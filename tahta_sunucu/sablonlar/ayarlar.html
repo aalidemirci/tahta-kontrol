@@ -32,6 +32,28 @@
       Bu klasör (veritabanı ve sunucu sertifikası) düzenli yedeklenmelidir. Sertifika kaybolursa bütün tahtalara ajan yeniden kurulur.</p>
   </div>
 </div>
+<div class="kutu">
+  <strong>Otomatik kapatma (enerji tasarrufu)</strong>
+  <div class="iki-sutun">
+    <div>
+      <label class="satir"><input type="checkbox" name="ok_etkin" value="1" {% if kapatma.etkin %}checked{% endif %}>
+        Hafta içi belirlenen saatlerde açık tahtaları kapat</label>
+      <label for="ok_saatler">Kapatma saatleri (virgülle ayırın)</label>
+      <input type="text" id="ok_saatler" name="ok_saatler" value="{{ (kapatma.saatler or []) | join(', ') }}" placeholder="ör. 19:15">
+    </div>
+    <div>
+      <label class="satir"><input type="checkbox" name="ok_hafta_sonu" value="1" {% if kapatma.hafta_sonu %}checked{% endif %}>
+        Cumartesi ve pazar günü uzun süre açık kalan tahtayı kapat</label>
+      <label for="ok_hafta_sonu_dk">Kaç dakika açık kalınca (10-600)</label>
+      <input type="number" id="ok_hafta_sonu_dk" name="ok_hafta_sonu_dk" min="10" max="600" value="{{ kapatma.hafta_sonu_dk or 60 }}">
+    </div>
+  </div>
+  <p class="not">Kullanılan tahtada kapanmadan önce 60 saniyelik geri sayım çıkar ve tahtadaki kişi “Vazgeç” diyebilir;
+    vazgeçilen tahta o saat için yeniden kapatılmaz (hafta sonunda aynı süre sonra yeniden sorulur).
+    Kilitli ya da oturum açılmamış tahta uyarısız kapanır. Yalnız o anda açık olan tahtalar kapatılır;
+    saatinden sonra açılan tahtaya dokunulmaz. Resmî tatiller ayrıca tanınmaz; hafta içine denk gelen tatilde
+    hafta içi kuralı geçerlidir. Sunucu programı o saatte çalışıyor olmalıdır.</p>
+</div>
 <p><button class="ana">Ayarları kaydet</button></p>
 </form>
 {% endblock %}

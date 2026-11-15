@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -198,6 +199,14 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             yanit.headers["Cache-Control"] = "no-store"
         return yanit
 
+    def kapatma_ozeti(kural: dict) -> str:
+        parcalar = []
+        if kural.get("etkin") and kural.get("saatler"):
+            parcalar.append("hafta içi " + ", ".join(kural["saatler"]))
+        if kural.get("hafta_sonu"):
+            parcalar.append(f"hafta sonu {kural.get('hafta_sonu_dk', 60)} dakika açık kalınca")
+        return " · ".join(parcalar)
+
     def kurulum_gerekli() -> bool:
         with vt.islem() as b:
             return b.execute("SELECT COUNT(*) FROM kullanici").fetchone()[0] == 0
@@ -293,6 +302,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                 "SELECT * FROM tahta WHERE durum != 'iptal' ORDER BY derslik COLLATE NOCASE, ad COLLATE NOCASE"
             ).fetchall()
             kilit_kodu_var = bool(vt.ayar_al(b, "kilit_kodu"))
+            kapatma = kapatma_ozeti(vt.ayar_al(b, "otomatik_kapatma") or {})
         tahtalar = [tahta_gorunumu(s) for s in satirlar]
         return sayfa(
             istek,
@@ -301,6 +311,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             onayli=[t for t in tahtalar if t["durum"] == "onayli"],
             bekleyen=[t for t in tahtalar if t["durum"] == "bekliyor"],
             kilit_kodu_var=kilit_kodu_var,
+            kapatma=kapatma,
             paket_surumu=paket.ajan_paketi().surum,
         )
 
@@ -583,12 +594,14 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         with vt.islem() as b:
             kilit_kodu_var = bool(vt.ayar_al(b, "kilit_kodu"))
             kayitli_adres = vt.ayar_al(b, "sunucu_adresi", "")
+            kapatma = vt.ayar_al(b, "otomatik_kapatma") or {}
         return sayfa(
             istek,
             "ayarlar.html",
             k,
             kilit_kodu_var=kilit_kodu_var,
             kayitli_adres=kayitli_adres,
+            kapatma=kapatma,
             ipler=guvenlik.yerel_ipler(),
             https_port=ayar.HTTPS_PORT,
             parmak_izi=parmak_izi,
@@ -607,6 +620,23 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             if adres and not adres.startswith("https://"):
                 return yonlendir("/ayarlar", "Sunucu adresi https:// ile başlamalı.")
             vt.ayar_yaz(b, "sunucu_adresi", adres)
+            saatler = [s.strip().replace(".", ":") for s in str(form.get("ok_saatler", "")).split(",") if s.strip()]
+            if any(not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", s) for s in saatler):
+                return yonlendir("/ayarlar", "Kapatma saatleri SS:DD biçiminde, virgülle ayrılarak yazılmalı (ör. 19:15).")
+            try:
+                hafta_sonu_dk = max(10, min(600, int(str(form.get("ok_hafta_sonu_dk", "60")) or "60")))
+            except ValueError:
+                hafta_sonu_dk = 60
+            vt.ayar_yaz(
+                b,
+                "otomatik_kapatma",
+                {
+                    "etkin": form.get("ok_etkin") == "1" and bool(saatler),
+                    "saatler": sorted(set(saatler)),
+                    "hafta_sonu": form.get("ok_hafta_sonu") == "1",
+                    "hafta_sonu_dk": hafta_sonu_dk,
+                },
+            )
             kod = str(form.get("kilit_kodu", "")).strip()
             if form.get("kilit_kodu_sil") == "1":
                 vt.ayar_yaz(b, "kilit_kodu", None)
@@ -780,4 +810,51 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         p = paket.ajan_paketi()
         return Response(p.icerik, media_type="application/vnd.debian.binary-package", headers={"X-Sha256": p.sha256})
 
+    # ---- otomatik kapatma ----------------------------------------------------
+    hafta_sonu_son: dict[int, float] = {}
+
+    def zamanlayici(simdi: datetime | None = None) -> int:
+        """Otomatik kapatma kurallarını uygular; komut verilen tahta sayısını döndürür.
+
+        Sunucu bunu 20 saniyede bir çağırır. Yalnız o anda çevrimiçi olan tahtalara
+        komut verilir; saatinden sonra açılan tahta kapatılmaz. Komut uyarılıdır:
+        kullanılan tahtada geri sayım çıkar ve kullanan kişi vazgeçebilir.
+        """
+        simdi = simdi or datetime.now(ISTANBUL)
+        hedefler, neden = [], ""
+        with vt.islem() as b:
+            kural = vt.ayar_al(b, "otomatik_kapatma") or {}
+            if not (kural.get("etkin") or kural.get("hafta_sonu")):
+                return 0
+            acik = [
+                t
+                for t in b.execute("SELECT * FROM tahta WHERE durum = 'onayli'").fetchall()
+                if t["son_gorulme"] and vt.simdi() - t["son_gorulme"] < ayar.CEVRIMICI_ESIK_SN
+            ]
+            if simdi.weekday() < 5:
+                isaretler = vt.ayar_al(b, "kapatma_isaretleri") or []
+                for saat in kural.get("saatler", []) if kural.get("etkin") else []:
+                    an = simdi.replace(hour=int(saat[:2]), minute=int(saat[3:]), second=0, microsecond=0)
+                    isaret = f"{simdi:%Y-%m-%d} {saat}"
+                    if 0 <= (simdi - an).total_seconds() < 600 and isaret not in isaretler:
+                        vt.ayar_yaz(b, "kapatma_isaretleri", (isaretler + [isaret])[-20:])
+                        hedefler, neden = acik, f"Otomatik kapatma (saat {saat})"
+                        break
+            elif kural.get("hafta_sonu"):
+                sinir = int(kural.get("hafta_sonu_dk", 60)) * 60
+                for t in acik:
+                    acik_sure = json.loads(t["durum_json"] or "{}").get("acik_sure", 0)
+                    if acik_sure > sinir and time.time() - hafta_sonu_son.get(t["id"], 0) > sinir:
+                        hafta_sonu_son[t["id"]] = time.time()
+                        hedefler.append(t)
+                neden = "Hafta sonu otomatik kapatma"
+            for t in hedefler:
+                komut_ekle(b, t["id"], "kapat", {"uyari_sn": 60, "neden": neden}, "sistem")
+            if hedefler:
+                vt.kayit_dus(b, "sistem", neden, f"{len(hedefler)} tahta: " + ", ".join(t["ad"] for t in hedefler))
+        for t in hedefler:
+            uyandir(t["id"])
+        return len(hedefler)
+
+    uygulama.state.zamanlayici = zamanlayici
     return uygulama

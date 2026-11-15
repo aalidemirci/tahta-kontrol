@@ -3,7 +3,7 @@
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.1.0, saha denemesi sürümü.** Debian 12 üzerinde uçtan uca denendi;
+> **Durum: 0.1.2, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
 > gerçek bir Pardus ETAP tahtasında henüz denenmedi. Okul genelinde kullanmadan
 > önce tek tahtada deneyin (`docs/saha-denemesi.md`).
 
@@ -15,8 +15,8 @@ gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 - **Ajan:** Pardus ETAP tahtalara kurulan küçük bir paket (`.deb`). Yalnız Python
   standart kitaplığını kullanır; tahtada internet ya da paket deposu gerekmez.
 
-0.1.0 sürümünde: tahtaların durumunu izleme, kilitleme ve açma, tam ekran duyuru,
-kapatma ve yeniden başlatma, uzaktan açma denemesi, saha tanılaması, ajanın
+Bu sürümde: tahtaların durumunu izleme, kilitleme ve açma, tam ekran duyuru,
+kapatma ve yeniden başlatma, saatli otomatik kapatma (enerji tasarrufu), saha tanılaması, ajanın
 sunucudan güncellenmesi, kullanıcı yetkileri ve işlem kaydı.
 
 Planlananlar: duyuru zamanlama, ders programına bağlı otomatik kilit, sınav

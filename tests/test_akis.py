@@ -188,3 +188,80 @@ def test_surumler_tutarli():
 
     surum = (Path(__file__).resolve().parent.parent / "VERSION").read_text(encoding="utf-8").strip()
     assert tahta_ajan.__version__ == tahta_sunucu.__version__ == surum
+
+
+def onayli_tahta(panel, tahta, durum=None):
+    basliklar = kaydol(tahta, kod_al(panel))
+    kimlik = basliklar["X-Tahta-Id"]
+    panel.post(f"/tahta/{kimlik}/kaydet", data={"ad": "Tahta", "eylem": "onayla"})
+    tahta.post("/ajan/bekle", headers=basliklar, json={"surum": "0.1.0", "durum": durum or {"kilitli": False}, "bekle": 0})
+    return basliklar
+
+
+def test_otomatik_kapatma_hafta_ici_saatinde_bir_kez_verilir(ortam):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    panel, tahta = ortam
+    kur_ve_gir(panel)
+    basliklar = onayli_tahta(panel, tahta)
+    zamanlayici = panel.app.state.zamanlayici
+    tz = ZoneInfo("Europe/Istanbul")
+
+    def pazartesi(saat, dakika):
+        return datetime(2026, 11, 16, saat, dakika, tzinfo=tz)
+
+    assert zamanlayici(pazartesi(19, 20)) == 0  # kural tanımlı değil
+    yanit = panel.post("/ayarlar", data={"okul_adi": "x", "ok_etkin": "1", "ok_saatler": "25:00"})
+    assert "bi%C3%A7iminde" in yanit.headers["location"]
+    panel.post("/ayarlar", data={"okul_adi": "x", "ok_etkin": "1", "ok_saatler": "19.15, 13:30"})
+    assert "hafta içi 13:30, 19:15" in panel.get("/").text
+
+    assert zamanlayici(pazartesi(19, 10)) == 0  # saat gelmedi
+    assert zamanlayici(pazartesi(19, 16)) == 1
+    assert zamanlayici(pazartesi(19, 17)) == 0  # aynı saat için ikinci kez verilmez
+    assert zamanlayici(pazartesi(19, 40)) == 0  # pencere geçti
+    komutlar = tahta.post("/ajan/bekle", headers=basliklar, json={"bekle": 0}).json()["komutlar"]
+    assert [(k["tur"], k["veri"]["uyari_sn"]) for k in komutlar] == [("kapat", 60)]
+    assert "sistem" in panel.get("/kayit").text
+
+
+def test_otomatik_kapatma_hafta_sonu_uzun_acik_kalan_tahta(ortam):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    panel, tahta = ortam
+    kur_ve_gir(panel)
+    onayli_tahta(panel, tahta, {"kilitli": False, "acik_sure": 30 * 60})
+    panel.post(
+        "/ayarlar",
+        data={"okul_adi": "x", "ok_hafta_sonu": "1", "ok_hafta_sonu_dk": "60", "ok_saatler": "19:15", "ok_etkin": "1"},
+    )
+    zamanlayici = panel.app.state.zamanlayici
+    cumartesi = datetime(2026, 11, 21, 19, 16, tzinfo=ZoneInfo("Europe/Istanbul"))
+    assert zamanlayici(cumartesi) == 0  # yarım saattir açık; hafta içi saati hafta sonu uygulanmaz
+    onayli_tahta(panel, tahta, {"kilitli": False, "acik_sure": 90 * 60})
+    assert zamanlayici(cumartesi) == 1
+    assert zamanlayici(cumartesi) == 0  # aynı tahtaya süre dolmadan yeniden sorulmaz
+
+
+def test_ajan_uyarili_kapatma_kullanilan_tahtada_vazgecilebilir(tmp_path, monkeypatch):
+    monkeypatch.setenv("TAHTA_AJAN_DIZIN", str(tmp_path / "ayar"))
+    monkeypatch.setenv("TAHTA_AJAN_DURUM", str(tmp_path / "durum"))
+    from tahta_ajan import servis, sistem
+
+    kapatildi = []
+    monkeypatch.setattr(sistem, "kapat", lambda: kapatildi.append(1) or (True, "kapandı"))
+    s = servis.Servis()
+    s.ekranlar[1] = {"gonder": lambda m: None, "bilgi": {"arayuz": "gtk3"}}
+    komut = {"tur": "kapat", "veri": {"uyari_sn": 60, "neden": "Otomatik kapatma (saat 19:15)"}}
+
+    basarili, cikti = s.komut_uygula(komut)
+    assert basarili and "uyarısı" in cikti and s.gorunum()["kapatma"]["kalan"] > 50
+    s.ekran_mesaji(1, {"tur": "kapatma_iptal"})
+    assert s.kapatma is None and not kapatildi and any("iptal" in o for o in s.olaylar)
+
+    # Kilitli tahtada uyaracak kimse yoktur: geri sayım açılmaz, doğrudan kapatma yoluna girer.
+    s.kilitli = True
+    basarili, cikti = s.komut_uygula(komut)
+    assert basarili and s.kapatma is None and "üç saniye" in cikti

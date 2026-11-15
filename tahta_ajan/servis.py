@@ -35,6 +35,7 @@ class Servis:
         kayitli = ayar.durum_oku()
         self.kilitli = bool(kayitli.get("kilitli", False))
         self.duyuru = None  # {"baslik","metin","bitis","kapatilabilir"}
+        self.kapatma = None  # {"bitis","neden"}: uyarılı kapatma geri sayımı
         self.okul_adi = kayitli.get("okul_adi", "")
         self.kilit_kodu = kayitli.get("kilit_kodu")  # {"tuz","ozet","tur"} ya da None
         # Açılışta sunucuya ulaşmak için süre tanınır; yoksa kilit ilk saniyede kodsuz açılabilirdi.
@@ -79,6 +80,11 @@ class Servis:
                     if duyuru
                     else None
                 ),
+                "kapatma": (
+                    {"kalan": max(0, int(self.kapatma["bitis"] - time.time())), "neden": self.kapatma["neden"]}
+                    if self.kapatma
+                    else None
+                ),
                 "okul_adi": self.okul_adi,
                 "kod_var": bool(self.kilit_kodu),
                 "cevrimdisi": self.cevrimdisi(),
@@ -103,6 +109,7 @@ class Servis:
         return {
             "kilitli": self.kilitli,
             "duyuru_var": self.duyuru is not None,
+            "kapatma_bekliyor": self.kapatma is not None,
             "ekranlar": ekranlar,
             "oturum": oturum,
             "acik_sure": sistem.acik_sure(),
@@ -134,6 +141,14 @@ class Servis:
                     self.olaylar.append("Kilit sunucuya ulaşılamadığı için tahtadan açıldı.")
                     self._kaydet()
                 self.yayinla()
+        elif tur == "kapatma_iptal":
+            with self.kilit:
+                iptal = self.kapatma is not None
+                self.kapatma = None
+                if iptal:
+                    self.olaylar.append("Otomatik kapatma tahtadan iptal edildi (tahta kullanılıyor).")
+            self.yayinla()
+            self.bildir()
         elif tur == "duyuru_kapat":
             with self.kilit:
                 if self.duyuru and self.duyuru["kapatilabilir"]:
@@ -204,6 +219,20 @@ class Servis:
             return True, json.dumps(rapor, ensure_ascii=False)
         if tur == "guncelle":
             return self._guncelle(veri)
+        if tur == "kapat" and int(veri.get("uyari_sn", 0) or 0) > 0:
+            # Uyarılı kapatma: tahta kullanılıyorsa (kilitli değil ve ekranı varsa)
+            # önce geri sayım gösterilir; kullanan kişi vazgeçebilir. Kilitli ya da
+            # oturumsuz tahtada uyaracak kimse yoktur, doğrudan kapanır.
+            with self.kilit:
+                gorunur = any(e["bilgi"].get("arayuz") not in (None, "yok") for e in self.ekranlar.values())
+                if gorunur and not self.kilitli:
+                    self.kapatma = {
+                        "bitis": time.time() + min(600, int(veri["uyari_sn"])),
+                        "neden": str(veri.get("neden", ""))[:200],
+                    }
+            if self.kapatma:
+                self.yayinla()
+                return True, "Kapatma uyarısı gösterildi; vazgeçilmezse süre sonunda kapanacak."
         if tur in ("kapat", "yeniden_baslat"):
             # Sonuç önce bildirilir; makine kapanınca bildirecek kimse kalmaz.
             islev = sistem.kapat if tur == "kapat" else sistem.yeniden_baslat
@@ -326,7 +355,14 @@ class Servis:
 
     def _bekci(self):
         """Çevrimdışı geçişini ve duyuru süresinin dolmasını ekranlara yansıtır."""
-        while not self.dur.wait(3):
+        while not self.dur.wait(1):
+            with self.kilit:
+                suresi_doldu = self.kapatma is not None and self.kapatma["bitis"] <= time.time()
+                if suresi_doldu:
+                    self.kapatma = None
+            if suresi_doldu:
+                gunluk.info("Uyarı süresi doldu, kapatılıyor: %s", sistem.kapat())
+                self.yayinla()
             durum = (self.cevrimdisi(), self.duyuru is not None and self.duyuru["bitis"] <= time.time())
             if durum != self._son_cevrimdisi or durum[1]:
                 self._son_cevrimdisi = durum

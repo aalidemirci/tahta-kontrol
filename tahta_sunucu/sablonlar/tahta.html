@@ -55,7 +55,9 @@
   <button name="tur" value="duyuru_kaldir">Duyuruyu kaldır</button>
   <button name="tur" value="tani" class="ana">Tanılama çalıştır</button>
   <button name="tur" value="guncelle">Ajanı güncelle</button>
-  <button name="tur" value="uyandir">Uzaktan aç</button>
+  <button name="tur" value="kapat" class="tehlike" onclick="return confirm('Bu tahta KAPATILACAK. Devam edilsin mi?')">Kapat</button>
+  <button name="tur" value="yeniden_baslat" class="tehlike" onclick="return confirm('Bu tahta yeniden başlatılacak. Devam edilsin mi?')">Yeniden başlat</button>
+  <button name="tur" value="uyandir" title="Tahtanın donanımına ve BIOS ayarına bağlıdır; çoğu cihazda çalışmaz.">Uzaktan aç (deneysel)</button>
 </form>
 {% endif %}
 

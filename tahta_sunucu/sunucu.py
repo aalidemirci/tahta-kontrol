@@ -67,9 +67,19 @@ class Sunucu:
             time.sleep(0.1)
         if not all(s.started for s in self.sunucular):
             raise RuntimeError("Sunucu 15 saniyede açılamadı.")
+        threading.Thread(target=self._zamanlayici, daemon=True).start()
         gunluk.info("Panel (bu bilgisayar): %s", self.yerel_adres)
         for adres in self.ag_adresleri():
             gunluk.info("Panel (okul ağı)     : %s", adres)
+
+    def _zamanlayici(self) -> None:
+        """Otomatik kapatma kurallarını düzenli aralıkla işletir."""
+        while not any(s.should_exit for s in self.sunucular):
+            try:
+                self.uygulama.state.zamanlayici()
+            except Exception:  # zamanlayıcı hatası sunucuyu düşürmez
+                gunluk.exception("Otomatik kapatma denetimi başarısız")
+            time.sleep(20)
 
     def durdur(self) -> None:
         for sunucu in self.sunucular:

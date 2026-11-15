@@ -6,7 +6,9 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.1.0, saha denemesi sürümü.** Gerçek bir ETAP tahtasında henüz denenmedi.
+- Durum: **0.1.2, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
+  (0.1.1: kurulum, kilit, duyuru, kapatma, güncelleme çalıştı); gerçek bir ETAP
+  tahtasında henüz denenmedi.
 
 ## Komutlar (PowerShell 5.1; `&&` yok)
 
@@ -76,6 +78,17 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
   `postinst` ayrıca önbelleği siler.
 - **`Referrer-Policy: no-referrer` kullanma:** tarayıcı form gönderiminde
   `Origin: null` yollar, kaynak denetimi bütün POST'ları reddeder (15.11.2026).
+- **GtkStack görünür olmayan sayfaya geçmez:** sayfalar pencere açılmadan
+  `yigin.show_all()` ile görünür kılınır, pencere `show()` ile açılır (`show_all()` değil;
+  o, gizlenmiş tuş takımını ve düğmeleri geri açar). Yoksa açılıştan sonraki ilk duyuru
+  ya da kapatma uyarısı yerine bozuk bir kilit sayfası çıkar (16.11.2026).
+- **Klavye kilidi pencere ekrana yerleşince alınır:** ilk deneme XFCE'de "not-viewable"
+  ile düşer; kilit sürdükçe her saniye yeniden denenir (15.11.2026, Pardus 25 denemesi).
+- **Otomatik kapatma** (`web.py::zamanlayici`, 20 sn'de bir): yalnız o an çevrimiçi
+  tahtalara, uyarılı (`uyari_sn`) komut verir; aynı gün-saat için bir kez (`kapatma_isaretleri`).
+  Ajan, kilitli ya da ekransız tahtada uyarı göstermeden kapatır. Uzaktan açma
+  (Wake-on-LAN) denenen bilgisayarda çalışmadı; düğme yalnız tahta sayfasında "deneysel" durur.
+- **Deneme betiklerinde saat:** Git Bash'te `TZ=Europe/Istanbul date` UTC verir; saati Python ile hesapla.
 - **İlk kurulum yalnız 127.0.0.1'den yapılır;** ağdaki biri yönetici hesabını kapamasın.
 - **Docker'da deneme:** `debian:12` + `python3-gi gir1.2-gtk-3.0 xvfb openbox imagemagick`;
   sunucuya `https://host.docker.internal:8788` ile ulaşılır; systemd yoktur, servis elle başlatılır.

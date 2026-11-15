@@ -1,6 +1,6 @@
 # Tahta Kontrol — tasarım
 
-Sürüm 0.1.0 · 15.11.2026
+Sürüm 0.1.2 · 16.11.2026
 
 ## 1. Amaç ve kapsam
 
@@ -73,7 +73,17 @@ Seçili tahtalarda tam ekran başlık + metin; süre dolunca kalkar; istenirse
 öğretmen tahtadan kapatabilir. Kalan süre sunucuda hesaplanır (tahta saatine
 güvenilmez). Tahta duyuru süresi içinde çevrimiçi olmazsa duyuru düşer.
 
-## 7. Güncelleme
+## 7. Otomatik kapatma
+
+Enerji tasarrufu için sunucu, ayarlanan saatlerde (hafta içi) o an açık olan
+tahtalara kapatma komutu verir; hafta sonunda belirlenen süreden uzun açık kalan
+tahtaya da aynı komut gider. Kullanılan tahtada 60 saniyelik geri sayım ve
+"Vazgeç" düğmesi çıkar; kilitli ya da oturumsuz tahta uyarısız kapanır. Saatinden
+sonra açılan tahtaya dokunulmaz. Resmî tatil takvimi yoktur. Uzaktan açma
+(Wake-on-LAN) güvenilir olmadığı için akışın parçası değildir; tahta gerektiğinde
+cihazdan açılır.
+
+## 8. Güncelleme
 
 Sunucu, ajan `.deb` paketini kendi içindeki ajan kaynağından üretir. Sunucu
 güncellenince paket de yenilenir; panelde sürümü eski tahtalar "Güncelleme var"
@@ -81,7 +91,7 @@ diye görünür ve "Ajanı güncelle" komutuyla paketi sunucudan indirip kurar
 (özet denetimiyle). Kurulum servisten bağımsız bir birimde koşar. Otomatik ve
 kademeli yayma ile başarısız güncellemede geri dönüş henüz yoktur.
 
-## 8. Platforma taşınabilirlik
+## 9. Platforma taşınabilirlik
 
 - Sunucu saf Python'dır; Windows'a özgü tek parça paketleme ve denetim
   penceresidir. Pardus sürümü için `.deb` + systemd birimi yazmak yeter.
@@ -89,11 +99,11 @@ kademeli yayma ile başarısız güncellemede geri dönüş henüz yoktur.
   içindedir. Windows'lu tahta desteği bu dosyanın ve bir ekran arka ucunun
   (ör. tkinter) yazılmasıdır.
 
-## 9. Yol haritası
+## 10. Yol haritası
 
 | Aşama | İçerik | Durum |
 |---|---|---|
-| 0–1 | Sunucu, ajan, kayıt, pano, kilit, duyuru, kapatma, tanılama, güncelleme | 0.1.0 — sahada denenecek |
+| 0–1 | Sunucu, ajan, kayıt, pano, kilit, duyuru, kapatma, tanılama, güncelleme, otomatik kapatma | 0.1.2 — ETAP'ta denenecek |
 | 2 | Duyuru zamanlama ve hedef grupları (kat, düzey, devre), acil durum yayını | — |
 | 3 | Ders programı ve zil saatleri (Okul Zili'nden), programa bağlı otomatik kilit/açma, boş geçen ders uyarısı, oturum temizliği | — |
 | 4 | Kelebek sınav duyurusu ve sınav kipi (Kelebek Sınav verisinden, maskeli liste), sınav yoklaması | — |

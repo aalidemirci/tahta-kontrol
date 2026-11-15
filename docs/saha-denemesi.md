@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.1.0)
+# Saha denemesi kılavuzu (0.1.2)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -13,13 +13,16 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Sunucu kapalıyken kilidin tahtadan açılması | Aynı | Çalıştı |
 | Ajanın sunucudan güncellenmesi | Aynı | Çalıştı |
 | Windows kurulum dosyasının derlenmesi, paketli programın açılması | Geliştirme bilgisayarı | Çalıştı |
+| Kurulum, kilit, duyuru, kapatma, güncelleme, klavye kilidi | Pardus 25 (XFCE) masaüstü | Çalıştı |
+| Uzaktan açma (Wake-on-LAN) | Aynı | Çalışmadı |
+| Otomatik kapatma: geri sayım, Vazgeç, süre sonunda kapatma | Debian 12 kabı | Çalıştı |
 | **Gerçek ETAP tahtası** | — | **Denenmedi** |
 | Kurulum dosyasının başka bir bilgisayara kurulması | — | Denenmedi |
 | Gerçek kapatma / yeniden başlatma / uzaktan açma | — | Denenmedi (kapta benzetim) |
 
 ## 1. Sunucuyu kurun
 
-1. `dist\cikti\tahta-kontrol-0.1.0-windows-kurulum.exe` dosyasını sunucu olacak
+1. `dist\cikti\tahta-kontrol-0.1.2-windows-kurulum.exe` dosyasını sunucu olacak
    idari bilgisayara kurun (yönetici izni ister; güvenlik duvarında 8788 kapısını açar).
 2. Açılan pencerede **Paneli aç** deyin; ilk kurulumda okul adını ve yönetici
    hesabını oluşturun.
@@ -62,6 +65,8 @@ kapanırsa tahtalar çevrimdışı kalır (kilitleri tahtadan açılabilir).
 | 14 | Karekod/USB ile kişisel hesaba giriş | Kilit orada da çalışır mı | |
 | 15 | Tahta kilitliyken oturum kapatılırsa | Giriş ekranında kilit YOKTUR (bilinen sınır) | |
 | 16 | ETAP güncellemesinden sonra | Ajan hâlâ çalışıyor mu | |
+| 17 | Ayarlar'da kapatma saatini birkaç dakika sonrasına verin; tahta açık ve kilitsiz | 60 sn geri sayım; Vazgeç tahtayı açık bırakır | |
+| 18 | Aynısı, tahta kilitliyken | Uyarısız kapanır | |
 
 ## 4. Otomatik giriş denemesi (elle)
 

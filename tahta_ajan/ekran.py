@@ -29,6 +29,9 @@ label { color: #f9fafb; }
 #duyuru-baslik { font-size: 72px; font-weight: 700; color: #fde68a; }
 #duyuru-metin { font-size: 52px; }
 #alt { font-size: 24px; color: #9ca3af; }
+#kapatma-baslik { font-size: 64px; font-weight: 700; color: #fca5a5; }
+#kapatma-sayac { font-size: 170px; font-weight: 700; }
+#kapatma-neden { font-size: 30px; color: #d1d5db; }
 button { font-size: 34px; font-weight: 600; padding: 14px 26px; border-radius: 12px;
          background-image: none; background-color: #374151; color: #f9fafb; border: 1px solid #4b5563; }
 button:active { background-color: #6b7280; }
@@ -135,6 +138,10 @@ def calistir() -> int:
             self.pencere.add(self.yigin)
             self.yigin.add_named(self._kilit_sayfasi(), "kilit")
             self.yigin.add_named(self._duyuru_sayfasi(), "duyuru")
+            self.yigin.add_named(self._kapatma_sayfasi(), "kapatma")
+            # Sayfalar pencere açılmadan görünür kılınır: GtkStack, görünür olmayan
+            # bir sayfaya geçiş isteğini yok sayar ve ilk sayfada (kilit) kalır.
+            self.yigin.show_all()
 
             geometri = self._geometri()
             self.baglanti = Baglanti(
@@ -215,6 +222,22 @@ def calistir() -> int:
                 kutu.pack_start(parca, False, False, 0)
             return kutu
 
+        def _kapatma_sayfasi(self):
+            kutu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+            kutu.set_valign(Gtk.Align.CENTER)
+            kutu.set_halign(Gtk.Align.CENTER)
+            baslik = self._etiket("kapatma-baslik", "Bu tahta kapatılacak")
+            self.kapatma_sayac = self._etiket("kapatma-sayac")
+            self.kapatma_neden = self._etiket("kapatma-neden")
+            vazgec = Gtk.Button(label="Vazgeç — tahtayı kullanıyorum")
+            vazgec.set_name("ana-dugme")
+            vazgec.set_halign(Gtk.Align.CENTER)
+            vazgec.set_can_focus(False)
+            vazgec.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "kapatma_iptal"}))
+            for parca in (baslik, self.kapatma_sayac, self.kapatma_neden, vazgec):
+                kutu.pack_start(parca, False, False, 0)
+            return kutu
+
         # ---- olaylar ---------------------------------------------------------
         def _tus(self, _dugme, tus):
             if tus == "Sil":
@@ -249,6 +272,9 @@ def calistir() -> int:
             if self.kopma_zamani and time.time() - self.kopma_zamani > 10 and self.gorunur:
                 self.durum = None
                 self._ciz()
+            if self.durum and self.durum.get("kapatma"):
+                self.durum["kapatma"]["kalan"] = max(0, self.durum["kapatma"]["kalan"] - 1)
+                self.kapatma_sayac.set_text(str(self.durum["kapatma"]["kalan"]))
             if self.durum and self.durum.get("duyuru"):
                 self.durum["duyuru"]["kalan"] -= 1
                 if self.durum["duyuru"]["kalan"] <= 0:
@@ -267,11 +293,19 @@ def calistir() -> int:
             durum = self.durum or {}
             duyuru = durum.get("duyuru")
             okul = durum.get("okul_adi") or ""
-            if duyuru:
+            kapatma = durum.get("kapatma")
+            if kapatma:
+                self.kapatma_sayac.set_text(str(kapatma.get("kalan", 0)))
+                self.kapatma_neden.set_text(
+                    (kapatma.get("neden") or "Otomatik kapatma")
+                    + "\nTahtayı kullanıyorsanız Vazgeç düğmesine dokunun; yoksa süre sonunda kapanır."
+                )
+                self.yigin.set_visible_child_name("kapatma")
+                self._goster(kilit=False)
+            elif duyuru:
                 self.duyuru_baslik.set_text(duyuru.get("baslik") or "DUYURU")
                 self.duyuru_metin.set_text(duyuru.get("metin") or "")
                 self.duyuru_kapat.set_visible(bool(duyuru.get("kapatilabilir")))
-                self.duyuru_kapat.set_no_show_all(not duyuru.get("kapatilabilir"))
                 self.duyuru_alt.set_text(okul)
                 self.yigin.set_visible_child_name("duyuru")
                 self._goster(kilit=False)
@@ -288,9 +322,7 @@ def calistir() -> int:
                     self.bilgi.set_text("Açmak için kilit kodunu girin.")
                 else:
                     self.bilgi.set_text("Kilit okul idaresince açılır.")
-                self.kod_kutusu.set_no_show_all(not (kod_var and not bekleme and not cevrimdisi))
                 self.kod_kutusu.set_visible(kod_var and not bekleme and not cevrimdisi)
-                self.cevrimdisi_dugmesi.set_no_show_all(not cevrimdisi)
                 self.cevrimdisi_dugmesi.set_visible(cevrimdisi)
                 self.yigin.set_visible_child_name("kilit")
                 self._goster(kilit=True)
@@ -300,7 +332,7 @@ def calistir() -> int:
         def _goster(self, kilit: bool):
             ilk = not self.gorunur
             self.gorunur = True
-            self.pencere.show_all()
+            self.pencere.show()
             self.pencere.fullscreen()
             self.pencere.present()
             self.kilit_modu = kilit
