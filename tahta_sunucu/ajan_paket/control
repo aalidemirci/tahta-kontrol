@@ -1,0 +1,12 @@
+Package: tahta-ajan
+Version: @SURUM@
+Section: admin
+Priority: optional
+Architecture: all
+Depends: python3 (>= 3.9)
+Recommends: python3-gi, gir1.2-gtk-3.0
+Installed-Size: @BOYUT@
+Maintainer: Tahta Kontrol <root@localhost>
+Description: Tahta Kontrol ajani
+ Okul agindaki Tahta Kontrol sunucusuna baglanir; kilit, duyuru, kapatma
+ komutlarini uygular ve tahtanin durumunu bildirir. Internete cikmaz.

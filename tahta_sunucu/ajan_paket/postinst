@@ -1,0 +1,12 @@
+#!/bin/sh
+# Tahta Kontrol ajani: kurulum sonrasi. Iletiler bilerek ASCII tutulur
+# (dash, UTF-8 iletilerde sorun cikarabiliyor).
+set -e
+# Onceki surumun derlenmis onbellegi yeni kodu golgelemesin.
+rm -rf /opt/tahta-kontrol/tahta_ajan/__pycache__
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload || true
+    systemctl enable tahta-ajan.service >/dev/null 2>&1 || true
+    systemctl restart tahta-ajan.service || true
+fi
+exit 0

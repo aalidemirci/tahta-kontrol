@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Tahta Kontrol ekran yardimcisi
+Comment=Kilit ve duyuru ekrani
+Exec=/usr/bin/tahta-ajan ekran
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Phase=Applications

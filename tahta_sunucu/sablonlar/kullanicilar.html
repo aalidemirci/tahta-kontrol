@@ -1,0 +1,44 @@
+{% extends "taban.html" %}
+{% block baslik %}Kullanıcılar · Tahta Kontrol{% endblock %}
+{% block icerik %}
+<h1>Kullanıcılar</h1>
+<table>
+  <tr><th>Kullanıcı adı</th><th>Ad soyad</th><th>Yetki</th><th>Durum</th><th>İşlem</th></tr>
+  {% for u in kullanicilar %}
+  <tr>
+    <td>{{ u.ad }}</td>
+    <td>{{ u.gorunen_ad }}</td>
+    <td>{{ roller[u.rol] }}</td>
+    <td>{% if u.aktif %}<span class="rozet yesil">Açık</span>{% else %}<span class="rozet kirmizi">Kapalı</span>{% endif %}</td>
+    <td>
+      <form method="post" action="/kullanicilar" class="satir-ici">
+        <input type="hidden" name="id" value="{{ u.id }}">
+        <input type="password" name="parola" placeholder="Yeni parola" minlength="8" style="width:150px" autocomplete="new-password">
+        <button name="eylem" value="parola">Parolayı değiştir</button>
+        {% if u.id != kullanici.id %}
+        <button name="eylem" value="durum" formnovalidate>{{ 'Hesabı kapat' if u.aktif else 'Hesabı aç' }}</button>
+        {% endif %}
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>Kullanıcı ekle</h2>
+<div class="kutu">
+  <form method="post" action="/kullanicilar" class="form-dar">
+    <label for="gorunen_ad">Ad soyad</label>
+    <input type="text" id="gorunen_ad" name="gorunen_ad" maxlength="80" required>
+    <label for="ad">Kullanıcı adı</label>
+    <input type="text" id="ad" name="ad" minlength="3" maxlength="40" required autocomplete="off">
+    <label for="parola">Parola (en az 8 karakter)</label>
+    <input type="password" id="parola" name="parola" minlength="8" required autocomplete="new-password">
+    <label for="rol">Yetki</label>
+    <select id="rol" name="rol">
+      <option value="idareci">İdareci — tahtaları yönetir, duyuru gönderir</option>
+      <option value="yonetici">Yönetici — ayrıca kullanıcı, ayar ve tahta kaydını yönetir</option>
+    </select>
+    <p><button name="eylem" value="ekle" class="ana">Kullanıcıyı ekle</button></p>
+  </form>
+</div>
+{% endblock %}

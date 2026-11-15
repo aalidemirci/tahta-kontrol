@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+rm -rf /opt/tahta-kontrol/tahta_ajan/__pycache__
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    if [ -d /run/systemd/system ]; then
+        systemctl stop tahta-ajan.service || true
+        systemctl disable tahta-ajan.service >/dev/null 2>&1 || true
+    fi
+fi
+exit 0

@@ -1,0 +1,5 @@
+* text=auto
+*.sh text eol=lf
+*.py text eol=lf
+tahta_sunucu/ajan_paket/* text eol=lf
+*.png binary

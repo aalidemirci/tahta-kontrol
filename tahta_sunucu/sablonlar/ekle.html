@@ -1,0 +1,46 @@
+{% extends "taban.html" %}
+{% block baslik %}Tahta ekle · Tahta Kontrol{% endblock %}
+{% block icerik %}
+<h1>Tahta ekle</h1>
+
+<div class="kutu">
+  {% if acik %}
+  <p>Tahta ekleme <strong>açık</strong>. Eşleştirme kodu:</p>
+  <p class="buyuk-kod">{{ kod }}</p>
+  <p class="not">Kod {{ bitis | zaman }} saatine kadar geçerlidir. Kodla kaydolan tahta komut almaz; önce panoda onaylamanız gerekir.</p>
+  {% if kullanici.rol == 'yonetici' %}
+  <form method="post" action="/ekle" class="satir-ici"><button name="eylem" value="kapat">Tahta eklemeyi kapat</button></form>
+  <form method="post" action="/ekle" class="satir-ici"><button name="eylem" value="ac">Yeni kod üret</button></form>
+  {% endif %}
+  {% else %}
+  <p>Tahta ekleme <strong>kapalı</strong>. Yeni tahta kaydı kabul edilmiyor.</p>
+  {% if kullanici.rol == 'yonetici' %}
+  <form method="post" action="/ekle"><button name="eylem" value="ac" class="ana">Tahta eklemeyi aç (60 dakika)</button></form>
+  {% else %}
+  <p class="not">Tahta eklemeyi yalnız yönetici açabilir.</p>
+  {% endif %}
+  {% endif %}
+</div>
+
+<h2>Tahtada yapılacaklar</h2>
+<div class="kutu">
+  <p>Tahtada yönetici hesabıyla (<span class="kod">etapadmin</span>) oturum açın ve uçbirimde şu iki komutu çalıştırın:</p>
+  <pre class="komut">wget --no-check-certificate -O tahta-kur.sh {{ adres }}/kur
+sudo bash tahta-kur.sh {{ kod or 'ESLESTIRME_KODU' }}</pre>
+  <p class="not"><span class="kod">wget</span> yoksa aynı dosyayı tahtanın tarayıcısında <span class="kod">{{ adres }}/kur</span> adresini açarak indirebilirsiniz
+     (tarayıcı sertifika uyarısı verir; “Gelişmiş → devam et”). Dosya İndirilenler klasörüne iner.</p>
+  <p>Betik sunucunun kimliğini parmak iziyle denetler. Ekranda yazan parmak izinin başı şununla aynı olmalı:</p>
+  <p class="kod"><strong>{{ parmak_izi[:16] }}</strong>…</p>
+  <p class="not">Tahtaların kullanacağı sunucu adresi: <span class="kod">{{ adres }}</span>.
+     Yanlışsa <a href="/ayarlar">Ayarlar</a> sayfasından düzeltin.</p>
+</div>
+
+<h2>Ağdan indiremeyen tahta için</h2>
+<div class="kutu">
+  <p><a class="dugme" href="/kur/usb.zip">USB kurulum paketini indir</a></p>
+  <p class="not">Zip dosyasını bir USB belleğe açın, tahtaya takın, uçbirimi o klasörde açıp
+     <span class="kod">sudo bash tahta-kur.sh {{ kod or 'ESLESTIRME_KODU' }}</span> komutunu çalıştırın.
+     Tahtanın yine de sunucuya ağdan erişebilmesi gerekir.</p>
+  <p class="not">Ajan paketi: {{ paket.dosya_adi }} · sha256 <span class="kod">{{ paket.sha256[:16] }}…</span></p>
+</div>
+{% endblock %}

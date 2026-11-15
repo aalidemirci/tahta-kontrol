@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+veri/
+*.db
+*.db-wal
+*.db-shm
+*.deb
+*.pem
+*.log
+# Gerçek okul verisi, tanılama dökümleri ve ekran görüntüleri depoya girmez
+saha/

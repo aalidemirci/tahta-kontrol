@@ -1,0 +1,23 @@
+{% extends "taban.html" %}
+{% block baslik %}Duyurular · Tahta Kontrol{% endblock %}
+{% block icerik %}
+<h1>Gönderilen duyurular</h1>
+<p class="not">Yeni duyuru <a href="/">Pano</a> sayfasından, tahtalar seçilerek gönderilir.</p>
+{% if duyurular %}
+<table>
+  <tr><th>Zaman</th><th>Başlık</th><th>Metin</th><th>Süre</th><th>Tahtalar</th><th>Gönderen</th></tr>
+  {% for d in duyurular %}
+  <tr>
+    <td>{{ d.olusturma | zaman }}</td>
+    <td>{{ d.baslik or '—' }}</td>
+    <td>{{ d.metin }}</td>
+    <td>{{ d.sure_sn // 60 }} dk{% if d.kapatilabilir %} · kapatılabilir{% endif %}</td>
+    <td>{{ d.hedef }}</td>
+    <td>{{ d.olusturan }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="not">Henüz duyuru gönderilmedi.</p>
+{% endif %}
+{% endblock %}

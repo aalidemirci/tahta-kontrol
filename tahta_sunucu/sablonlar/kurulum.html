@@ -1,0 +1,26 @@
+{% extends "taban.html" %}
+{% block baslik %}İlk kurulum · Tahta Kontrol{% endblock %}
+{% block icerik %}
+<div class="kutu giris-kutusu">
+  <h1>İlk kurulum</h1>
+  {% if not yerel %}
+  <p>İlk kurulum yalnız sunucunun kurulu olduğu bilgisayardan yapılabilir. O bilgisayarda
+     Tahta Kontrol penceresindeki <strong>Paneli aç</strong> düğmesini kullanın.</p>
+  {% else %}
+  <p class="not">Bu hesap panelin yöneticisidir; diğer kullanıcıları o ekler.</p>
+  <form method="post" action="/kurulum">
+    <label for="okul_adi">Okulun adı</label>
+    <input type="text" id="okul_adi" name="okul_adi" maxlength="120" required>
+    <label for="gorunen_ad">Adınız soyadınız</label>
+    <input type="text" id="gorunen_ad" name="gorunen_ad" maxlength="80" required>
+    <label for="ad">Kullanıcı adı</label>
+    <input type="text" id="ad" name="ad" minlength="3" maxlength="40" autocomplete="username" required>
+    <label for="parola">Parola (en az 8 karakter)</label>
+    <input type="password" id="parola" name="parola" minlength="8" autocomplete="new-password" required>
+    <label for="parola2">Parola (yeniden)</label>
+    <input type="password" id="parola2" name="parola2" minlength="8" autocomplete="new-password" required>
+    <p><button class="ana">Kurulumu tamamla</button></p>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

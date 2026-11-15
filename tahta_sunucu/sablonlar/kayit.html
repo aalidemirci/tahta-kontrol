@@ -1,0 +1,18 @@
+{% extends "taban.html" %}
+{% block baslik %}İşlem kaydı · Tahta Kontrol{% endblock %}
+{% block icerik %}
+<h1>İşlem kaydı</h1>
+<p class="not">Son 300 işlem. Kayıtlar panelden silinemez.</p>
+<table>
+  <tr><th>Zaman</th><th>Kim</th><th>İşlem</th><th>Ayrıntı</th><th>Adres</th></tr>
+  {% for k in kayitlar %}
+  <tr>
+    <td>{{ k.zaman | zaman }}</td>
+    <td>{{ k.kullanici }}</td>
+    <td>{{ k.islem }}</td>
+    <td>{{ k.ayrinti }}</td>
+    <td class="kod">{{ k.ip }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

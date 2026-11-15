@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block baslik %}Tahta Kontrol{% endblock %}</title>
+<link rel="stylesheet" href="/statik/stil.css">
+</head>
+<body>
+{% if kullanici %}
+<header class="ust">
+  <span class="marka">Tahta Kontrol</span>
+  {% if okul_adi %}<span class="okul">{{ okul_adi }}</span>{% endif %}
+  <nav>
+    <a href="/">Pano</a>
+    <a href="/duyurular">Duyurular</a>
+    <a href="/ekle">Tahta ekle</a>
+    <a href="/kayit">İşlem kaydı</a>
+    {% if kullanici.rol == 'yonetici' %}
+    <a href="/kullanicilar">Kullanıcılar</a>
+    <a href="/ayarlar">Ayarlar</a>
+    {% endif %}
+  </nav>
+  <div class="sag">
+    <span>{{ kullanici.gorunen_ad }} · {{ roller[kullanici.rol] }}</span>
+    <form method="post" action="/cikis" class="satir-ici"><button class="baglanti">Çıkış</button></form>
+  </div>
+</header>
+{% endif %}
+<main>
+{% if mesaj %}<div class="mesaj">{{ mesaj }}</div>{% endif %}
+{% block icerik %}{% endblock %}
+</main>
+</body>
+</html>

@@ -1,0 +1,13 @@
+[Unit]
+Description=Tahta Kontrol ajani
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/tahta-ajan servis
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

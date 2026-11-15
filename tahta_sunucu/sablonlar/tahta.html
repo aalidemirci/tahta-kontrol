@@ -1,0 +1,99 @@
+{% extends "taban.html" %}
+{% block baslik %}{{ t.ad }} · Tahta Kontrol{% endblock %}
+{% block icerik %}
+<p><a href="/">← Pano</a></p>
+<h1>{{ t.ad }}
+  {% if t.durum == 'bekliyor' %}<span class="rozet sari">Onay bekliyor</span>
+  {% elif t.cevrimici %}<span class="rozet yesil">Çevrimiçi</span>
+  {% else %}<span class="rozet kirmizi">Çevrimdışı</span>{% endif %}
+</h1>
+
+<div class="iki-sutun">
+  <div class="kutu">
+    <strong>Tahta bilgileri</strong>
+    {% if kullanici.rol == 'yonetici' %}
+    <form method="post" action="/tahta/{{ t.id }}/kaydet" class="form-dar">
+      <label for="ad">Tahtanın adı</label>
+      <input type="text" id="ad" name="ad" value="{{ t.ad }}" maxlength="60" required>
+      <label for="derslik">Derslik</label>
+      <input type="text" id="derslik" name="derslik" value="{{ t.derslik }}" maxlength="60" placeholder="ör. 2. kat, 11/A sınıfı">
+      <p>
+        {% if t.durum == 'bekliyor' %}
+        <button name="eylem" value="onayla" class="ana">Onayla ve kaydet</button>
+        {% else %}
+        <button name="eylem" value="kaydet" class="ana">Kaydet</button>
+        {% endif %}
+        <button name="eylem" value="sil" class="tehlike" formnovalidate
+          onclick="return confirm('Bu tahta panelden kaldırılacak ve ajanı sunucuya bağlanamayacak. Devam edilsin mi?')">Tahtayı kaldır</button>
+      </p>
+    </form>
+    {% else %}
+    <p>Derslik: {{ t.derslik or '—' }}</p>
+    {% endif %}
+  </div>
+  <div class="kutu">
+    <strong>Durum</strong>
+    <table>
+      <tr><td>Son görülme</td><td>{{ ham.son_gorulme | zaman }}</td></tr>
+      <tr><td>Kayıt zamanı</td><td>{{ ham.kayit_zamani | zaman }}</td></tr>
+      <tr><td>IP · MAC</td><td class="kod">{{ ham.ip or '—' }} · {{ ham.mac or '—' }}</td></tr>
+      <tr><td>Makine adı</td><td>{{ ham.makine_adi or '—' }}</td></tr>
+      <tr><td>İşletim sistemi</td><td>{{ ham.platform or '—' }}</td></tr>
+      <tr><td>Ajan sürümü</td><td>{{ ham.surum or '—' }}{% if ham.surum and not t.guncel %} <span class="rozet">Güncelleme var</span>{% endif %}</td></tr>
+      <tr><td>Oturum</td><td>{{ t.oturum }}</td></tr>
+      <tr><td>Ekran yardımcısı</td><td>{{ 'Bağlı' if t.ekran_bagli else 'Bağlı değil' }}</td></tr>
+    </table>
+  </div>
+</div>
+
+{% if t.durum == 'onayli' %}
+<form method="post" action="/islem" class="arac-cubugu">
+  <input type="hidden" name="tahta" value="{{ t.id }}">
+  <input type="hidden" name="donus" value="/tahta/{{ t.id }}">
+  <button name="tur" value="kilitle">Kilitle</button>
+  <button name="tur" value="kilit_ac">Kilidi aç</button>
+  <button name="tur" value="duyuru_kaldir">Duyuruyu kaldır</button>
+  <button name="tur" value="tani" class="ana">Tanılama çalıştır</button>
+  <button name="tur" value="guncelle">Ajanı güncelle</button>
+  <button name="tur" value="uyandir">Uzaktan aç</button>
+</form>
+{% endif %}
+
+<h2>Saha tanılaması</h2>
+{% if tani %}
+<p class="not">Rapor zamanı: {{ ham.tani_zamani | zaman }} · ajan {{ tani.ajan_surumu }}</p>
+<table class="tani">
+  <tr><th>Denetim</th><th>Sonuç</th><th>Ayrıntı</th></tr>
+  {% for d in tani.denetimler %}
+  <tr>
+    <td>{{ d.ad }}</td>
+    <td>{% if d.sonuc == 'tamam' %}<span class="rozet yesil">Tamam</span>
+        {% elif d.sonuc == 'uyari' %}<span class="rozet sari">Uyarı</span>
+        {% elif d.sonuc == 'sorun' %}<span class="rozet kirmizi">Sorun</span>
+        {% else %}<span class="rozet">Bilgi</span>{% endif %}</td>
+    <td>{{ d.ayrinti }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="not">Henüz tanılama raporu yok. Tahta çevrimiçiyken “Tanılama çalıştır” düğmesine basın; rapor birkaç saniye içinde bu sayfada görünür.</p>
+{% endif %}
+
+<h2>Son komutlar</h2>
+{% if komutlar %}
+<table>
+  <tr><th>Zaman</th><th>Komut</th><th>Veren</th><th>Durum</th><th>Sonuç</th></tr>
+  {% for k in komutlar %}
+  <tr>
+    <td>{{ k.olusturma | zaman }}</td>
+    <td>{{ komut_adi.get(k.tur, k.tur) }}</td>
+    <td>{{ k.olusturan }}</td>
+    <td>{{ komut_durumu.get(k.durum, k.durum) }}</td>
+    <td>{{ k.sonuc }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="not">Bu tahtaya henüz komut verilmedi.</p>
+{% endif %}
+{% endblock %}

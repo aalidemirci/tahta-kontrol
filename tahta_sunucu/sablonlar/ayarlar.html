@@ -1,0 +1,37 @@
+{% extends "taban.html" %}
+{% block baslik %}Ayarlar · Tahta Kontrol{% endblock %}
+{% block icerik %}
+<h1>Ayarlar</h1>
+<form method="post" action="/ayarlar">
+<div class="iki-sutun">
+  <div class="kutu">
+    <strong>Okul</strong>
+    <label for="okul_adi">Okulun adı (kilit ve duyuru ekranında görünür)</label>
+    <input type="text" id="okul_adi" name="okul_adi" value="{{ okul_adi }}" maxlength="120">
+
+    <label for="kilit_kodu">Tahta kilit kodu (4-8 rakam)</label>
+    <input type="password" id="kilit_kodu" name="kilit_kodu" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="off"
+      placeholder="{{ 'Tanımlı — değiştirmek için yeni kod yazın' if kilit_kodu_var else 'Tanımlı değil' }}">
+    {% if kilit_kodu_var %}
+    <label class="satir"><input type="checkbox" name="kilit_kodu_sil" value="1"> Kilit kodunu kaldır (tahta yalnız panelden açılır)</label>
+    {% endif %}
+    <p class="not">Bu kod bütün tahtalarda ortaktır ve öğretmenlerin kilitli tahtayı açması içindir.
+       Sınıfın önünde ekrandan girildiği için öğrencilerce görülebilir; düzenli aralıklarla değiştirin.
+       Kod tahtalara özet olarak gider ve sunucu kapalıyken de çalışır.</p>
+  </div>
+  <div class="kutu">
+    <strong>Sunucu</strong>
+    <label for="sunucu_adresi">Tahtaların kullanacağı sunucu adresi</label>
+    <input type="text" id="sunucu_adresi" name="sunucu_adresi" value="{{ kayitli_adres }}"
+      placeholder="https://{{ ipler[0] if ipler else '10.0.0.5' }}:{{ https_port }}">
+    <p class="not">Boş bırakılırsa bu bilgisayarın ilk ağ adresi kullanılır. Bu bilgisayarın adresleri:
+      {% for ip in ipler %}<span class="kod">{{ ip }}</span>{% if not loop.last %}, {% endif %}{% else %}bulunamadı{% endfor %}.
+      Sunucu bilgisayarına ağda sabit IP ayrılması önerilir.</p>
+    <p class="not">Sertifika parmak izi: <span class="kod">{{ parmak_izi }}</span></p>
+    <p class="not">Veri klasörü: <span class="kod">{{ veri_dizini }}</span><br>
+      Bu klasör (veritabanı ve sunucu sertifikası) düzenli yedeklenmelidir. Sertifika kaybolursa bütün tahtalara ajan yeniden kurulur.</p>
+  </div>
+</div>
+<p><button class="ana">Ayarları kaydet</button></p>
+</form>
+{% endblock %}

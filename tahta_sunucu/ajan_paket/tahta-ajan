@@ -1,0 +1,2 @@
+#!/bin/sh
+PYTHONPATH=/opt/tahta-kontrol exec python3 -m tahta_ajan "$@"

@@ -1,0 +1,139 @@
+{% extends "taban.html" %}
+{% block baslik %}Pano · Tahta Kontrol{% endblock %}
+{% block icerik %}
+<h1>Tahtalar</h1>
+
+{% if bekleyen %}
+<div class="kutu">
+  <strong>Onay bekleyen tahtalar</strong>
+  <p class="not">Kurulumu yapılan tahta, ad ve derslik verilip onaylanınca komut alır.</p>
+  {% for t in bekleyen %}
+  <div><a href="/tahta/{{ t.id }}">{{ t.ad }}</a> <span class="not">· {{ t.ip }} · {{ t.son_gorulme }}</span></div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if not onayli %}
+<div class="kutu">
+  <p>Henüz onaylı tahta yok. Tahtalara ajanı kurmak için <a href="/ekle">Tahta ekle</a> sayfasını açın.</p>
+</div>
+{% else %}
+<form method="post" action="/islem" id="islem">
+  <div class="arac-cubugu">
+    <button type="button" id="hepsini-sec">Tümünü seç</button>
+    <span class="ayrac"></span>
+    <button name="tur" value="kilitle">Kilitle</button>
+    <button name="tur" value="kilit_ac">Kilidi aç</button>
+    <span class="ayrac"></span>
+    <button name="tur" value="duyuru_kaldir">Duyuruyu kaldır</button>
+    <span class="ayrac"></span>
+    <button name="tur" value="kapat" class="tehlike" data-onay="Seçili tahtalar KAPATILACAK. Açık çalışmalar kaybolabilir. Devam edilsin mi?">Kapat</button>
+    <button name="tur" value="yeniden_baslat" class="tehlike" data-onay="Seçili tahtalar yeniden başlatılacak. Devam edilsin mi?">Yeniden başlat</button>
+    <button name="tur" value="uyandir">Uzaktan aç</button>
+    <span class="ayrac"></span>
+    <button name="tur" value="tani">Tanılama</button>
+    <button name="tur" value="guncelle">Ajanı güncelle</button>
+    <span class="not" id="secim-sayisi"></span>
+  </div>
+
+  <details class="kutu">
+    <summary>Duyuru gönder</summary>
+    <div class="iki-sutun">
+      <div>
+        <label for="baslik">Başlık (isteğe bağlı)</label>
+        <input type="text" id="baslik" name="baslik" maxlength="200" placeholder="DUYURU">
+        <label for="metin">Duyuru metni</label>
+        <textarea id="metin" name="metin" maxlength="4000"></textarea>
+      </div>
+      <div>
+        <label for="sure_dk">Ekranda kalma süresi (dakika)</label>
+        <input type="number" id="sure_dk" name="sure_dk" value="5" min="1" max="240">
+        <label class="satir"><input type="checkbox" name="kapatilabilir" value="1" checked>
+          Öğretmen tahtadan kapatabilsin</label>
+        <p class="not">Duyuru seçili tahtalarda tam ekran gösterilir ve süre dolunca kendiliğinden kalkar.
+          Tahtada öğrenci adı ya da kişisel bilgi içeren duyuru yayımlamayın; ekran bütün sınıfa açıktır.</p>
+        <p><button name="tur" value="duyuru" class="ana">Seçili tahtalara gönder</button></p>
+      </div>
+    </div>
+  </details>
+
+  {% if not kilit_kodu_var %}
+  <p class="not">Kilit kodu tanımlı değil: kilitlenen tahta yalnız panelden açılır.
+    {% if kullanici.rol == 'yonetici' %}<a href="/ayarlar">Ayarlar</a> sayfasından kod belirleyebilirsiniz.{% endif %}</p>
+  {% endif %}
+
+  <div class="izgara">
+    {% for t in onayli %}
+    <article class="tahta {% if not t.cevrimici %}cevrimdisi{% endif %}" data-id="{{ t.id }}">
+      <div class="bas">
+        <input type="checkbox" name="tahta" value="{{ t.id }}" aria-label="{{ t.ad }}">
+        <div>
+          <div class="ad"><a href="/tahta/{{ t.id }}">{{ t.ad }}</a></div>
+          <div class="derslik">{{ t.derslik or 'Derslik atanmadı' }}</div>
+        </div>
+      </div>
+      <div class="rozetler" data-alan="rozetler"></div>
+      <div class="satir" data-alan="oturum"></div>
+      <div class="satir" data-alan="alt"></div>
+    </article>
+    {% endfor %}
+  </div>
+</form>
+
+<script id="ilk-veri" type="application/json">{{ onayli | tojson }}</script>
+<script>
+(function () {
+  var paketSurumu = {{ paket_surumu | tojson }};
+  function rozet(metin, sinif) {
+    var e = document.createElement('span');
+    e.className = 'rozet ' + (sinif || '');
+    e.textContent = metin;
+    return e;
+  }
+  function ciz(liste) {
+    liste.forEach(function (t) {
+      var kart = document.querySelector('article.tahta[data-id="' + t.id + '"]');
+      if (!kart) return;
+      kart.classList.toggle('cevrimdisi', !t.cevrimici);
+      var rozetler = kart.querySelector('[data-alan="rozetler"]');
+      rozetler.textContent = '';
+      rozetler.appendChild(rozet(t.cevrimici ? 'Çevrimiçi' : 'Çevrimdışı', t.cevrimici ? 'yesil' : 'kirmizi'));
+      if (t.cevrimici) {
+        rozetler.appendChild(rozet(t.kilitli ? 'Kilitli' : 'Açık', t.kilitli ? 'sari' : ''));
+        if (t.duyuru_var) rozetler.appendChild(rozet('Duyuru ekranda', 'sari'));
+        if (!t.ekran_bagli) rozetler.appendChild(rozet('Ekran yardımcısı yok', 'kirmizi'));
+      }
+      if (t.surum && !t.guncel) rozetler.appendChild(rozet('Güncelleme var', ''));
+      kart.querySelector('[data-alan="oturum"]').textContent = t.cevrimici ? t.oturum : '';
+      kart.querySelector('[data-alan="alt"]').textContent =
+        'Son görülme: ' + t.son_gorulme + (t.surum ? ' · ajan ' + t.surum : '');
+    });
+  }
+  ciz(JSON.parse(document.getElementById('ilk-veri').textContent));
+  setInterval(function () {
+    fetch('/api/durum', {credentials: 'same-origin'}).then(function (y) {
+      if (y.status === 401) { location.href = '/giris'; return null; }
+      return y.json();
+    }).then(function (v) { if (v) ciz(v.tahtalar); }).catch(function () {});
+  }, 4000);
+
+  var kutular = Array.prototype.slice.call(document.querySelectorAll('input[name="tahta"]'));
+  function say() {
+    var n = kutular.filter(function (k) { return k.checked; }).length;
+    document.getElementById('secim-sayisi').textContent = n ? n + ' tahta seçili' : '';
+  }
+  kutular.forEach(function (k) { k.addEventListener('change', say); });
+  document.getElementById('hepsini-sec').addEventListener('click', function () {
+    var hepsi = kutular.every(function (k) { return k.checked; });
+    kutular.forEach(function (k) { k.checked = !hepsi; });
+    say();
+  });
+  document.querySelectorAll('button[data-onay]').forEach(function (d) {
+    d.addEventListener('click', function (olay) {
+      if (!confirm(d.getAttribute('data-onay'))) olay.preventDefault();
+    });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}
