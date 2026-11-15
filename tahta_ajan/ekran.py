@@ -115,6 +115,7 @@ def calistir() -> int:
             self.girilen = ""
             self.gorunur = False
             self.klavye_kilidi = "denenmedi"
+            self.kilit_modu = False
             self.kopma_zamani = None
 
             saglayici = Gtk.CssProvider()
@@ -256,6 +257,10 @@ def calistir() -> int:
             if self.gorunur:
                 self.pencere.present()
                 self.pencere.fullscreen()
+                # Pencere ekrana yerleşmeden yapılan ilk deneme "not-viewable" ile
+                # düşer; kilit sürdükçe klavye kilidi alınana kadar yeniden denenir.
+                if self.kilit_modu and self.klavye_kilidi != "alındı":
+                    self._klavye_kilitle()
             return True
 
         def _ciz(self):
@@ -298,40 +303,51 @@ def calistir() -> int:
             self.pencere.show_all()
             self.pencere.fullscreen()
             self.pencere.present()
+            self.kilit_modu = kilit
             if kilit:
                 self._klavye_kilitle()
             else:
                 self._klavye_birak()
             if ilk:
-                genislik, yukseklik = self._geometri()
-                self.baglanti.gonder(
-                    {
-                        "tur": "ekran_durumu",
-                        "genislik": genislik,
-                        "yukseklik": yukseklik,
-                        "klavye_kilidi": self.klavye_kilidi,
-                    }
-                )
+                self._durum_bildir()
+
+        def _durum_bildir(self):
+            genislik, yukseklik = self._geometri()
+            self.baglanti.gonder(
+                {
+                    "tur": "ekran_durumu",
+                    "genislik": genislik,
+                    "yukseklik": yukseklik,
+                    "klavye_kilidi": self.klavye_kilidi,
+                }
+            )
 
         def _gizle(self):
             if self.gorunur:
                 self._klavye_birak()
                 self.pencere.hide()
             self.gorunur = False
+            self.kilit_modu = False
             self.girilen = ""
             self.kod_etiketi.set_text("")
 
         def _klavye_kilitle(self):
             """Klavye ve fareyi bu pencereye bağlar (X11'de Alt+Tab'ı keser)."""
+            onceki = self.klavye_kilidi
             try:
                 koltuk = Gdk.Display.get_default().get_default_seat()
                 pencere = self.pencere.get_window()
                 if pencere is None:
                     return
+                if not pencere.is_viewable():
+                    self.klavye_kilidi = "bekliyor (pencere henüz görünür değil)"
+                    return
                 sonuc = koltuk.grab(pencere, Gdk.SeatCapabilities.ALL, True, None, None, None)
                 self.klavye_kilidi = "alındı" if sonuc == Gdk.GrabStatus.SUCCESS else f"alınamadı ({sonuc.value_nick})"
             except Exception as hata:
                 self.klavye_kilidi = f"hata: {hata}"
+            if self.klavye_kilidi != onceki:
+                self._durum_bildir()
 
         def _klavye_birak(self):
             try:
