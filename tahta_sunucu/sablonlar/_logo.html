@@ -1,0 +1,3 @@
+{% if logo_v %}<span class="logo-rozet"><img src="/marka/logo?v={{ logo_v }}" alt="{{ okul_adi or 'Okul' }} logosu"></span>
+{% elif monogram %}<span class="logo-rozet monogram" aria-hidden="true">{{ monogram }}</span>
+{% else %}<span class="logo-rozet"><img src="/statik/isaret.svg" alt=""></span>{% endif %}

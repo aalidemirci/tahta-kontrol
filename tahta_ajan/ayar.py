@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -74,3 +75,80 @@ def durum_oku() -> dict:
 
 def durum_yaz(veri: dict) -> None:
     _json_yaz(durum_dizini() / "durum.json", veri, gizli=True)
+
+
+# ---- okul kimliği: tahta paleti ve logo -------------------------------------------
+# Tonlar tahtada hesaplanmaz; sunucu (tahta_sunucu/tema.py) üretir ve hex olarak indirir.
+# Bu palet, varsayılan temanın (lacivert + kehribar) tahta paletinin aynısıdır (test eder);
+# eski sunucuya bağlı ya da henüz sunucuya ulaşmamış tahta bununla çizilir.
+PALET_ANAHTARLARI = (
+    "zemin", "yuzey", "serit", "metin", "soluk", "dugme", "dugme_kenar", "ana", "ana_metin", "vurgu", "bilgi",
+)  # fmt: skip
+VARSAYILAN_PALET = {
+    "zemin": "#021020",
+    "yuzey": "#08192a",
+    "serit": "#00203e",
+    "metin": "#f8fafc",
+    "soluk": "#b4bfca",
+    "dugme": "#25323f",
+    "dugme_kenar": "#526170",
+    "ana": "#36628e",
+    "ana_metin": "#ffffff",
+    "vurgu": "#e58044",
+    "bilgi": "#ffc752",
+}
+_HEX = re.compile(r"#[0-9a-f]{6}")
+
+LOGO_SINIRI = 256 * 1024
+
+
+def palet_dogrula(palet) -> dict | None:
+    """Sunucudan gelen paleti doğrular: bilinen anahtarlar, her biri #rrggbb (küçük harf).
+
+    Eksik ya da geçersiz anahtar varsayılan paletin değeriyle doldurulur; sözlük değilse None.
+    Doğrulanmamış hiçbir değer GTK stiline yazılmaz.
+    """
+    if not isinstance(palet, dict):
+        return None
+    sonuc = {}
+    for ad in PALET_ANAHTARLARI:
+        deger = palet.get(ad)
+        sonuc[ad] = deger if isinstance(deger, str) and _HEX.fullmatch(deger) else VARSAYILAN_PALET[ad]
+    return sonuc
+
+
+def logo_gecerli(veri) -> bool:
+    """Logo yalnız PNG ya da JPEG olabilir (sihirli baytlarla), en çok LOGO_SINIRI bayt."""
+    if not isinstance(veri, (bytes, bytearray)) or not veri or len(veri) > LOGO_SINIRI:
+        return False
+    png = veri[:8] == b"\x89PNG\r\n\x1a\n" and veri[12:16] == b"IHDR"
+    return png or veri[:3] == b"\xff\xd8\xff"
+
+
+def logo_yolu() -> Path:
+    """Logo yalnız servisin okuyabildiği yerde durur; ekran yardımcısına soketle gider."""
+    return durum_dizini() / "logo"
+
+
+def logo_oku() -> bytes | None:
+    try:
+        return logo_yolu().read_bytes()
+    except OSError:
+        return None
+
+
+def logo_yaz(veri: bytes) -> None:
+    yol = logo_yolu()
+    yol.parent.mkdir(parents=True, exist_ok=True)
+    gecici = yol.with_name("logo.yeni")
+    gecici.write_bytes(veri)
+    if not _windows():
+        os.chmod(gecici, 0o600)
+    os.replace(gecici, yol)
+
+
+def logo_sil() -> None:
+    try:
+        logo_yolu().unlink()
+    except OSError:
+        pass

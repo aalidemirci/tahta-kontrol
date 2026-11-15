@@ -1,15 +1,26 @@
 {% extends "taban.html" %}
 {% block baslik %}Giriş · Tahta Kontrol{% endblock %}
+{% block govde_sinifi %}giris-sayfasi{% endblock %}
+{% block mesaj_yeri %}{% endblock %}
 {% block icerik %}
-<div class="kutu giris-kutusu">
-  <h1>Tahta Kontrol</h1>
-  {% if okul_adi %}<p class="not">{{ okul_adi }}</p>{% endif %}
-  <form method="post" action="/giris">
-    <label for="ad">Kullanıcı adı</label>
-    <input type="text" id="ad" name="ad" autocomplete="username" autofocus required>
-    <label for="parola">Parola</label>
-    <input type="password" id="parola" name="parola" autocomplete="current-password" required>
-    <p><button class="ana">Giriş yap</button></p>
-  </form>
+<div class="giris-cerceve">
+  <aside class="giris-kimlik">
+    {% include "_logo.html" %}
+    <p class="giris-okul">{{ okul_adi or 'Tahta Kontrol' }}</p>
+    <p class="not">Tahta Kontrol · okul ağındaki etkileşimli tahtaların yönetimi</p>
+  </aside>
+  <div class="giris-yan">
+    {% if mesaj %}{% include "_ileti.html" %}{% endif %}
+    <div class="giris-kart kutu">
+      <h1>Giriş yap</h1>
+      <form method="post" action="/giris">
+        <label for="ad">Kullanıcı adı</label>
+        <input type="text" id="ad" name="ad" autocomplete="username" autofocus required>
+        <label for="parola">Parola</label>
+        <input type="password" id="parola" name="parola" autocomplete="current-password" required>
+        <p class="dugme-satiri"><button class="ana tam">Giriş yap</button></p>
+      </form>
+    </div>
+  </div>
 </div>
 {% endblock %}

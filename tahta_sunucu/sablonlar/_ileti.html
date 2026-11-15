@@ -1,0 +1,4 @@
+{# Sunucu iletisi: hata ise kırmızı kenarlı ve role="alert"; panel.js data-odakla taşıyan bandı odaklar (ekran okuyucu okur). #}
+<div class="bant{% if mesaj_hata %} hata{% endif %}" role="{{ 'alert' if mesaj_hata else 'status' }}"{% if odakla %} id="ileti" tabindex="-1" data-odakla{% endif %}>
+  {%- if mesaj_hata %}<svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span class="gizli">Hata: </span>{% endif %}{{ mesaj -}}
+</div>

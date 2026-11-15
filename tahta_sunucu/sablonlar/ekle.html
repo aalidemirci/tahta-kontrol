@@ -1,16 +1,18 @@
 {% extends "taban.html" %}
 {% block baslik %}Tahta ekle · Tahta Kontrol{% endblock %}
 {% block icerik %}
-<h1>Tahta ekle</h1>
+<div class="sayfa-bas"><h1>Tahta ekle</h1></div>
 
-<div class="kutu">
+<div class="kutu kod-bilet">
   {% if acik %}
   <p>Tahta ekleme <strong>açık</strong>. Eşleştirme kodu:</p>
   <p class="buyuk-kod">{{ kod }}</p>
   <p class="not">Kod {{ bitis | zaman }} saatine kadar geçerlidir. Kodla kaydolan tahta komut almaz; önce panoda onaylamanız gerekir.</p>
   {% if kullanici.rol == 'yonetici' %}
-  <form method="post" action="/ekle" class="satir-ici"><button name="eylem" value="kapat">Tahta eklemeyi kapat</button></form>
-  <form method="post" action="/ekle" class="satir-ici"><button name="eylem" value="ac">Yeni kod üret</button></form>
+  <div class="dugme-satiri">
+    <form method="post" action="/ekle" class="satir-ici"><button name="eylem" value="kapat">Tahta eklemeyi kapat</button></form>
+    <form method="post" action="/ekle" class="satir-ici"><button name="eylem" value="ac">Yeni kod üret</button></form>
+  </div>
   {% endif %}
   {% else %}
   <p>Tahta ekleme <strong>kapalı</strong>. Yeni tahta kaydı kabul edilmiyor.</p>
@@ -25,8 +27,11 @@
 <h2>Tahtada yapılacaklar</h2>
 <div class="kutu">
   <p>Tahtada yönetici hesabıyla (<span class="kod">etapadmin</span>) oturum açın ve uçbirimde şu iki komutu çalıştırın:</p>
-  <pre class="komut">wget --no-check-certificate -O tahta-kur.sh {{ adres }}/kur
+  <div class="komut-kap">
+    <pre class="komut" id="kur-komutu">wget --no-check-certificate -O tahta-kur.sh {{ adres }}/kur
 sudo bash tahta-kur.sh {{ kod or 'ESLESTIRME_KODU' }}</pre>
+    <button type="button" class="kopyala" data-kopyala="kur-komutu" hidden>Kopyala</button>
+  </div>
   <p class="not"><span class="kod">wget</span> yoksa aynı dosyayı tahtanın tarayıcısında <span class="kod">{{ adres }}/kur</span> adresini açarak indirebilirsiniz
      (tarayıcı sertifika uyarısı verir; “Gelişmiş → devam et”). Dosya İndirilenler klasörüne iner.</p>
   <p>Betik sunucunun kimliğini parmak iziyle denetler. Ekranda yazan parmak izinin başı şununla aynı olmalı:</p>

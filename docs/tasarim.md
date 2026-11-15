@@ -1,6 +1,6 @@
 # Tahta Kontrol — tasarım
 
-Sürüm 0.1.2 · 16.11.2026
+Sürüm 0.2.0 · 16.11.2026
 
 ## 1. Amaç ve kapsam
 
@@ -99,11 +99,52 @@ kademeli yayma ile başarısız güncellemede geri dönüş henüz yoktur.
   içindedir. Windows'lu tahta desteği bu dosyanın ve bir ekran arka ucunun
   (ör. tkinter) yazılmasıdır.
 
-## 10. Yol haritası
+## 10. Görünüm ve okul kimliği
+
+Panel ve tahta ekranı okulun logosu ve renkleriyle biçimlendirilir (Ayarlar >
+Okul kimliği). Amaç kimliktir, süs değil: renk anlam taşımaz, okunurluk her
+seçimde korunur.
+
+- **İki renk girdisi:** ana renk ve isteğe bağlı vurgu (ikinci okul rengi). Bütün
+  tonlar sunucuda (`tahta_sunucu/tema.py`, yalnız standart kitaplık) OKLCH
+  uzayında üretilir ve sRGB'ye sığdırılır; her metin/zemin çifti için kontrast
+  eşiği orada tutturulur (metin 4.5:1, tahtada uzaktan okuma 7:1, kenar ve simge
+  3:1). Kullanıcının seçimi reddedilmez; gerekirse ton açılır/koyulaştırılır ve
+  Ayarlar bunu söyler (kontrast raporu). Türetilmiş tonlar saklanmaz.
+- **Durum renkleri sabittir:** açık yeşil, kilitli çivit, duyuru kehribar,
+  çevrimdışı gri, sorun kırmızı. Okulun rengi bunlara karışmaz; her durum
+  renk + simge + metinle verilir. Çevrimdışı alarm sayılmaz (akşam olağandır).
+- **Panel:** açık/koyu görünüm işletim sisteminin tercihine uyar. Renkler
+  `/marka/tema.css` ile gelir; satır içi betik ve stil yoktur (CSP
+  `style-src 'self'; script-src 'self'`). Tarayıcının yeni renk özellikleri
+  (`light-dark()`, göreli renk, `contrast-color()`) yalnız aşamalı iyileştirme
+  ve kayıt öncesi önizlemedir; doğruluk onlara bağlı değildir. Dış font, CDN ve
+  derleme adımı yoktur.
+- **Logo:** yalnız PNG ya da JPEG (sihirli baytlarla denetlenir; SVG ve WebP
+  reddedilir), en çok 256 KB, kenarlar 64–2048 px, en-boy oranı 1:4–4:1. Kullanıcı
+  dosya adı hiçbir yerde kullanılmaz. Logo yokken panelde okul adının baş
+  harfleri, o da yoksa nötr ürün işareti görünür.
+- **Tahta ekranı her zaman koyudur** (projeksiyon parlamasında okunur). Her
+  sayfanın (kilit, duyuru, kapatma) üstünde bant durur: logo, okul adı, sağda
+  tahta adı · derslik; altında vurgu çizgisi. Duyuru başlığı vurgu renginde,
+  "Aç" tuşu ana renktedir; kapatma uyarısı markadan bağımsız sabit renktir.
+- **Tahtaya iniş:** onaylı tahtaya her `/ajan/bekle` yanıtında sunucunun
+  hesapladığı 11 tonluk tahta paleti, logonun SHA-256 özeti ve tahtanın adı/
+  dersliği iner; logo baytları ayrı uçtan (`/ajan/logo`, tahta kimliğiyle)
+  yalnız özet değişince indirilir, özeti ve türü denetlenir, servis dizininde
+  (root, 0600) saklanır. Ekran yardımcısı root dosyalarını okuyamaz; logo ona
+  yerel soketle ("marka" satırı, base64) gider. Tahta ton hesaplamaz; palet
+  doğrulanır, geçersiz değer varsayılanla değişir. Logo inmezse ya da bozuksa
+  ekran logosuz çalışır; eski sunucuya bağlı tahta varsayılan temayla çizilir.
+- **GTK'da iki stil sağlayıcısı:** ölçüler bir kez yüklenir, renkler tema
+  değişince aynı sağlayıcıya yeniden yüklenir (pencere yeniden açılmaz).
+
+## 11. Yol haritası
 
 | Aşama | İçerik | Durum |
 |---|---|---|
 | 0–1 | Sunucu, ajan, kayıt, pano, kilit, duyuru, kapatma, tanılama, güncelleme, otomatik kapatma | 0.1.2 — ETAP'ta denenecek |
+| 1.5 | Görünüm ve okul kimliği: okul logosu ve renkleri, yeni panel ve tahta ekranı tasarımı | 0.2.0 — ETAP'ta denenecek |
 | 2 | Duyuru zamanlama ve hedef grupları (kat, düzey, devre), acil durum yayını | — |
 | 3 | Ders programı ve zil saatleri (Okul Zili'nden), programa bağlı otomatik kilit/açma, boş geçen ders uyarısı, oturum temizliği | — |
 | 4 | Kelebek sınav duyurusu ve sınav kipi (Kelebek Sınav verisinden, maskeli liste), sınav yoklaması | — |

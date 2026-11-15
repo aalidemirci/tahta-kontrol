@@ -1,23 +1,32 @@
 {% extends "taban.html" %}
 {% block baslik %}Duyurular · Tahta Kontrol{% endblock %}
 {% block icerik %}
-<h1>Gönderilen duyurular</h1>
-<p class="not">Yeni duyuru <a href="/">Pano</a> sayfasından, tahtalar seçilerek gönderilir.</p>
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1 id="duyuru-baslik">Gönderilen duyurular</h1>
+    <p>Yeni duyuru <a href="/">Pano</a> sayfasından, tahtalar seçilerek gönderilir.</p>
+  </div>
+</div>
 {% if duyurular %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="duyuru-baslik">
 <table>
-  <tr><th>Zaman</th><th>Başlık</th><th>Metin</th><th>Süre</th><th>Tahtalar</th><th>Gönderen</th></tr>
+  <caption class="gizli">Son 100 duyuru</caption>
+  <thead><tr><th scope="col">Zaman</th><th scope="col">Başlık</th><th scope="col">Metin</th><th scope="col">Süre</th><th scope="col">Tahtalar</th><th scope="col">Gönderen</th></tr></thead>
+  <tbody>
   {% for d in duyurular %}
   <tr>
-    <td>{{ d.olusturma | zaman }}</td>
-    <td>{{ d.baslik or '—' }}</td>
-    <td>{{ d.metin }}</td>
-    <td>{{ d.sure_sn // 60 }} dk{% if d.kapatilabilir %} · kapatılabilir{% endif %}</td>
-    <td>{{ d.hedef }}</td>
-    <td>{{ d.olusturan }}</td>
+    <td data-etiket="Zaman">{{ d.olusturma | zaman }}</td>
+    <td data-etiket="Başlık">{{ d.baslik or '—' }}</td>
+    <td data-etiket="Metin">{{ d.metin }}</td>
+    <td data-etiket="Süre">{{ d.sure_sn // 60 }} dk{% if d.kapatilabilir %} · kapatılabilir{% endif %}</td>
+    <td data-etiket="Tahtalar">{{ d.hedef }}</td>
+    <td data-etiket="Gönderen">{{ d.olusturan }}</td>
   </tr>
   {% endfor %}
+  </tbody>
 </table>
+</div>
 {% else %}
-<p class="not">Henüz duyuru gönderilmedi.</p>
+<div class="kutu"><p class="not">Henüz duyuru gönderilmedi.</p></div>
 {% endif %}
 {% endblock %}

@@ -1,19 +1,22 @@
 {% extends "taban.html" %}
 {% block baslik %}Kullanıcılar · Tahta Kontrol{% endblock %}
 {% block icerik %}
-<h1>Kullanıcılar</h1>
-<table>
-  <tr><th>Kullanıcı adı</th><th>Ad soyad</th><th>Yetki</th><th>Durum</th><th>İşlem</th></tr>
+<div class="sayfa-bas"><h1 id="kullanici-baslik">Kullanıcılar</h1></div>
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="kullanici-baslik">
+<table class="kullanicilar-tablo">
+  <caption class="gizli">Panel kullanıcıları</caption>
+  <thead><tr><th scope="col">Kullanıcı adı</th><th scope="col">Ad soyad</th><th scope="col">Yetki</th><th scope="col">Durum</th><th scope="col">İşlem</th></tr></thead>
+  <tbody>
   {% for u in kullanicilar %}
   <tr>
-    <td>{{ u.ad }}</td>
-    <td>{{ u.gorunen_ad }}</td>
-    <td>{{ roller[u.rol] }}</td>
-    <td>{% if u.aktif %}<span class="rozet yesil">Açık</span>{% else %}<span class="rozet kirmizi">Kapalı</span>{% endif %}</td>
-    <td>
+    <td data-etiket="Kullanıcı adı">{{ u.ad }}</td>
+    <td data-etiket="Ad soyad">{{ u.gorunen_ad }}</td>
+    <td data-etiket="Yetki">{{ roller[u.rol] }}</td>
+    <td data-etiket="Durum">{% if u.aktif %}<span class="rozet" data-durum="acik"><svg class="simge" aria-hidden="true"><use href="#s-acik"/></svg>Açık</span>{% else %}<span class="rozet" data-durum="cevrimdisi"><svg class="simge" aria-hidden="true"><use href="#s-kapali"/></svg>Kapalı</span>{% endif %}</td>
+    <td data-etiket="İşlem">
       <form method="post" action="/kullanicilar" class="satir-ici">
         <input type="hidden" name="id" value="{{ u.id }}">
-        <input type="password" name="parola" placeholder="Yeni parola" minlength="8" style="width:150px" autocomplete="new-password">
+        <input type="password" name="parola" placeholder="Yeni parola" minlength="8" class="alan-dar" autocomplete="new-password" aria-label="{{ u.ad }} için yeni parola">
         <button name="eylem" value="parola">Parolayı değiştir</button>
         {% if u.id != kullanici.id %}
         <button name="eylem" value="durum" formnovalidate>{{ 'Hesabı kapat' if u.aktif else 'Hesabı aç' }}</button>
@@ -22,10 +25,12 @@
     </td>
   </tr>
   {% endfor %}
+  </tbody>
 </table>
+</div>
 
-<h2>Kullanıcı ekle</h2>
 <div class="kutu">
+  <h2>Kullanıcı ekle</h2>
   <form method="post" action="/kullanicilar" class="form-dar">
     <label for="gorunen_ad">Ad soyad</label>
     <input type="text" id="gorunen_ad" name="gorunen_ad" maxlength="80" required>
@@ -38,7 +43,7 @@
       <option value="idareci">İdareci — tahtaları yönetir, duyuru gönderir</option>
       <option value="yonetici">Yönetici — ayrıca kullanıcı, ayar ve tahta kaydını yönetir</option>
     </select>
-    <p><button name="eylem" value="ekle" class="ana">Kullanıcıyı ekle</button></p>
+    <p class="dugme-satiri"><button name="eylem" value="ekle" class="ana">Kullanıcıyı ekle</button></p>
   </form>
 </div>
 {% endblock %}

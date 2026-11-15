@@ -8,6 +8,7 @@ kilit kodu özeti) ekran yardımcısına hiç gitmez.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -26,6 +27,7 @@ gunluk = logging.getLogger("tahta-ajan")
 
 KOD_DENEME_SINIRI = 5
 KOD_BEKLEME_SN = 60
+LOGO_YENIDEN_DENEME_SN = 60
 
 
 class Servis:
@@ -50,6 +52,19 @@ class Servis:
         self._son_cevrimdisi = None
         self.yapi = {}
         self.istemci = None
+        # Okul kimliği: sunucunun hesapladığı tahta paleti, logo ve tahtanın adı/dersliği.
+        # Logo yalnız bu serviste (root) durur; ekran yardımcısına soketle gider.
+        self.tema = ayar.palet_dogrula(kayitli.get("tema"))
+        tahta = kayitli.get("tahta") if isinstance(kayitli.get("tahta"), dict) else {}
+        self.tahta_bilgi = {"ad": _kisa(tahta.get("ad")), "derslik": _kisa(tahta.get("derslik"))}
+        self.logo, self.logo_sha = None, None
+        sha = kayitli.get("logo_sha256")
+        veri = ayar.logo_oku() if _sha_gecerli(sha) else None
+        if veri and ayar.logo_gecerli(veri) and hashlib.sha256(veri).hexdigest() == sha:
+            self.logo, self.logo_sha = veri, sha
+        # Son başarısız denemenin time.monotonic() zamanı; None = bekleme yok. Duvar saati değil:
+        # tahta saati geri alınırsa (bozuk RTC, NTP düzeltmesi) logo uzun süre indirilmez olurdu.
+        self._logo_son_deneme = None
 
     # ---- durum -----------------------------------------------------------
     def cevrimdisi(self) -> bool:
@@ -59,7 +74,16 @@ class Servis:
         return bool(self.yapi.get("tahta_id"))
 
     def _kaydet(self):
-        ayar.durum_yaz({"kilitli": self.kilitli, "okul_adi": self.okul_adi, "kilit_kodu": self.kilit_kodu})
+        ayar.durum_yaz(
+            {
+                "kilitli": self.kilitli,
+                "okul_adi": self.okul_adi,
+                "kilit_kodu": self.kilit_kodu,
+                "tema": self.tema,
+                "logo_sha256": self.logo_sha,
+                "tahta": self.tahta_bilgi,
+            }
+        )
 
     def gorunum(self) -> dict:
         with self.kilit:
@@ -90,7 +114,27 @@ class Servis:
                 "cevrimdisi": self.cevrimdisi(),
                 "kayitli": self.kayitli(),
                 "bekleme": max(0, int(self.bekleme_bitis - time.time())),
+                # Görünüm: sır içermez (kilit kodu özeti, tahta anahtarı buraya girmez).
+                "tema": self.tema or dict(ayar.VARSAYILAN_PALET),
+                "logo_sha256": self.logo_sha,
+                "tahta_adi": self.tahta_bilgi["ad"],
+                "derslik": self.tahta_bilgi["derslik"],
             }
+
+    def marka_mesaji(self) -> dict:
+        """Logo baytlarını ekran yardımcısına taşıyan satır (yardımcı root dosyasını okuyamaz)."""
+        with self.kilit:
+            logo, sha = self.logo, self.logo_sha
+        if not logo:
+            return {"tur": "marka", "sha256": None, "logo": None}
+        return {"tur": "marka", "sha256": sha, "logo": base64.b64encode(logo).decode("ascii")}
+
+    def marka_yayinla(self):
+        mesaj = self.marka_mesaji()
+        with self.kilit:
+            hedefler = list(self.ekranlar.values())
+        for hedef in hedefler:
+            hedef["gonder"](mesaj)
 
     def yayinla(self):
         mesaj = self.gorunum()
@@ -283,10 +327,58 @@ class Servis:
                 self.okul_adi, degisti = ayarlar["okul_adi"], True
             if "kilit_kodu" in ayarlar and ayarlar["kilit_kodu"] != self.kilit_kodu:
                 self.kilit_kodu, degisti = ayarlar["kilit_kodu"], True
-            if degisti:
+            # Okul kimliği: anahtar yoksa (0.1.x sunucu) mevcut görünüme dokunulmaz.
+            if "tema" in ayarlar:
+                tema = ayar.palet_dogrula(ayarlar["tema"])
+                if tema != self.tema:
+                    self.tema, degisti = tema, True
+            if isinstance(ayarlar.get("tahta"), dict):
+                bilgi = {"ad": _kisa(ayarlar["tahta"].get("ad")), "derslik": _kisa(ayarlar["tahta"].get("derslik"))}
+                if bilgi != self.tahta_bilgi:
+                    self.tahta_bilgi, degisti = bilgi, True
+        logo_degisti = False
+        if "logo_sha256" in ayarlar:
+            sha = ayarlar["logo_sha256"]
+            if sha is None and self.logo_sha is not None:
+                ayar.logo_sil()
+                with self.kilit:
+                    self.logo, self.logo_sha = None, None
+                logo_degisti = True
+            elif _sha_gecerli(sha) and sha != self.logo_sha:
+                # İndirme kilit tutulmadan yapılır: ekran ve komutlar beklemez.
+                logo_degisti = self._logo_indir(sha)
+        if degisti or logo_degisti:
+            with self.kilit:
                 self._kaydet()
-        if degisti:
+        if logo_degisti:
+            self.marka_yayinla()
+        if degisti or logo_degisti:
             self.yayinla()
+
+    def _logo_indir(self, sha: str) -> bool:
+        """Logoyu indirir, denetler ve saklar; başarılıysa True. Bozuk logo saklanmaz, eskisi kalır."""
+        if self.istemci is None:
+            return False
+        if self._logo_son_deneme is not None and time.monotonic() - self._logo_son_deneme < LOGO_YENIDEN_DENEME_SN:
+            return False
+        self._logo_son_deneme = time.monotonic()
+        try:
+            kod, veri, _ = self.istemci.istek("GET", "/ajan/logo", zaman_asimi=30, ham=True)
+        except BaglantiHatasi as hata:
+            gunluk.warning("Logo indirilemedi: %s", hata)
+            return False
+        if kod != 200 or not ayar.logo_gecerli(veri) or hashlib.sha256(veri).hexdigest() != sha:
+            gunluk.warning("Logo kabul edilmedi (HTTP %s, %s bayt).", kod, len(veri or b""))
+            return False
+        try:
+            ayar.logo_yaz(bytes(veri))
+        except OSError as hata:
+            gunluk.warning("Logo yazılamadı: %s", hata)
+            return False
+        with self.kilit:
+            self.logo, self.logo_sha = bytes(veri), sha
+        self._logo_son_deneme = None
+        return True
 
     def bildir(self):
         """Durum değişikliğini uzun beklemeyi beklemeden sunucuya iletir."""
@@ -389,6 +481,9 @@ class Servis:
                     no = servis._ekran_no
                     servis.ekranlar[no] = {"gonder": gonder, "bilgi": {}}
                 try:
+                    # Logo önce gider: yardımcı ilk durumu çizerken logoyu zaten tanır.
+                    if servis.logo_sha:
+                        gonder(servis.marka_mesaji())
                     gonder(servis.gorunum())
                     for satir in self.rfile:
                         try:
@@ -420,6 +515,14 @@ class Servis:
             self._dongu()
         finally:
             yerel.shutdown()
+
+
+def _kisa(deger) -> str:
+    return str(deger or "").strip()[:60]
+
+
+def _sha_gecerli(deger) -> bool:
+    return isinstance(deger, str) and len(deger) == 64 and all(c in "0123456789abcdef" for c in deger)
 
 
 def calistir() -> int:

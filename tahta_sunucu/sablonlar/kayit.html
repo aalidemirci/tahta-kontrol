@@ -1,18 +1,31 @@
 {% extends "taban.html" %}
 {% block baslik %}İşlem kaydı · Tahta Kontrol{% endblock %}
 {% block icerik %}
-<h1>İşlem kaydı</h1>
-<p class="not">Son 300 işlem. Kayıtlar panelden silinemez.</p>
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1 id="kayit-baslik">İşlem kaydı</h1>
+    <p>Son 300 işlem. Kayıtlar panelden silinemez.</p>
+  </div>
+</div>
+{% if kayitlar %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="kayit-baslik">
 <table>
-  <tr><th>Zaman</th><th>Kim</th><th>İşlem</th><th>Ayrıntı</th><th>Adres</th></tr>
+  <caption class="gizli">Son 300 işlem</caption>
+  <thead><tr><th scope="col">Zaman</th><th scope="col">Kim</th><th scope="col">İşlem</th><th scope="col">Ayrıntı</th><th scope="col">Adres</th></tr></thead>
+  <tbody>
   {% for k in kayitlar %}
   <tr>
-    <td>{{ k.zaman | zaman }}</td>
-    <td>{{ k.kullanici }}</td>
-    <td>{{ k.islem }}</td>
-    <td>{{ k.ayrinti }}</td>
-    <td class="kod">{{ k.ip }}</td>
+    <td data-etiket="Zaman">{{ k.zaman | zaman }}</td>
+    <td data-etiket="Kim">{{ k.kullanici }}</td>
+    <td data-etiket="İşlem">{{ k.islem }}</td>
+    <td data-etiket="Ayrıntı">{{ k.ayrinti }}</td>
+    <td data-etiket="Adres" class="kod">{{ k.ip }}</td>
   </tr>
   {% endfor %}
+  </tbody>
 </table>
+</div>
+{% else %}
+<div class="kutu"><p class="not">Henüz kayıt yok.</p></div>
+{% endif %}
 {% endblock %}

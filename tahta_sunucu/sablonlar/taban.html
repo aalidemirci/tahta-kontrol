@@ -3,33 +3,68 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="{{ tema_serit }}">
+<link rel="icon" href="{{ '/marka/logo?v=' ~ logo_v if logo_v else '/statik/isaret.svg' }}">
+<link rel="stylesheet" href="/statik/stil.css?v={{ surum }}">
+<link rel="stylesheet" href="/marka/tema.css?v={{ tema_v }}">
+<script src="/statik/panel.js?v={{ surum }}" defer></script>
 <title>{% block baslik %}Tahta Kontrol{% endblock %}</title>
-<link rel="stylesheet" href="/statik/stil.css">
 </head>
-<body>
+<body class="{% block govde_sinifi %}{% endblock %}">
+<a class="atla" href="#icerik">İçeriğe geç</a>
+<svg class="gizli" aria-hidden="true" focusable="false">
+  <symbol id="s-acik" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" fill="currentColor"/></symbol>
+  <symbol id="s-kapali" viewBox="0 0 16 16"><circle cx="8" cy="8" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="s-kilit" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor"/><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="s-duyuru" viewBox="0 0 16 16"><path d="M2 6h3l5-3v10L5 10H2z" fill="currentColor"/><path d="M12 5.5a3.5 3.5 0 0 1 0 5" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="s-sorun" viewBox="0 0 16 16"><path d="M8 1.5 15 14H1z" fill="currentColor"/><path class="unlem" d="M8 6v4M8 11.5v1" stroke-width="1.6"/></symbol>
+  <symbol id="s-guncel" viewBox="0 0 16 16"><path d="M8 2v9M4 7l4 4 4-4M3 14h10" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="s-onay" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.5 1.5"/><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="s-tamam" viewBox="0 0 16 16"><path d="M3 8.5 6.5 12 13 4.5" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="s-bilgi" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 7v4.5M8 4.5v1" stroke="currentColor" stroke-width="1.8"/></symbol>
+</svg>
 {% if kullanici %}
-<header class="ust">
-  <span class="marka">Tahta Kontrol</span>
-  {% if okul_adi %}<span class="okul">{{ okul_adi }}</span>{% endif %}
-  <nav>
-    <a href="/">Pano</a>
-    <a href="/duyurular">Duyurular</a>
-    <a href="/ekle">Tahta ekle</a>
-    <a href="/kayit">İşlem kaydı</a>
+<header class="ust"><div class="ust-ic">
+  <a class="kimlik" href="/">
+    {% include "_logo.html" %}
+    <span class="kimlik-yazi">
+      <span class="kimlik-okul">{{ okul_adi or 'Tahta Kontrol' }}</span>
+      {% if okul_adi %}<span class="kimlik-urun">Tahta Kontrol</span>{% endif %}
+    </span>
+  </a>
+  <nav class="ana-menu" aria-label="Ana menü">
+    {% set yol = request.url.path %}
+    <a href="/" {% if yol == '/' or yol.startswith('/tahta/') %}aria-current="page"{% endif %}>Pano</a>
+    <a href="/duyurular" {% if yol == '/duyurular' %}aria-current="page"{% endif %}>Duyurular</a>
+    <a href="/ekle" {% if yol == '/ekle' %}aria-current="page"{% endif %}>Tahta ekle</a>
+    <a href="/kayit" {% if yol == '/kayit' %}aria-current="page"{% endif %}>İşlem kaydı</a>
     {% if kullanici.rol == 'yonetici' %}
-    <a href="/kullanicilar">Kullanıcılar</a>
-    <a href="/ayarlar">Ayarlar</a>
+    <a href="/kullanicilar" {% if yol == '/kullanicilar' %}aria-current="page"{% endif %}>Kullanıcılar</a>
+    <a href="/ayarlar" {% if yol == '/ayarlar' %}aria-current="page"{% endif %}>Ayarlar</a>
     {% endif %}
   </nav>
-  <div class="sag">
+  <div class="oturum">
     <span>{{ kullanici.gorunen_ad }} · {{ roller[kullanici.rol] }}</span>
-    <form method="post" action="/cikis" class="satir-ici"><button class="baglanti">Çıkış</button></form>
+    <form method="post" action="/cikis" class="satir-ici"><button class="cikis">Çıkış</button></form>
   </div>
-</header>
+</div></header>
 {% endif %}
-<main>
-{% if mesaj %}<div class="mesaj">{{ mesaj }}</div>{% endif %}
+<main id="icerik">
+{% block mesaj_yeri %}{% if mesaj %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}{% endblock %}
 </main>
+{% if kullanici %}
+<dialog id="onay-diyalog" class="onay" aria-labelledby="onay-baslik" aria-describedby="onay-metin">
+  <h2 id="onay-baslik"></h2>
+  <p id="onay-metin"></p>
+  <ul id="onay-liste" class="onay-liste" hidden></ul>
+  <p id="onay-uyari" class="bant uyari" hidden></p>
+  <div class="dugmeler">
+    <form method="dialog"><button value="vazgec" autofocus>Vazgeç</button></form>
+    <button type="submit" id="onay-evet" class="tehlike-dolu" form="" formnovalidate></button>
+  </div>
+</dialog>
+{% endif %}
 </body>
 </html>

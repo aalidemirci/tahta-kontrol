@@ -6,9 +6,10 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.1.2, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
-  (0.1.1: kurulum, kilit, duyuru, kapatma, güncelleme çalıştı); gerçek bir ETAP
-  tahtasında henüz denenmedi.
+- Durum: **0.2.0, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
+  (0.1.1: kurulum, kilit, duyuru, kapatma, güncelleme çalıştı); 0.2.0'ın okul kimliği
+  (logo, renkler, yeni panel ve tahta ekranı) yalnız Debian 12 kabında ve tarayıcıda
+  denendi; gerçek bir ETAP tahtasında henüz denenmedi.
 
 ## Komutlar (PowerShell 5.1; `&&` yok)
 
@@ -30,16 +31,20 @@ Ajan: `TAHTA_AJAN_DIZIN`, `TAHTA_AJAN_DURUM`, `TAHTA_AJAN_BENZETIM=1` (kapatma k
 
 ```
 tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
-  web.py        panel uçları ve /ajan/* arayüzü (uzun bekleme)
+  web.py        panel uçları, /marka/* (tema.css, logo) ve /ajan/* arayüzü (uzun bekleme)
+  tema.py       okul renklerinden bütün panel ve tahta tonları (OKLCH, kontrast eşikleri)
+  marka.py      okul logosu: PNG/JPEG denetimi, ölçü okuma, saklama (veri_dizini/marka/logo)
   vt.py         şema ve göçler (GOCLER listesi, PRAGMA user_version)
   guvenlik.py   parola (scrypt), sunucu sertifikası ve parmak izi, kilit kodu özeti
   paket.py      ajan .deb paketini ve kurulum betiğini dış araç olmadan üretir
   sunucu.py     iki dinleyici: yerel HTTP + ağ için HTTPS
   pencere.py    masaüstü denetim penceresi (tkinter)
+  statik/       stil.css (tek dosya, katmanlı), panel.js (tek dosya, kütüphanesiz), isaret.svg (nötr ürün işareti)
   ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh
 tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
   servis.py     yönetici yetkili sistem servisi: sunucu döngüsü, komutlar, yerel soket
-  ekran.py      oturumda çalışan kilit/duyuru penceresi (GTK3)
+  ekran.py      oturumda çalışan kilit/duyuru/kapatma penceresi (GTK3), üst bantta logo ve okul adı
+  ayar.py       yapılandırma, varsayılan tahta paleti, logonun servis tarafında saklanması
   sistem.py     işletim sistemine dokunan HER ŞEY (yeni platform = bu dosya)
   tani.py       saha tanılaması (denetim listesi)
 packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
@@ -88,6 +93,17 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
   tahtalara, uyarılı (`uyari_sn`) komut verir; aynı gün-saat için bir kez (`kapatma_isaretleri`).
   Ajan, kilitli ya da ekransız tahtada uyarı göstermeden kapatır. Uzaktan açma
   (Wake-on-LAN) denenen bilgisayarda çalışmadı; düğme yalnız tahta sayfasında "deneysel" durur.
+- **Panelde satır içi betik ve stil yok:** CSP `script-src 'self'; style-src 'self'`.
+  Şablona `<style>`, `style=`, `onclick=` ya da çalışan `<script>` yazılmaz (yalnız
+  `type="application/json"` veri blokları); test bunu denetler. Renkler `/marka/tema.css`'ten
+  gelir, `stil.css`'teki varsayılan ham değerler `tema.varsayilan()` çıktısıyla aynı olmalı.
+- **GTK'da `label` renk kuralı düğmenin içindeki etiketi de boyar:** düğme yazı rengi
+  `button label` ve `#ana-dugme label` ile ayrıca verilir (`ekran.renk_stili`). Renkler ayrı
+  bir CSS sağlayıcısındadır ve tema değişince aynı sağlayıcıya yeniden yüklenir.
+- **Ajanın varsayılan paleti sunucuyla aynıdır:** `tahta_ajan/ayar.VARSAYILAN_PALET` =
+  `tema.varsayilan()["tahta"]`; tema formülü değişirse ikisi birlikte değişir (test eder).
+- **Logo ekran yardımcısına soketle gider:** dosya root'a aittir (0600); yardımcı okuyamaz.
+  Logo bozuk ya da inmemişse ekran logosuz çalışır; bunu "hata" diye düşürme.
 - **Deneme betiklerinde saat:** Git Bash'te `TZ=Europe/Istanbul date` UTC verir; saati Python ile hesapla.
 - **İlk kurulum yalnız 127.0.0.1'den yapılır;** ağdaki biri yönetici hesabını kapamasın.
 - **Docker'da deneme:** `debian:12` + `python3-gi gir1.2-gtk-3.0 xvfb openbox imagemagick`;

@@ -1,13 +1,19 @@
-"""Ekran yardımcısı: kilit ve duyuru penceresini çizer.
+"""Ekran yardımcısı: kilit, duyuru ve kapatma uyarısı penceresini çizer.
 
 Her masaüstü oturumunda (otomatik başlatma ile) kullanıcının yetkisiyle
 çalışır; ne göstereceğini ajan servisinden yerel soket üzerinden öğrenir.
 Servisle bağlantı koparsa pencere kapanır: yardımcı tek başına tahtayı
 kilitli tutmaz.
+
+Görünüm: her sayfanın üstünde okulun logosu ve adı olan bir bant durur. Renkler
+sunucuda hesaplanır (okunurluk eşikleri orada tutturulur) ve servis üzerinden
+hex olarak gelir; burada yalnız doğrulanıp GTK stiline yazılır. Logo baytları
+servisten "marka" mesajıyla gelir; yüklenemezse ekran logosuz çalışır.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import socket
@@ -17,26 +23,64 @@ import time
 
 from . import __version__, ayar
 
-STIL = b"""
-window { background-color: #111827; }
-label { color: #f9fafb; }
-#okul { font-size: 34px; font-weight: 600; color: #d1d5db; }
+# Ölçüler, ağırlıklar ve boşluklar: renk YOK (renkler renk_stili() ile ayrı sağlayıcıda).
+STIL_OLCU = b"""
+#okul { font-size: 40px; font-weight: 600; }
+#bant-sag { font-size: 26px; }
+#ust-bant { padding: 28px 48px; border-bottom-width: 6px; border-bottom-style: solid; }
+#logo-kutu { border-radius: 16px; padding: 10px; }
 #saat { font-size: 150px; font-weight: 700; }
-#tarih { font-size: 30px; color: #9ca3af; }
+#tarih { font-size: 30px; }
 #kilit-yazi { font-size: 40px; font-weight: 600; margin-top: 24px; }
-#bilgi { font-size: 24px; color: #fbbf24; }
+#bilgi { font-size: 24px; }
 #kod { font-size: 56px; letter-spacing: 12px; }
-#duyuru-baslik { font-size: 72px; font-weight: 700; color: #fde68a; }
+#duyuru-baslik { font-size: 72px; font-weight: 700; }
 #duyuru-metin { font-size: 52px; }
-#alt { font-size: 24px; color: #9ca3af; }
-#kapatma-baslik { font-size: 64px; font-weight: 700; color: #fca5a5; }
+#kapatma-baslik { font-size: 64px; font-weight: 700; }
 #kapatma-sayac { font-size: 170px; font-weight: 700; }
-#kapatma-neden { font-size: 30px; color: #d1d5db; }
-button { font-size: 34px; font-weight: 600; padding: 14px 26px; border-radius: 12px;
-         background-image: none; background-color: #374151; color: #f9fafb; border: 1px solid #4b5563; }
-button:active { background-color: #6b7280; }
-#ana-dugme { background-color: #2563eb; border-color: #1d4ed8; }
+#kapatma-neden { font-size: 30px; }
+button { font-size: 34px; font-weight: 600; padding: 14px 26px; border-radius: 12px; background-image: none;
+         border-width: 1px; border-style: solid; box-shadow: none; text-shadow: none; }
 """
+
+LOGO_BOY = 96  # piksel; genişlik oran korunarak en çok LOGO_EN
+LOGO_EN = 320
+LOGO_METIN_SINIRI = 400_000  # base64 karakter (256 KB logo yaklaşık 350 000)
+
+
+def renk_stili(palet: dict) -> str:
+    """Tahta paletinden GTK renk kurallarını üretir (ASCII; değerler doğrulanmış hex).
+
+    "label" genel kuralı düğme içindeki etiketi de yakalar; bu yüzden "button label" ve
+    "#ana-dugme label" kuralları zorunludur. Kapatma başlığı markadan bağımsız sabit renktir.
+    """
+    p = ayar.palet_dogrula(palet) or dict(ayar.VARSAYILAN_PALET)
+    return (
+        f"window {{ background-color: {p['zemin']}; }}\n"
+        f"label {{ color: {p['metin']}; }}\n"
+        f"#ust-bant {{ background-color: {p['serit']}; border-bottom-color: {p['vurgu']}; }}\n"
+        "#logo-kutu { background-color: #ffffff; }\n"
+        f"#bant-sag, #tarih, #kapatma-neden {{ color: {p['soluk']}; }}\n"
+        f"#bilgi {{ color: {p['bilgi']}; }}\n"
+        f"#duyuru-baslik {{ color: {p['vurgu']}; }}\n"
+        "#kapatma-baslik { color: #fca5a5; }\n"
+        f"button {{ background-color: {p['dugme']}; border-color: {p['dugme_kenar']}; }}\n"
+        f"button label {{ color: {p['metin']}; }}\n"
+        f"button:active {{ background-color: {p['yuzey']}; }}\n"
+        f"#ana-dugme {{ background-color: {p['ana']}; border-color: {p['ana']}; }}\n"
+        f"#ana-dugme label {{ color: {p['ana_metin']}; }}\n"
+    )
+
+
+def logo_olcusu(en: int, boy: int) -> tuple[int, int]:
+    """Logoyu bant yüksekliğine (96 px) ölçekler; genişlik 320 px'i aşarsa ona göre küçültür."""
+    if en <= 0 or boy <= 0:
+        return 0, 0
+    yeni_en, yeni_boy = round(en * LOGO_BOY / boy), LOGO_BOY
+    if yeni_en > LOGO_EN:
+        yeni_en, yeni_boy = LOGO_EN, max(1, round(boy * LOGO_EN / en))
+    return max(1, yeni_en), yeni_boy
+
 
 AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
 GUNLER = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
@@ -103,7 +147,9 @@ def calistir() -> int:
 
         gi.require_version("Gtk", "3.0")
         gi.require_version("Gdk", "3.0")
-        from gi.repository import Gdk, GLib, Gtk
+        gi.require_version("GdkPixbuf", "2.0")
+        gi.require_version("Pango", "1.0")
+        from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
     except Exception as hata:  # kitaplık yoksa servise bildirilir, tanılamada görünür
         bilgi = dict(_ortam_bilgisi(), arayuz="yok", hata=f"{type(hata).__name__}: {hata}")
         baglanti = Baglanti(lambda m: None, lambda: None)
@@ -120,11 +166,20 @@ def calistir() -> int:
             self.klavye_kilidi = "denenmedi"
             self.kilit_modu = False
             self.kopma_zamani = None
+            self.bantlar = []  # her sayfanın üst bandı: (logo_kutu, logo_resmi, okul, sag)
+            self.logo_pixbuf = None
+            self.logo_sha = None
 
-            saglayici = Gtk.CssProvider()
-            saglayici.load_from_data(STIL)
+            # İki sağlayıcı: ölçüler bir kez yüklenir; renkler tema değişince yenilenir.
+            ekran = Gdk.Screen.get_default()
+            olcu = Gtk.CssProvider()
+            olcu.load_from_data(STIL_OLCU)
+            Gtk.StyleContext.add_provider_for_screen(ekran, olcu, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+            self.palet = dict(ayar.VARSAYILAN_PALET)
+            self.renk_saglayici = Gtk.CssProvider()
+            self.renk_saglayici.load_from_data(renk_stili(self.palet).encode("ascii"))
             Gtk.StyleContext.add_provider_for_screen(
-                Gdk.Screen.get_default(), saglayici, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+                ekran, self.renk_saglayici, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
             )
             self.pencere = Gtk.Window(title="Tahta Kontrol")
             self.pencere.set_decorated(False)
@@ -142,6 +197,9 @@ def calistir() -> int:
             # Sayfalar pencere açılmadan görünür kılınır: GtkStack, görünür olmayan
             # bir sayfaya geçiş isteğini yok sayar ve ilk sayfada (kilit) kalır.
             self.yigin.show_all()
+            # Logo gelene kadar logo kutuları gizli (pencere show() ile açılır, show_all() değil).
+            for logo_kutu, *_ in self.bantlar:
+                logo_kutu.set_visible(False)
 
             geometri = self._geometri()
             self.baglanti = Baglanti(
@@ -167,20 +225,66 @@ def calistir() -> int:
             etiket.set_justify(Gtk.Justification.CENTER)
             return etiket
 
+        def _ust_bant(self):
+            """Okul kimliği bandı: solda logo, yanında okul adı, sağda tahta adı · derslik."""
+            bant = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=28)
+            bant.set_name("ust-bant")
+            logo_kutu = Gtk.Box()
+            logo_kutu.set_name("logo-kutu")
+            logo_kutu.set_valign(Gtk.Align.CENTER)
+            logo_resmi = Gtk.Image()
+            logo_kutu.pack_start(logo_resmi, False, False, 0)
+            okul = Gtk.Label(label="Tahta Kontrol")
+            okul.set_name("okul")
+            okul.set_xalign(0)
+            okul.set_line_wrap(False)
+            okul.set_ellipsize(Pango.EllipsizeMode.END)
+            okul.set_hexpand(True)
+            sag = Gtk.Label(label="")
+            sag.set_name("bant-sag")
+            sag.set_xalign(1)
+            sag.set_ellipsize(Pango.EllipsizeMode.END)
+            sag.set_max_width_chars(40)
+            bant.pack_start(logo_kutu, False, False, 0)
+            bant.pack_start(okul, True, True, 0)
+            bant.pack_end(sag, False, False, 0)
+            self.bantlar.append((logo_kutu, logo_resmi, okul, sag))
+            return bant
+
+        def _sayfa(self, govde):
+            """Sayfa iskeleti: üstte bant, altında ortalanmış gövde."""
+            sayfa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            sayfa.pack_start(self._ust_bant(), False, False, 0)
+            govde.set_valign(Gtk.Align.CENTER)
+            govde.set_halign(Gtk.Align.CENTER)
+            sayfa.pack_start(govde, True, True, 0)
+            return sayfa
+
         def _kilit_sayfasi(self):
-            kutu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-            kutu.set_valign(Gtk.Align.CENTER)
-            kutu.set_halign(Gtk.Align.CENTER)
-            self.okul = self._etiket("okul")
+            govde = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=140)
+            sol = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            sol.set_valign(Gtk.Align.CENTER)
             self.saat = self._etiket("saat")
             self.tarih = self._etiket("tarih")
             self.kilit_yazi = self._etiket("kilit-yazi", "Bu tahta kilitlidir")
             self.bilgi = self._etiket("bilgi")
-            for parca in (self.okul, self.saat, self.tarih, self.kilit_yazi, self.bilgi):
-                kutu.pack_start(parca, False, False, 0)
+            self.bilgi.set_max_width_chars(40)
+            for parca in (self.saat, self.tarih, self.kilit_yazi, self.bilgi):
+                sol.pack_start(parca, False, False, 0)
+            govde.pack_start(sol, False, False, 0)
+
+            # Sunucuya ulaşılamayınca çıkan düğme sol sütunda, bilgi yazısının altındadır
+            # ("aşağıdaki düğmeyle" metni doğru kalsın).
+            self.cevrimdisi_dugmesi = Gtk.Button(label="Kilidi aç")
+            self.cevrimdisi_dugmesi.set_name("ana-dugme")
+            self.cevrimdisi_dugmesi.set_halign(Gtk.Align.CENTER)
+            self.cevrimdisi_dugmesi.set_can_focus(False)
+            self.cevrimdisi_dugmesi.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "cevrimdisi_ac"}))
+            sol.pack_start(self.cevrimdisi_dugmesi, False, False, 16)
 
             self.kod_kutusu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
             self.kod_kutusu.set_halign(Gtk.Align.CENTER)
+            self.kod_kutusu.set_valign(Gtk.Align.CENTER)
             self.kod_etiketi = self._etiket("kod", "")
             self.kod_kutusu.pack_start(self.kod_etiketi, False, False, 6)
             izgara = Gtk.Grid(row_spacing=10, column_spacing=10)
@@ -194,20 +298,11 @@ def calistir() -> int:
                 dugme.connect("clicked", self._tus, tus)
                 izgara.attach(dugme, sira % 3, sira // 3, 1, 1)
             self.kod_kutusu.pack_start(izgara, False, False, 0)
-            kutu.pack_start(self.kod_kutusu, False, False, 16)
-
-            self.cevrimdisi_dugmesi = Gtk.Button(label="Kilidi aç")
-            self.cevrimdisi_dugmesi.set_name("ana-dugme")
-            self.cevrimdisi_dugmesi.set_halign(Gtk.Align.CENTER)
-            self.cevrimdisi_dugmesi.set_can_focus(False)
-            self.cevrimdisi_dugmesi.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "cevrimdisi_ac"}))
-            kutu.pack_start(self.cevrimdisi_dugmesi, False, False, 16)
-            return kutu
+            govde.pack_start(self.kod_kutusu, False, False, 0)
+            return self._sayfa(govde)
 
         def _duyuru_sayfasi(self):
             kutu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=30)
-            kutu.set_valign(Gtk.Align.CENTER)
-            kutu.set_halign(Gtk.Align.CENTER)
             kutu.set_margin_start(80)
             kutu.set_margin_end(80)
             self.duyuru_baslik = self._etiket("duyuru-baslik")
@@ -217,15 +312,14 @@ def calistir() -> int:
             self.duyuru_kapat.set_halign(Gtk.Align.CENTER)
             self.duyuru_kapat.set_can_focus(False)
             self.duyuru_kapat.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "duyuru_kapat"}))
-            self.duyuru_alt = self._etiket("alt")
-            for parca in (self.duyuru_baslik, self.duyuru_metin, self.duyuru_kapat, self.duyuru_alt):
+            for parca in (self.duyuru_baslik, self.duyuru_metin, self.duyuru_kapat):
                 kutu.pack_start(parca, False, False, 0)
-            return kutu
+            return self._sayfa(kutu)
 
         def _kapatma_sayfasi(self):
             kutu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
-            kutu.set_valign(Gtk.Align.CENTER)
-            kutu.set_halign(Gtk.Align.CENTER)
+            kutu.set_margin_start(80)
+            kutu.set_margin_end(80)
             baslik = self._etiket("kapatma-baslik", "Bu tahta kapatılacak")
             self.kapatma_sayac = self._etiket("kapatma-sayac")
             self.kapatma_neden = self._etiket("kapatma-neden")
@@ -236,7 +330,7 @@ def calistir() -> int:
             vazgec.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "kapatma_iptal"}))
             for parca in (baslik, self.kapatma_sayac, self.kapatma_neden, vazgec):
                 kutu.pack_start(parca, False, False, 0)
-            return kutu
+            return self._sayfa(kutu)
 
         # ---- olaylar ---------------------------------------------------------
         def _tus(self, _dugme, tus):
@@ -253,11 +347,58 @@ def calistir() -> int:
         def _mesaj(self, mesaj):
             if mesaj.get("tur") == "yeniden_baslat":
                 os.execv(sys.executable, [sys.executable, "-m", "tahta_ajan", "ekran"])
+            if mesaj.get("tur") == "marka":
+                self._marka(mesaj)
+                if self.durum:
+                    self._ciz()
             if mesaj.get("tur") == "durum":
                 self.kopma_zamani = None
                 self.durum = mesaj
+                self._renkleri_uygula(mesaj.get("tema"))
                 self._ciz()
             return False
+
+        def _marka(self, mesaj):
+            """Servisten gelen logoyu yükler. Her hata yutulur: ekran logosuz ama çalışır."""
+            self.logo_pixbuf, self.logo_sha = None, None
+            metin, sha = mesaj.get("logo"), mesaj.get("sha256")
+            if not (isinstance(metin, str) and isinstance(sha, str)) or len(metin) > LOGO_METIN_SINIRI:
+                return
+            try:
+                veri = base64.b64decode(metin, validate=True)
+                if not ayar.logo_gecerli(veri):
+                    return
+                yukleyici = GdkPixbuf.PixbufLoader()
+                yukleyici.write(veri)
+                yukleyici.close()
+                resim = yukleyici.get_pixbuf()
+                en, boy = logo_olcusu(resim.get_width(), resim.get_height())
+                if not en:
+                    return
+                self.logo_pixbuf = resim.scale_simple(en, boy, GdkPixbuf.InterpType.BILINEAR)
+                self.logo_sha = sha
+            except Exception as hata:
+                print(f"Logo yüklenemedi: {hata}", file=sys.stderr)
+                self.logo_pixbuf, self.logo_sha = None, None
+
+        def _renkleri_uygula(self, tema):
+            palet = ayar.palet_dogrula(tema) or dict(ayar.VARSAYILAN_PALET)
+            if palet != self.palet:
+                self.palet = palet
+                # Aynı sağlayıcıya yeniden yüklemek önceki renk kurallarının yerine geçer.
+                self.renk_saglayici.load_from_data(renk_stili(palet).encode("ascii"))
+
+        def _bantlari_ciz(self, durum):
+            okul = durum.get("okul_adi") or "Tahta Kontrol"
+            sag = " · ".join(p for p in (durum.get("tahta_adi"), durum.get("derslik")) if p)
+            sha = durum.get("logo_sha256")
+            logo_var = bool(sha) and sha == self.logo_sha and self.logo_pixbuf is not None
+            for logo_kutu, logo_resmi, okul_etiketi, sag_etiketi in self.bantlar:
+                okul_etiketi.set_text(okul)
+                sag_etiketi.set_text(sag)
+                if logo_var:
+                    logo_resmi.set_from_pixbuf(self.logo_pixbuf)
+                logo_kutu.set_visible(logo_var)
 
         def _koptu(self):
             if self.kopma_zamani is None:
@@ -292,8 +433,8 @@ def calistir() -> int:
         def _ciz(self):
             durum = self.durum or {}
             duyuru = durum.get("duyuru")
-            okul = durum.get("okul_adi") or ""
             kapatma = durum.get("kapatma")
+            self._bantlari_ciz(durum)
             if kapatma:
                 self.kapatma_sayac.set_text(str(kapatma.get("kalan", 0)))
                 self.kapatma_neden.set_text(
@@ -306,11 +447,9 @@ def calistir() -> int:
                 self.duyuru_baslik.set_text(duyuru.get("baslik") or "DUYURU")
                 self.duyuru_metin.set_text(duyuru.get("metin") or "")
                 self.duyuru_kapat.set_visible(bool(duyuru.get("kapatilabilir")))
-                self.duyuru_alt.set_text(okul)
                 self.yigin.set_visible_child_name("duyuru")
                 self._goster(kilit=False)
             elif durum.get("kilitli"):
-                self.okul.set_text(okul)
                 kod_var = bool(durum.get("kod_var"))
                 bekleme = int(durum.get("bekleme") or 0)
                 cevrimdisi = bool(durum.get("cevrimdisi")) or not durum.get("kayitli", True)

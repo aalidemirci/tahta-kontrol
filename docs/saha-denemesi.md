@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.1.2)
+# Saha denemesi kılavuzu (0.2.0)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -16,13 +16,15 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Kurulum, kilit, duyuru, kapatma, güncelleme, klavye kilidi | Pardus 25 (XFCE) masaüstü | Çalıştı |
 | Uzaktan açma (Wake-on-LAN) | Aynı | Çalışmadı |
 | Otomatik kapatma: geri sayım, Vazgeç, süre sonunda kapatma | Debian 12 kabı | Çalıştı |
+| Okul kimliği (0.2.0): logo ve renklerin tahtaya inmesi; kilit, duyuru, kapatma ekranı; canlı renk ve logo değişimi, logonun kaldırılması | Debian 12 kabı + sanal ekran (1920×1080) | Çalıştı |
+| Panelin yeni tasarımı: açık/koyu görünüm, dar ekran, onay penceresi, logo yükleme | Chromium (geliştirme bilgisayarı) | Çalıştı |
 | **Gerçek ETAP tahtası** | — | **Denenmedi** |
 | Kurulum dosyasının başka bir bilgisayara kurulması | — | Denenmedi |
 | Gerçek kapatma / yeniden başlatma / uzaktan açma | — | Denenmedi (kapta benzetim) |
 
 ## 1. Sunucuyu kurun
 
-1. `dist\cikti\tahta-kontrol-0.1.2-windows-kurulum.exe` dosyasını sunucu olacak
+1. `dist\cikti\tahta-kontrol-0.2.0-windows-kurulum.exe` dosyasını sunucu olacak
    idari bilgisayara kurun (yönetici izni ister; güvenlik duvarında 8788 kapısını açar).
 2. Açılan pencerede **Paneli aç** deyin; ilk kurulumda okul adını ve yönetici
    hesabını oluşturun.
@@ -30,6 +32,8 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
    ulaşabildiğini bir tahtanın tarayıcısından `https://ADRES:8788/saglik`
    açarak sınayın (sertifika uyarısı beklenir).
 4. Ayarlar'da 4-8 haneli bir kilit kodu belirleyin.
+5. Ayarlar > **Okul kimliği**: okulun rengini seçip **Renkleri kaydet**, logoyu
+   (PNG ya da JPEG, en çok 256 KB) **Logoyu yükle** deyin. Kontrast raporuna bakın.
 
 Not: sunucu şimdilik oturum açıkken çalışır; bilgisayar kapanır ya da oturum
 kapanırsa tahtalar çevrimdışı kalır (kilitleri tahtadan açılabilir).
@@ -67,6 +71,13 @@ kapanırsa tahtalar çevrimdışı kalır (kilitleri tahtadan açılabilir).
 | 16 | ETAP güncellemesinden sonra | Ajan hâlâ çalışıyor mu | |
 | 17 | Ayarlar'da kapatma saatini birkaç dakika sonrasına verin; tahta açık ve kilitsiz | 60 sn geri sayım; Vazgeç tahtayı açık bırakır | |
 | 18 | Aynısı, tahta kilitliyken | Uyarısız kapanır | |
+| 19 | Logo yüklüyken kilitle | Üst bantta beyaz kutu içinde logo, okul adı, sağda tahta adı · derslik | |
+| 20 | JPEG logo yükleyin | Tahtada görünür (ETAP'ta JPEG yükleyicisi var mı) | |
+| 21 | Kilit ekranı açıkken panelde rengi değiştirin | Birkaç saniye içinde tahtanın renkleri değişir, pencere kapanıp açılmaz | |
+| 22 | Logoyu kaldırın | Tahtada logo kutusu kaybolur; okul adı kalır | |
+| 23 | En büyük logo (yaklaşık 250 KB) | Tahtada görünür (yerel sokette büyük satır) | |
+| 24 | Projeksiyonda / gün ışığında kilit ve duyuru ekranı | Okul adı, saat, bilgi yazısı ve duyuru başlığı sınıfın arkasından okunur | |
+| 25 | Üst bandın zemin rengi | Bant okul renginin koyu tonunda çizilir (çizilmiyorsa not alın) | |
 
 ## 4. Otomatik giriş denemesi (elle)
 
@@ -86,6 +97,9 @@ ve güncellemeden sonra duruyor mu.
 - Merkezî yönetim (LiderAhenk) üçüncü taraf servisi kaldırmaz; bu konuda İlçe MEM
   bilgi işlem birimine danışılması önerilir.
 - Tahtalar ile sunucu bilgisayarı arasındaki ağ erişimi (yönlendirme) açık.
+- ETAP'taki GTK 3.24 sürümü `Gtk.Box` zeminini CSS'ten çizer (Debian 12'de çiziyor;
+  çizmezse üst bant `Gtk.EventBox` içine alınmalı).
+- GdkPixbuf'un PNG ve JPEG yükleyicileri ETAP'ta kurulu.
 
 ## 6. Sorun olursa
 
