@@ -3,7 +3,7 @@
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.7.0, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
+> **Durum: 0.7.1, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
 > gerçek bir Pardus ETAP tahtasında henüz denenmedi. Okul genelinde kullanmadan
 > önce tek tahtada deneyin (`docs/saha-denemesi.md`).
 

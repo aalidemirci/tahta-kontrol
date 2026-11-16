@@ -118,22 +118,48 @@ def calistir() -> int:
         print(f"Arıza penceresi açılamadı (GTK3 yok): {hata}", file=sys.stderr)
         return 2
 
-    from .ekran import renk_stili
+    from .ekran import dikey_mi, ekran_olcegi, olcekle, olcekli_stil, pencere_olcusu, renk_stili
+
+    # Pencere, imlecin bulunduğu monitörde açılır ve ölçüleri o monitörün boyutuna göre ölçeklenir
+    # (değerler 1920x1080 içindir; ekran.ekran_olcegi). Sığmayan içerik kaydırılır.
+    gosterge = Gdk.Display.get_default()
+    monitor = None
+    try:
+        _, x, y = gosterge.get_default_seat().get_pointer().get_position()
+        monitor = gosterge.get_monitor_at_point(x, y)
+    except Exception:
+        monitor = None
+    monitor = monitor or gosterge.get_primary_monitor() or gosterge.get_monitor(0)
+    alan = monitor.get_geometry() if monitor is not None else None
+    ekran_en, ekran_boy = (alan.width, alan.height) if alan is not None else (0, 0)
+    olcek = ekran_olcegi(ekran_en, ekran_boy)
+
+    def o(piksel: int) -> int:
+        return olcekle(piksel, olcek)
 
     ekran = Gdk.Screen.get_default()
-    for metin in (STIL_OLCU, (renk_stili(ayar.VARSAYILAN_PALET) + renkler(ayar.VARSAYILAN_PALET)).encode("ascii")):
+    for metin in (olcekli_stil(STIL_OLCU, olcek),
+                  (renk_stili(ayar.VARSAYILAN_PALET) + renkler(ayar.VARSAYILAN_PALET)).encode("ascii")):  # fmt: skip
         saglayici = Gtk.CssProvider()
         saglayici.load_from_data(metin)
         Gtk.StyleContext.add_provider_for_screen(ekran, saglayici, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
     pencere = Gtk.Window(title=BASLIK)
-    pencere.set_default_size(1240, 860)
-    pencere.set_position(Gtk.WindowPosition.CENTER)
+    pencere_en, pencere_boy = pencere_olcusu(1240, 860, ekran_en, ekran_boy, olcek)
+    pencere.set_default_size(pencere_en, pencere_boy)
+    if alan is not None:
+        pencere.move(alan.x + (alan.width - pencere_en) // 2, alan.y + (alan.height - pencere_boy) // 2)
+    else:
+        pencere.set_position(Gtk.WindowPosition.CENTER)
     pencere.connect("destroy", Gtk.main_quit)
-    kutu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+    kutu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=o(18))
     for kenar in ("top", "bottom", "start", "end"):
-        getattr(kutu, f"set_margin_{kenar}")(40)
-    pencere.add(kutu)
+        getattr(kutu, f"set_margin_{kenar}")(o(40))
+    kaydirma = Gtk.ScrolledWindow()
+    kaydirma.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+    kaydirma.set_shadow_type(Gtk.ShadowType.NONE)
+    kaydirma.add(kutu)
+    pencere.add(kaydirma)
 
     def etiket(ad: str, metin: str = "", hiza=0.0) -> Gtk.Label:
         e = Gtk.Label(label=metin)
@@ -145,7 +171,8 @@ def calistir() -> int:
     kutu.pack_start(etiket("ariza-baslik", BASLIK), False, False, 0)
     kutu.pack_start(etiket("ariza-ipucu", "Arıza türünü seçin:"), False, False, 0)
 
-    izgara = Gtk.Grid(column_spacing=14, row_spacing=14, column_homogeneous=True, row_homogeneous=True)
+    izgara = Gtk.Grid(column_spacing=o(14), row_spacing=o(14), column_homogeneous=True, row_homogeneous=True)
+    sutun = 2 if dikey_mi(ekran_en, ekran_boy) else 4  # portre ekranda türler iki sütun
     kutu.pack_start(izgara, False, False, 0)
     # Gizli "seçilmedi" düğmesi: radyo grubunda başlangıçta hiçbir tür seçili görünmesin.
     hicbiri = Gtk.RadioButton.new_from_widget(None)
@@ -166,16 +193,16 @@ def calistir() -> int:
         yazi.set_line_wrap(True)
         yazi.set_justify(Gtk.Justification.CENTER)
         dugme.add(yazi)
-        dugme.set_size_request(-1, 104)
+        dugme.set_size_request(-1, o(104))
         dugme.set_can_focus(True)  # dokunmatiği bozuk tahtada klavyeyle de seçilebilsin
-        izgara.attach(dugme, sira % 4, sira // 4, 1, 1)
+        izgara.attach(dugme, sira % sutun, sira // sutun, 1, 1)
         dugmeler[kod] = dugme
 
     kutu.pack_start(etiket("ariza-ipucu", f"Açıklama (isteğe bağlı, en çok {ACIKLAMA_EN_UZUN} karakter)"), False, False, 0)
     cerceve = Gtk.ScrolledWindow()
     cerceve.set_name("ariza-cerceve")
     cerceve.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-    cerceve.set_size_request(-1, 150)
+    cerceve.set_size_request(-1, o(150))
     metin_alani = Gtk.TextView()
     metin_alani.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
     metin_alani.set_accepts_tab(False)  # Tab odağı düğmelere taşır
@@ -197,7 +224,7 @@ def calistir() -> int:
     sonuc = etiket("ariza-sonuc")
     kutu.pack_start(sonuc, False, False, 0)
 
-    satir = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+    satir = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=o(16))
     satir.set_halign(Gtk.Align.END)
     vazgec = Gtk.Button(label="Vazgeç")
     vazgec.set_can_focus(True)
@@ -264,6 +291,15 @@ def calistir() -> int:
         return False
 
     pencere.connect("key-press-event", tus)
+    # Boy içeriğe göre: ölçekli taban boyu yetmezse ekranın %90'ına kadar uzar, daha uzunu kaydırılır.
+    kutu.show_all()
+    sonuc.set_visible(False)
+    gerekli = kutu.get_preferred_height_for_width(pencere_en)[1] + o(8)
+    if gerekli > pencere_boy:
+        pencere_boy = min(gerekli, int(ekran_boy * 0.90)) if ekran_boy > 0 else gerekli
+        pencere.set_default_size(pencere_en, pencere_boy)
+        if alan is not None:
+            pencere.move(alan.x + (alan.width - pencere_en) // 2, alan.y + (alan.height - pencere_boy) // 2)
     pencere.show_all()
     sonuc.set_visible(False)
     Gtk.main()

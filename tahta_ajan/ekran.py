@@ -29,7 +29,9 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import os
+import re
 import socket
 import sys
 import threading
@@ -37,7 +39,61 @@ import time
 
 from . import __version__, ayar
 
+# ---- ekran ölçeği (saf; test edilir) -----------------------------------------------------------
+# Bütün piksel ölçüleri (yazı boyları, boşluklar, tuş takımı, düğmeler) 1920x1080 yatay ekran için
+# yazılır ve pencerenin bulunduğu ekranın boyutuna göre orantılı büyütülür/küçültülür. Sabit piksel
+# genişlik VERMEYİN: GtkStack en geniş sayfasına göre boyutlanır; bir sayfadaki tek bir sabit ölçü
+# bütün pencereyi ekrandan taşırır (0.7.0'da 1280x800 ve 1366x768 ekranda kilit ekranı sağa kaydı).
+OLCEK_TABAN_EN = 1920
+OLCEK_TABAN_BOY = 1080
+OLCEK_EN_AZ = 0.4  # 768 px'ten dar ekranda yazı okunmaz olmasın (sığmayan içerik kaydırılır)
+OLCEK_EN_COK = 3.0
+
+
+def ekran_olcegi(en: int, boy: int) -> float:
+    """1920x1080 için yazılmış ölçülerin bu ekrandaki çarpanı.
+
+    Yatay ekran 1920x1080'e, dikey (portre) ekran 1080x1920'ye göre ölçülür; iki eksenden küçük
+    oran alınır ki hiçbir yönde taşmasın (4:3 ekranda genişlik, 16:10'da yükseklik belirler).
+    Ekran boyu bilinmiyorsa 1.
+    """
+    if not en or not boy or en <= 0 or boy <= 0:
+        return 1.0
+    uzun, kisa = max(en, boy), min(en, boy)
+    olcek = min(uzun / OLCEK_TABAN_EN, kisa / OLCEK_TABAN_BOY)
+    return round(min(OLCEK_EN_COK, max(OLCEK_EN_AZ, olcek)), 4)
+
+
+def dikey_mi(en: int, boy: int) -> bool:
+    """Portre ekran: yan yana iki sütunlu sayfalar (kilit, kod ve PIN) alt alta dizilir."""
+    return bool(en and boy) and 0 < en < boy
+
+
+def olcekle(piksel: int, olcek: float) -> int:
+    """Bir piksel ölçüsünü ölçekler. 0 ve eksi değerler (GTK'da -1 = "doğal boy") olduğu gibi kalır;
+    artı bir ölçü en az 1 px olur (ince kenarlıklar kaybolmasın)."""
+    if piksel <= 0:
+        return piksel
+    return max(1, round(piksel * olcek))
+
+
+def olcekli_stil(stil: bytes, olcek: float) -> bytes:
+    """CSS'teki bütün `<sayı>px` değerlerini ölçekler (yazı boyu, dolgu, kenarlık, harf aralığı)."""
+    return re.sub(rb"(\d+)px", lambda m: b"%dpx" % olcekle(int(m.group(1)), olcek), stil)
+
+
+def pencere_olcusu(taban_en: int, taban_boy: int, ekran_en: int, ekran_boy: int, olcek: float) -> tuple[int, int]:
+    """Tam ekran olmayan pencere (arıza bildirimi): ölçekli taban boyu, ekranın %94 x %90'ını aşmaz."""
+    en, boy = olcekle(taban_en, olcek), olcekle(taban_boy, olcek)
+    if ekran_en > 0:
+        en = min(en, int(ekran_en * 0.94))
+    if ekran_boy > 0:
+        boy = min(boy, int(ekran_boy * 0.90))
+    return max(1, en), max(1, boy)
+
+
 # Ölçüler, ağırlıklar ve boşluklar: renk YOK (renkler renk_stili() ile ayrı sağlayıcıda).
+# Değerler 1920x1080 içindir; ekranda olcekli_stil() ile ekran ölçeğine çevrilerek yüklenir.
 STIL_OLCU = b"""
 #okul { font-size: 40px; font-weight: 600; }
 #bant-sag { font-size: 26px; }
@@ -155,15 +211,44 @@ def bitis_metni(sinav: dict) -> str:
     return f"Bitiş {sinav.get('bitis_saat', '')}".strip()
 
 
-def liste_sutun_sayisi(n: int) -> int:
-    """Giriş ekranındaki liste: ≤ 20 kişi tek sütun, ≤ 40 iki, fazlası üç sütun."""
-    return 1 if n <= 20 else 2 if n <= 40 else 3
+def liste_sutun_sayisi(n: int, ekran_eni: int = 0, olcek: float = 1.0, karakter: int = 0) -> int:
+    """Giriş ekranındaki liste: ≤ 20 kişi tek sütun, ≤ 40 iki, fazlası üç sütun. Ekran eni verilirse
+    en küçük yazıyla bile sığmayan sütun sayısı azaltılır (portre ekran; liste kaydırılır).
+    karakter: en uzun satırın harf sayısı (liste_satir_karakteri); verilmezse LISTE_SATIR_KARAKTER."""
+    sutun = 1 if n <= 20 else 2 if n <= 40 else 3
+    karakter = max(LISTE_SATIR_KARAKTER, karakter)
+    if ekran_eni > 0:
+        while sutun > 1 and (sutun * karakter * 0.6 * olcekle(22, olcek)
+                             + (120 + 56 * (sutun - 1) + 88 * sutun) * olcek) > ekran_eni:  # fmt: skip
+            sutun -= 1
+    return sutun
 
 
-def liste_punto(satir_sayisi: int, ekran_boyu: int) -> int:
-    """Liste yazı boyu (px): ekran yüksekliğinden; 22–44 arası (arka sıradan okunabilsin)."""
-    kullanilir = (ekran_boyu or 1080) - 430  # bant, başlık satırları ve alt satır
-    return max(22, min(44, int(kullanilir / max(1, satir_sayisi) / 1.38)))
+LISTE_SATIR_KARAKTER = 34  # giriş listesinin bir sütun grubu: koltuk + maskeli ad + …no + şube (en az)
+
+
+def liste_satir_karakteri(liste: list) -> int:
+    """Listenin en uzun satırının harf sayısı (koltuk + maske + …no + şube). Uzun maskeli ad
+    ("Mu****** Em** Ka*************") 34 harflik tahmini aşar; 1024x768'de şube sütunu ekrandan
+    taşıyordu (0.7.1 denetimi). En az LISTE_SATIR_KARAKTER."""
+    return max([LISTE_SATIR_KARAKTER] + [sum(len(h) for h in liste_hucreleri(oge)) for oge in liste or []])
+
+
+def liste_punto(
+    satir_sayisi: int, ekran_boyu: int, olcek: float = 1.0, ekran_eni: int = 0, sutun: int = 1, karakter: int = 0
+) -> int:
+    """Liste yazı boyu (px): ekran yüksekliğinden; 1920x1080'de 22–44 arası (arka sıradan okunabilsin),
+    başka ekranda bu sınırlar da ölçeklenir. Ekran eni verilirse sütun grupları ene de sığdırılır
+    (portre ekranda yazı büyüyüp yana taşmasın; en uzun satır `karakter` harf). Sığmayan uzun liste
+    kaydırılır."""
+    karakter = max(LISTE_SATIR_KARAKTER, karakter)
+    kullanilir = (ekran_boyu or 1080) - 430 * olcek  # bant, başlık satırları ve alt satır
+    punto = int(kullanilir / max(1, satir_sayisi) / 1.38)
+    if ekran_eni > 0:
+        sutun = max(1, sutun)
+        serbest = ekran_eni - (120 + 56 * (sutun - 1) + 4 * 22 * sutun) * olcek  # kenarlar, ara, hücre boşluğu
+        punto = min(punto, int(serbest / sutun / karakter / 0.6))
+    return max(olcekle(22, olcek), min(olcekle(44, olcek), punto))
 
 
 def liste_hucreleri(oge: dict) -> tuple[str, str, str, str]:
@@ -172,11 +257,22 @@ def liste_hucreleri(oge: dict) -> tuple[str, str, str, str]:
     return str(oge.get("k", "")), str(oge.get("a") or ""), f"…{no}" if no else "", str(oge.get("s") or "")
 
 
-def izgara_sutun(n: int) -> int:
-    """Yoklama ızgarasının sütun sayısı: ceil(sqrt(n·16/9)) — düğmeler 16:9 ekrana yayılır."""
-    import math
+def izgara_sutun(n: int, en: int = 0, boy: int = 0) -> int:
+    """Yoklama ızgarasının sütun sayısı: ceil(sqrt(n·oran)) — düğmeler ekrana yayılır (oran ekranın
+    en/boy oranı; bilinmiyorsa 16:9)."""
+    oran = en / boy if en > 0 and boy > 0 else 16 / 9
+    return max(1, math.ceil(math.sqrt(max(1, n) * oran)))
 
-    return max(1, math.ceil(math.sqrt(max(1, n) * 16 / 9)))
+
+def izgara_dugme_olcusu(n: int, en: int, boy: int, olcek: float = 1.0) -> tuple[int, int]:
+    """Gözetmen yoklama ızgarasındaki koltuk düğmesinin en küçük eni ve boyu (px). 1920x1080'de
+    120–260 x 80–170; sınırlar ölçeklenir. Izgara ekrana sığmazsa kaydırılır."""
+    en, boy = en or 1920, boy or 1080
+    sutun = izgara_sutun(n, en, boy)
+    satir = max(1, -(-max(1, n) // sutun))
+    dugme_en = max(olcekle(120, olcek), min(olcekle(260, olcek), int((en - 120 * olcek) // sutun - 10 * olcek)))
+    dugme_boy = max(olcekle(80, olcek), min(olcekle(170, olcek), int((boy - 430 * olcek) // satir - 10 * olcek)))
+    return dugme_en, dugme_boy
 
 
 def koltuk_etiketi(oge: dict, gelmedi: bool) -> str:
@@ -270,9 +366,32 @@ def ogrenci_uzun_mu(ad: str) -> bool:
     return len(ad) > YOKLAMA_DUGME_SIGAN
 
 
-def yoklama_sutun(ekran_eni: int) -> int:
-    """Liste ızgarasının sütun sayısı: ekran enine göre, en çok 6."""
-    return max(1, min(YOKLAMA_SUTUN_EN_COK, ((ekran_eni or 1920) - 120) // (YOKLAMA_DUGME_EN + 16)))
+def yoklama_sutun(ekran_eni: int, olcek: float = 1.0) -> int:
+    """Liste ızgarasının sütun sayısı: ekran enine ve düğmenin ölçekli enine göre, en çok 6."""
+    sutun = ((ekran_eni or 1920) - 120 * olcek) // ((YOKLAMA_DUGME_EN + 16) * olcek)
+    return max(1, min(YOKLAMA_SUTUN_EN_COK, int(sutun)))
+
+
+YOKLAMA_DUGME_BOY_EN_AZ = 80  # 1920x1080'de iki satır (ad + "YOK") 26 px yazıyla sığar
+YOKLAMA_SATIR_ARALIGI = 12  # öğrenci akışının satır aralığı (1920x1080)
+YOKLAMA_HUCRE_PAYI = 8  # FlowBoxChild dolgusu (tema, ölçeklenmez) + yuvarlama payı
+
+
+def yoklama_dugme_boyu(n: int, sutun: int, alan_boyu: int, olcek: float = 1.0) -> int:
+    """Öğrenci düğmesinin boyu (px): bütün satırlar kaydırmadan görünsün diye liste alanının boyuna
+    göre kısalır; 1920x1080'de 96 ile 80 arası, sınırlar ölçeklenir. Kısalınca da sığmayan liste
+    kaydırılır. Alan henüz ölçülmediyse (sayfa görünmüyor) tam boy.
+
+    Gerekçe: dokunulmayan öğrenci "var" sayılır; 1366x768'de 32 kişilik şubenin son satırı alanın
+    altında yarım kalıyor, kaydırılabildiği belli olmuyordu.
+    """
+    tam, en_az = olcekle(YOKLAMA_DUGME_BOY, olcek), olcekle(YOKLAMA_DUGME_BOY_EN_AZ, olcek)
+    if alan_boyu <= 1 or n <= 0:
+        return tam
+    satir = -(-n // max(1, sutun))
+    aralik = olcekle(YOKLAMA_SATIR_ARALIGI, olcek)
+    boy = (alan_boyu + aralik) // satir - aralik - YOKLAMA_HUCRE_PAYI
+    return max(en_az, min(tam, boy))
 
 
 def yoklama_pin_hatasi(yoklama: dict) -> str:
@@ -301,13 +420,15 @@ def kurallar_metni(metin: str) -> str:
     return "\n".join(satirlar[: KURALLAR_EKRAN_SATIRI - 1] + [satirlar[KURALLAR_EKRAN_SATIRI - 1] + " …"])
 
 
-def duyuru_duzeni(metin: str, ekran_boyu: int) -> dict:
+def duyuru_duzeni(metin: str, ekran_boyu: int, olcek: float = 1.0, ekran_eni: int = 0) -> dict:
     """Duyuru metninin ekran düzeni (saf; test edilir).
 
     Kısa metin: {"ust": "", "sutunlar": [], "sinif": ""|"uzun"|"cok-uzun", "punto": 0} ve metin
     tek etikette. Çok satırlı metin (şube oturma listesi gibi): baştaki ilk boş satıra kadarki
     en çok 3 satır "ust" olur, kalanlar 1–3 sütuna bölünür, yazı boyu ekran yüksekliğinden
-    hesaplanır (20–40 px). Uzun liste sığmazsa sayfa kaydırılır; Kapat düğmesi hep ekrandadır.
+    hesaplanır (1920x1080'de 20–40 px; sınırlar ölçeklenir). Ekran eni verilirse en uzun satır da
+    sütunlara sığacak kadar küçültülür (sütun satırları kırılmaz). Uzun liste sığmazsa sayfa
+    kaydırılır; Kapat düğmesi hep ekrandadır.
     """
     satirlar = (metin or "").split("\n")
     if len(satirlar) <= DUYURU_SUTUN_ESIGI:
@@ -322,9 +443,22 @@ def duyuru_duzeni(metin: str, ekran_boyu: int) -> dict:
         satirlar = satirlar[1:]
     n = max(1, len(satirlar))
     sutun = 1 if n <= 16 else 2 if n <= 40 else 3
+    en_uzun = max(1, max((len(s) for s in satirlar), default=1))
+
+    def serbest(sutun_sayisi: int) -> float:  # kenar boşlukları ve sütun araları dışında kalan en
+        return ekran_eni - (160 + 70 * (sutun_sayisi - 1)) * olcek
+
+    if ekran_eni > 0:
+        # Dar (portre) ekranda en küçük yazıyla bile sığmayan sütun sayısı azaltılır (liste kaydırılır).
+        while sutun > 1 and sutun * en_uzun * 0.6 * olcekle(20, olcek) > serbest(sutun):
+            sutun -= 1
     boy = -(-n // sutun)
-    kullanilir = (ekran_boyu or 1080) - 480  # bant, başlık, üst satır ve Kapat
-    punto = max(20, min(40, int(kullanilir / boy / 1.38)))
+    kullanilir = (ekran_boyu or 1080) - 480 * olcek  # bant, başlık, üst satır ve Kapat
+    punto = int(kullanilir / boy / 1.38)
+    if ekran_eni > 0:
+        # Sütun içi satır kırılmaz: en uzun satır (ortalama harf eni ≈ 0,6 punto) sütuna sığsın.
+        punto = min(punto, int(serbest(sutun) / sutun / en_uzun / 0.6))
+    punto = max(olcekle(20, olcek), min(olcekle(40, olcek), punto))
     parcalar = [satirlar[i * boy : (i + 1) * boy] for i in range(sutun)]
     return {"ust": "\n".join(ust), "sutunlar": ["\n".join(p) for p in parcalar if p], "sinif": "", "punto": punto}
 
@@ -409,13 +543,15 @@ def program_bilgisi(durum: dict) -> str:
     return f"{neden} · Tahta {saat_eki(acilis)} açılır."
 
 
-def logo_olcusu(en: int, boy: int) -> tuple[int, int]:
-    """Logoyu bant yüksekliğine (96 px) ölçekler; genişlik 320 px'i aşarsa ona göre küçültür."""
+def logo_olcusu(en: int, boy: int, olcek: float = 1.0) -> tuple[int, int]:
+    """Logoyu bant yüksekliğine (1920x1080'de 96 px) ölçekler; genişlik 320 px'i aşarsa ona göre
+    küçültür. İki sınır da ekran ölçeğiyle çarpılır."""
     if en <= 0 or boy <= 0:
         return 0, 0
-    yeni_en, yeni_boy = round(en * LOGO_BOY / boy), LOGO_BOY
-    if yeni_en > LOGO_EN:
-        yeni_en, yeni_boy = LOGO_EN, max(1, round(boy * LOGO_EN / en))
+    sinir_boy, sinir_en = olcekle(LOGO_BOY, olcek), olcekle(LOGO_EN, olcek)
+    yeni_en, yeni_boy = round(en * sinir_boy / boy), sinir_boy
+    if yeni_en > sinir_en:
+        yeni_en, yeni_boy = sinir_en, max(1, round(boy * sinir_en / en))
     return max(1, yeni_en), yeni_boy
 
 
@@ -526,12 +662,21 @@ def calistir() -> int:
             self.yk_secim_imza = None
             self.yk_dugmeler: dict[int, tuple] = {}  # id -> (düğme, etiket)
             self.yk_guncelleniyor = False
+            # Ekran ölçeği: pencerenin bulunduğu ekranın (monitör) boyutundan. Piksel ölçüleri
+            # _olcu() ile kaydedilir; ölçek değişince (başka monitör, çözünürlük değişimi) yeniden uygulanır.
+            self.pencere = None
+            self.monitor = None
+            self.ekran_en, self.ekran_boy = 0, 0
+            self.olcek, self.dikey = None, False
+            self._olcu_islevleri = []  # (işlev, 1920x1080 pikselleri)
+            self._yon_kutulari = []  # dikey ekranda alt alta dizilen iki sütunlu gövdeler
+            self.logo_olcekli = None  # (ölçek, pixbuf)
 
-            # İki sağlayıcı: ölçüler bir kez yüklenir; renkler tema değişince yenilenir.
+            # Sağlayıcılar: ölçüler ekran ölçeğiyle yüklenir; renkler tema değişince yenilenir.
             ekran = Gdk.Screen.get_default()
-            olcu = Gtk.CssProvider()
-            olcu.load_from_data(STIL_OLCU)
-            Gtk.StyleContext.add_provider_for_screen(ekran, olcu, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+            self.olcu_saglayici = Gtk.CssProvider()
+            self.olcu_saglayici.load_from_data(STIL_OLCU)
+            Gtk.StyleContext.add_provider_for_screen(ekran, self.olcu_saglayici, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
             self.palet = dict(ayar.VARSAYILAN_PALET)
             self.renk_saglayici = Gtk.CssProvider()
             self.renk_saglayici.load_from_data(renk_stili(self.palet).encode("ascii"))
@@ -551,6 +696,11 @@ def calistir() -> int:
                 ekran, self.duyuru_saglayici, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
             )
             self.duyuru_imza = None
+            # Ölçek sayfalar kurulmadan hesaplanır: pencere henüz yokken birincil monitör esas alınır,
+            # pencere o monitörde tam ekran açılır (_tam_ekran); sonra pencerenin bulunduğu monitör izlenir.
+            self._ekran_denetle()
+            ekran.connect("monitors-changed", lambda *_: self._ekran_degisti())
+            ekran.connect("size-changed", lambda *_: self._ekran_degisti())
             self.pencere = Gtk.Window(title="Tahta Kontrol")
             self.pencere.set_decorated(False)
             self.pencere.set_keep_above(True)
@@ -560,6 +710,11 @@ def calistir() -> int:
             self.pencere.connect("delete-event", lambda *_: True)
 
             self.yigin = Gtk.Stack()
+            # GtkStack varsayılan olarak bütün sayfaların EN BÜYÜĞÜNE göre boyutlanır: bir sayfadaki
+            # sığmayan öğe görünmediği hâlde kilit ve duyuru ekranını da taşırırdı. Yalnız görünen
+            # sayfa ölçülür; ölçek de her sayfanın ekrana sığmasını sağlar (scripts/ekran_olcum.py).
+            self.yigin.set_hhomogeneous(False)
+            self.yigin.set_vhomogeneous(False)
             self.pencere.add(self.yigin)
             self.yigin.add_named(self._kilit_sayfasi(), "kilit")
             self.yigin.add_named(self._duyuru_sayfasi(), "duyuru")
@@ -597,11 +752,130 @@ def calistir() -> int:
             GLib.timeout_add(1000, self._saniye)
 
         def _geometri(self):
+            """Pencerenin bulunduğu (ya da açılacağı) monitörün boyutu."""
+            return self.ekran_en, self.ekran_boy
+
+        # ---- ekran ölçeği ve monitör --------------------------------------------------------
+        def _monitor_bul(self):
+            """Pencere ekrandaysa bulunduğu monitör; değilse birincil (yoksa ilk) monitör."""
+            gosterge = Gdk.Display.get_default()
+            monitor = None
+            gdk_pencere = self.pencere.get_window() if self.pencere is not None else None
+            if gdk_pencere is not None and gdk_pencere.is_viewable():
+                monitor = gosterge.get_monitor_at_window(gdk_pencere)
+            if monitor is None:
+                monitor = gosterge.get_primary_monitor() or gosterge.get_monitor(0)
+            return monitor
+
+        def _ekran_denetle(self) -> bool:
+            """Monitörü ve ölçeği yeniden hesaplar; ölçek ya da yön değiştiyse bütün ölçüleri yeniden
+            uygular ve True döner."""
             try:
-                ekran = Gdk.Display.get_default().get_monitor(0).get_geometry()
-                return ekran.width, ekran.height
+                monitor = self._monitor_bul()
+                alan = monitor.get_geometry()
+                en, boy = alan.width, alan.height
             except Exception:
-                return 0, 0
+                monitor, en, boy = None, 0, 0
+            self.monitor, self.ekran_en, self.ekran_boy = monitor, en, boy
+            olcek, dikey = ekran_olcegi(en, boy), dikey_mi(en, boy)
+            if (olcek, dikey) == (self.olcek, self.dikey):
+                return False
+            self.olcek, self.dikey = olcek, dikey
+            self.olcu_saglayici.load_from_data(olcekli_stil(STIL_OLCU, olcek))
+            for islev, pikseller in self._olcu_islevleri:
+                islev(*(olcekle(p, olcek) for p in pikseller))
+            yon = Gtk.Orientation.VERTICAL if dikey else Gtk.Orientation.HORIZONTAL
+            for kutu in self._yon_kutulari:
+                kutu.set_orientation(yon)
+            # Sonradan kurulan içerik yeni ölçüyle yeniden kurulur ya da yeniden boyutlanır.
+            self.liste_imza = self.duyuru_imza = self.yk_secim_imza = None
+            self.logo_olcekli = None
+            if getattr(self, "izgara_dugmeleri", None):
+                olcu = izgara_dugme_olcusu(len(self.izgara_dugmeleri), en, boy, olcek)
+                for dugme, _ in self.izgara_dugmeleri.values():
+                    dugme.set_size_request(*olcu)
+            if getattr(self, "yk_dugmeler", None):
+                self.yl_akis.set_min_children_per_line(yoklama_sutun(en, olcek))
+                self._yoklama_boy_esitle()  # alan boyu değişince size-allocate yeniden eşitler
+            if self.durum:
+                GLib.idle_add(self._yeniden_ciz)
+            return True
+
+        def _yeniden_ciz(self):
+            self._ciz()
+            return False
+
+        def _ekran_degisti(self):
+            """Monitör eklendi/çıkarıldı ya da çözünürlük değişti."""
+            self._ekran_denetle()
+            if self.gorunur:
+                self._tam_ekran()
+            if self.ekran_en:
+                self.baglanti.gonder({"tur": "ekran_durumu", "genislik": self.ekran_en, "yukseklik": self.ekran_boy,
+                                      "klavye_kilidi": self.klavye_kilidi})  # fmt: skip
+
+        def _monitor_sirasi(self) -> int:
+            gosterge = Gdk.Display.get_default()
+            for sira in range(gosterge.get_n_monitors()):
+                if gosterge.get_monitor(sira) == self.monitor:
+                    return sira
+            return 0
+
+        def _tam_ekran(self):
+            """Pencere ölçeğin hesaplandığı monitörde tam ekran olur (çok ekranlı kurulumda başka
+            monitöre geçip yanlış boyla çizilmesin)."""
+            try:
+                self.pencere.fullscreen_on_monitor(self.pencere.get_screen(), self._monitor_sirasi())
+            except Exception:
+                self.pencere.fullscreen()
+
+        def _o(self, piksel):
+            return olcekle(piksel, self.olcek)
+
+        def _olcu(self, islev, *pikseller):
+            """1920x1080 pikselleriyle bir ölçü ayarı (boşluk, kenar, en küçük boy): şimdi ölçekli
+            uygulanır, ölçek değişince yeniden uygulanır. Sabit piksel doğrudan VERİLMEZ."""
+            self._olcu_islevleri.append((islev, pikseller))
+            islev(*(olcekle(p, self.olcek) for p in pikseller))
+
+        def _kutu(self, yon, aralik=0, iki_sutun=False):
+            kutu = Gtk.Box(orientation=yon)
+            if aralik:
+                self._olcu(kutu.set_spacing, aralik)
+            if iki_sutun:
+                # Yan yana iki sütun (bilgi + tuş takımı): portre ekranda alt alta dizilir.
+                self._yon_kutulari.append(kutu)
+                if self.dikey:
+                    kutu.set_orientation(Gtk.Orientation.VERTICAL)
+            return kutu
+
+        def _izgara(self, satir_araligi, sutun_araligi):
+            izgara = Gtk.Grid()
+            self._olcu(izgara.set_row_spacing, satir_araligi)
+            self._olcu(izgara.set_column_spacing, sutun_araligi)
+            return izgara
+
+        def _kenar(self, oge, bas=0, son=0, ust=0, alt=0):
+            for islev, piksel in ((oge.set_margin_start, bas), (oge.set_margin_end, son),
+                                  (oge.set_margin_top, ust), (oge.set_margin_bottom, alt)):  # fmt: skip
+                if piksel:
+                    self._olcu(islev, piksel)
+
+        def _ekle(self, kutu, cocuk, dolgu=0, genis=False, son=False):
+            """pack_start/pack_end; dolgu (padding) 1920x1080 pikseliyle verilir ve ölçeklenir."""
+            (kutu.pack_end if son else kutu.pack_start)(cocuk, genis, genis, 0)
+            if dolgu:
+                self._olcu(lambda p: kutu.child_set_property(cocuk, "padding", p), dolgu)
+
+        def _kaydirma(self, icerik):
+            """Uzun içerik dikey kaydırılır. Yatay kaydırma yalnız güvenlik ağıdır: ölçekli içerik
+            normalde sığar; sığmazsa da pencere ekrandan taşmaz (kaydırma alanının en küçük eni
+            içeriğe bağlı değildir), içerik kaydırılır. Ölçüm betiği bunu "taştı" sayar."""
+            kaydirma = Gtk.ScrolledWindow()
+            kaydirma.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+            kaydirma.set_shadow_type(Gtk.ShadowType.NONE)
+            kaydirma.add(icerik)
+            return kaydirma
 
         def _etiket(self, ad, metin=""):
             etiket = Gtk.Label(label=metin)
@@ -612,7 +886,7 @@ def calistir() -> int:
 
         def _ust_bant(self):
             """Okul kimliği bandı: solda logo, yanında okul adı, sağda tahta adı · derslik."""
-            bant = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=28)
+            bant = self._kutu(Gtk.Orientation.HORIZONTAL, 28)
             bant.set_name("ust-bant")
             logo_kutu = Gtk.Box()
             logo_kutu.set_name("logo-kutu")
@@ -629,7 +903,7 @@ def calistir() -> int:
             sag.set_name("bant-sag")
             sag.set_xalign(1)
             sag.set_ellipsize(Pango.EllipsizeMode.END)
-            sag.set_max_width_chars(40)
+            sag.set_max_width_chars(64)  # yer varken tahta adı · derslik kısaltılmasın (dar ekranda kısalır)
             bant.pack_start(logo_kutu, False, False, 0)
             bant.pack_start(okul, True, True, 0)
             bant.pack_end(sag, False, False, 0)
@@ -637,17 +911,28 @@ def calistir() -> int:
             return bant
 
         def _sayfa(self, govde):
-            """Sayfa iskeleti: üstte bant, altında ortalanmış gövde."""
+            """Sayfa iskeleti: üstte bant, altında ortalanmış gövde (sığmazsa kaydırılır)."""
             sayfa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
             sayfa.pack_start(self._ust_bant(), False, False, 0)
             govde.set_valign(Gtk.Align.CENTER)
             govde.set_halign(Gtk.Align.CENTER)
-            sayfa.pack_start(govde, True, True, 0)
+            self._kenar(govde, 48, 48, 24, 24)
+            sayfa.pack_start(self._kaydirma(govde), True, True, 0)
             return sayfa
 
+        def _tus_takimi(self, tuslar, islev):
+            """12 tuşlu takım (1920x1080'de 150x96 tuş): kilit, gözetmen kodu ve yoklama PIN'i."""
+            izgara = self._izgara(10, 10)
+            izgara.set_column_homogeneous(True)
+            izgara.set_row_homogeneous(True)
+            for sira, tus in enumerate(tuslar):
+                dugme = self._dugme(tus, lambda t=tus: islev(t), ana=tus in ("Aç", "Tamam"), en=150, boy=96)
+                izgara.attach(dugme, sira % 3, sira // 3, 1, 1)
+            return izgara
+
         def _kilit_sayfasi(self):
-            govde = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=140)
-            sol = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            govde = self._kutu(Gtk.Orientation.HORIZONTAL, 140, iki_sutun=True)
+            sol = self._kutu(Gtk.Orientation.VERTICAL, 8)
             sol.set_valign(Gtk.Align.CENTER)
             self.saat = self._etiket("saat")
             self.tarih = self._etiket("tarih")
@@ -668,31 +953,22 @@ def calistir() -> int:
             self.cevrimdisi_dugmesi.set_halign(Gtk.Align.CENTER)
             self.cevrimdisi_dugmesi.set_can_focus(False)
             self.cevrimdisi_dugmesi.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "cevrimdisi_ac"}))
-            sol.pack_start(self.cevrimdisi_dugmesi, False, False, 16)
+            self._ekle(sol, self.cevrimdisi_dugmesi, 16)
             # Ders yoklaması (A5): yoklama etkin, tahta çevrimiçi ve kayıtlıysa görünür. Kilidi AÇMAZ;
             # yoklama bitince kilit ekranı geri gelir.
             self.kilit_yoklama = Gtk.Button(label="Yoklama al")
             self.kilit_yoklama.set_halign(Gtk.Align.CENTER)
             self.kilit_yoklama.set_can_focus(False)
             self.kilit_yoklama.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "yoklama_ac"}))
-            sol.pack_start(self.kilit_yoklama, False, False, 16)
+            self._ekle(sol, self.kilit_yoklama, 16)
 
-            self.kod_kutusu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            self.kod_kutusu = self._kutu(Gtk.Orientation.VERTICAL, 10)
             self.kod_kutusu.set_halign(Gtk.Align.CENTER)
             self.kod_kutusu.set_valign(Gtk.Align.CENTER)
             self.kod_etiketi = self._etiket("kod", "")
-            self.kod_kutusu.pack_start(self.kod_etiketi, False, False, 6)
-            izgara = Gtk.Grid(row_spacing=10, column_spacing=10)
+            self._ekle(self.kod_kutusu, self.kod_etiketi, 6)
             tuslar = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "Sil", "0", "Aç"]
-            for sira, tus in enumerate(tuslar):
-                dugme = Gtk.Button(label=tus)
-                dugme.set_size_request(150, 96)
-                dugme.set_can_focus(False)
-                if tus == "Aç":
-                    dugme.set_name("ana-dugme")
-                dugme.connect("clicked", self._tus, tus)
-                izgara.attach(dugme, sira % 3, sira // 3, 1, 1)
-            self.kod_kutusu.pack_start(izgara, False, False, 0)
+            self.kod_kutusu.pack_start(self._tus_takimi(tuslar, lambda t: self._tus(None, t)), False, False, 0)
             govde.pack_start(self.kod_kutusu, False, False, 0)
             return self._sayfa(govde)
 
@@ -701,28 +977,23 @@ def calistir() -> int:
 
             Uzun metin ortayı büyütemez: Kapat düğmesi her metin uzunluğunda ekranda kalır.
             """
-            kutu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=30)
-            kutu.set_margin_start(80)
-            kutu.set_margin_end(80)
+            kutu = self._kutu(Gtk.Orientation.VERTICAL, 30)
+            self._kenar(kutu, 80, 80, 24, 24)
             kutu.set_valign(Gtk.Align.CENTER)
             kutu.set_halign(Gtk.Align.CENTER)
             self.duyuru_baslik = self._etiket("duyuru-baslik")
             self.duyuru_metin = self._etiket("duyuru-metin")
             self.duyuru_metin.set_max_width_chars(48)
             self.duyuru_ust = self._etiket("duyuru-ust")
-            self.duyuru_sutunlar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=70)
+            self.duyuru_sutunlar = self._kutu(Gtk.Orientation.HORIZONTAL, 70)
             self.duyuru_sutunlar.set_halign(Gtk.Align.CENTER)
             for parca in (self.duyuru_baslik, self.duyuru_metin, self.duyuru_ust, self.duyuru_sutunlar):
                 kutu.pack_start(parca, False, False, 0)
-            kaydirma = Gtk.ScrolledWindow()
-            kaydirma.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-            kaydirma.set_shadow_type(Gtk.ShadowType.NONE)
-            kaydirma.add(kutu)
+            kaydirma = self._kaydirma(kutu)
             self.duyuru_kapat = Gtk.Button(label="Kapat")
             self.duyuru_kapat.set_halign(Gtk.Align.CENTER)
             self.duyuru_kapat.set_can_focus(False)
-            self.duyuru_kapat.set_margin_top(16)
-            self.duyuru_kapat.set_margin_bottom(32)
+            self._kenar(self.duyuru_kapat, ust=16, alt=32)
             self.duyuru_kapat.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "duyuru_kapat"}))
             sayfa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
             sayfa.pack_start(self._ust_bant(), False, False, 0)
@@ -734,7 +1005,7 @@ def calistir() -> int:
             if metin == self.duyuru_imza:
                 return
             self.duyuru_imza = metin
-            duzen = duyuru_duzeni(metin, self._geometri()[1])
+            duzen = duyuru_duzeni(metin, self.ekran_boy, self.olcek, self.ekran_en)
             baglam = self.duyuru_metin.get_style_context()
             for sinif in ("uzun", "cok-uzun"):
                 baglam.remove_class(sinif)
@@ -761,9 +1032,8 @@ def calistir() -> int:
             self.duyuru_sutunlar.show_all()  # yalnız sütun kutusu; yığın sayfaları değil
 
         def _kapatma_sayfasi(self):
-            kutu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
-            kutu.set_margin_start(80)
-            kutu.set_margin_end(80)
+            kutu = self._kutu(Gtk.Orientation.VERTICAL, 18)
+            self._kenar(kutu, 80, 80)
             baslik = self._etiket("kapatma-baslik", "Bu tahta kapatılacak")
             self.kapatma_sayac = self._etiket("kapatma-sayac")
             self.kapatma_neden = self._etiket("kapatma-neden")
@@ -783,11 +1053,8 @@ def calistir() -> int:
             saat satırı ve "yayını kapat" düğmesi. Uzun metin ortayı büyütemez: alt kat (kural 3
             düğmesi) her metin uzunluğunda ekranda kalır.
             """
-            sayfa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=24)
-            sayfa.set_margin_start(80)
-            sayfa.set_margin_end(80)
-            sayfa.set_margin_top(40)
-            sayfa.set_margin_bottom(40)
+            sayfa = self._kutu(Gtk.Orientation.VERTICAL, 24)
+            self._kenar(sayfa, 80, 80, 40, 40)
             self.acil_bant = self._etiket("acil-bant")
             self.acil_baslik = self._etiket("acil-baslik")
             self.acil_baslik.set_lines(2)
@@ -801,16 +1068,13 @@ def calistir() -> int:
             self.acil_kapat.set_can_focus(False)
             self.acil_kapat.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "cevrimdisi_ac"}))
 
-            orta = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=30)
+            orta = self._kutu(Gtk.Orientation.VERTICAL, 30)
             orta.set_valign(Gtk.Align.CENTER)
             orta.pack_start(self.acil_baslik, False, False, 0)
             orta.pack_start(self.acil_metin, False, False, 0)
-            kaydirma = Gtk.ScrolledWindow()
-            kaydirma.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-            kaydirma.set_shadow_type(Gtk.ShadowType.NONE)
-            kaydirma.add(orta)  # kendi Viewport'unu ekler
+            kaydirma = self._kaydirma(orta)  # kendi Viewport'unu ekler
 
-            alt = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+            alt = self._kutu(Gtk.Orientation.VERTICAL, 16)
             alt.pack_start(self.acil_alt, False, False, 0)
             alt.pack_start(self.acil_kapat, False, False, 0)
 
@@ -824,27 +1088,28 @@ def calistir() -> int:
             """Bant + ekranı dolduran gövde (liste ve ızgara sayfaları için)."""
             sayfa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
             sayfa.pack_start(self._ust_bant(), False, False, 0)
-            govde.set_margin_start(60)
-            govde.set_margin_end(60)
-            govde.set_margin_top(24)
-            govde.set_margin_bottom(28)
+            self._kenar(govde, 60, 60, 24, 28)
             sayfa.pack_start(govde, True, True, 0)
             return sayfa
 
-        def _dugme(self, metin, islev, ana=False, en=0, boy=0):
+        def _dugme(self, metin, islev, ana=False, en=0, boy=0, gecici=False):
+            """Düğme; en/boy 1920x1080 pikseliyle verilir ve ekran ölçeğiyle küçülür/büyür. Sonradan
+            kurulup yok edilen (gecici) düğmenin ölçüsü kaydedilmez: ölçek değişince yeniden kurulur."""
             dugme = Gtk.Button(label=metin)
             dugme.set_can_focus(False)
             if ana:
                 dugme.set_name("ana-dugme")
-            if en or boy:
-                dugme.set_size_request(en, boy)
+            if gecici and (en or boy):
+                dugme.set_size_request(self._o(en or -1), self._o(boy or -1))
+            elif en or boy:
+                self._olcu(dugme.set_size_request, en or -1, boy or -1)
             dugme.connect("clicked", lambda *_: islev())
             return dugme
 
         def _sinav_alt(self):
             """Sınav sayfalarının alt satırı: solda saat, ortada çevrimdışı bilgisi ve düğmesi
             (kural 3), sağda "Gözetmen"."""
-            alt = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+            alt = self._kutu(Gtk.Orientation.HORIZONTAL, 24)
             saat = Gtk.Label(label="")
             saat.set_name("sinav-saat")
             bilgi = Gtk.Label(label="Sunucuya ulaşılamıyor. Sınav ekranı süre bitince kendiliğinden kalkar.")
@@ -861,24 +1126,24 @@ def calistir() -> int:
             return alt
 
         def _sinav_giris_sayfasi(self):
-            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            govde = self._kutu(Gtk.Orientation.VERTICAL, 10)
             self.sg_ad = self._etiket("sinav-adi")
             self.sg_ad.set_max_width_chars(60)
             self.sg_salon = self._etiket("sinav-salon")
             self.sg_bilgi = self._etiket("sinav-bilgi")
-            self.sg_liste = Gtk.Grid(column_spacing=22, row_spacing=2)
+            self.sg_liste = self._izgara(2, 22)
             self.sg_liste.set_halign(Gtk.Align.CENTER)
             self.sg_liste.set_valign(Gtk.Align.START)
             self.sg_fazla = self._etiket("sinav-fazla")
             for parca in (self.sg_ad, self.sg_salon, self.sg_bilgi):
                 govde.pack_start(parca, False, False, 0)
-            govde.pack_start(self.sg_liste, True, True, 12)
+            self._ekle(govde, self._kaydirma(self.sg_liste), 12, genis=True)
             govde.pack_start(self.sg_fazla, False, False, 0)
             govde.pack_end(self._sinav_alt(), False, False, 0)
             return self._sayfa_dolu(govde)
 
         def _sinav_sayfasi(self):
-            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            govde = self._kutu(Gtk.Orientation.VERTICAL, 8)
             self.ss_ad = self._etiket("sinav-adi")
             self.ss_ad.set_max_width_chars(60)
             self.ss_salon = self._etiket("sinav-salon")
@@ -891,23 +1156,20 @@ def calistir() -> int:
             self.ss_kurallar.set_lines(2)  # paragraf (kural) başına en çok 2 satır
             self.ss_kurallar.set_ellipsize(Pango.EllipsizeMode.END)
             self.ss_durum = self._etiket("sinav-durum")
-            orta = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            orta = self._kutu(Gtk.Orientation.VERTICAL, 10)
             orta.set_valign(Gtk.Align.CENTER)
             for parca in (self.ss_ad, self.ss_salon, self.ss_sayac, self.ss_bitis, self.ss_kurallar, self.ss_durum):
                 orta.pack_start(parca, False, False, 0)
-            kaydirma = Gtk.ScrolledWindow()
-            kaydirma.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-            kaydirma.set_shadow_type(Gtk.ShadowType.NONE)
-            kaydirma.add(orta)
-            govde.pack_start(kaydirma, True, True, 0)
+            govde.pack_start(self._kaydirma(orta), True, True, 0)
             govde.pack_end(self._sinav_alt(), False, False, 0)
             return self._sayfa_dolu(govde)
 
         def _gozetmen_kod_sayfasi(self):
-            govde = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=120)
-            sol = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            govde = self._kutu(Gtk.Orientation.HORIZONTAL, 120, iki_sutun=True)
+            sol = self._kutu(Gtk.Orientation.VERTICAL, 12)
             sol.set_valign(Gtk.Align.CENTER)
-            sol.set_size_request(640, -1)  # hata metni gelince tuş takımı kaymasın
+            # Hata metni gelince tuş takımı kaymasın: sol sütunun eni ölçekli sabittir (1920'de 640).
+            self._olcu(sol.set_size_request, 640, -1)
             sol.pack_start(self._etiket("gozetmen-baslik", "Gözetmen kodu"), False, False, 0)
             self.gk_salon = self._etiket("sinav-salon")
             self.gk_bilgi = self._etiket("gozetmen-bilgi", "Salon fişindeki 6 haneli kodu girin.")
@@ -916,49 +1178,48 @@ def calistir() -> int:
             self.gk_hata.set_max_width_chars(34)
             for parca in (self.gk_salon, self.gk_bilgi, self.gk_hata):
                 sol.pack_start(parca, False, False, 0)
-            sol.pack_start(self._dugme("Vazgeç", self._gozetmen_vazgec), False, False, 24)
-            sag = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            vazgec = self._dugme("Vazgeç", self._gozetmen_vazgec)
+            vazgec.set_halign(Gtk.Align.CENTER)
+            self._ekle(sol, vazgec, 24)
+            sag = self._kutu(Gtk.Orientation.VERTICAL, 10)
             sag.set_valign(Gtk.Align.CENTER)
             self.gk_kod = self._etiket("kod", "")
-            sag.pack_start(self.gk_kod, False, False, 6)
-            self.gk_tuslar = Gtk.Grid(row_spacing=10, column_spacing=10)
-            self.gk_tuslar.set_column_homogeneous(True)
-            for sira, tus in enumerate(["1", "2", "3", "4", "5", "6", "7", "8", "9", "Sil", "0", "Tamam"]):
-                dugme = self._dugme(tus, lambda t=tus: self._gozetmen_tus(t), ana=tus == "Tamam", en=150, boy=96)
-                self.gk_tuslar.attach(dugme, sira % 3, sira // 3, 1, 1)
+            self._ekle(sag, self.gk_kod, 6)
+            self.gk_tuslar = self._tus_takimi(["1", "2", "3", "4", "5", "6", "7", "8", "9", "Sil", "0", "Tamam"],
+                                              self._gozetmen_tus)  # fmt: skip
             sag.pack_start(self.gk_tuslar, False, False, 0)
             govde.pack_start(sol, False, False, 0)
             govde.pack_start(sag, False, False, 0)
             return self._sayfa(govde)
 
         def _gozetmen_menu_sayfasi(self):
-            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+            govde = self._kutu(Gtk.Orientation.VERTICAL, 16)
             govde.pack_start(self._etiket("gozetmen-baslik", "Gözetmen"), False, False, 0)
             self.gm_salon = self._etiket("sinav-salon")
             govde.pack_start(self.gm_salon, False, False, 0)
             self.gm_yoklama = self._dugme("Yoklama al", lambda: self.baglanti.gonder({"tur": "gozetmen_yoklama"}),
                                           ana=True, en=560, boy=110)  # fmt: skip
             self.gm_yoklama.set_halign(Gtk.Align.CENTER)
-            govde.pack_start(self.gm_yoklama, False, False, 20)
+            self._ekle(govde, self.gm_yoklama, 20)
             self.gm_neden = self._etiket("gozetmen-bilgi")
             self.gm_hata = self._etiket("gozetmen-hata")
             govde.pack_start(self.gm_neden, False, False, 0)
             govde.pack_start(self.gm_hata, False, False, 0)
             cik = self._dugme("Çık", lambda: self.baglanti.gonder({"tur": "gozetmen_cikis"}), en=300, boy=90)
             cik.set_halign(Gtk.Align.CENTER)
-            govde.pack_start(cik, False, False, 20)
+            self._ekle(govde, cik, 20)
             return self._sayfa(govde)
 
         def _gozetmen_yoklama_sayfasi(self):
-            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            govde = self._kutu(Gtk.Orientation.VERTICAL, 10)
             self.gy_baslik = self._etiket("sinav-adi")
             self.gy_hata = self._etiket("gozetmen-hata")
-            self.gy_izgara = Gtk.Grid(row_spacing=10, column_spacing=10)
+            self.gy_izgara = self._izgara(10, 10)
             self.gy_izgara.set_row_homogeneous(True)
             self.gy_izgara.set_column_homogeneous(True)
             self.gy_izgara.set_halign(Gtk.Align.CENTER)
             self.gy_izgara.set_valign(Gtk.Align.CENTER)
-            alt = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+            alt = self._kutu(Gtk.Orientation.HORIZONTAL, 24)
             alt.set_halign(Gtk.Align.CENTER)
             self.gy_kaydet = self._dugme("Kaydet", self._gozetmen_kaydet, ana=True, en=320, boy=90)
             self.gy_vazgec = self._dugme("Vazgeç", lambda: self.baglanti.gonder({"tur": "gozetmen_cikis"}), en=240, boy=90)
@@ -966,17 +1227,18 @@ def calistir() -> int:
             alt.pack_start(self.gy_vazgec, False, False, 0)
             govde.pack_start(self.gy_baslik, False, False, 0)
             govde.pack_start(self.gy_hata, False, False, 0)
-            govde.pack_start(self.gy_izgara, True, True, 8)
+            self._ekle(govde, self._kaydirma(self.gy_izgara), 8, genis=True)
             govde.pack_end(alt, False, False, 0)
             return self._sayfa_dolu(govde)
 
         # ---- ders yoklaması sayfaları (A5) -----------------------------------------------
         def _yoklama_pin_sayfasi(self):
             """Öğretmen kodu (3 hane) ve PIN (6 hane): kilit tuş takımıyla aynı ölçüde 12 tuş."""
-            govde = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=120)
-            sol = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            govde = self._kutu(Gtk.Orientation.HORIZONTAL, 120, iki_sutun=True)
+            sol = self._kutu(Gtk.Orientation.VERTICAL, 12)
             sol.set_valign(Gtk.Align.CENTER)
-            sol.set_size_request(720, -1)  # hata metni gelince tuş takımı kaymasın
+            # Hata metni gelince tuş takımı kaymasın: sol sütunun eni ölçekli sabittir (1920'de 720).
+            self._olcu(sol.set_size_request, 720, -1)
             sol.pack_start(self._etiket("yoklama-baslik", "Ders yoklaması"), False, False, 0)
             self.yp_bilgi = self._etiket("yoklama-bilgi")
             self.yp_bilgi.set_max_width_chars(40)
@@ -991,16 +1253,13 @@ def calistir() -> int:
                 sol.pack_start(parca, False, False, 0)
             vazgec = self._dugme("Vazgeç", lambda: self.baglanti.gonder({"tur": "yoklama_kapat"}), en=300, boy=90)
             vazgec.set_halign(Gtk.Align.CENTER)
-            sol.pack_start(vazgec, False, False, 24)
-            sag = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            self._ekle(sol, vazgec, 24)
+            sag = self._kutu(Gtk.Orientation.VERTICAL, 10)
             sag.set_valign(Gtk.Align.CENTER)
             self.yp_kod = self._etiket("kod", "")
-            sag.pack_start(self.yp_kod, False, False, 6)
-            self.yp_tuslar = Gtk.Grid(row_spacing=10, column_spacing=10)
-            self.yp_tuslar.set_column_homogeneous(True)
-            for sira, tus in enumerate(["1", "2", "3", "4", "5", "6", "7", "8", "9", "Sil", "0", "Tamam"]):
-                dugme = self._dugme(tus, lambda t=tus: self._yoklama_tus(t), ana=tus == "Tamam", en=150, boy=96)
-                self.yp_tuslar.attach(dugme, sira % 3, sira // 3, 1, 1)
+            self._ekle(sag, self.yp_kod, 6)
+            self.yp_tuslar = self._tus_takimi(["1", "2", "3", "4", "5", "6", "7", "8", "9", "Sil", "0", "Tamam"],
+                                              self._yoklama_tus)  # fmt: skip
             sag.pack_start(self.yp_tuslar, False, False, 0)
             govde.pack_start(sol, False, False, 0)
             govde.pack_start(sag, False, False, 0)
@@ -1009,8 +1268,8 @@ def calistir() -> int:
         def _yoklama_liste_sayfasi(self):
             """Üst satır (şube · ders · öğretmen · kalan süre), ortada kaydırılabilir öğrenci düğmeleri
             ya da şube/ders saati seçimi, altta "Yok: 2 · Mevcut: 32/34" [Vazgeç] [Kaydet]."""
-            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-            ust = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
+            govde = self._kutu(Gtk.Orientation.VERTICAL, 12)
+            ust = self._kutu(Gtk.Orientation.HORIZONTAL, 20)
             self.yl_ust = Gtk.Label(label="")
             self.yl_ust.set_name("yoklama-ust")
             self.yl_ust.set_xalign(0)
@@ -1034,15 +1293,18 @@ def calistir() -> int:
             self.yl_akis.set_selection_mode(Gtk.SelectionMode.NONE)
             self.yl_akis.set_homogeneous(True)
             self.yl_akis.set_max_children_per_line(YOKLAMA_SUTUN_EN_COK)
-            self.yl_akis.set_row_spacing(12)
-            self.yl_akis.set_column_spacing(12)
+            self._olcu(self.yl_akis.set_row_spacing, YOKLAMA_SATIR_ARALIGI)
+            self._olcu(self.yl_akis.set_column_spacing, 12)
             self.yl_akis.set_valign(Gtk.Align.START)
-            self.yl_kaydirma = Gtk.ScrolledWindow()
-            self.yl_kaydirma.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-            self.yl_kaydirma.set_shadow_type(Gtk.ShadowType.NONE)
-            self.yl_kaydirma.add(self.yl_akis)
+            self.yl_kaydirma = self._kaydirma(self.yl_akis)
+            # Uzun listede kaydırma çubuğu hep görünür: alttaki öğrencilerin varlığı belli olsun
+            # (dokunulmayan öğrenci "var" sayılır).
+            self.yl_kaydirma.set_overlay_scrolling(False)
+            # Liste alanı ölçülünce düğme boyu alana göre ayarlanır (yoklama_dugme_boyu); ayar
+            # yerleşim sırasında değil, ardından yapılır.
+            self.yl_kaydirma.connect("size-allocate", lambda *_: GLib.idle_add(self._yoklama_boy_esitle))
 
-            secim = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            secim = self._kutu(Gtk.Orientation.VERTICAL, 12)
             self.yl_sube_baslik = Gtk.Label(label="Şube")
             self.yl_sube_baslik.set_name("yoklama-adim")
             self.yl_sube_baslik.set_xalign(0)
@@ -1052,23 +1314,21 @@ def calistir() -> int:
                 akis.set_selection_mode(Gtk.SelectionMode.NONE)
                 akis.set_homogeneous(True)
                 akis.set_max_children_per_line(8)
-                akis.set_row_spacing(10)
-                akis.set_column_spacing(10)
+                self._olcu(akis.set_row_spacing, 10)
+                self._olcu(akis.set_column_spacing, 10)
                 akis.set_valign(Gtk.Align.START)
             ders_baslik = Gtk.Label(label="Ders saati")
             ders_baslik.set_name("yoklama-adim")
             ders_baslik.set_xalign(0)
             for parca in (self.yl_sube_baslik, self.yl_subeler, ders_baslik, self.yl_dersler):
                 secim.pack_start(parca, False, False, 0)
-            self.yl_secim = Gtk.ScrolledWindow()
-            self.yl_secim.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-            self.yl_secim.set_shadow_type(Gtk.ShadowType.NONE)
-            self.yl_secim.add(secim)
+            self.yl_secim = self._kaydirma(secim)
 
-            alt = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+            alt = self._kutu(Gtk.Orientation.HORIZONTAL, 24)
             self.yl_sayi = Gtk.Label(label="")
             self.yl_sayi.set_name("yoklama-sayi")
             self.yl_sayi.set_xalign(0)
+            self.yl_sayi.set_line_wrap(True)  # dar ekranda düğmeleri ekrandan itmesin
             self.yl_kaydet = self._dugme("Kaydet", lambda: self.baglanti.gonder({"tur": "yoklama_kaydet"}), ana=True, en=300, boy=90)
             vazgec = self._dugme("Vazgeç", lambda: self.baglanti.gonder({"tur": "yoklama_kapat"}), en=240, boy=90)
             alt.pack_start(self.yl_sayi, True, True, 0)
@@ -1078,20 +1338,20 @@ def calistir() -> int:
             govde.pack_start(ust, False, False, 0)
             govde.pack_start(self.yl_bilgi, False, False, 0)
             govde.pack_start(self.yl_hata, False, False, 0)
-            govde.pack_start(self.yl_kaydirma, True, True, 4)
-            govde.pack_start(self.yl_secim, True, True, 4)
+            self._ekle(govde, self.yl_kaydirma, 4, genis=True)
+            self._ekle(govde, self.yl_secim, 4, genis=True)
             govde.pack_end(alt, False, False, 0)
             return self._sayfa_dolu(govde)
 
         def _yoklama_onay_sayfasi(self):
-            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=24)
+            govde = self._kutu(Gtk.Orientation.VERTICAL, 24)
             self.yo_ust = self._etiket("yoklama-bilgi")
             self.yo_baslik = self._etiket("yoklama-baslik")
             self.yo_liste = self._etiket("yoklama-onay-liste")
             self.yo_liste.set_max_width_chars(60)
             self.yo_hata = self._etiket("yoklama-hata")
             self.yo_hata.set_max_width_chars(50)
-            dugmeler = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+            dugmeler = self._kutu(Gtk.Orientation.HORIZONTAL, 24)
             dugmeler.set_halign(Gtk.Align.CENTER)
             self.yo_geri = self._dugme("Geri", lambda: self.baglanti.gonder({"tur": "yoklama_geri"}), en=300, boy=96)
             self.yo_onayla = self._dugme("Onayla", lambda: self.baglanti.gonder({"tur": "yoklama_onayla"}), ana=True, en=300, boy=96)
@@ -1099,11 +1359,11 @@ def calistir() -> int:
             dugmeler.pack_start(self.yo_onayla, False, False, 0)
             for parca in (self.yo_ust, self.yo_baslik, self.yo_liste, self.yo_hata):
                 govde.pack_start(parca, False, False, 0)
-            govde.pack_start(dugmeler, False, False, 16)
+            self._ekle(govde, dugmeler, 16)
             return self._sayfa(govde)
 
         def _yoklama_ileti_sayfasi(self):
-            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=40)
+            govde = self._kutu(Gtk.Orientation.VERTICAL, 40)
             self.yi_metin = self._etiket("yoklama-ileti")
             self.yi_metin.set_max_width_chars(40)
             self.yi_kapat = self._dugme("Kapat", lambda: self.baglanti.gonder({"tur": "yoklama_kapat"}), en=300, boy=90)
@@ -1177,7 +1437,16 @@ def calistir() -> int:
             else:
                 self.izgara_isaret.discard(koltuk)
             dugme.set_label(koltuk_etiketi(oge, dugme.get_active()))
+            self._koltuk_etiketi_hizala(dugme)  # set_label etiketi yeniden kurar
             self._izgara_basligi()
+
+        def _koltuk_etiketi_hizala(self, dugme):
+            """Ortalı ve satır satır kısaltılabilir: uzun maskeli ad düğmeyi (ve ızgarayı) genişletmesin;
+            koltuk numarası ilk satırdadır, kısalan yalnız adın sonu olur."""
+            etiket = dugme.get_child()
+            if isinstance(etiket, Gtk.Label):
+                etiket.set_justify(Gtk.Justification.CENTER)
+                etiket.set_ellipsize(Pango.EllipsizeMode.END)
 
         def _izgara_basligi(self):
             self.gy_baslik.set_text(f"Gelmeyenlere dokunun · Gelmeyen: {len(self.izgara_isaret)}")
@@ -1195,12 +1464,8 @@ def calistir() -> int:
             liste = gozetmen.get("liste") or []
             self.izgara_isaret = {k for k in gozetmen.get("gelmeyen") or [] if isinstance(k, int)}
             n = len(liste)
-            sutun = izgara_sutun(n)
-            satir = max(1, -(-n // sutun))
-            en, boy = self._geometri()
-            en, boy = en or 1920, boy or 1080
-            dugme_en = max(120, min(260, (en - 120) // sutun - 10))
-            dugme_boy = max(80, min(170, (boy - 430) // satir - 10))
+            sutun = izgara_sutun(n, self.ekran_en, self.ekran_boy)
+            dugme_en, dugme_boy = izgara_dugme_olcusu(n, self.ekran_en, self.ekran_boy, self.olcek)
             for sira, oge in enumerate(liste):
                 gelmedi = oge["k"] in self.izgara_isaret
                 dugme = Gtk.ToggleButton(label=koltuk_etiketi(oge, gelmedi))
@@ -1208,9 +1473,7 @@ def calistir() -> int:
                 dugme.set_can_focus(False)
                 dugme.set_size_request(dugme_en, dugme_boy)
                 dugme.set_active(gelmedi)
-                etiket = dugme.get_child()
-                if isinstance(etiket, Gtk.Label):
-                    etiket.set_justify(Gtk.Justification.CENTER)
+                self._koltuk_etiketi_hizala(dugme)
                 dugme.connect("toggled", self._koltuk_degisti, oge)
                 self.gy_izgara.attach(dugme, sira % sutun, sira // sutun, 1, 1)
                 self.izgara_dugmeleri[oge["k"]] = (dugme, oge)
@@ -1228,9 +1491,10 @@ def calistir() -> int:
             if not liste:
                 return
             n = len(liste)
-            sutun = liste_sutun_sayisi(n)
+            karakter = liste_satir_karakteri(liste)
+            sutun = liste_sutun_sayisi(n, self.ekran_en, self.olcek, karakter)
             satir = -(-n // sutun)
-            punto = liste_punto(satir, self._geometri()[1])
+            punto = liste_punto(satir, self.ekran_boy, self.olcek, self.ekran_en, sutun, karakter)
             self.liste_saglayici.load_from_data(f".liste-hucre {{ font-size: {punto}px; }}".encode("ascii"))
             for sira, oge in enumerate(liste):
                 kolon, satir_no = divmod(sira, satir)  # koltuk sırası sütun sütun yukarıdan aşağı
@@ -1244,7 +1508,7 @@ def calistir() -> int:
                     self.sg_liste.attach(etiket, kolon * 5 + j, satir_no, 1, 1)
                 if satir_no == 0 and kolon < sutun - 1:
                     ara = Gtk.Label(label="")
-                    ara.set_size_request(56, -1)
+                    ara.set_size_request(self._o(56), -1)
                     self.sg_liste.attach(ara, kolon * 5 + 4, 0, 1, 1)
             self.sg_liste.show_all()
 
@@ -1341,13 +1605,13 @@ def calistir() -> int:
         def _yoklama_izgara_kur(self, yoklama, imza):
             self._yoklama_liste_temizle()
             yok = set(yoklama.get("yok") or [])
-            self.yl_akis.set_min_children_per_line(yoklama_sutun(self._geometri()[0]))
+            self.yl_akis.set_min_children_per_line(yoklama_sutun(self.ekran_en, self.olcek))
             for oge in yoklama.get("ogrenciler") or []:
                 isaretli = oge["id"] in yok
                 dugme = Gtk.ToggleButton(label=ogrenci_dugme_metni(oge["etiket"], isaretli))
                 dugme.set_name("ogrenci")
                 dugme.set_can_focus(False)
-                dugme.set_size_request(YOKLAMA_DUGME_EN, YOKLAMA_DUGME_BOY)
+                dugme.set_size_request(self._o(YOKLAMA_DUGME_EN), self._yoklama_dugme_boyu(len(yoklama.get("ogrenciler") or [])))
                 dugme.set_active(isaretli)
                 self._ogrenci_etiketi(dugme, ogrenci_dugme_metni(oge["etiket"], isaretli))
                 dugme.connect("toggled", self._ogrenci_degisti, oge)
@@ -1355,6 +1619,20 @@ def calistir() -> int:
                 self.yk_dugmeler[oge["id"]] = (dugme, oge["etiket"])
             self.yl_akis.show_all()  # yalnız akışın içi (yığın sayfaları değil)
             self.yk_liste_imza = imza
+
+        def _yoklama_dugme_boyu(self, n=None):
+            n = len(self.yk_dugmeler) if n is None else n
+            sutun = yoklama_sutun(self.ekran_en, self.olcek)
+            return yoklama_dugme_boyu(n, sutun, self.yl_kaydirma.get_allocated_height(), self.olcek)
+
+        def _yoklama_boy_esitle(self):
+            """Öğrenci düğmelerinin boyunu liste alanına göre eşitler (değişmediyse dokunmaz: yerleşim döngüye girmez)."""
+            if self.yk_dugmeler:
+                olcu = (self._o(YOKLAMA_DUGME_EN), self._yoklama_dugme_boyu())
+                for dugme, _ in self.yk_dugmeler.values():
+                    if tuple(dugme.get_size_request()) != olcu:
+                        dugme.set_size_request(*olcu)
+            return False
 
         def _yoklama_isaretleri_esitle(self, yok: set):
             """Servisin işaretleriyle düğmeleri eşitler; ızgara yeniden kurulmaz."""
@@ -1381,7 +1659,8 @@ def calistir() -> int:
                     cocuk.destroy()
             self.yl_sube_baslik.set_text("Şube" if subeler else "Şube · öğrenci listesi yüklenmemiş; okul idaresine bildirin.")
             for s in subeler:
-                dugme = self._dugme(s, lambda s=s: self.baglanti.gonder({"tur": "yoklama_sec", "sube": s}), ana=s == sube, en=200, boy=80)
+                dugme = self._dugme(s, lambda s=s: self.baglanti.gonder({"tur": "yoklama_sec", "sube": s}), ana=s == sube,
+                                    en=200, boy=80, gecici=True)  # fmt: skip
                 if s != sube:
                     dugme.set_name("secim")
                 dugme.set_sensitive(not istek)
@@ -1390,7 +1669,7 @@ def calistir() -> int:
                 no = d.get("ders_no")
                 dugme = self._dugme(str(d.get("metin") or f"{no}. ders"),
                                     lambda no=no: self.baglanti.gonder({"tur": "yoklama_sec", "sube": sube, "ders_no": no}),
-                                    ana=no == ders_no, en=330, boy=80)  # fmt: skip
+                                    ana=no == ders_no, en=330, boy=80, gecici=True)  # fmt: skip
                 if no != ders_no:
                     dugme.set_name("secim")
                 dugme.set_sensitive(bool(sube) and bool(d.get("secilebilir")) and not istek)
@@ -1582,10 +1861,10 @@ def calistir() -> int:
                 yukleyici.write(veri)
                 yukleyici.close()
                 resim = yukleyici.get_pixbuf()
-                en, boy = logo_olcusu(resim.get_width(), resim.get_height())
-                if not en:
+                if not logo_olcusu(resim.get_width(), resim.get_height())[0]:
                     return
-                self.logo_pixbuf = resim.scale_simple(en, boy, GdkPixbuf.InterpType.BILINEAR)
+                # Özgün çözünürlük saklanır; bant için ekran ölçeğine göre _logo_resmi() küçültür.
+                self.logo_pixbuf, self.logo_olcekli = resim, None
                 self.logo_sha = sha
             except Exception as hata:
                 print(f"Logo yüklenemedi: {hata}", file=sys.stderr)
@@ -1603,12 +1882,26 @@ def calistir() -> int:
             sag = " · ".join(p for p in (durum.get("tahta_adi"), durum.get("derslik")) if p)
             sha = durum.get("logo_sha256")
             logo_var = bool(sha) and sha == self.logo_sha and self.logo_pixbuf is not None
+            resim = self._logo_resmi() if logo_var else None
             for logo_kutu, logo_resmi, okul_etiketi, sag_etiketi in self.bantlar:
                 okul_etiketi.set_text(okul)
                 sag_etiketi.set_text(sag)
-                if logo_var:
-                    logo_resmi.set_from_pixbuf(self.logo_pixbuf)
-                logo_kutu.set_visible(logo_var)
+                if resim is not None and logo_resmi.get_pixbuf() is not resim:
+                    logo_resmi.set_from_pixbuf(resim)
+                logo_kutu.set_visible(resim is not None)
+
+        def _logo_resmi(self):
+            """Bant logosu ekran ölçeğinde (1920x1080'de 96 px boy); ölçek değişene dek önbellekte."""
+            if self.logo_olcekli and self.logo_olcekli[0] == self.olcek:
+                return self.logo_olcekli[1]
+            try:
+                en, boy = logo_olcusu(self.logo_pixbuf.get_width(), self.logo_pixbuf.get_height(), self.olcek)
+                resim = self.logo_pixbuf.scale_simple(en, boy, GdkPixbuf.InterpType.BILINEAR)
+            except Exception as hata:
+                print(f"Logo ölçeklenemedi: {hata}", file=sys.stderr)
+                return None
+            self.logo_olcekli = (self.olcek, resim)
+            return resim
 
         def _koptu(self):
             if self.kopma_zamani is None:
@@ -1672,8 +1965,10 @@ def calistir() -> int:
             if self.gozetmen_kod_acik and time.time() - self.gozetmen_dokunma > GOZETMEN_KOD_ZAMAN_ASIMI_SN:
                 self._gozetmen_vazgec()
             if self.gorunur:
+                # Pencere başka monitöre geçtiyse ölçü o monitörün boyutuna uyarlanır.
+                self._ekran_denetle()
                 self.pencere.present()
-                self.pencere.fullscreen()
+                self._tam_ekran()
                 # Pencere ekrana yerleşmeden yapılan ilk deneme "not-viewable" ile
                 # düşer; kilit sürdükçe klavye kilidi alınana kadar yeniden denenir.
                 if self.kilit_modu and self.klavye_kilidi != "alındı":
@@ -1775,8 +2070,9 @@ def calistir() -> int:
         def _goster(self, kilit: bool):
             ilk = not self.gorunur
             self.gorunur = True
+            self._ekran_denetle()
+            self._tam_ekran()  # show()'dan önce: pencere ölçeğin hesaplandığı monitörde açılır
             self.pencere.show()
-            self.pencere.fullscreen()
             self.pencere.present()
             self.kilit_modu = kilit
             if kilit:

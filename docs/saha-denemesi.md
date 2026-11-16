@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.7.0)
+# Saha denemesi kılavuzu (0.7.1)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -28,6 +28,7 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Ders yoklaması (0.6.0): gerçek paketle kurulan tahtada "Yoklama Al" kısayolunun (`tahta-ajan yoklama`) PIN sayfasını açması; PIN sonrası şube ve ders saati seçimi (zil saati yokken 1–12); 24 kişilik listede işaretleme ("Burak K. / YOK", "Yok: 3 · Mevcut: 21/24"), onay ve "Kaydedildi: 3 öğrenci yok"; kaydın panel ızgarasında "3 yok" görünmesi; kilit ekranında "Yoklama al" düğmesi; kilitli tahtada hatalı PIN iletisi; yoklama açıkken gelen duyurunun yoklamanın altında beklemesi, yoklama kapanınca görünmesi; `durum.json`'da liste ve belirteç olmaması; mevcut kilit, duyuru ve kapatma ekranlarının bozulmadığı | Debian 12 kabı + sanal ekran (1920×1080), gerçek paket; dokunmalar yerel iletiyle benzetildi (kapta `xdotool` yok) | Çalıştı |
 | Yoklama günlük görünüm (e-Okul kutusunun kendiliğinden kaydı), kayıt ayrıntısı ve silme onayı (gerekçesiz açılmaz), panelden yoklama, icmal ("Metni kopyala" pano izni yokken metni seçer), öğretmenler, öğrenci listesi, önizleme | Chromium (geliştirme bilgisayarı) | Çalıştı |
 | Altyapı (0.7.0): gerçek paketin kurulum betiğiyle kurulması (`ajan.json`'a adres listesi yazıldı); birincil adres ulaşılamazken 3 hatadan sonra listedeki adrese geçip onu kalıcı birincil yapması; sunucunun gönderdiği listenin `ajan.json`'a yazılması; `tahta-ajan sunucu` (ulaşılamayan adreste hiçbir şey yazmaması, ulaşılanda yazması); envanterin (ekran çözünürlüğü dahil) panele inmesi ve "Envanteri yenile" komutu; menüdeki "Arıza bildir" kısayolunun kurulması, arıza penceresinde tür seçimi, açıklama ve "Arıza kaydı iletildi."; kaydın panelde "Tahtadan" görünmesi; tanılamada "Sunucu adresleri" ve "Arıza bildirimi kısayolu" satırları; mevcut kilit, duyuru ve kapatma ekranlarının bozulmadığı | Debian 12 kabı + sanal ekran (1920×1080), gerçek paket; dokunma `xdotool` ile | Çalıştı |
+| Ekran ölçeği (0.7.1): tahta ekranının bütün ölçülerinin (yazı, tuş takımı, düğmeler, boşluklar) monitör boyutuna orantılı olması; gerçek paketle kurulan üç tahtada (1280×800, 1366×768, 1920×1080) kilit, duyuru, kapatma geri sayımı, acil yayın, ders yoklaması PIN'i, şube/ders seçimi ve öğrenci listesi, sınav giriş ekranı ve gözetmen kodu sayfasında pencerenin ekrana eşit olması (`xwininfo`), kesik yazı ve taşma olmaması; `scripts/ekran_olcum.py` ile 17 senaryonun 1024×768, 1280×800, 1366×768, 1920×1080, 3840×2160 ve portre 1080×1920'de ölçülmesi (taşan yok; yalnız 32–40 kişilik yoklama listesi dikey kaydırılır) | Debian 12 kabı + sanal ekran, gerçek paket; PIN fiziksel klavyeyle (`xdotool`), Gözetmen düğmesi dokunmayla | Çalıştı |
 | Yedekler (parola, elle yedek, indirme, yanlış/doğru parolayla geri yükleme denetimi, önizleme, vazgeç), Envanter (sıralama, CSV), Arızalar ve arıza ayrıntısı, tahta sayfasında envanter/arıza/bağlantı kartları, panoda "Arıza" ve "Donanım değişti" rozetleri, Ayarlar › Sunucu adresleri | Chromium (geliştirme bilgisayarı) | Çalıştı |
 | Onaylanan geri yüklemenin program yeniden açılınca uygulanması | Geliştirme bilgisayarı (deneme veri klasörü) | Çalıştı |
 | Gerçek e-Okul OOG01001R020 `.XLS` dosyası | — | Denenmedi |
@@ -39,7 +40,7 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 
 ## 1. Sunucuyu kurun
 
-1. `dist\cikti\tahta-kontrol-0.5.0-windows-kurulum.exe` dosyasını sunucu olacak
+1. `dist\cikti\tahta-kontrol-0.7.1-windows-kurulum.exe` dosyasını sunucu olacak
    idari bilgisayara kurun (yönetici izni ister; güvenlik duvarında 8788 kapısını açar).
 2. Açılan pencerede **Paneli aç** deyin; ilk kurulumda okul adını ve yönetici
    hesabını oluşturun.
@@ -273,8 +274,9 @@ ve güncellemeden sonra duruyor mu.
     "Öğrenci No", dipnotlar) yalnız komşu projenin kodundan ve uydurma matristen çıkarıldı;
     gerçek dosyayla ve `xlrd` ile denenmedi. Menü yolu da doğrulanmadı.
   - Windows kurucusunda `xlrd`'nin pakete girdiği (build.ps1 çalıştırılmadı).
-  - Öğrenci düğmeleri (260×96 px, 26 px yazı, 1920 genişlikte 6 sütun) ve tuş takımı (150×96 px)
-    ETAP dokunmatiğinde rahat; 40 kişide liste kaydırılır.
+  - Öğrenci düğmeleri (1920×1080'de 260×96 px, 26 px yazı, 6 sütun) ve tuş takımı (150×96 px)
+    ETAP dokunmatiğinde rahat; 40 kişide liste kaydırılır. 0.7.1'den beri ölçüler ekrana orantılıdır
+    (1366×768'de öğrenci düğmesi yaklaşık 185×68, tuş 107×68 px); küçük ekranda dokunma alanının yeterliliği denenmedi.
   - Fiziksel klavye olayları kilitsiz tahtada da tam ekran pencereye gider (ETAP pencere yöneticisi).
   - "Yoklama Al" kısayolu (`/usr/share/applications`) ETAP menüsünde Eğitim altında görünür;
     `update-desktop-database` yoksa menü bir sonraki oturumda yenilenir.
@@ -285,13 +287,18 @@ ve güncellemeden sonra duruyor mu.
   - Dayanaklar: yoklamaya ilişkin yönetmelik fıkrası, ders saatinden güne çevirme kuralı ve
     KVKK md. 12 doğrulanacaklar listesindedir (`docs/tasarim.md` §18); arayüzde atıf yoktur.
 
+- Ekran ölçeği (0.7.1):
+  - ETAP 4K tahtada GDK ölçeği (HiDPI, `GDK_SCALE`) 1 ise ölçek 2, 2 ise 1 olur; ikisinde de yazı aynı
+    fiziksel boyda çıkar. ETAP'ın hangisini kullandığı ve çok monitörlü (yansıtma/genişletme) kurulumda
+    pencerenin birincil monitörde açıldığı gerçek tahtada denenmedi.
+
 - Altyapı (0.7.0):
   - ETAP'ta `/sys/class/dmi/id/product_serial` ve `board_serial` dolu (üretici seri no yazıyor);
     boşsa donanım kimliği değişimi uyarısı çalışmaz (yalnız dolu→farklı dolu uyarır).
   - Dokunmatik aygıt adı `/proc/bus/input/devices` içinde "touch" sözcüğünü taşır.
   - `tahta-ariza.desktop` ETAP menüsünde (Donatılar/Utility) her hesapta görünür; ETAP'ın ekran
     klavyesi GTK metin alanına odaklanınca açılır.
-  - Arıza penceresi (1240×860, normal pencere) ETAP'ın 4K ve 1080p ekranlarında okunur; düğmeler
+  - Arıza penceresi (1920×1080'de 1240×860, ekrana orantılı; normal pencere) ETAP'ın 4K ve 1080p ekranlarında okunur; düğmeler
     dokunmaya yeterince iri. Pencere okulun renklerini değil varsayılan tahta paletini kullanır.
   - `dpkg-query` ETAP'ta birkaç saniyede biter (envanter açılışta ve 6 saatte bir okunur).
   - Okul ağında DNS adı tanımlanabiliyor ve tahtalar onu çözüyor (açık soru 51).

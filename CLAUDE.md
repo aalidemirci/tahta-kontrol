@@ -6,7 +6,7 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.7.0, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
+- Durum: **0.7.1, saha denemesi sürümü** (0.7.1: tahta ekranı ekran boyutuna orantılı). Pardus 25 (XFCE) masaüstünde denendi
   (0.1.1: kurulum, kilit, duyuru, kapatma, güncelleme çalıştı); 0.2.0'ın okul kimliği,
   0.3.0'ın duyuru planları, hedef grupları ve acil durum/tatbikat yayını, 0.4.0'ın ders
   programı/program kilidi, 0.5.0'ın sınav kipi/sınav yoklaması, 0.6.0'ın ders yoklaması ve
@@ -80,6 +80,7 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   marka.py      okul logosu: PNG/JPEG denetimi, ölçü okuma, saklama (veri_dizini/marka/logo)
   vt.py         şema ve göçler (GOCLER listesi, PRAGMA user_version; göç öncesi kopya veri_dizini/goc-oncesi)
   guvenlik.py   parola (scrypt), sunucu sertifikası ve parmak izi, kilit kodu özeti, tc_kimlik_var
+  wol.py        uzaktan açma (Wake-on-LAN) sihirli paketi; birkaç yayın adresine gönderir ("deneysel")
   paket.py      ajan .deb paketini ve kurulum betiğini dış araç olmadan üretir
   sunucu.py     iki dinleyici: yerel HTTP + ağ için HTTPS; zamanlayıcı (state.zamanlayicilar, 20 sn)
   pencere.py    masaüstü denetim penceresi (tkinter)
@@ -99,10 +100,13 @@ tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
   ekran.py      oturumda çalışan kilit/duyuru/kapatma/acil penceresi (GTK3), üst bantta logo ve okul adı;
                 program kilidinde "Teneffüs · Tahta 10:40'ta açılır." satırı (saat_eki sunucudakiyle aynı);
                 sınav sayfaları: sinav-giris, sinav, gozetmen-kod, gozetmen-menu, gozetmen-yoklama;
-                yoklama sayfaları: yoklama-pin, yoklama-liste, yoklama-onay, yoklama-ileti; kilitte "Yoklama al"
+                yoklama sayfaları: yoklama-pin, yoklama-liste, yoklama-onay, yoklama-ileti; kilitte "Yoklama al";
+                ölçüler 1920x1080 için yazılır, ekran_olcegi() ile pencerenin monitörüne orantılanır (0.7.1)
+scripts/ekran_olcum.py  Docker/Xvfb'de her tahta sayfasının ekrana sığıp sığmadığını ölçer (uydurma veri)
   __main__.py   komut satırı; `tahta-ajan yoklama` ("Yoklama Al" kısayolu) servise yoklama_ac yollar;
                 `tahta-ajan ariza` (pencere), `tahta-ajan sunucu ADRES` (parmak izi tutarsa yazar)
   ayar.py       yapılandırma, varsayılan tahta paleti, logonun servis tarafında saklanması, adres doğrulama/sırası
+  baglanti.py   sunucu istemcisi (Istemci): HTTPS, sertifika zinciri yerine parmak izi denetimi (tutmazsa tek bayt gitmez)
   sistem.py     işletim sistemine dokunan HER ŞEY (yeni platform = bu dosya)
   tani.py       saha tanılaması (denetim listesi)
 packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
@@ -216,6 +220,13 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
   `postinst` ayrıca önbelleği siler.
 - **`Referrer-Policy: no-referrer` kullanma:** tarayıcı form gönderiminde
   `Origin: null` yollar, kaynak denetimi bütün POST'ları reddeder (15.11.2026).
+- **GtkStack en büyük sayfasına göre boyutlanır; sabit piksel ölçü verme** (16.11.2026, 0.7.0 kusuru):
+  gözetmen kodu/yoklama PIN'i sayfasındaki 640/720 px sütun ve 150 px tuşlar pencereyi 1427 px'e
+  zorladı; 1280x800 ve 1366x768 ekranda kilit ve duyuru da sağa kaydı, tahta adı kesildi. Artık yığın
+  homojen değildir ve bütün pikseller (CSS dahil) `ekran.py`'de `_olcu/_kutu/_izgara/_kenar/_ekle/_dugme`
+  ile 1920x1080 değeriyle verilip `ekran_olcegi()` ile ölçeklenir (`test_ekran_kodunda_sabit_piksel_yok`).
+  Ekran sayfası değişince dar ekranda dene: `scripts/ekran_olcum.py`'yi Xvfb'de 1024x768, 1366x768,
+  1920x1080 ve 3840x2160'ta çalıştır; "TAŞTI" kalmamalı.
 - **GtkStack görünür olmayan sayfaya geçmez:** sayfalar pencere açılmadan
   `yigin.show_all()` ile görünür kılınır, pencere `show()` ile açılır (`show_all()` değil;
   o, gizlenmiş tuş takımını ve düğmeleri geri açar). Yoksa açılıştan sonraki ilk duyuru
