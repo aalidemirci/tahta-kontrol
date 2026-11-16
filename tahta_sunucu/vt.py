@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from contextlib import contextmanager
 from datetime import datetime
@@ -291,8 +292,43 @@ GOCLER = [
         sube_sayisi INTEGER NOT NULL, eklenen INTEGER NOT NULL, guncellenen INTEGER NOT NULL,
         pasif INTEGER NOT NULL, atlanan INTEGER NOT NULL);
     """,
+    # 0.7.0 — tahta envanteri ve arıza bildirimi (yedekler için tablo YOK: kaynak yedek klasörüdür)
+    """
+    ALTER TABLE tahta ADD COLUMN envanter_json TEXT;
+    ALTER TABLE tahta ADD COLUMN envanter_ozet TEXT NOT NULL DEFAULT '';
+    ALTER TABLE tahta ADD COLUMN envanter_zamani INTEGER;
+    ALTER TABLE tahta ADD COLUMN donanim_kimligi TEXT NOT NULL DEFAULT '';
+    ALTER TABLE tahta ADD COLUMN demirbas_no TEXT NOT NULL DEFAULT '';
+    ALTER TABLE tahta ADD COLUMN envanter_notu TEXT NOT NULL DEFAULT '';
+    CREATE TABLE ariza (
+        id INTEGER PRIMARY KEY,
+        tahta_id INTEGER NOT NULL REFERENCES tahta(id),
+        kaynak TEXT NOT NULL,                   -- 'tahta' | 'panel'
+        yerel_id TEXT,                          -- tahtadan gelende tekrar önleme; panelde NULL
+        kategori TEXT NOT NULL,
+        aciklama TEXT NOT NULL DEFAULT '',      -- en çok 300 karakter
+        bildiren TEXT NOT NULL,                 -- panel: kullanıcı adı; tahta: 'tahta'
+        oturum_sinifi TEXT NOT NULL DEFAULT '', -- tahtadan gelende hesap sınıfı (kişi kimliği değil)
+        durum TEXT NOT NULL DEFAULT 'acik',     -- acik | inceleniyor | cozuldu | iptal
+        olusturma INTEGER NOT NULL,
+        guncelleme INTEGER NOT NULL,
+        cozum_notu TEXT NOT NULL DEFAULT '',
+        UNIQUE (tahta_id, yerel_id));
+    CREATE INDEX ariza_durum ON ariza (durum, tahta_id);
+    CREATE TABLE ariza_hareket (
+        id INTEGER PRIMARY KEY,
+        ariza_id INTEGER NOT NULL REFERENCES ariza(id),
+        zaman INTEGER NOT NULL,
+        kullanici TEXT NOT NULL,                -- panel kullanıcı adı ya da 'tahta'
+        eski_durum TEXT NOT NULL DEFAULT '',
+        yeni_durum TEXT NOT NULL,
+        not_metni TEXT NOT NULL DEFAULT '');
+    CREATE INDEX ariza_hareket_ariza ON ariza_hareket (ariza_id);
+    """,
 ]
 GOC_ONCESI_KALAN = 3
+# Göç (ve göç öncesi kopya), yedek alma ve geri yükleme aynı anda çalışmaz (A6 K-B2).
+KILIT = threading.Lock()
 
 
 def yol():
@@ -370,6 +406,11 @@ def goc_oncesi_kopya(baglanti: sqlite3.Connection, eski: int) -> Path:
 
 
 def hazirla() -> None:
+    with KILIT:
+        _hazirla()
+
+
+def _hazirla() -> None:
     baglanti = baglan()
     try:
         surum = baglanti.execute("PRAGMA user_version").fetchone()[0]

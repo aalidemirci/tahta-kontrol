@@ -14,14 +14,17 @@ import hmac
 import json
 import logging
 import os
+import secrets
 import select
 import socket
 import socketserver
 import threading
 import time
+import unicodedata
+from collections import deque
 from urllib.parse import urlsplit
 
-from . import __version__, ayar, sistem, tani
+from . import __version__, ayar, envanter, sistem, tani
 from .baglanti import BaglantiHatasi, Istemci
 
 gunluk = logging.getLogger("tahta-ajan")
@@ -31,7 +34,7 @@ RAKAMLAR = "0123456789"  # str.isdigit() "²" gibi karakterleri de kabul eder
 KOD_BEKLEME_SN = 60
 LOGO_YENIDEN_DENEME_SN = 60
 # Sunucunun bu ajana uygulayabileceği yetenekler (sürüm karşılaştırması yerine).
-YETENEKLER = ["acil", "duyuru_id", "program_kilidi", "sinav", "yoklama"]
+YETENEKLER = ["acil", "duyuru_id", "program_kilidi", "sinav", "yoklama", "adres_listesi", "envanter", "ariza"]
 ACIL_TURLERI = {"acil": "acil durum", "tatbikat": "tatbikat"}
 ACIL_EN_UZUN_SN = 7200  # sunucu ne derse desin acil yayın tahtada en çok 2 saat kalır (kural 3)
 # Program kilidi (teneffüs / boş ders saati) tahtada SÜRELİ tutulur ve süresi tahtanın kendi
@@ -61,6 +64,24 @@ ILETI_YOKLAMA_SINAV = "Sınav sürüyor; ders yoklaması açılamaz."
 ILETI_YOKLAMA_ACIL = "Acil yayın sürüyor; ders yoklaması açılamaz."
 ILETI_YOKLAMA_KAPALI = "Ders yoklaması bu okulda etkin değil."
 ILETI_YOKLAMA_DESTEK_YOK = "Sunucu ders yoklamasını desteklemiyor; okul idaresine bildirin."
+# Altyapı (A6). Adres listesi: aynı adrese art arda bu kadar BAĞLANTI hatası (parmak izi hatası dahil;
+# HTTP 401/403/5xx dahil değil) olunca sıradaki adres denenir.
+ADRES_HATA_ESIGI = 3
+ENVANTER_YENILEME_SN = 6 * 3600  # donanım okumaları (dpkg-query dahil) en çok bu sıklıkta yenilenir
+ENVANTER_YENIDEN_SN = 3600  # sunucu aynı özeti hâlâ istiyorsa en erken bu kadar sonra yeniden gönderilir
+# Arıza bildirimi: tahtadan bildirilebilen türler ("acilis" yalnız panelden), kuyruk ve hız sınırları.
+ARIZA_KATEGORILERI = ("dokunmatik", "goruntu", "ses", "kalem", "ag", "yazilim", "fiziksel", "diger")
+ARIZA_KUYRUK_EN_COK = 10
+ARIZA_SAATLIK_EN_COK = 3
+ARIZA_OMUR_SN = 7 * 86400
+ARIZA_ACIKLAMA_EN_UZUN = 300
+ARIZA_ONAY_BEKLEME_SN = 5  # pencere "iletildi" demeden önce sunucunun ariza_alindi yanıtını bu kadar bekler
+ILETI_ARIZA_ILETILDI = "Arıza kaydı iletildi."
+ILETI_ARIZA_BEKLIYOR = "Kayıt tahtada bekletiliyor; sunucuya ulaşınca iletilecek."
+ILETI_ARIZA_KAYITSIZ = "Bu tahta henüz sunucuya kayıtlı değil."
+ILETI_ARIZA_KATEGORI = "Geçersiz kategori."
+ILETI_ARIZA_SINIR = "Bu tahtadan son bir saatte çok bildirim yapıldı; idareye başvurun."
+ILETI_ARIZA_KUYRUK = "Bekleyen bildirim çok; sunucuya ulaşılınca yeniden deneyin."
 # Ekran sayılmayan yerel bağlantılar: kitaplığı olmayan yardımcı ("yok") ve kısa ömürlü komut istemcisi.
 GORUNMEZ_ARAYUZ = (None, "yok", "komut")
 
@@ -124,6 +145,26 @@ class Servis:
         self._son_cevrimdisi = None
         self.yapi = {}
         self.istemci = None
+        # ---- altyapı (A6) ----
+        # Arıza kuyruğu durum.json'da (root, 0600) en çok 7 gün bekler; tahtada hiçbir arıza metni gösterilmez.
+        self.ariza_kuyrugu = _ariza_kuyrugu_coz(kayitli.get("ariza_kuyrugu"))
+        self._ariza_zamanlari: deque = deque()  # kabul edilen bildirimlerin time.monotonic() zamanları
+        self._ariza_olaylari: dict[str, threading.Event] = {}  # yerel_id → sunucu aldı olayı
+        self.onay_bekliyor = False  # sunucu "bekliyor" dedi (onaylanmamış tahta arıza bildiremez)
+        # Adres listesi: etkin adres (bağlanılan) ve ardışık bağlantı hatası sayısı. Bellekte.
+        self._etkin_adres = None
+        self._birincil_son = None
+        self._adres_hata = 0
+        self._gecikme = 2
+        # Envanter: ham donanım okumaları önbellekte; gönderim yalnız sunucu isteyince (envanter_iste).
+        self._donanim = None
+        self._donanim_zamani = 0.0
+        self._donanim_kilidi = threading.Lock()
+        self._envanter_iste = False
+        # Aynı özet hemen ikinci kez gönderilmez (sunucu reddetse de döngü olmasın); sunucu aynı özeti
+        # ENVANTER_YENIDEN_SN sonra hâlâ istiyorsa (ör. yedekten geri yüklendi, envanter kayboldu) yeniden gider.
+        self._envanter_gonderilen = None
+        self._envanter_gonderim_zamani = 0.0
         # Okul kimliği: sunucunun hesapladığı tahta paleti, logo ve tahtanın adı/dersliği.
         # Logo yalnız bu serviste (root) durur; ekran yardımcısına soketle gider.
         self.tema = ayar.palet_dogrula(kayitli.get("tema"))
@@ -155,6 +196,7 @@ class Servis:
                 "tema": self.tema,
                 "logo_sha256": self.logo_sha,
                 "tahta": self.tahta_bilgi,
+                "ariza_kuyrugu": self.ariza_kuyrugu,
             }
         )
 
@@ -944,7 +986,10 @@ class Servis:
         for hedef in self._hedefler():
             hedef["gonder"](mesaj)
 
-    def durum_ozeti(self) -> dict:
+    def durum_ozeti(self, env: dict | None = None) -> dict:
+        """Sunucuya giden durum. `env`: aynı istekte gönderilen envanter (özeti aynı olsun); verilmezse hesaplanır."""
+        if env is None:
+            env = self.envanter_al()
         with self.kilit:
             ekranlar = [dict(e["bilgi"]) for e in self.ekranlar.values() if e["bilgi"].get("arayuz") != "komut"]
             olaylar, self.olaylar = self.olaylar, []
@@ -976,6 +1021,10 @@ class Servis:
             "mac": ag.get("mac", ""),
             "platform": sistem.platform_adi(),
             "olaylar": olaylar,
+            # A6: bağlanılan adres, kayıtlı adres listesinin özeti, envanter özeti (envanter ancak istenince gider).
+            "sunucu_adresi": self._etkin_adres or self.yapi.get("sunucu", ""),
+            "adres_listesi_ozet": ayar.adres_listesi_ozet(self.yapi.get("sunucular") or []),
+            "envanter_ozet": envanter.ozet(env) if env else "",
         }
 
     # ---- ekran yardımcısından gelenler -------------------------------------
@@ -1061,6 +1110,124 @@ class Servis:
             self._yoklama_bitir_gonder(belirtec)
             self.yayinla()
             self.bildir()
+        # ---- arıza bildirimi (A6): kısa ömürlü arıza penceresi (`arayuz: komut`) ----------------
+        elif tur == "ariza":
+            basarili, metin = self.ariza_bildir(mesaj.get("kategori"), mesaj.get("aciklama"))
+            with self.kilit:
+                hedef = self.ekranlar.get(no)
+            if hedef:
+                # Pencereye yalnız sonuç iletisi gider (sır ve kuyruk içeriği gitmez; kural 5).
+                hedef["gonder"]({"tur": "ariza_sonuc", "basarili": basarili, "mesaj": metin})
+
+    # ---- arıza bildirimi (A6) ----------------------------------------------------------
+    def ariza_bildir(self, kategori, aciklama) -> tuple[bool, str]:
+        """Tahtadan arıza kaydı: denetler, kuyruğa yazar, sunucuya hemen iletmeyi dener.
+
+        Sunucu en çok ARIZA_ONAY_BEKLEME_SN içinde `ariza_alindi` ile aldığını söylerse "iletildi",
+        demezse "tahtada bekletiliyor" denir; kayıt kuyrukta kalır ve sonraki bağlantıda iletilir.
+        """
+        kategori = str(kategori or "")
+        if kategori not in ARIZA_KATEGORILERI:
+            return False, ILETI_ARIZA_KATEGORI
+        if not self.kayitli() or self.onay_bekliyor:
+            return False, ILETI_ARIZA_KAYITSIZ
+        aciklama = ariza_aciklamasi(aciklama)
+        sinif = sistem.etkin_oturum().get("sinif", "")  # yalnız hesap SINIFI (kural 6)
+        with self.kilit:
+            simdi = time.monotonic()
+            while self._ariza_zamanlari and simdi - self._ariza_zamanlari[0] >= 3600:
+                self._ariza_zamanlari.popleft()
+            if len(self._ariza_zamanlari) >= ARIZA_SAATLIK_EN_COK:
+                return False, ILETI_ARIZA_SINIR
+            self._ariza_kuyrugu_buda()
+            if len(self.ariza_kuyrugu) >= ARIZA_KUYRUK_EN_COK:
+                return False, ILETI_ARIZA_KUYRUK
+            yerel_id = secrets.token_hex(8)
+            self.ariza_kuyrugu.append({
+                "yerel_id": yerel_id, "kategori": kategori, "aciklama": aciklama,
+                "oturum_sinifi": sinif, "tahta_zamani": int(time.time()),
+            })  # fmt: skip
+            self._ariza_zamanlari.append(simdi)
+            olay = threading.Event()
+            self._ariza_olaylari[yerel_id] = olay
+            self._kaydet()
+        self.bildir()
+        iletildi = olay.wait(ARIZA_ONAY_BEKLEME_SN)
+        with self.kilit:
+            self._ariza_olaylari.pop(yerel_id, None)
+        return True, ILETI_ARIZA_ILETILDI if iletildi else ILETI_ARIZA_BEKLIYOR
+
+    def _ariza_kuyrugu_buda(self):
+        """7 günden eski bekleyen bildirimleri atar (çağıran self.kilit'i tutar)."""
+        sinir = time.time() - ARIZA_OMUR_SN
+        eski = [a for a in self.ariza_kuyrugu if a["tahta_zamani"] < sinir]
+        if eski:
+            self.ariza_kuyrugu = [a for a in self.ariza_kuyrugu if a["tahta_zamani"] >= sinir]
+            self.olaylar.append(f"{len(eski)} arıza bildirimi 7 gün içinde sunucuya iletilemediği için silindi.")
+            self._kaydet()
+
+    def _gonderilecek_arizalar(self) -> list[dict]:
+        with self.kilit:
+            self._ariza_kuyrugu_buda()
+            return [dict(a) for a in self.ariza_kuyrugu[:ARIZA_KUYRUK_EN_COK]]
+
+    # ---- envanter (A6) ---------------------------------------------------------------
+    def donanim_tazele(self, zorla: bool = False):
+        """Ham donanım okumalarını açılışta ve 6 saatte bir (ya da `envanter` komutunda) yeniler."""
+        with self._donanim_kilidi:
+            if not zorla and self._donanim is not None and time.monotonic() - self._donanim_zamani < ENVANTER_YENILEME_SN:
+                return
+            try:
+                ham = sistem.donanim_bilgisi()
+            except Exception:  # envanter hiçbir koşulda ajanı düşürmez
+                gunluk.exception("Donanım bilgisi okunamadı")
+                ham = {}
+            self._donanim, self._donanim_zamani = ham, time.monotonic()
+
+    def envanter_al(self) -> dict | None:
+        """Gönderilecek envanter (§5.4); donanım henüz okunmadıysa None."""
+        if self._donanim is None:
+            return None
+        with self.kilit:
+            ekranlar = [dict(e["bilgi"]) for e in self.ekranlar.values() if e["bilgi"].get("arayuz") not in GORUNMEZ_ARAYUZ]
+        return envanter.topla(self._donanim, envanter.ekran_cozunurlugu(ekranlar))
+
+    def _istek_govdesi(self, sonuclar: list, bekle: int, komut_al: bool = True) -> dict:
+        """`/ajan/bekle` gövdesi: durum + (varsa) bekleyen arızalar + (istendiyse) envanter."""
+        env = self.envanter_al()
+        govde = {"surum": __version__, "durum": self.durum_ozeti(env), "sonuclar": sonuclar, "bekle": bekle}
+        if not komut_al:
+            govde["komut_al"] = False
+        arizalar = self._gonderilecek_arizalar()
+        if arizalar:
+            govde["arizalar"] = arizalar
+        ozet = govde["durum"]["envanter_ozet"]
+        if komut_al and env is not None and self._envanter_iste and (
+            ozet != self._envanter_gonderilen
+            or time.monotonic() - self._envanter_gonderim_zamani >= ENVANTER_YENIDEN_SN
+        ):
+            govde["envanter"] = env
+        return govde
+
+    def _altyapi_yanit(self, yanit: dict, govde: dict):
+        """Yanıttaki `ariza_alindi` (kuyruktan sil) ve `envanter_iste` alanlarını işler (eski sunucuda yoklar)."""
+        alinan = yanit.get("ariza_alindi")
+        if isinstance(alinan, list):
+            alinan = {str(a) for a in alinan}
+            with self.kilit:
+                once = len(self.ariza_kuyrugu)
+                self.ariza_kuyrugu = [a for a in self.ariza_kuyrugu if a["yerel_id"] not in alinan]
+                if len(self.ariza_kuyrugu) != once:
+                    self._kaydet()
+                for yerel_id in alinan:
+                    olay = self._ariza_olaylari.get(yerel_id)
+                    if olay:
+                        olay.set()
+        if "envanter" in govde:
+            self._envanter_gonderilen = govde["durum"].get("envanter_ozet")
+            self._envanter_gonderim_zamani = time.monotonic()
+        if "envanter_iste" in yanit:
+            self._envanter_iste = bool(yanit["envanter_iste"])
 
     def _kod_dene(self, kod: str):
         if self.sinav_ekrani_acik():
@@ -1147,10 +1314,20 @@ class Servis:
             parca = urlsplit(self.yapi.get("sunucu", ""))
             with self.kilit:
                 ekranlar = [dict(e["bilgi"]) for e in self.ekranlar.values()]
-            rapor = tani.topla(parca.hostname or "", parca.port or 443, self.sunucu_saat, ekranlar, self.sinav_tani_metni())
+            rapor = tani.topla(
+                parca.hostname or "", parca.port or 443, self.sunucu_saat, ekranlar, self.sinav_tani_metni(),
+                sunucular=ayar.adres_sirasi(self.yapi),
+            )
             return True, json.dumps(rapor, ensure_ascii=False)
         if tur == "guncelle":
             return self._guncelle(veri)
+        if tur == "envanter":
+            # Çıktı envanterin kendisidir; sunucu onu saklar ("Envanter alındı."). Özet aynı önbellekten.
+            self.donanim_tazele(zorla=True)
+            env = self.envanter_al() or envanter.topla({})
+            self._envanter_gonderilen = envanter.ozet(env)
+            self._envanter_gonderim_zamani = time.monotonic()
+            return True, json.dumps(env, ensure_ascii=False)
         if tur == "kapat" and int(veri.get("uyari_sn", 0) or 0) > 0:
             # Uyarılı (otomatik) kapatma acil yayın sürerken uygulanmaz: bilinçli atlama,
             # hata değildir. Panelden verilen uyarısız kapatma ise her durumda uygulanır.
@@ -1228,13 +1405,68 @@ class Servis:
 
     # ---- sunucu döngüsü ------------------------------------------------------
     def _istemci_kur(self):
+        """ajan.json'u okur ve etkin adrese istemci kurar.
+
+        Etkin adres önce birincildir ("sunucu"); art arda 3 bağlantı hatasında listedeki sıradakine
+        geçilir (_adres_hatasi). Birincil dışarıdan değişirse (`tahta-ajan sunucu ADRES`) ona dönülür.
+        """
         self.yapi = ayar.oku()
-        if not self.yapi.get("sunucu"):
+        sira = ayar.adres_sirasi(self.yapi)
+        if not sira:
             self.istemci = None
             return
+        if sira[0] != self._birincil_son or self._etkin_adres not in sira:
+            self._birincil_son, self._etkin_adres, self._adres_hata = sira[0], sira[0], 0
         self.istemci = Istemci(
-            self.yapi["sunucu"], self.yapi.get("parmak_izi", ""), self.yapi.get("tahta_id"), self.yapi.get("anahtar", "")
+            self._etkin_adres, self.yapi.get("parmak_izi", ""), self.yapi.get("tahta_id"), self.yapi.get("anahtar", "")
         )
+
+    def _adres_hatasi(self):
+        """Bağlantı hatası (parmak izi dahil) sayar; eşikte listedeki sıradaki adrese geçer."""
+        sira = ayar.adres_sirasi(self.yapi)
+        self._adres_hata += 1
+        if self._adres_hata < ADRES_HATA_ESIGI or len(sira) < 2:
+            return
+        konum = sira.index(self._etkin_adres) if self._etkin_adres in sira else -1
+        self._etkin_adres = sira[(konum + 1) % len(sira)]
+        self._adres_hata = 0
+        gunluk.warning("Sunucuya %s kez ulaşılamadı; sıradaki adres denenecek: %s", ADRES_HATA_ESIGI, self._etkin_adres)
+
+    def _adres_basarili(self):
+        """Birincil olmayan adreste ilk başarılı yanıt: o adres kalıcı olarak birincil olur."""
+        self._adres_hata = 0
+        if not self._etkin_adres or self._etkin_adres == self.yapi.get("sunucu"):
+            return
+        yapi = ayar.oku()
+        if not yapi.get("sunucu"):
+            return
+        yapi["sunucu"] = self._etkin_adres
+        try:
+            ayar.yaz(yapi)
+        except OSError as hata:
+            gunluk.warning("ajan.json yazılamadı: %s", hata)
+            return
+        self.yapi = yapi
+        self._birincil_son = self._etkin_adres
+        with self.kilit:
+            self.olaylar.append(f"Sunucuya yeni adresten ulaşıldı: {self._etkin_adres}")
+
+    def _adres_listesi_isle(self, deger):
+        """Sunucunun bildirdiği adres listesi (durum tabanlı; anahtar yoksa dokunulmaz, boşsa silinmez)."""
+        liste = ayar.adresler_dogrula(deger)
+        if not liste or liste == self.yapi.get("sunucular"):
+            return
+        yapi = ayar.oku()
+        if not yapi.get("sunucu"):
+            return
+        yapi["sunucular"] = liste
+        try:
+            ayar.yaz(yapi)
+        except OSError as hata:
+            gunluk.warning("ajan.json yazılamadı: %s", hata)
+            return
+        self.yapi = yapi
+        gunluk.info("Sunucu adres listesi güncellendi (%s adres).", len(liste))
 
     def _yanit_isle(self, yanit: dict):
         ayarlar = yanit.get("ayar") or {}
@@ -1257,6 +1489,9 @@ class Servis:
                 bilgi = {"ad": _kisa(ayarlar["tahta"].get("ad")), "derslik": _kisa(ayarlar["tahta"].get("derslik"))}
                 if bilgi != self.tahta_bilgi:
                     self.tahta_bilgi, degisti = bilgi, True
+        # Adres listesi (A6): durum tabanlı; anahtar yoksa (eski sunucu ya da boş liste) dokunulmaz.
+        if "sunucu_adresleri" in ayarlar:
+            self._adres_listesi_isle(ayarlar["sunucu_adresleri"])
         # Acil yayın durumu: anahtar hiç yoksa (eski sunucu) dokunulmaz; null gelirse temizlenir.
         acil_degisti = "acil" in ayarlar and self._acil_isle(ayarlar["acil"])
         # Sınav durumu (A4): anahtar hiç yoksa (eski sunucu) dokunulmaz; null gelirse temizlenir.
@@ -1345,65 +1580,69 @@ class Servis:
         if not (self.istemci and self.kayitli()):
             return
 
+        istemci = self.istemci
+
         def _gonder():
             try:
-                self.istemci.istek(
-                    "POST",
-                    "/ajan/bekle",
-                    {"surum": __version__, "durum": self.durum_ozeti(), "sonuclar": [], "bekle": 0, "komut_al": False},
-                    zaman_asimi=8,
-                )
+                govde = self._istek_govdesi([], 0, komut_al=False)
+                kod, yanit, _ = istemci.istek("POST", "/ajan/bekle", govde, zaman_asimi=8)
             except BaglantiHatasi:
-                pass
+                return
+            if kod == 200 and isinstance(yanit, dict):
+                self._altyapi_yanit(yanit, govde)
 
         threading.Thread(target=_gonder, daemon=True).start()
 
     def _dongu(self):
-        gecikme = 2
         while not self.dur.is_set():
-            self._istemci_kur()
-            if not (self.istemci and self.kayitli()):
-                self.dur.wait(5)
-                continue
-            with self.kilit:
-                gonderilen = list(self.sonuclar)
+            bekle = self._tur()
+            if bekle:
+                self.dur.wait(bekle)
+
+    def _tur(self) -> float:
+        """Uzun beklemenin bir turu; sonraki turdan önce beklenecek saniyeyi döndürür (0 = hemen)."""
+        self._istemci_kur()
+        if not (self.istemci and self.kayitli()):
+            return 5
+        self.donanim_tazele()  # açılışta ve 6 saatte bir; arada önbellekten
+        with self.kilit:
+            gonderilen = list(self.sonuclar)
+        govde = self._istek_govdesi(gonderilen, 25)
+        try:
+            kod, yanit, _ = self.istemci.istek("POST", "/ajan/bekle", govde, zaman_asimi=45)
+        except BaglantiHatasi as hata:
+            gunluk.warning("Sunucuya ulaşılamadı (%s): %s", self._etkin_adres, hata)
+            self._adres_hatasi()
+            bekle, self._gecikme = self._gecikme, min(self._gecikme * 2, 30)
+            return bekle
+        # Sunucuya ulaşıldı (parmak izi tuttu): HTTP hatası adres değiştirme sebebi değildir.
+        self._adres_hata = 0
+        if kod in (401, 403):
+            gunluk.warning("Sunucu bu tahtayı tanımıyor (HTTP %s); kayıt yenilenmeli.", kod)
+            return 30
+        if kod != 200:
+            gunluk.warning("Sunucu yanıtı: HTTP %s %s", kod, str(yanit)[:200])
+            bekle, self._gecikme = self._gecikme, min(self._gecikme * 2, 30)
+            return bekle
+        self._gecikme = 2
+        self.son_temas = time.time()
+        self._adres_basarili()
+        with self.kilit:
+            self.sonuclar = [s for s in self.sonuclar if s not in gonderilen]
+        self.onay_bekliyor = yanit.get("durum") == "bekliyor"
+        self._altyapi_yanit(yanit, govde)
+        self._yanit_isle(yanit)
+        if self.onay_bekliyor:
+            return 8
+        for komut in yanit.get("komutlar") or []:
             try:
-                kod, yanit, _ = self.istemci.istek(
-                    "POST",
-                    "/ajan/bekle",
-                    {"surum": __version__, "durum": self.durum_ozeti(), "sonuclar": gonderilen, "bekle": 25},
-                    zaman_asimi=45,
-                )
-            except BaglantiHatasi as hata:
-                gunluk.warning("Sunucuya ulaşılamadı: %s", hata)
-                self.dur.wait(gecikme)
-                gecikme = min(gecikme * 2, 30)
-                continue
-            if kod in (401, 403):
-                gunluk.warning("Sunucu bu tahtayı tanımıyor (HTTP %s); kayıt yenilenmeli.", kod)
-                self.dur.wait(30)
-                continue
-            if kod != 200:
-                gunluk.warning("Sunucu yanıtı: HTTP %s %s", kod, str(yanit)[:200])
-                self.dur.wait(gecikme)
-                gecikme = min(gecikme * 2, 30)
-                continue
-            gecikme = 2
-            self.son_temas = time.time()
+                basarili, cikti = self.komut_uygula(komut)
+            except Exception as hata:  # tek komutun hatası döngüyü düşürmez
+                gunluk.exception("Komut uygulanamadı")
+                basarili, cikti = False, f"{type(hata).__name__}: {hata}"
             with self.kilit:
-                self.sonuclar = [s for s in self.sonuclar if s not in gonderilen]
-            self._yanit_isle(yanit)
-            if yanit.get("durum") == "bekliyor":
-                self.dur.wait(8)
-                continue
-            for komut in yanit.get("komutlar") or []:
-                try:
-                    basarili, cikti = self.komut_uygula(komut)
-                except Exception as hata:  # tek komutun hatası döngüyü düşürmez
-                    gunluk.exception("Komut uygulanamadı")
-                    basarili, cikti = False, f"{type(hata).__name__}: {hata}"
-                with self.kilit:
-                    self.sonuclar.append({"komut_id": komut.get("id"), "basarili": basarili, "cikti": cikti})
+                self.sonuclar.append({"komut_id": komut.get("id"), "basarili": basarili, "cikti": cikti})
+        return 0
 
     def _program_suresi_denetle(self) -> bool:
         """Süresi dolan program kilidini SUNUCUDAN BAĞIMSIZ açar; açtıysa True."""
@@ -1516,6 +1755,31 @@ class Servis:
 
 def _kisa(deger) -> str:
     return str(deger or "").strip()[:60]
+
+
+def ariza_aciklamasi(metin) -> str:
+    """Arıza açıklaması: denetim karakterleri atılır (satır sonu boşluğa döner), en çok 300 karakter."""
+    duz = "".join(" " if c in "\r\n\t" else c for c in str(metin or "") if unicodedata.category(c)[0] != "C" or c in "\r\n\t")
+    return " ".join(duz.split())[:ARIZA_ACIKLAMA_EN_UZUN]
+
+
+def _ariza_kuyrugu_coz(deger) -> list[dict]:
+    """durum.json'daki kuyruğu doğrular (bozuk öğe atılır, en çok 10)."""
+    sonuc: list[dict] = []
+    for oge in deger if isinstance(deger, list) else []:
+        if not isinstance(oge, dict):
+            continue
+        yerel_id = str(oge.get("yerel_id") or "")
+        if not (8 <= len(yerel_id) <= 32 and all(c in "0123456789abcdef" for c in yerel_id)):
+            continue
+        sonuc.append({
+            "yerel_id": yerel_id,
+            "kategori": str(oge.get("kategori") or "diger")[:40],
+            "aciklama": ariza_aciklamasi(oge.get("aciklama")),
+            "oturum_sinifi": str(oge.get("oturum_sinifi") or "")[:20],
+            "tahta_zamani": _sayi(oge.get("tahta_zamani")),
+        })  # fmt: skip
+    return sonuc[:ARIZA_KUYRUK_EN_COK]
 
 
 def _saat_gecerli(deger: str) -> bool:

@@ -1,7 +1,7 @@
 {% extends "taban.html" %}
 {% block baslik %}Ayarlar · Tahta Kontrol{% endblock %}
 {# Okul kimliği işlemlerinin iletisi sayfa başında değil, #kimlik bölümünde çizilir (yönlendirme oraya kayar). #}
-{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in ('kimlik', 'acil', 'sinav') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
+{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in ('kimlik', 'acil', 'sinav', 'adresler') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}
 <div class="sayfa-bas"><h1>Ayarlar</h1></div>
 <form method="post" action="/ayarlar">
@@ -27,15 +27,11 @@
   </div>
   <div class="kutu">
     <h2>Sunucu</h2>
-    <label for="sunucu_adresi">Tahtaların kullanacağı sunucu adresi</label>
-    <input type="text" id="sunucu_adresi" name="sunucu_adresi" value="{{ kayitli_adres }}"
-      placeholder="https://{{ ipler[0] if ipler else '10.0.0.5' }}:{{ https_port }}">
-    <p class="not">Boş bırakılırsa bu bilgisayarın ilk ağ adresi kullanılır. Bu bilgisayarın adresleri:
-      {% for ip in ipler %}<span class="kod">{{ ip }}</span>{% if not loop.last %}, {% endif %}{% else %}bulunamadı{% endfor %}.
-      Sunucu bilgisayarına ağda sabit IP ayrılması önerilir.</p>
+    <p class="not">Tahtaların kullandığı sunucu adresleri aşağıdaki <a href="#adresler">Sunucu adresleri</a> bölümündedir.</p>
     <p class="not">Sertifika parmak izi: <span class="kod">{{ parmak_izi }}</span></p>
     <p class="not">Veri klasörü: <span class="kod">{{ veri_dizini }}</span><br>
-      Bu klasör (veritabanı ve sunucu sertifikası) düzenli yedeklenmelidir. Sertifika kaybolursa bütün tahtalara ajan yeniden kurulur.</p>
+      Veritabanı ve sunucu sertifikası <a href="/yedekler">Yedekler</a> sayfasından şifreli olarak yedeklenir.
+      Sertifika kaybolursa bütün tahtalara ajan yeniden kurulur.</p>
   </div>
 </div>
 <div class="kutu">
@@ -63,6 +59,30 @@
 </div>
 <p><button class="ana">Ayarları kaydet</button></p>
 </form>
+
+{# A6 Sunucu adresleri: ayrı form (bolum=adresler); yalnız `sunucu_adresleri` anahtarını yazar. #}
+<section class="kutu" id="adresler" aria-labelledby="adresler-baslik">
+  <div class="kutu-bas">
+    <h2 id="adresler-baslik">Sunucu adresleri</h2>
+    {% if sunucu_adresleri %}
+    <span class="rozet" data-durum="{{ 'tamam' if adres_durumu.alan == adres_durumu.onayli else 'uyari' }}"><svg class="simge" aria-hidden="true"><use href="#{{ 's-tamam' if adres_durumu.alan == adres_durumu.onayli else 's-onay' }}"/></svg>{{ adres_durumu.alan }}/{{ adres_durumu.onayli }} tahta güncel adres listesini aldı</span>
+    {% endif %}
+  </div>
+  {% if ileti_yeri == 'adresler' and mesaj %}{% with odakla=True %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <form method="post" action="/ayarlar" class="form-dar">
+    <input type="hidden" name="bolum" value="adresler">
+    <label for="sunucu_adresleri">Tahtalara bildirilen adresler (satır başına bir adres, en çok {{ adres_en_cok }})</label>
+    <p class="ipucu" id="adres-ipucu">İlk satır birincil adrestir (kurulum betiği bunu kullanır). Tahta bir adrese 3 kez ulaşamazsa
+      sıradakini dener ve ulaştığı adresi kalıcı yapar. Sunucu bilgisayarının IP'si değişecekse yeni adresi taşımadan
+      ÖNCE ekleyin ve bütün tahtalar listeyi alana kadar bekleyin. Okul DNS'inde bir ad tanımlıysa onu da ekleyin.</p>
+    <textarea id="sunucu_adresleri" name="sunucu_adresleri" rows="5" aria-describedby="adres-ipucu" placeholder="https://{{ ipler[0] if ipler else '10.0.0.5' }}:{{ https_port }}">{{ sunucu_adresleri_metni }}</textarea>
+    <p class="not">Boş bırakılırsa bu bilgisayarın ilk ağ adresi kullanılır. Bu bilgisayarın adresleri:
+      {% for ip in ipler %}<span class="kod">{{ ip }}</span>{% if not loop.last %}, {% endif %}{% else %}bulunamadı{% endfor %}.
+      {% if sunucu_adresleri and adres_durumu.yetenekli < adres_durumu.onayli %}{{ adres_durumu.onayli - adres_durumu.yetenekli }} tahtada ajan güncellenmeli (eski ajan listeyi almaz).{% endif %}</p>
+    <p class="dugme-satiri"><button class="ana">Adresleri kaydet</button></p>
+  </form>
+  <p class="not">Tahtalar yeni adrese ulaşamıyorsa tahtada yönetici olarak: <span class="kod">sudo tahta-ajan sunucu https://YENİ-ADRES:{{ https_port }}</span></p>
+</section>
 
 {# Acil şablonları ayrı formdur (bolum=acil_sablonlari): genel ayarları ezmez. Alanlar paralel
    listedir: s_ad, s_baslik, s_metin; adı boş satır silinmiş sayılır. #}

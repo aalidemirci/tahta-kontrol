@@ -6,11 +6,14 @@ kimliğini taşır; yalnız yönetici (root) okuyabilir.
 
 from __future__ import annotations
 
+import hashlib
+import ipaddress
 import json
 import os
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 YEREL_PORT = int(os.environ.get("TAHTA_AJAN_YEREL_PORT", "47811"))
 # Sunucuyla bu kadar saniye konuşulamazsa tahta "çevrimdışı" sayılır ve kilit
@@ -67,6 +70,83 @@ def oku() -> dict:
 
 def yaz(veri: dict) -> None:
     _json_yaz(ayar_yolu(), veri, gizli=True)
+
+
+# ---- sunucu adres listesi (A6) ----------------------------------------------------
+# ajan.json: "sunucu" (birincil, bağlanılan) + "sunucular" (sunucunun bildirdiği liste, en çok 5).
+# Liste root'a özel ajan.json'da durur; ekran yardımcısına gitmez. Parmak izi her adreste aynı
+# denetlendiği için listeyi sunucunun itmesi güvenlidir (yanlış adrese tek bayt veri gitmez).
+ADRES_EN_COK = 5
+
+
+# Ana makine adı izin listesi (sunucudaki adresler.makine_gecerli_mi ile aynı): geçerli IP ya da
+# yalnız [a-z0-9-] etiketlerinden oluşan DNS adı. Kabuk metakarakteri ($ ( ) ` " ;) hiçbir yolda geçmez.
+_DNS_ETIKET = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+_DNS_ADI = re.compile(rf"{_DNS_ETIKET}(?:\.{_DNS_ETIKET})*")
+_NETLOC = re.compile(r"[a-z0-9.\-\[\]:]+")
+
+
+def _makine_gecerli_mi(makine: str, netloc: str) -> bool:
+    if not _NETLOC.fullmatch(netloc or ""):
+        return False
+    try:
+        ipaddress.ip_address(makine)
+        return True
+    except ValueError:
+        pass
+    return len(makine) <= 253 and bool(_DNS_ADI.fullmatch(makine))
+
+
+def adres_dogrula(adres) -> str | None:
+    """Sunucudaki adres kurallarının aynısı: https, ana makine dolu, port 1–65535, yerel adres
+    değil, yol/sorgu yok. Geçerliyse sondaki / atılmış adres, değilse None."""
+    adres = str(adres or "").strip().rstrip("/")
+    if not adres.lower().startswith("https://") or any(c.isspace() for c in adres) or len(adres) > 200:
+        return None
+    try:
+        parca = urlsplit(adres)
+        port = parca.port
+    except ValueError:
+        return None
+    makine = (parca.hostname or "").lower()
+    if not makine or makine == "localhost" or makine.startswith("127.") or makine in ("::1", "0.0.0.0"):
+        return None
+    if not _makine_gecerli_mi(makine, parca.netloc.lower()):
+        return None
+    if port is not None and not 1 <= port <= 65535:
+        return None
+    if parca.path not in ("", "/") or parca.query or parca.fragment or parca.username or parca.password:
+        return None
+    return adres
+
+
+def adresler_dogrula(liste) -> list[str]:
+    """Sunucunun bildirdiği listeyi süzer: geçersiz öğe atılır, tekrarsız, en çok 5."""
+    if not isinstance(liste, list):
+        return []
+    sonuc: list[str] = []
+    for oge in liste:
+        adres = adres_dogrula(oge)
+        if adres and adres not in sonuc:
+            sonuc.append(adres)
+    return sonuc[:ADRES_EN_COK]
+
+
+def adres_sirasi(yapi: dict) -> list[str]:
+    """Deneme sırası: önce birincil ("sunucu"), sonra listedeki diğerleri (sıra korunur, tekrarsız)."""
+    sira: list[str] = []
+    for adres in [yapi.get("sunucu")] + list(yapi.get("sunucular") or []):
+        adres = str(adres or "").rstrip("/")
+        if adres and adres not in sira:
+            sira.append(adres)
+    return sira
+
+
+def adres_listesi_ozet(liste) -> str:
+    """Sunucunun karşılaştırdığı özet: "\\n".join(liste) SHA-256'sının ilk 12 hanesi (liste boşsa boş)."""
+    if not liste:
+        return ""
+    return hashlib.sha256("\n".join(liste).encode("utf-8")).hexdigest()[:12]
 
 
 def durum_oku() -> dict:

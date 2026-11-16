@@ -3,7 +3,7 @@
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.5.0, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
+> **Durum: 0.7.0, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
 > gerçek bir Pardus ETAP tahtasında henüz denenmedi. Okul genelinde kullanmadan
 > önce tek tahtada deneyin (`docs/saha-denemesi.md`).
 
@@ -86,7 +86,25 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
 - Yoklama kayıtları ayarlanan süre (varsayılan 30 gün) sonunda kendiliğinden silinir; öğretim
   yılı sonunda bütün öğrenci ve yoklama verisi tek işlemle silinebilir.
 
-Planlananlar: şifreli yedek, tahta envanteri ve arıza bildirimi (`docs/tasarim.md`, yol haritası).
+0.7.0 ile:
+
+- **Şifreli yedek:** veritabanı ve sunucu sertifikası her gün bir kez, yedek parolasıyla
+  şifrelenmiş tek dosya (`.tkyedek`) olarak yedeklenir; parola sunucuda saklanmaz (sunucu yalnız
+  şifreleyebilir, açamaz). Saklama sayısı, ikinci kopya klasörü (başka disk ya da USB), elle yedek
+  ve indirme vardır. Geri yükleme yalnız sunucu bilgisayarından, önizleme ve onayla yapılır; yeni
+  bir bilgisayarda ilk kurulum sayfasından da başlatılabilir.
+- **Sunucu adres listesi:** tahtalara en çok 5 adres (IP ya da okul DNS'indeki ad) bildirilir;
+  tahta birincil adrese ulaşamazsa sıradakini dener ve ulaştığını kalıcı yapar. Sunucunun adresi
+  değişecekse yeni adres önceden eklenir. Tahtada elle düzeltme: `sudo tahta-ajan sunucu ADRES`.
+- **Tahta envanteri:** üretici, model, seri no, işlemci, bellek, disk, ekran, dokunmatik aygıt,
+  işletim sistemi ve ajan sürümü tahtadan kendiliğinden gelir; demirbaş numarası panelden girilir;
+  sıralanabilir tablo ve CSV. Seri numarası değişen ya da iki tahtada aynı görünen cihaz işaretlenir.
+- **Arıza bildirimi:** öğretmen tahtanın menüsündeki "Arıza bildir" penceresinden türü seçip kısa
+  açıklama yazar; sunucuya ulaşılamıyorsa kayıt tahtada bekler. İdare kaydı panelden de açar,
+  "İnceleniyor / Çözüldü" diye izler; her değişiklik geçmişe düşer, kayıt silinmez.
+
+Planlananlar: sunucunun Windows hizmeti olarak (oturum açılmadan) çalışması ve ajan paketi
+imzası (`docs/tasarim.md`, yol haritası).
 
 ## Çalıştırma (geliştirme)
 
@@ -117,6 +135,11 @@ Panel `http://127.0.0.1:8787` adresinde açılır. Windows kurulum dosyası
 - Panel dış kaynak (font, CDN, analitik) yüklemez; satır içi betik ve stil
   içermez, içerik güvenliği politikası (CSP) bunu zorlar. Logo yalnız PNG ya da
   JPEG olarak kabul edilir.
+- Yedekler şifrelidir ve parola sunucuda durmaz; parola unutulursa yedek açılamaz. Yedekler,
+  süresi dolunca silinen kişisel verinin kopyasını yedek saklama süresi kadar daha taşır.
+- Envanter yalnız cihaz bilgisidir (hesap adı, dosya adı, makine adı girmez). Tahtadan gelen arıza
+  kaydında kişi kimliği yoktur, yalnız hesap türü (öğretmen/öğrenci); tahtada hiçbir arıza metni
+  gösterilmez.
 - Ajan paketi henüz imzalı değildir; sunucu bilgisayarını yetkisiz erişime karşı koruyun.
 - Güvenlik açığı bildirimi için herkese açık kayıt açmak yerine depo sahibine
   GitHub üzerinden özel olarak ulaşın.

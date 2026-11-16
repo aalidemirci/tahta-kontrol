@@ -22,6 +22,7 @@ KOMUT_OMRU = {
     "yeniden_baslat": 120,
     "tani": 86400,
     "guncelle": 86400,
+    "envanter": 86400,
 }
 KOMUT_ADI = {
     "kilitle": "Kilitle",
@@ -32,6 +33,7 @@ KOMUT_ADI = {
     "yeniden_baslat": "Yeniden başlat",
     "tani": "Tanılama",
     "guncelle": "Ajanı güncelle",
+    "envanter": "Envanteri yenile",
     "uyandir": "Uzaktan aç",
 }
 KOMUT_DURUMU = {

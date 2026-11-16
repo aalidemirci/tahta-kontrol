@@ -1,0 +1,111 @@
+{# A6 (§6.3) tahta sayfası eklemeleri: envanter, arızalar, sunucu bağlantısı.
+   Bağlam: envanter (envanter.gorunum() ya da None), envanter_zamani, demirbas_no, envanter_notu, arizalar (bu tahtanın
+   açık+inceleniyor kayıtları), ariza_kategorileri, baglanti {adres, listede, liste_guncel, imza}, t.donanim_degisti. #}
+{% from "_ariza.html" import durum_rozeti, acma_formu %}
+<div class="iki-sutun">
+<section class="kutu" id="envanter" aria-labelledby="envanter-baslik">
+  <div class="kutu-bas">
+    <h2 id="envanter-baslik">Envanter</h2>
+    {% if t.durum == 'onayli' and t.envanter_yetenegi %}
+    <form method="post" action="/islem" class="satir-ici">
+      <input type="hidden" name="tahta" value="{{ t.id }}">
+      <input type="hidden" name="donus" value="/tahta/{{ t.id }}#envanter">
+      <button name="tur" value="envanter">Envanteri yenile</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if t.donanim_degisti %}
+  <div class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>
+    <div><p><strong>Tahtanın donanım kimliği (seri no) değişti.</strong> Disk başka bir cihaza takılmış ya da tahta anahtarı kopyalanmış olabilir.
+      Tahtayı tanımıyorsanız “Tahtayı kaldır” ile bağlantısını kesin.</p>
+    {% if kullanici.rol == 'yonetici' %}
+    <form method="post" action="/tahta/{{ t.id }}/donanim-goruldu" class="dugme-satiri"><button>Gördüm, uyarıyı kapat</button></form>
+    {% endif %}</div>
+  </div>
+  {% endif %}
+  {% if envanter %}
+  <dl class="ozellikler">
+    <dt>Üretici · model</dt><dd>{{ envanter.uretici_model or '—' }}{% if envanter.model_surumu %} ({{ envanter.model_surumu }}){% endif %}</dd>
+    <dt>Seri no</dt><dd><span class="kod">{{ envanter.seri or '—' }}</span></dd>
+    <dt>Anakart seri no</dt><dd><span class="kod">{{ envanter.anakart_seri or '—' }}</span></dd>
+    <dt>BIOS</dt><dd>{{ envanter.bios or '—' }}</dd>
+    <dt>İşlemci</dt><dd>{{ envanter.islemci or '—' }}{% if envanter.cekirdek_sayisi %} · {{ envanter.cekirdek_sayisi }} çekirdek{% endif %}</dd>
+    <dt>Bellek</dt><dd>{{ envanter.bellek_gb ~ ' GB' if envanter.bellek_gb else '—' }}</dd>
+    <dt>Diskler</dt><dd>{% for d in envanter.diskler %}{{ d.model or d.ad }} · {{ d.boyut_gb }} GB{% if d.ssd %} SSD{% elif d.ssd == false %} HDD{% endif %}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</dd>
+    <dt>Ekran</dt><dd>{{ envanter.ekran or '—' }}</dd>
+    <dt>Dokunmatik</dt><dd>{{ envanter.dokunmatik | join(', ') or '—' }}</dd>
+    <dt>Ağ</dt><dd>{% for a in envanter.ag %}{{ a.arayuz }} <span class="kod">{{ a.mac }}</span>{% if a.kablosuz %} (kablosuz){% endif %}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</dd>
+    <dt>İşletim sistemi</dt><dd>{{ envanter.isletim_sistemi or '—' }}{% if envanter.cekirdek %}<div class="not">çekirdek {{ envanter.cekirdek }}</div>{% endif %}</dd>
+    <dt>Ajan sürümü</dt><dd>{{ envanter.ajan_surumu or '—' }}</dd>
+    <dt>Envanter tarihi</dt><dd>{{ envanter_zamani | tarih }}</dd>
+  </dl>
+  {% if envanter.etap_paketleri %}
+  <details class="ek-bilgi">
+    <summary>ETAP paketleri ({{ envanter.etap_paketleri | length }})</summary>
+    <ul class="kod-liste">{% for p in envanter.etap_paketleri %}<li><span class="kod">{{ p }}</span></li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  {% elif t.envanter_yetenegi %}
+  <p class="bos-not">Envanter bekleniyor; tahta bir sonraki bağlantısında gönderir.</p>
+  {% else %}
+  <p class="bos-not">Envanter ve arıza bildirimi için ajanı güncelleyin.</p>
+  {% endif %}
+
+  <h3>Demirbaş bilgisi</h3>
+  {% if kullanici.rol == 'yonetici' %}
+  <form method="post" action="/tahta/{{ t.id }}/envanter" class="form-dar">
+    <label for="demirbas_no">Demirbaş no</label>
+    <input type="text" id="demirbas_no" name="demirbas_no" maxlength="40" value="{{ demirbas_no }}" placeholder="ör. TS-2026-0001">
+    <label for="envanter_notu">Not</label>
+    <p class="ipucu" id="envanter-notu-ipucu">Ör. garanti bitişi, kurulum tarihi. Kişi adı yazmayın.</p>
+    <textarea id="envanter_notu" name="envanter_notu" maxlength="300" rows="2" aria-describedby="envanter-notu-ipucu">{{ envanter_notu }}</textarea>
+    <p class="dugme-satiri"><button class="ana">Demirbaş bilgisini kaydet</button></p>
+  </form>
+  {% else %}
+  <dl class="ozellikler">
+    <dt>Demirbaş no</dt><dd>{{ demirbas_no or '—' }}</dd>
+    <dt>Not</dt><dd>{{ envanter_notu or '—' }}</dd>
+  </dl>
+  {% endif %}
+</section>
+
+<div>
+<section class="kutu" id="arizalar" aria-labelledby="ariza-baslik">
+  <div class="kutu-bas">
+    <h2 id="ariza-baslik">Arızalar</h2>
+    <a href="/arizalar?durum=hepsi&amp;tahta={{ t.id }}">Bütün kayıtlar</a>
+  </div>
+  {% if arizalar %}
+  <ul class="ariza-liste">
+    {% for a in arizalar %}
+    <li>{{ durum_rozeti(a.durum, a.durum_adi) }} <a href="/ariza/{{ a.id }}">#{{ a.id }} {{ a.kategori_adi }}</a>
+      <div class="not">{{ a.olusturma | tarih }} · {{ a.kaynak_metni }}</div></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="not">Bu tahtada süren arıza kaydı yok.</p>
+  {% endif %}
+  {% if t.durum == 'onayli' %}
+  <details class="kutu ic-kutu"{% if not arizalar %} open{% endif %}>
+    <summary>Arıza kaydı aç</summary>
+    {{ acma_formu(ariza_kategorileri, tahta_id=t.id, donus='/tahta/' ~ t.id ~ '#arizalar', kimlik='tahta-ariza') }}
+  </details>
+  {% endif %}
+</section>
+
+<section class="kutu" id="baglanti" aria-labelledby="baglanti-baslik">
+  <h2 id="baglanti-baslik">Sunucu bağlantısı</h2>
+  <dl class="ozellikler">
+    <dt>Bağlandığı adres</dt>
+    <dd>{% if baglanti.adres %}<span class="kod">{{ baglanti.adres }}</span>{% else %}—{% endif %}
+      {% if baglanti.listede == False %}<div><span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Bağlandığı adres listede yok</span></div>{% endif %}</dd>
+    <dt>Adres listesi</dt>
+    <dd>{% if baglanti.liste_guncel is none %}{{ '—' if t.adres_listesi_yetenegi else 'ajan desteklemiyor' }}
+      {% elif baglanti.liste_guncel %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Güncel</span>
+      {% else %}<span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Eski</span><div class="not">Tahta bir sonraki bağlantısında yeni listeyi alır.</div>{% endif %}</dd>
+    <dt>Paket imzası</dt><dd>{{ 'destekliyor' if baglanti.imza else 'desteklemiyor' }}</dd>
+  </dl>
+  <p class="not">Adres listesi <a href="/ayarlar#adresler">Ayarlar › Sunucu adresleri</a> bölümündedir.</p>
+</section>
+</div>
+</div>

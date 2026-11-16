@@ -109,7 +109,7 @@ def test_goc_bos_ve_onceki_surum_veritabaninda_calisir(tmp_path, monkeypatch):
     b.close()
     vt.hazirla()
     with vt.islem() as b:
-        assert b.execute("PRAGMA user_version").fetchone()[0] == len(vt.GOCLER) == 5
+        assert b.execute("PRAGMA user_version").fetchone()[0] == len(vt.GOCLER) >= 5
         for tablo in ("ogretmen", "ogretmen_pin", "ogrenci", "yoklama", "yoklama_yok", "yoklama_iz", "yoklama_belirtec",
                       "eokul_islendi", "ogrenci_aktarim"):  # fmt: skip
             assert b.execute(f"SELECT COUNT(*) FROM {tablo}").fetchone()[0] == 0

@@ -1,0 +1,59 @@
+{% extends "taban.html" %}
+{% block baslik %}Envanter · Tahta Kontrol{% endblock %}
+{# A6 §6.5. Bağlam: satirlar [{id, ad, derslik, demirbas_no, envanter_notu, durum, ip, mac, son_gorulme,
+   surum, envanter_zamani, env (envanter.gorunum() ya da None), acik_ariza, eksik_neden, seri_tekrar}],
+   eksik_sayisi, guncellenmeli_sayisi. Sıralama: panel.js (th[data-sirala]; hücrede data-deger varsa ona göre). #}
+{% block icerik %}
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1 id="envanter-baslik">Envanter</h1>
+    <p>Tahtaların donanım ve yazılım bilgisi; ajan kendisi gönderir, değişince yeniler. Seri no, model ve MAC
+      cihaz bilgisidir; kişi bilgisi toplanmaz. Demirbaş numarası tahta sayfasından girilir.</p>
+  </div>
+  <p class="dugme-satiri sag"><a class="dugme" href="/envanter.csv" download>CSV indir</a></p>
+</div>
+{% if guncellenmeli_sayisi %}<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg><span>{{ guncellenmeli_sayisi }} tahtada envanter için ajan güncellenmeli (panoda “Ajanı güncelle”).</span></p>{% endif %}
+{% if satirlar %}
+<p class="not">{{ satirlar | length }} tahta{% if eksik_sayisi %} · {{ eksik_sayisi }} tahtanın envanteri yok{% endif %}. Sıralamak için sütun başlığına dokunun.</p>
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="envanter-baslik">
+<table id="envanter-tablo" class="envanter-tablo">
+  <caption class="gizli">Tahta envanteri</caption>
+  <thead><tr>
+    <th scope="col" data-sirala>Tahta</th><th scope="col" data-sirala>Derslik</th><th scope="col" data-sirala>Demirbaş no</th>
+    <th scope="col" data-sirala>Üretici / model</th><th scope="col" data-sirala>Seri no</th><th scope="col" data-sirala>İşlemci</th>
+    <th scope="col" data-sirala="sayi">Bellek</th><th scope="col" data-sirala>Disk</th><th scope="col" data-sirala>Ekran</th>
+    <th scope="col" data-sirala>İşletim sistemi</th><th scope="col" data-sirala>Ajan</th><th scope="col" data-sirala="sayi">Envanter tarihi</th>
+    <th scope="col" data-sirala="sayi">Açık arıza</th>
+  </tr></thead>
+  <tbody>
+  {% for s in satirlar %}
+  <tr>
+    <th scope="row" data-etiket="Tahta"><a href="/tahta/{{ s.id }}#envanter">{{ s.ad }}</a>{% if s.durum == 'bekliyor' %}<div class="not">onay bekliyor</div>{% endif %}</th>
+    <td data-etiket="Derslik">{{ s.derslik or '—' }}</td>
+    <td data-etiket="Demirbaş no">{{ s.demirbas_no or '—' }}</td>
+    {% if s.env %}
+    <td data-etiket="Üretici / model">{{ s.env.uretici_model or '—' }}</td>
+    <td data-etiket="Seri no"><span class="kod">{{ s.env.seri or '—' }}</span>{% if s.seri_tekrar %} <span class="rozet" data-durum="sorun"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Seri no başka tahtada da var</span>{% endif %}</td>
+    <td data-etiket="İşlemci" class="kirp">{{ s.env.islemci or '—' }}</td>
+    <td data-etiket="Bellek" data-deger="{{ s.env.bellek_mb or 0 }}" class="tarih-hucre">{{ s.env.bellek_gb ~ ' GB' if s.env.bellek_gb else '—' }}</td>
+    <td data-etiket="Disk">{{ s.env.disk_metni or '—' }}</td>
+    <td data-etiket="Ekran">{{ s.env.ekran or '—' }}</td>
+    <td data-etiket="İşletim sistemi">{{ s.env.isletim_sistemi or '—' }}</td>
+    <td data-etiket="Ajan">{{ s.env.ajan_surumu or s.surum or '—' }}</td>
+    <td data-etiket="Envanter tarihi" data-deger="{{ s.envanter_zamani or 0 }}" class="tarih-hucre">{{ s.envanter_zamani | tarih }}</td>
+    {% else %}
+    <td data-etiket="Üretici / model">—</td><td data-etiket="Seri no">—</td><td data-etiket="İşlemci">—</td>
+    <td data-etiket="Bellek" data-deger="0">—</td><td data-etiket="Disk">—</td><td data-etiket="Ekran">—</td><td data-etiket="İşletim sistemi">—</td>
+    <td data-etiket="Ajan">{{ s.surum or '—' }}</td>
+    <td data-etiket="Envanter tarihi" data-deger="0">{% if s.eksik_neden == 'Ajan güncellenmeli' %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Ajan güncellenmeli</span>{% else %}<span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>{{ s.eksik_neden }}</span>{% endif %}</td>
+    {% endif %}
+    <td data-etiket="Açık arıza" data-deger="{{ s.acik_ariza }}">{% if s.acik_ariza %}<a class="rozet" data-durum="sorun" href="/arizalar?tahta={{ s.id }}"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ s.acik_ariza }}</a>{% else %}0{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="bos-not">Kayıtlı tahta yok. Tahtalar <a href="/ekle">Tahta ekle</a> sayfasından eklenir.</p>
+{% endif %}
+{% endblock %}

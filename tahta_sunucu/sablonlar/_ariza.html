@@ -1,0 +1,31 @@
+{# A6 arıza kayıtları için ortak parçalar. Durum rengi + simge + metin (renk tek başına anlam taşımaz):
+   açık = sorun (kırmızı), inceleniyor = uyarı (kehribar), çözüldü = tamam (yeşil), iptal = bilgi (gri). #}
+{% macro durum_rozeti(durum, ad) -%}
+{%- set d = {'acik': ('sorun', 's-sorun'), 'inceleniyor': ('uyari', 's-onay'), 'cozuldu': ('tamam', 's-tamam')}.get(durum, ('bilgi', 's-kapali')) -%}
+<span class="rozet" data-durum="{{ d[0] }}"><svg class="simge" aria-hidden="true"><use href="#{{ d[1] }}"/></svg>{{ ad }}</span>
+{%- endmacro %}
+
+{# Arıza açma formu (Arızalar sayfası ve tahta sayfası). tahtalar verilmezse tahta_id gizli alandır. #}
+{% macro acma_formu(kategoriler, tahtalar=None, tahta_id=None, donus=None, kimlik='ariza') -%}
+<form method="post" action="/arizalar" class="form-dar">
+  {% if donus %}<input type="hidden" name="donus" value="{{ donus }}">{% endif %}
+  {% if tahtalar is not none %}
+  <label for="{{ kimlik }}-tahta">Tahta</label>
+  <select id="{{ kimlik }}-tahta" name="tahta_id" required>
+    <option value="">Seçin</option>
+    {% for t in tahtalar %}<option value="{{ t.id }}" {% if t.id == tahta_id %}selected{% endif %}>{{ t.ad }}{% if t.derslik %} · {{ t.derslik }}{% endif %}</option>{% endfor %}
+  </select>
+  {% else %}
+  <input type="hidden" name="tahta_id" value="{{ tahta_id }}">
+  {% endif %}
+  <label for="{{ kimlik }}-kategori">Arıza türü</label>
+  <select id="{{ kimlik }}-kategori" name="kategori" required>
+    <option value="">Seçin</option>
+    {% for kod, ad in kategoriler.items() %}<option value="{{ kod }}">{{ ad }}</option>{% endfor %}
+  </select>
+  <label for="{{ kimlik }}-aciklama">Açıklama (isteğe bağlı, en çok 300 karakter)</label>
+  <p class="ipucu" id="{{ kimlik }}-ipucu">Kişi adı yazmayın. Bu kayıt yalnız tahtanın bakımı içindir.</p>
+  <textarea id="{{ kimlik }}-aciklama" name="aciklama" maxlength="300" rows="3" aria-describedby="{{ kimlik }}-ipucu"></textarea>
+  <p class="dugme-satiri"><button class="ana">Arıza kaydı aç</button></p>
+</form>
+{%- endmacro %}

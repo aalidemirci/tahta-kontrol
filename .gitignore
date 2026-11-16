@@ -14,3 +14,5 @@ veri/
 *.log
 # Gerçek okul verisi, tanılama dökümleri ve ekran görüntüleri depoya girmez
 saha/
+# A6: şifreli yedek dosyaları depoya girmez
+*.tkyedek

@@ -1,0 +1,61 @@
+{% extends "taban.html" %}
+{% from "_ariza.html" import durum_rozeti, acma_formu %}
+{% block baslik %}Arızalar · Tahta Kontrol{% endblock %}
+{# A6 §6.6. Bağlam: arizalar [ariza.satir_gorunumu], durum_sayilari {acik, inceleniyor, cozuldu, iptal, hepsi},
+   suren_sayisi, secili_durum ('' = açık+inceleniyor), tahta_suzgeci {id, ad} ya da None, tahtalar [{id, ad, derslik}]
+   (onaylı), kategoriler, durumlar. Açıklama |safe ile BASILMAZ. #}
+{% block icerik %}
+{% set ek = '&tahta=' ~ tahta_suzgeci.id if tahta_suzgeci else '' %}
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1 id="ariza-baslik">Arızalar</h1>
+    <p>Tahtalardan (“Arıza bildir” penceresi) ve panelden açılan kayıtlar. Kayıtlar silinmez; yanlış kayıt “İptal” edilir.</p>
+  </div>
+  <p class="dugme-satiri sag"><a class="dugme ana" href="#yeni-ariza">Yeni arıza kaydı</a></p>
+</div>
+
+<nav class="sekmeler" aria-label="Duruma göre süz">
+  <a href="/arizalar{{ '?tahta=' ~ tahta_suzgeci.id if tahta_suzgeci else '' }}" {% if not secili_durum %}aria-current="page"{% endif %}>Süren <span class="sekme-sayi">{{ suren_sayisi }}</span></a>
+  {% for kod, ad in durumlar.items() %}
+  <a href="/arizalar?durum={{ kod }}{{ ek }}" {% if secili_durum == kod %}aria-current="page"{% endif %}>{{ ad }} <span class="sekme-sayi">{{ durum_sayilari[kod] }}</span></a>
+  {% endfor %}
+  <a href="/arizalar?durum=hepsi{{ ek }}" {% if secili_durum == 'hepsi' %}aria-current="page"{% endif %}>Hepsi <span class="sekme-sayi">{{ durum_sayilari.hepsi }}</span></a>
+</nav>
+{% if tahta_suzgeci %}<p class="bant" role="status"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg><span>Yalnız <strong>{{ tahta_suzgeci.ad }}</strong> gösteriliyor (sayılar bütün tahtalarındır). <a href="/arizalar{{ '?durum=' ~ secili_durum if secili_durum else '' }}">Süzgeci kaldır</a></span></p>{% endif %}
+
+{% if arizalar %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="ariza-baslik">
+<table class="ariza-tablo">
+  <caption class="gizli">Arıza kayıtları</caption>
+  <thead><tr><th scope="col">No</th><th scope="col">Tahta</th><th scope="col">Kategori</th><th scope="col">Açıklama</th>
+    <th scope="col">Kaynak</th><th scope="col">Açılış</th><th scope="col">Son güncelleme</th><th scope="col">Durum</th></tr></thead>
+  <tbody>
+  {% for a in arizalar %}
+  <tr>
+    <th scope="row" data-etiket="No"><a href="/ariza/{{ a.id }}">#{{ a.id }}</a></th>
+    <td data-etiket="Tahta">{{ a.tahta_adi }}{% if a.tahta_kaldirildi %} <span class="not">(kaldırıldı)</span>{% endif %}{% if a.derslik %}<div class="not">{{ a.derslik }}</div>{% endif %}</td>
+    <td data-etiket="Kategori">{{ a.kategori_adi }}</td>
+    <td data-etiket="Açıklama" class="kirp">{{ a.aciklama_kisa or '—' }}</td>
+    <td data-etiket="Kaynak">{{ a.kaynak_metni }}</td>
+    <td data-etiket="Açılış" class="tarih-hucre">{{ a.olusturma | tarih }}</td>
+    <td data-etiket="Son güncelleme" class="tarih-hucre">{{ a.guncelleme | tarih }}</td>
+    <td data-etiket="Durum">{{ durum_rozeti(a.durum, a.durum_adi) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="bos-not">{% if not secili_durum %}Süren arıza kaydı yok.{% else %}Bu süzgece uyan kayıt yok.{% endif %}</p>
+{% endif %}
+
+<section class="kutu" id="yeni-ariza" aria-labelledby="yeni-ariza-baslik">
+  <h2 id="yeni-ariza-baslik">Yeni arıza kaydı</h2>
+  {% if tahtalar %}
+  <p class="not">Öğretmenler tahtadan da bildirebilir: tahtanın uygulama menüsünde “Arıza bildir”.</p>
+  {{ acma_formu(kategoriler, tahtalar=tahtalar, tahta_id=tahta_suzgeci.id if tahta_suzgeci else None, kimlik='yeni') }}
+  {% else %}
+  <p class="not">Onaylı tahta yok.</p>
+  {% endif %}
+</section>
+{% endblock %}

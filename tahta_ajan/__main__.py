@@ -1,4 +1,4 @@
-"""Komut satırı: tahta-ajan servis | ekran | kaydol KOD | tani | durum | yoklama"""
+"""Komut satırı: tahta-ajan servis | ekran | kaydol KOD | tani | durum | yoklama | ariza | sunucu ADRES"""
 
 from __future__ import annotations
 
@@ -18,6 +18,9 @@ KULLANIM = """Tahta Kontrol ajanı {surum}
   tahta-ajan tani          Saha tanılamasını çalıştırıp ekrana yazar (sunucu gerekmez).
   tahta-ajan durum         Yapılandırmayı ve sunucu erişimini gösterir.
   tahta-ajan yoklama       Ders yoklaması ekranını açar ("Yoklama Al" kısayolu bunu çağırır).
+  tahta-ajan ariza         Arıza bildirim penceresini açar ("Arıza bildir" kısayolu bunu çağırır).
+  tahta-ajan sunucu ADRES  Sunucu adresini değiştirir (ör. https://10.0.0.5:8788); yönetici yetkisi ister.
+                           Parmak izi tutmayan ya da ulaşılamayan adres yazılmaz.
 """
 
 
@@ -67,6 +70,9 @@ def durum() -> int:
     yapi = ayar.oku()
     print(f"Ajan sürümü : {__version__}")
     print(f"Sunucu      : {yapi.get('sunucu') or '(tanımlı değil)'}")
+    diger = ayar.adres_sirasi(yapi)[1:]
+    if diger:
+        print(f"Yedek adres : {', '.join(diger)}")
     print(f"Tahta no    : {yapi.get('tahta_id') or '(kayıtlı değil)'}")
     if not yapi.get("sunucu"):
         return 1
@@ -96,6 +102,45 @@ def yoklama() -> int:
     return 0
 
 
+def sunucu(adres: str) -> int:
+    """Sunucu adresini elle değiştirir (A6 §5.5-7): parmak izini doğrulayarak /saglik'e ulaşırsa
+    "sunucu" yapar ve listeye ekler; ulaşamazsa HİÇBİR ŞEY yazmaz. Servis yeni adresi bir sonraki
+    turda kendiliğinden kullanır; hemen geçmesi için servisin yeniden başlatılması önerilir."""
+    temiz = ayar.adres_dogrula(adres)
+    if not temiz:
+        print("Adres geçersiz: https:// ile başlamalı, yol içermemeli (ör. https://10.0.0.5:8788).", file=sys.stderr)
+        return 2
+    yapi = ayar.oku()
+    if not yapi.get("parmak_izi"):
+        print("Ajan kurulu değil (parmak izi yok); kurulum betiğini çalıştırın.", file=sys.stderr)
+        return 2
+    istemci = Istemci(temiz, yapi.get("parmak_izi", ""))
+    try:
+        kod, _, _ = istemci.istek("GET", "/saglik", zaman_asimi=8)
+    except BaglantiHatasi as hata:
+        print(f"Sunucuya ulaşılamadı; hiçbir şey değiştirilmedi: {hata}", file=sys.stderr)
+        return 3
+    if kod != 200:
+        print(f"Sunucu yanıtı HTTP {kod}; hiçbir şey değiştirilmedi.", file=sys.stderr)
+        return 3
+    yapi["sunucu"] = temiz
+    yapi["sunucular"] = ([temiz] + [a for a in yapi.get("sunucular") or [] if a != temiz])[: ayar.ADRES_EN_COK]
+    try:
+        ayar.yaz(yapi)
+    except OSError as hata:
+        print(f"Yapılandırma yazılamadı (yönetici yetkisi gerekir: sudo): {hata}", file=sys.stderr)
+        return 4
+    print(f"Sunucu adresi değiştirildi: {temiz}")
+    print("Servisin hemen geçmesi için: sudo systemctl restart tahta-ajan")
+    return 0
+
+
+def ariza() -> int:
+    from . import ariza_penceresi
+
+    return ariza_penceresi.calistir()
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     komut = argv[0] if argv else ""
@@ -114,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
 
         yapi = ayar.oku()
         parca = urlsplit(yapi.get("sunucu", ""))
-        rapor = tani.topla(parca.hostname or "", parca.port or 443)
+        rapor = tani.topla(parca.hostname or "", parca.port or 443, sunucular=ayar.adres_sirasi(yapi))
         if "--json" in argv:
             print(json.dumps(rapor, ensure_ascii=False, indent=1))
         else:
@@ -125,6 +170,10 @@ def main(argv: list[str] | None = None) -> int:
         return durum()
     if komut == "yoklama":
         return yoklama()
+    if komut == "ariza":
+        return ariza()
+    if komut == "sunucu" and len(argv) == 2:
+        return sunucu(argv[1])
     if komut in ("--surum", "--version"):
         print(__version__)
         return 0

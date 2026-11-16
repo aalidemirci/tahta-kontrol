@@ -16,6 +16,8 @@ HTTPS_PORT = int(os.environ.get("TAHTA_HTTPS_PORT", "8788"))
 CEVRIMICI_ESIK_SN = 70  # ajan en geç 25 saniyede bir yeniden bağlanır
 OTURUM_SAAT = 12
 KAYIT_PENCERESI_DK = 60
+# Windows hizmeti olarak mı çalışıyor (6B'de hizmet ayarlar; 6A'da her zaman False).
+HIZMET = os.environ.get("TAHTA_HIZMET") == "1"
 
 PAKET_KOKU = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 SUNUCU_DIZINI = PAKET_KOKU / "tahta_sunucu"

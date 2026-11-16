@@ -51,7 +51,10 @@ Sunucu iki kapı açar: `127.0.0.1:8787` (şifresiz, yalnız sunucu bilgisayarı
   yönetici ve idareci. Her işlem silinemeyen işlem kaydına düşer.
 - **İlk kurulum** yalnız sunucu bilgisayarından (127.0.0.1) yapılabilir.
 - **Bilinen sınır:** ajan paketi imzalı değildir; güncellemenin güvenliği sunucu
-  bilgisayarının güvenliğine eşittir. Çok okullu dağıtımdan önce paket imzası eklenmeli.
+  bilgisayarının güvenliğine eşittir. Paket imzası (sürüm anahtarı sunucuda değil, derleyenin
+  bilgisayarında; tahtada saf Python Ed25519 doğrulaması) Aşama 6B'ye bırakıldı (§15).
+- **Sunucu adres listesi** (§15.2) bu modeli değiştirmez: tahta listedeki her adreste aynı
+  parmak izini arar; parmak izi tutmayan adrese tek bayt veri gitmez.
 
 ## 5. Kilit
 
@@ -490,7 +493,119 @@ Sonraya bırakılanlar (göç gerektirmez): e-Okul personel listesi (OOK01001R1)
 (öğretmenler elle eklenir); günlük ızgarada "programdaki öğretmenden farklı" işareti (Aşama 3
 öğretmen tutmaz).
 
-## 15. Yol haritası
+## 15. Altyapı: şifreli yedek, sunucu adresleri, envanter, arıza (0.7.0)
+
+Aşama 6'nın çekirdeği (6A). Windows hizmeti ve ajan paketi imzası (6B) kurucu derlemesi,
+yönetici yetkili deneme ve kullanıcı kararı (sürüm anahtarını kim tutacak, hizmet hesabı)
+gerektirdiği için sonraya bırakıldı; göç gerektirmez, ayrı sürümle gelir. Göç: `tahta`'ya
+`envanter_json, envanter_ozet, envanter_zamani, donanim_kimligi, demirbas_no, envanter_notu`;
+yeni `ariza`, `ariza_hareket` tabloları (`user_version` 6).
+
+### 15.1 Şifreli yedek
+
+- **Biçim:** tek dosya `.tkyedek` = başlık (JSON: KDF değiştirgeleri, alıcı açık anahtarı, geçici
+  açık anahtar, nonce) + AES-256-GCM ile şifreli ZIP (`tahta-kontrol.db` SQLite yedek API'siyle
+  tutarlı görüntü, sunucu sertifikası ve anahtarı, `bilgi.json`). Başlık şifrelemenin ek verisidir;
+  değiştirilirse çözme düşer. Okul adı yalnız şifreli içerikte durur.
+- **Anahtar:** yedek parolası (en az 12 karakter) scrypt (n=2^17, r=8, p=1) ile X25519 özel anahtara
+  çevrilir; sunucuda **yalnız açık anahtar** saklanır. Bu yüzden sunucu parolayı bilmeden her gün
+  yedek alabilir ama yedeği açamaz; sunucu diski çalınsa da eski yedekler açılmaz. Parola
+  belirlenirken hesap parolası yeniden istenir. Parola unutulursa yedekler açılamaz.
+- **Zamanlama:** zamanlayıcının 7. işi; parola varsa, program en az 5 dk açıksa ve bugünün
+  (Europe/Istanbul) günlük yedeği yoksa alınır; başarısızsa 30 dk sonra yeniden denenir. Aynı gün
+  ikinci günlük yedek üretilmez. Saklama: günlük yedeklerden en yeni N (3–90, varsayılan 14), elle
+  alınanlardan en yeni 10; elle alınanlar ayrıca N günden eskiyince silinir (KVKK: seyrek alınan elle
+  yedek süreli silinen veriyi süresiz taşımasın). Aynı kurallar ikinci kopya klasörüne de uygulanır.
+  İsteğe bağlı ikinci kopya klasörü (başka disk/sürücü); klasöre yazılamazsa ayar kaydedilmez. İzin
+  komutu (`yedek.izin_komutu`) 6A'da programı çalıştıran Windows hesabına, hizmet kipinde (6B)
+  LocalService'e (`*S-1-5-19`) yazma izni verir. Yedek, göç ve geri yükleme aynı kilitte (`vt.KILIT`) çalışır.
+- **Parolasız yedek yoktur:** parola belirlenene kadar panoda kırmızı şerit durur.
+- **Geri yükleme** yalnız sunucu bilgisayarından (127.0.0.1) ve yöneticiyle; ilk kurulumda
+  (kullanıcı yokken) oturumsuz ama yine yalnız yerelden ("Yedekten geri yükle" bağlantısı). Akış:
+  dosya + parola → denetim (sihirli bayt, başlık, KDF sınırları, parola, GCM, ZIP içinde tam dört
+  dosya ve boyut sınırı, `integrity_check`, şema sürümü, sertifika/anahtar eşleşmesi) → önizleme
+  (yedek tarihi, okul adı, tahta ve kullanıcı sayısı, parmak izleri; sertifika farklıysa kırmızı
+  uyarı) → onay → **program kapatılıp açılınca** uygulanır: bugünkü dosyalar
+  `geri-yukleme-oncesi/<zaman>/` klasörüne taşınır, yedektekiler yerleşir, oturumlar silinir. Hata
+  olursa taşınanlar geri konur. Onaydan sonra da yeniden açılıştan önce vazgeçilebilir. Başarısız
+  denemeye 10 dakikada 5 sınırı vardır.
+- **Sapma (şartnameden):** onaylanan yedek açılışta parolasız uygulanabilsin diye denetlenmiş içerik
+  çözülmüş olarak `geri-yukleme/bekleyen/` altında (canlı veritabanıyla aynı klasör izinlerinde)
+  bekler; vazgeçilince ya da uygulanınca silinir, onaylanmadan 24 saat bekleyen kendiliğinden silinir.
+  Parola ya da özel anahtar diske hiç yazılmaz. `geri-yukleme-oncesi/` altında yalnız en yeni klasör
+  kalır, o da N günden eskiyince silinir (zamanlayıcının yedek işi budar; işlem kaydına düşer).
+- **KVKK:** şifreli yedekler, süreli silinen kişisel verinin (sınav, yoklama, boş ders uyarısı)
+  kopyasını yedek saklama süresi kadar daha taşır; Yedekler sayfası bunu yazar. Arayüzde mevzuat
+  atfı yoktur (KVKK md. 12 §18'de doğrulanacak).
+
+### 15.2 Sunucu adres listesi
+
+- Ayarlar › Sunucu adresleri: en çok 5 adres (IP ya da DNS adı, `https://`, yol yok, yerel adres
+  değil). İlk satır birincildir (kurulum betiği bunu kullanır; `kur.sh` listeyi de `ajan.json`'a
+  `sunucular` olarak yazar). Eski tek adres ayarı (`sunucu_adresi`) okunur ve ilk kayıtta taşınır.
+- Liste **durum tabanlıdır**: her `/ajan/bekle` yanıtında `ayar.sunucu_adresleri` (boşsa hiç
+  gönderilmez). Ajan listeyi aynı kurallarla süzer, farklıysa `ajan.json`'a yazar; boş ya da hiç
+  gelmeyen listede kendi listesine dokunmaz.
+- Ajan bir adrese art arda **3 bağlantı hatasında** (parmak izi hatası dahil; HTTP 401/403/5xx
+  dahil değil, çünkü sunucuya ulaşılmıştır) sıradaki adrese geçer; birincil olmayan bir adreste ilk
+  başarılı yanıtta onu kalıcı birincil yapar ve olay kaydı düşer. Üstel bekleme (2→30 sn) ve
+  `CEVRIMDISI_SN` (kural 3) değişmez.
+- Panel: "n/m tahta güncel adres listesini aldı" (ajanın bildirdiği liste özeti sunucununkiyle
+  karşılaştırılır), tahta sayfasında bağlandığı adres ve "listede yok" uyarısı, panoda "bu
+  bilgisayarın adresi listede yok" şeridi (listede DNS adı varsa uyarılmaz).
+- Adres habersiz değişirse tahtalar listeyi alamaz; çözüm: eski IP'yi geri vermek, listeye
+  önceden DNS adı koymak ya da tahtada `sudo tahta-ajan sunucu https://YENİ:8788` (parmak izi
+  tutmazsa ya da ulaşılamazsa hiçbir şey yazmaz). Ağ taraması ve yayınla keşif bilerek yoktur
+  (kurum ağında saldırı sayılabilir; alt ağlar ayrı olduğundan yayın zaten ulaşmaz).
+
+### 15.3 Envanter
+
+- Ajan donanım okumalarını (`sistem.donanim_bilgisi`: DMI üretici/model/seri, anakart, BIOS,
+  işlemci, bellek, diskler — takılı USB bellek hariç, dokunmatik aygıt adları, fiziksel ağ
+  arayüzleri ve MAC, işletim sistemi, çekirdek, ETAP paketleri, Python) açılışta ve 6 saatte bir
+  yeniler; ekran çözünürlüğü bağlı ekran yardımcısından gelir. Yer tutucu seri numaraları ("To be
+  filled by O.E.M." vb.) boş sayılır.
+- Envanter yalnız sunucu `envanter_iste` deyince (sunucuda yoksa ya da özet farklıysa) ya da
+  "Envanteri yenile" (`envanter` komutu) ile gider; aynı özet ikinci kez gönderilmez.
+- **Girmez:** hesap/kullanıcı adları, ev dizinleri, dosya adları, makine adı, açık kalma süresi
+  (kural 6). Seri no, MAC, model **cihaz** verisidir.
+- Panel: Envanter sayfası (sıralanabilir tablo; CSV: UTF-8 BOM, `;`, formül kaçışı, MAC ve IP
+  dahil), tahta sayfasında envanter kartı ve yöneticinin girdiği demirbaş no/not. Seri no iki
+  tahtada aynıysa "başka tahtada da var" rozeti (kopyalanmış disk belirtisi). Donanım kimliği
+  (ürün seri no, yoksa anakart seri no) dolu→farklı dolu değişirse işlem kaydı ve panoda "Donanım
+  değişti" rozeti; yönetici "Gördüm" diyene kadar durur. Bağlantı kesilmez (yanlış alarm dersi
+  rehin almasın); karar yöneticinindir.
+
+### 15.4 Arıza bildirimi
+
+- **Tahtadan:** menüde "Arıza bildir" (`tahta-ariza.desktop` → `tahta-ajan ariza`). Kullanıcı
+  yetkisiyle açılan ayrı bir GTK3 penceresidir (ekran yardımcısının sayfalarına dokunmaz): sekiz iri
+  tür düğmesi ("Açılmıyor" yalnız panelden), isteğe bağlı 300 karakterlik açıklama, sabit "Kişi adı
+  yazmayın" notu. Pencere servise yerel soketle `merhaba arayuz=komut` + `ariza` yollar; tahtanın
+  adı, eski kayıtlar ve hiçbir arıza metni tahtada gösterilmez. Pencere varsayılan tahta paletiyle
+  çizilir (okulun renkleri yalnız servisten ekran yardımcısına gider).
+- **Servis:** kategori ve açıklamayı denetler, saatte 3 bildirim ve en çok 10 bekleyen kayıt sınırı
+  koyar, kaydı `durum.json`'daki kuyruğa yazar (yalnız hesap SINIFIYLA) ve hemen iletmeyi dener.
+  Sunucu 5 sn içinde `ariza_alindi` derse pencere "Arıza kaydı iletildi.", demezse "Kayıt tahtada
+  bekletiliyor; sunucuya ulaşınca iletilecek." der. Kuyruk sonraki her bağlantıda gönderilir;
+  7 günde iletilemeyen kayıt atılır. Aynı kayıt iki kez gelse de (`yerel_id`) tek kayıt olur.
+  Onaylanmamış ya da kayıtsız tahta bildiremez.
+- **Panelden:** Arızalar sayfası ve tahta sayfası; iki rol de açar ve izler. Durumlar: Açık →
+  İnceleniyor / Çözüldü / İptal; İnceleniyor → Açık / Çözüldü / İptal; Çözüldü → Açık; İptal
+  sondur. Her değişiklik hareket geçmişine ve işlem kaydına düşer; kayıt silinmez. Süren arıza
+  sayısı menüde ve pano kartında rozetle görünür.
+- **KVKK:** açıklama serbest metindir; her giriş yerinde "Kişi adı yazmayın" notu, 300 karakter;
+  T.C. kimlik numarasına benzeyen sayı panelde reddedilir, tahtadan gelende metin kaydedilmez
+  (kayıt alınır ki kuyruk tıkanmasın).
+
+### 15.5 Geriye uyum
+
+- Eski ajan (0.6 ve öncesi) + yeni sunucu: yeni yanıt alanlarını yok sayar; panel "Envanter ve
+  arıza bildirimi için ajanı güncelleyin" der, "Envanteri yenile" o tahtayı atlar.
+- Yeni ajan + eski sunucu: liste, `envanter_iste`, `ariza_alindi` gelmez; liste değişmez, envanter
+  gönderilmez, arıza kuyrukta 7 gün bekler.
+
+## 16. Yol haritası
 
 | Aşama | İçerik | Durum |
 |---|---|---|
@@ -500,16 +615,14 @@ Sonraya bırakılanlar (göç gerektirmez): e-Okul personel listesi (OOK01001R1)
 | 3 | Ders programı ve zil saatleri (Okul Zili'nden ya da elle), derslik programı, programa bağlı otomatik kilit/açma, istisnalar, boş geçen ders uyarısı | 0.4.0 — Debian 12 kabında denendi; ETAP'ta denenecek. Oturum temizliği sonraya (§12) |
 | 4 | Kelebek sınav duyurusu ve sınav kipi (Kelebek Sınav verisinden, maskeli liste), sınav yoklaması | 0.5.0 — Debian 12 kabında denendi; ETAP'ta ve gerçek Kelebek çizelgesiyle denenecek. Tablo gösterimi, tahtadan sınav ekranını kapatma ve sayfalı ızgara sonraya (§13) |
 | 5 | Ders yoklaması (öğretmen kodu + PIN, e-Okul sınıf listesi, tahtadan ve panelden yoklama, icmal, imha) | 0.6.0 — Debian 12 kabında denendi; ETAP'ta ve gerçek e-Okul dosyasıyla denenecek. e-Okul personel listesi aktarımı sonraya (§14) |
-
-Ayrıca bekleyenler: sunucunun Windows hizmeti olarak çalışması (şimdi oturum
-açılınca başlar), şifreli yedek, paket imzası, sunucu IP'si değişince ajanın
-yeniden bulması, tahta envanteri ve arıza bildirimi.
+| 6A | Altyapı çekirdeği: şifreli yedek ve geri yükleme, sunucu adres listesi (`tahta-ajan sunucu`), tahta envanteri, arıza bildirimi (panel + tahtadaki "Arıza bildir" penceresi) | 0.7.0 — Debian 12 kabında ve tarayıcıda denendi; ETAP'ta denenecek (§15) |
+| 6B | Sunucunun Windows hizmeti olarak çalışması (oturum açılmadan başlar, veri ProgramData'ya taşınır), ajan paketi imzası (sürüm anahtarı + tahtada Ed25519) | Sonraya: kurucu derlemesi, yönetici yetkili deneme ve açık soru 41–42'nin yanıtı gerekir |
 
 Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" ve "Seçili
 tahtalara alan ata", plan formunda "sonraki 3 gösterim" canlı önizlemesi, çakışan
 plan uyarısı.
 
-## 16. Açık sorular
+## 17. Açık sorular
 
 Yanıt gelene kadar bu belgedeki karar geçerlidir.
 
@@ -543,7 +656,7 @@ Ders programı ve program kilidi (0.4.0):
     çalışma için kullanılması okulda olağan mı? Olağansa varsayılan kapatılır.
 12. **Boş ders uyarısı** personel denetimi gibi algılanabilir. Açılmadan önce öğretmenler
     kurulunda ya da yazılı bilgilendirmeyle duyurulmalı mı, okulun aydınlatma metnine
-    eklenmeli mi? 30 günlük saklama uygun mu? (Dayanak §17'de doğrulanacak.)
+    eklenmeli mi? 30 günlük saklama uygun mu? (Dayanak §18'de doğrulanacak.)
 13. **Derslik programı kaynağı:** okulda ders programı hangi programla hazırlanıyor
     (e-Okul, bir ders dağıtım programı, Excel)? Dışa aktardığı dosyanın uydurma verili bir
     örneği paylaşılırsa ikinci bir içe aktarma biçimi eklenebilir; şimdilik yalnız kendi
@@ -586,7 +699,7 @@ Ders yoklaması (0.6.0):
 
 27. **e-Okul'a giriş biçimi:** devamsızlık e-Okul'a ders saati bazında mı, yarım gün/tam gün
     olarak mı işleniyor? Ders saatlerinden güne çevirme kuralı doğrulanırsa icmale gün sütunu
-    eklenir (dayanak §17'de doğrulanacak).
+    eklenir (dayanak §18'de doğrulanacak).
 28. **"Geç geldi"** ayrı işaret olarak gerekli mi? (Şimdi tek durum: yok.)
 29. **Kilitli tahtada doğru PIN kilidi de açsın mı?** Karar: açmaz; yoklama bitince kilit geri gelir.
 30. **PIN'i öğretmen kendisi değiştirebilsin mi?** Karar: hayır; idare yeni PIN üretir (sınıf
@@ -614,7 +727,32 @@ Ders yoklaması (0.6.0):
     saati varsayar ("ders programı yüklü değil, 8 saat varsayıldı"). Okulun günlük ders sayısı
     farklıysa programın yüklenmesi gerekir.
 
-## 17. Doğrulanacak dayanaklar
+Altyapı (0.7.0 ve 6B):
+
+41. **Sürüm anahtarını kim tutacak?** (6B, paket imzası) Öneri: kurucuyu derleyen kişi; anahtar depo
+    dışında parolalı dosyada, ikinci kopyası çevrimdışı (USB, kasada). Uygun mu?
+42. **Hizmet hesabı Yerel Hizmet (LocalService) olsun mu?** (6B) Sonucu: yedeğin ikinci kopyası ağ
+    paylaşımına yazılamaz, yalnız yerel disk/USB. Ağ paylaşımı gerekiyorsa daha geniş yetkili hesap gerekir.
+43. **Parola belirlenmeden yedek almamak** kabul mü? (Karar: hiç almamak + panoda sürekli kırmızı şerit.)
+44. **Saklama:** varsayılan 14 günlük yedek yeterli mi? Okulun imha politikası daha kısa süre
+    istiyorsa ayardan 3 güne kadar indirilebilir.
+45. **Arıza kategorileri** okulun ihtiyacına uyuyor mu; eklenecek/çıkarılacak var mı?
+46. **Öğrenci hesabından arıza bildirimi** açık kalsın mı? (Karar: açık; saatte 3 sınırı ve kayıtta
+    hesap sınıfı görünür.)
+47. **Arıza açıklamasındaki kişi adı:** yönetici açıklamayı sonradan düzeltebilsin mi (düzeltme hareket
+    geçmişine "açıklama düzeltildi" diye düşer, eski metin saklanmaz)? Şimdilik düzeltme yok.
+48. **Demirbaş numarası biçimi:** taşınır kayıt sistemindeki sicil biçimi mi, serbest metin mi?
+    (Şimdi serbest metin, en çok 40 karakter; dayanak §18'de doğrulanacak.)
+49. **Kapalı arızalar** ne kadar saklansın? (Karar: süresiz; cihaz bakım geçmişi.)
+50. **Sunucu bilgisayarının güç ayarı** (uyku kapalı) kim tarafından yapılacak? Yazılım yalnız uyarır.
+51. **Okul DNS'inde sunucu için ad tanımlanabiliyor mu?** Tanımlanabiliyorsa adres listesine eklenmesi
+    önerilir; IP habersiz değişince tahtalar ada geçer.
+52. **Envanter CSV'sinde MAC ve IP** bulunuyor (şartname böyle istiyor; eski tahta CSV'si bu iki alanı
+    dışarıda bırakıyordu). Cihaz verisidir ama ağ yönetimi bilgisidir; CSV'den çıkarılsın mı?
+53. **Arıza penceresi okulun renklerini kullansın mı?** Şimdi varsayılan tahta paletiyle çiziliyor
+    (pencere servisten durum yayını almaz). İstenirse servis pencereye yalnız paleti verebilir.
+
+## 18. Doğrulanacak dayanaklar
 
 Arayüzde hiçbir mevzuat maddesine atıf yapılmaz. Belgeye dayanak olarak yazılmadan
 önce metni yerelde doğrulanması gerekenler:
@@ -638,3 +776,7 @@ Arayüzde hiçbir mevzuat maddesine atıf yapılmaz. Belgeye dayanak olarak yaz�
   kuralı (soru 27) — depoda yalnız md. 36/7 (özür belgesi) metni var; fıkra numarası
   yazılmadı. KVKK md. 12 (veri güvenliği) yoklama için de doğrulanacak. Aydınlatma metninin
   kapsamı (KVKK md. 10, soru 33) ve 30 günlük saklamanın imha politikasıyla uyumu (soru 32).
+- Şifreli yedek: KVKK md. 12 ve Kurul'un "yeterli önlemler" kararındaki kriptografik yöntem ve
+  anahtarların ayrı tutulması önlemleri; metinleri yerelde usulünce yok, arayüz bunlara atıf yapmaz.
+- Demirbaş numarası biçimi için taşınır mal mevzuatındaki sicil/kod hükmü (soru 48).
+- Arıza açıklamasında kişi adının düzeltilmesi/silinmesi talebi (KVKK md. 7 ve 11 açısından; soru 47).

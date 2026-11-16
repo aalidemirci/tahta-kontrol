@@ -21,7 +21,7 @@ from functools import lru_cache
 
 import tahta_ajan
 
-from . import ayar
+from . import adresler, ayar
 
 SABIT_ZAMAN = 1767225600  # 01.01.2026 00:00 UTC
 PAKET_ADI = "tahta-ajan"
@@ -103,6 +103,8 @@ def ajan_paketi() -> Paket:
         ("./usr/share/", 0o755, None),
         ("./usr/share/applications/", 0o755, None),
         ("./usr/share/applications/tahta-yoklama.desktop", 0o644, _sablon("tahta-yoklama.desktop")),
+        # Arıza bildirimi kısayolu (A6): menüde "Arıza bildir" → tahta-ajan ariza.
+        ("./usr/share/applications/tahta-ariza.desktop", 0o644, _sablon("tahta-ariza.desktop")),
     ]
     kontrol_metni = (
         _sablon("control").decode("utf-8").replace("@SURUM@", surum).replace("@BOYUT@", str(max(1, boyut // 1024)))
@@ -122,11 +124,22 @@ def ajan_paketi() -> Paket:
     return Paket(surum, icerik, hashlib.sha256(icerik).hexdigest(), f"{PAKET_ADI}_{surum}_all.deb")
 
 
-def kurulum_betigi(sunucu: str, parmak_izi: str) -> bytes:
+def kurulum_betigi(sunucu: str, parmak_izi: str, sunucular: list[str] | None = None) -> bytes:
+    """Kurulum betiği. `sunucular` (A6 adres listesi; doğrulanmış https adresleri) ajan.json'a
+    `sunucular` olarak yazılır; birincil adres `sunucu`'dur ve listenin başına konur."""
+    # Betik root yetkisiyle çalışır: adresler çift tırnak içine yazıldığı için kabuk
+    # metakarakteri taşıyan hiçbir değer betiğe girmez (birincil geçersizse üretim durur).
+    if not adresler.betige_yazilabilir_mi(sunucu):
+        raise ValueError("Kurulum betiği için sunucu adresi geçersiz.")
+    if not all(c in "0123456789abcdefABCDEF:" for c in parmak_izi):
+        raise ValueError("Kurulum betiği için parmak izi geçersiz.")
+    sunucular = [a for a in (sunucular or []) if adresler.betige_yazilabilir_mi(a)] if sunucular else sunucular
     paket = ajan_paketi()
+    liste = [sunucu] + [a for a in (sunucular or []) if a != sunucu]
     metin = (
         _sablon("kur.sh")
         .decode("utf-8")
+        .replace("@SUNUCULAR@", " ".join(liste) if sunucular else "")
         .replace("@SUNUCU@", sunucu)
         .replace("@PARMAK_IZI@", parmak_izi)
         .replace("@PAKET_SHA256@", paket.sha256)
@@ -135,11 +148,11 @@ def kurulum_betigi(sunucu: str, parmak_izi: str) -> bytes:
     return metin.encode("utf-8")
 
 
-def usb_paketi(sunucu: str, parmak_izi: str) -> bytes:
+def usb_paketi(sunucu: str, parmak_izi: str, sunucular: list[str] | None = None) -> bytes:
     """Ağdan indiremeyen tahta için: betik + paket tek zip içinde."""
     cikti = io.BytesIO()
     with zipfile.ZipFile(cikti, "w", zipfile.ZIP_DEFLATED) as arsiv:
-        arsiv.writestr("tahta-kur.sh", kurulum_betigi(sunucu, parmak_izi))
+        arsiv.writestr("tahta-kur.sh", kurulum_betigi(sunucu, parmak_izi, sunucular))
         arsiv.writestr("tahta-ajan.deb", ajan_paketi().icerik)
         arsiv.writestr(
             "OKUYUNUZ.txt",

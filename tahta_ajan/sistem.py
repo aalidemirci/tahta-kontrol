@@ -19,6 +19,8 @@ LINUX = sys.platform.startswith("linux")
 STANDART_HESAPLAR = ("etapadmin", "ogretmen", "ogrenci")
 # Ders yoklaması kısayolu (A5; paketle gelir). Menüde "Yoklama Al" adıyla görünür.
 YOKLAMA_KISAYOLU = "/usr/share/applications/tahta-yoklama.desktop"
+# Arıza bildirimi kısayolu (A6; paketle gelir). Menüde "Arıza bildir" adıyla görünür.
+ARIZA_KISAYOLU = "/usr/share/applications/tahta-ariza.desktop"
 
 
 def calistir(komut: list[str], zaman_asimi: float = 8) -> tuple[int | None, str]:
@@ -103,6 +105,138 @@ def etkin_oturum() -> dict:
             sonuc["tur"] = alan.get("Type", "")
             break
     return sonuc
+
+
+# ---- envanter (A6): donanım ve yazılım okumaları ------------------------------------
+# Yalnız CİHAZ verisi okunur: kullanıcı/hesap adları, ev dizinleri, dosya adları, makine adı
+# ve açık kalma süresi gibi oynak değerler okunmaz (kural 6). `kok` yalnız testler içindir.
+DMI_ALANLARI = (
+    "sys_vendor", "product_name", "product_version", "product_serial", "board_vendor", "board_name",
+    "board_serial", "bios_vendor", "bios_version", "bios_date",
+)  # fmt: skip
+ETAP_ONEKLERI = ("eta-", "etap", "pardus-lightdm", "pardus-eta", "ahenk")
+ETAP_PAKET_EN_COK = 30
+
+
+def _ilk_satir(yol: str, sinir: int = 200) -> str:
+    try:
+        with open(yol, encoding="utf-8", errors="replace") as dosya:
+            return " ".join(dosya.readline(sinir).split())
+    except OSError:
+        return ""
+
+
+def _yol(kok: str, *parcalar: str) -> str:
+    return os.path.join(kok, *parcalar)
+
+
+def etap_paketleri() -> list[str]:
+    """ETAP'a özgü paketler ("ad sürüm"), en çok 30; dpkg-query yoksa boş liste."""
+    if not shutil.which("dpkg-query"):
+        return []
+    kod, cikti = calistir(["dpkg-query", "-W", "-f", "${Package} ${Version}\n"], 15)
+    if kod != 0:
+        return []
+    return [s.strip() for s in cikti.splitlines() if s.startswith(ETAP_ONEKLERI)][:ETAP_PAKET_EN_COK]
+
+
+def donanim_bilgisi(kok: str = "/") -> dict:
+    """Ham donanım okumaları. Her alan ayrı denenir; okunamayan alan boş kalır.
+
+    Seri numaraları (product_serial, board_serial) yalnız root okuyabilir; servis root'tur.
+    Yer tutucu seri numaralarının ayıklanması envanter.py'dedir (platformdan bağımsız kural).
+    """
+    if not LINUX and kok == "/":
+        return {"linux_disi": True, "isletim_sistemi": platform_adi(), "python": platform.python_version()}
+    ham: dict = {}
+    for alan in DMI_ALANLARI:
+        ham[alan] = _ilk_satir(_yol(kok, "sys/class/dmi/id", alan))
+    try:
+        with open(_yol(kok, "proc/cpuinfo"), encoding="utf-8", errors="replace") as dosya:
+            for satir in dosya:
+                if satir.lower().startswith("model name"):
+                    ham["islemci"] = " ".join(satir.split(":", 1)[1].split())[:120]
+                    break
+    except (OSError, IndexError):
+        pass
+    ham["cekirdek_sayisi"] = os.cpu_count() or 0
+    try:
+        with open(_yol(kok, "proc/meminfo"), encoding="ascii", errors="replace") as dosya:
+            for satir in dosya:
+                if satir.startswith("MemTotal:"):
+                    ham["bellek_mb"] = int(satir.split()[1]) // 1024
+                    break
+    except (OSError, ValueError, IndexError):
+        pass
+    diskler = []
+    try:
+        for ad in sorted(os.listdir(_yol(kok, "sys/block"))):
+            if not ad.startswith(("sd", "nvme", "mmcblk", "vd", "hd")) or "boot" in ad or "rpmb" in ad:
+                continue
+            blok = _yol(kok, "sys/block", ad)
+            if _ilk_satir(os.path.join(blok, "removable")) == "1":
+                continue  # takılı USB bellek envantere girmez
+            try:
+                kesim = int(_ilk_satir(os.path.join(blok, "size")) or 0)
+            except ValueError:
+                kesim = 0
+            if kesim <= 0:
+                continue
+            donen = _ilk_satir(os.path.join(blok, "queue", "rotational"))
+            diskler.append({
+                "ad": ad,
+                "model": _ilk_satir(os.path.join(blok, "device", "model"), 80),
+                "boyut_gb": round(kesim * 512 / 2**30),
+                "ssd": donen == "0" if donen in ("0", "1") else None,
+            })  # fmt: skip
+    except OSError:
+        pass
+    ham["diskler"] = diskler[:8]
+    dokunmatik: list[str] = []
+    try:
+        with open(_yol(kok, "proc/bus/input/devices"), encoding="utf-8", errors="replace") as dosya:
+            for satir in dosya:
+                if satir.startswith("N: Name="):
+                    ad = satir.split("=", 1)[1].strip().strip('"')[:80]
+                    if "touch" in ad.lower() and ad not in dokunmatik:
+                        dokunmatik.append(ad)
+    except OSError:
+        pass
+    ham["dokunmatik"] = dokunmatik[:10]
+    ag = []
+    try:
+        for ad in sorted(os.listdir(_yol(kok, "sys/class/net"))):
+            dizin = _yol(kok, "sys/class/net", ad)
+            # Yalnız fiziksel arayüzler (device bağlantısı olanlar); lo, docker0, veth vb. girmez.
+            if ad == "lo" or not os.path.exists(os.path.join(dizin, "device")):
+                continue
+            ag.append({
+                "arayuz": ad[:20],
+                "mac": _ilk_satir(os.path.join(dizin, "address"), 40)[:17],
+                "kablosuz": os.path.isdir(os.path.join(dizin, "wireless")),
+            })  # fmt: skip
+    except OSError:
+        pass
+    ham["ag"] = ag[:8]
+    ham["isletim_sistemi"] = platform_adi() if kok == "/" else _os_release(kok)
+    try:
+        ham["cekirdek"] = os.uname().release if kok == "/" else _ilk_satir(_yol(kok, "proc/sys/kernel/osrelease"))
+    except AttributeError:
+        ham["cekirdek"] = ""
+    ham["etap_paketleri"] = etap_paketleri()
+    ham["python"] = platform.python_version()
+    return ham
+
+
+def _os_release(kok: str) -> str:
+    try:
+        with open(_yol(kok, "etc/os-release"), encoding="utf-8") as dosya:
+            for satir in dosya:
+                if satir.startswith("PRETTY_NAME="):
+                    return satir.split("=", 1)[1].strip().strip('"')
+    except OSError:
+        pass
+    return ""
 
 
 def acik_sure() -> int:

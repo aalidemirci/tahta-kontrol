@@ -15,6 +15,7 @@ import shutil
 import socket
 import sys
 import time
+from urllib.parse import urlsplit
 
 from . import __version__, sistem
 
@@ -224,6 +225,34 @@ def _yoklama_kisayolu():
     return UYARI, f"{sistem.YOKLAMA_KISAYOLU} yok; ajan paketini yeniden kurun"
 
 
+def _ariza_kisayolu():
+    if os.path.exists(sistem.ARIZA_KISAYOLU):
+        return TAMAM, f"{sistem.ARIZA_KISAYOLU} kurulu (menüde \"Arıza bildir\")"
+    return UYARI, f"{sistem.ARIZA_KISAYOLU} yok; ajan paketini yeniden kurun"
+
+
+def _sunucu_adresleri(sunucular):
+    """Listedeki her adres için ad çözümü ve TCP erişimi. Adresler rapora YAZILMAZ, yalnız sayılar (A6)."""
+    if not sunucular:
+        return BILGI, "Adres listesi yok (yalnız birincil adres kullanılıyor)."
+    cozulen = erisilen = 0
+    for adres in sunucular:
+        parca = urlsplit(adres)
+        makine, port = parca.hostname or "", parca.port or 443
+        try:
+            socket.getaddrinfo(makine, port, proto=socket.IPPROTO_TCP)
+        except (OSError, UnicodeError):
+            continue
+        cozulen += 1
+        if _erisim(makine, port):
+            erisilen += 1
+    n = len(sunucular)
+    ayrinti = f"{n} adresten erişilebilen: {erisilen} · adı çözülen: {cozulen}"
+    if erisilen == 0:
+        return SORUN, ayrinti
+    return (TAMAM if erisilen == n else UYARI), ayrinti
+
+
 def _servis():
     if not os.path.isdir("/run/systemd/system"):
         return UYARI, "systemd çalışmıyor; ajan servis olarak başlatılamaz."
@@ -233,8 +262,11 @@ def _servis():
     return (TAMAM if kod == 0 and kod2 == 0 else UYARI), ayrinti
 
 
-def topla(sunucu_makine: str = "", sunucu_port: int = 0, sunucu_saat=None, ekranlar=None, sinav_kipi=None) -> dict:
-    """sinav_kipi: servisin "yok" / "giris (kimlik)" / "suruyor (kimlik)" satırı (A4). Liste, ad, kod girmez."""
+def topla(
+    sunucu_makine: str = "", sunucu_port: int = 0, sunucu_saat=None, ekranlar=None, sinav_kipi=None, sunucular=None
+) -> dict:
+    """sinav_kipi: servisin "yok" / "giris (kimlik)" / "suruyor (kimlik)" satırı (A4). Liste, ad, kod girmez.
+    sunucular: ajanın deneme sırasındaki adresler (A6); rapora yalnız sayıları girer."""
     ekranlar = ekranlar or []
     ag = sistem.ag_bilgisi(sunucu_makine, sunucu_port) if sunucu_makine else {}
     if not sistem.LINUX:
@@ -254,8 +286,10 @@ def topla(sunucu_makine: str = "", sunucu_port: int = 0, sunucu_saat=None, ekran
         ("Ekran yardımcısı", lambda: _ekran(ekranlar)),
         ("Sınav kipi", lambda: (BILGI, sinav_kipi or "yok")),
         ("Yoklama kısayolu", _yoklama_kisayolu),
+        ("Arıza bildirimi kısayolu", _ariza_kisayolu),
         ("Kapatma / yeniden başlatma yetkisi", _guc),
         ("Ağ", lambda: _ag(ag)),
+        ("Sunucu adresleri", lambda: _sunucu_adresleri(sunucular or [])),
         ("Uzaktan açma (Wake-on-LAN)", lambda: _wol(ag.get("arayuz"))),
         ("Saat", lambda: _saat(sunucu_saat)),
         ("İnternet ve paket deposu", _depo),

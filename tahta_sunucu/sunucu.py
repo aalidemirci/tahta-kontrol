@@ -9,7 +9,7 @@ import time
 
 import uvicorn
 
-from . import ayar, guvenlik, paket, web
+from . import ayar, guvenlik, paket, web, yedek
 
 gunluk = logging.getLogger("tahta-sunucu")
 
@@ -17,6 +17,8 @@ gunluk = logging.getLogger("tahta-sunucu")
 class Sunucu:
     def __init__(self):
         veri = ayar.veri_dizini()
+        # A6: onaylanmış geri yükleme, veritabanı ve sertifika açılmadan ÖNCE yerleştirilir.
+        self.geri_yukleme_iletisi = yedek.bekleyeni_uygula(veri)
         self.sertifika, self.anahtar, self.parmak_izi = guvenlik.sertifika_hazirla(veri)
         self.uygulama = web.uygulama_olustur(self.parmak_izi)
         self.paket = paket.ajan_paketi()

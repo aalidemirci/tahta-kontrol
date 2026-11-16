@@ -5,6 +5,8 @@
 set -euo pipefail
 
 SUNUCU="@SUNUCU@"
+# Sunucu adres listesi (bosluklu; bos olabilir). Ajan birincil adrese ulasamazsa siradakini dener.
+SUNUCULAR="@SUNUCULAR@"
 PARMAK_IZI="@PARMAK_IZI@"
 PAKET_SHA256="@PAKET_SHA256@"
 KOD="${1:-}"
@@ -64,7 +66,7 @@ if ! echo "$PAKET_SHA256  $PAKET" | sha256sum -c - >/dev/null 2>&1; then
 fi
 
 mkdir -p /etc/tahta-kontrol
-python3 - "$SUNUCU" "$PARMAK_IZI" <<'PY'
+python3 - "$SUNUCU" "$PARMAK_IZI" "$SUNUCULAR" <<'PY'
 import json, os, sys
 yol = "/etc/tahta-kontrol/ajan.json"
 try:
@@ -72,6 +74,9 @@ try:
 except Exception:
     eski = {}
 yeni = {"sunucu": sys.argv[1], "parmak_izi": sys.argv[2]}
+sunucular = [a for a in sys.argv[3].split() if a.startswith("https://")][:5]
+if sunucular:
+    yeni["sunucular"] = sunucular
 # Ayni sunucuya yeniden kurulumda tahtanin kaydi korunur.
 if eski.get("parmak_izi") == yeni["parmak_izi"] and eski.get("tahta_id"):
     yeni["tahta_id"] = eski["tahta_id"]

@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.6.0)
+# Saha denemesi kılavuzu (0.7.0)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -27,6 +27,9 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Sınavlar, sınav sayfası (canlı durum), salon yoklaması, gözetmen fişleri, icmal, onay pencereleri, panoda "Sınav sürüyor" rozeti ve sınavdaki tahtaya kilit açma ek onayı | Chromium (geliştirme bilgisayarı) | Çalıştı |
 | Ders yoklaması (0.6.0): gerçek paketle kurulan tahtada "Yoklama Al" kısayolunun (`tahta-ajan yoklama`) PIN sayfasını açması; PIN sonrası şube ve ders saati seçimi (zil saati yokken 1–12); 24 kişilik listede işaretleme ("Burak K. / YOK", "Yok: 3 · Mevcut: 21/24"), onay ve "Kaydedildi: 3 öğrenci yok"; kaydın panel ızgarasında "3 yok" görünmesi; kilit ekranında "Yoklama al" düğmesi; kilitli tahtada hatalı PIN iletisi; yoklama açıkken gelen duyurunun yoklamanın altında beklemesi, yoklama kapanınca görünmesi; `durum.json`'da liste ve belirteç olmaması; mevcut kilit, duyuru ve kapatma ekranlarının bozulmadığı | Debian 12 kabı + sanal ekran (1920×1080), gerçek paket; dokunmalar yerel iletiyle benzetildi (kapta `xdotool` yok) | Çalıştı |
 | Yoklama günlük görünüm (e-Okul kutusunun kendiliğinden kaydı), kayıt ayrıntısı ve silme onayı (gerekçesiz açılmaz), panelden yoklama, icmal ("Metni kopyala" pano izni yokken metni seçer), öğretmenler, öğrenci listesi, önizleme | Chromium (geliştirme bilgisayarı) | Çalıştı |
+| Altyapı (0.7.0): gerçek paketin kurulum betiğiyle kurulması (`ajan.json`'a adres listesi yazıldı); birincil adres ulaşılamazken 3 hatadan sonra listedeki adrese geçip onu kalıcı birincil yapması; sunucunun gönderdiği listenin `ajan.json`'a yazılması; `tahta-ajan sunucu` (ulaşılamayan adreste hiçbir şey yazmaması, ulaşılanda yazması); envanterin (ekran çözünürlüğü dahil) panele inmesi ve "Envanteri yenile" komutu; menüdeki "Arıza bildir" kısayolunun kurulması, arıza penceresinde tür seçimi, açıklama ve "Arıza kaydı iletildi."; kaydın panelde "Tahtadan" görünmesi; tanılamada "Sunucu adresleri" ve "Arıza bildirimi kısayolu" satırları; mevcut kilit, duyuru ve kapatma ekranlarının bozulmadığı | Debian 12 kabı + sanal ekran (1920×1080), gerçek paket; dokunma `xdotool` ile | Çalıştı |
+| Yedekler (parola, elle yedek, indirme, yanlış/doğru parolayla geri yükleme denetimi, önizleme, vazgeç), Envanter (sıralama, CSV), Arızalar ve arıza ayrıntısı, tahta sayfasında envanter/arıza/bağlantı kartları, panoda "Arıza" ve "Donanım değişti" rozetleri, Ayarlar › Sunucu adresleri | Chromium (geliştirme bilgisayarı) | Çalıştı |
+| Onaylanan geri yüklemenin program yeniden açılınca uygulanması | Geliştirme bilgisayarı (deneme veri klasörü) | Çalıştı |
 | Gerçek e-Okul OOG01001R020 `.XLS` dosyası | — | Denenmedi |
 | İcmalin A4 kâğıda yazdırılması (şube başına sayfa) | — | Denenmedi |
 | Gerçek Kelebek çizelgesi (okulun Kelebek sürümüyle indirilen R5) | — | Denenmedi |
@@ -189,6 +192,29 @@ ve PIN pusulası; tahta sayfasında "Şube(ler)" alanı dolu.
 | Y15 | Fiziksel klavyeden PIN | Rakamlar, Geri silme ve Enter tuş takımı gibi çalışır | |
 | Y16 | Tahtada `durum.json` ve `journalctl -u tahta-ajan` | Öğrenci adı, PIN, belirteç yok | |
 
+### 3.5 Altyapı: yedek, sunucu adresleri, envanter, arıza (0.7.0)
+
+Hazırlık: Yedekler sayfasında yedek parolasını belirleyin (kâğıda yazın). Ayarlar › Sunucu
+adresleri'ne sunucunun adresini (ve okul DNS'inde bir ad varsa onu) yazın.
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| A1 | Yedek parolası belirle; 5 dk bekle | Yedekler'de "Günlük" yedek; panodaki kırmızı şerit kalkar | |
+| A2 | İkinci kopya klasörü olarak USB disk; sonra USB'yi çıkar | Takılıyken kopya yazılır; çıkarılınca ana yedek alınır, panoda "ikinci kopya yazılamadı" | |
+| A3 | Ağ paylaşımı (`\\sunucu\pay`) ikinci kopya olarak | Oturum programında yazılabilir; 6B'de hizmet hesabıyla yazılamayacağı not edilir | |
+| A4 | Yedeği başka bir Windows bilgisayara kurulan programın ilk kurulum sayfasından geri yükle | Önizlemede okul adı, tahta sayısı; "sertifika farklı" uyarısı; programı kapatıp açınca eski kullanıcılarla giriş | |
+| A5 | A4'teki bilgisayara eski IP verildiğinde tahtalar | Yeniden kurulum olmadan bağlanır | |
+| A6 | Adres listesine ikinci bir adres ekle; Ayarlar'da "n/n tahta güncel adres listesini aldı" | Bütün çevrimiçi tahtalar bir iki dakikada listeyi alır | |
+| A7 | Sunucunun IP'sini değiştir (listede yeni adres önceden varken) | Tahtalar yaklaşık 1 dk içinde yeni adrese geçer; tahta sayfasında "Bağlandığı adres" yeni adres | |
+| A8 | Tahtada `sudo tahta-ajan sunucu https://YANLIŞ:8788` | "Sunucuya ulaşılamadı; hiçbir şey değiştirilmedi"; `ajan.json` aynı | |
+| A9 | Envanter sayfası | Üretici, model, seri no (ETAP'ta `product_serial` dolu mu?), işlemci, bellek, disk, ekran, dokunmatik aygıt adı doğru | |
+| A10 | CSV indir, Excel'de aç | Türkçe karakterler doğru; sütunlar ayrık; seri no bilimsel gösterime dönmüyor | |
+| A11 | Menüde "Arıza bildir": `ogretmen` ve `ogrenci` hesaplarında | Görünür ve açılır; ETAP ekran klavyesi açıklama alanında çıkar mı? | |
+| A12 | Arıza bildir (sunucu açık) | "Arıza kaydı iletildi."; panelde Arızalar'da "Tahtadan · öğretmen hesabı"; panoda "Arıza" rozeti | |
+| A13 | Ağ kablosu çıkarılmışken arıza bildir; kabloyu tak | "Kayıt tahtada bekletiliyor…"; kablo takılınca kayıt panelde görünür | |
+| A14 | Bir saatte 4 arıza bildir | Dördüncüsü "son bir saatte çok bildirim" iletisiyle reddedilir | |
+| A15 | Tahtada `durum.json` | `ariza_kuyrugu` iletilince boşalır; hesap adı yok | |
+
 ## 4. Otomatik giriş denemesi (elle)
 
 Yazılım otomatik girişi ayarlamaz. Tanılama raporundaki "Giriş ekranı ve
@@ -241,7 +267,7 @@ ve güncellemeden sonra duruyor mu.
   - Sınav ekranının ETAP'ın pencere yöneticisinde EBA içeriği ya da tam ekran videonun
     üstüne çıkması (Debian 12 + openbox'ta çıktı).
   - Dayanaklar: KVKK md. 12 ve sınav kurallarındaki "ilk ve son 10 dakika" kuralı
-    doğrulanacaklar listesindedir (`docs/tasarim.md` §17); arayüzde atıf yoktur.
+    doğrulanacaklar listesindedir (`docs/tasarim.md` §18); arayüzde atıf yoktur.
 - Ders yoklaması (0.6.0):
   - e-Okul OOG01001R020 `.XLS` çıktısının blok yapısı ve başlık biçimi ("10. Sınıf / A Şubesi",
     "Öğrenci No", dipnotlar) yalnız komşu projenin kodundan ve uydurma matristen çıkarıldı;
@@ -257,7 +283,27 @@ ve güncellemeden sonra duruyor mu.
   - Yerel soket (`127.0.0.1`) tahtadaki diğer yerel süreçlere açıktır; yoklama açıkken ekrandaki
     etiketleri okuyabilirler (belirteç ve PIN girmez).
   - Dayanaklar: yoklamaya ilişkin yönetmelik fıkrası, ders saatinden güne çevirme kuralı ve
-    KVKK md. 12 doğrulanacaklar listesindedir (`docs/tasarim.md` §17); arayüzde atıf yoktur.
+    KVKK md. 12 doğrulanacaklar listesindedir (`docs/tasarim.md` §18); arayüzde atıf yoktur.
+
+- Altyapı (0.7.0):
+  - ETAP'ta `/sys/class/dmi/id/product_serial` ve `board_serial` dolu (üretici seri no yazıyor);
+    boşsa donanım kimliği değişimi uyarısı çalışmaz (yalnız dolu→farklı dolu uyarır).
+  - Dokunmatik aygıt adı `/proc/bus/input/devices` içinde "touch" sözcüğünü taşır.
+  - `tahta-ariza.desktop` ETAP menüsünde (Donatılar/Utility) her hesapta görünür; ETAP'ın ekran
+    klavyesi GTK metin alanına odaklanınca açılır.
+  - Arıza penceresi (1240×860, normal pencere) ETAP'ın 4K ve 1080p ekranlarında okunur; düğmeler
+    dokunmaya yeterince iri. Pencere okulun renklerini değil varsayılan tahta paletini kullanır.
+  - `dpkg-query` ETAP'ta birkaç saniyede biter (envanter açılışta ve 6 saatte bir okunur).
+  - Okul ağında DNS adı tanımlanabiliyor ve tahtalar onu çözüyor (açık soru 51).
+  - Sunucu IP'si değişince tahtaların 3 hata + üstel bekleme sonrası yaklaşık 1 dk içinde geçmesi
+    (kapta birincil adres "ağ ulaşılamıyor" ile hızlı düştü; gerçek ağda bağlantı zaman aşımı
+    45 sn'ye kadar sürebilir, geçiş birkaç dakikayı bulabilir).
+  - Scrypt (n=2^17) parola belirleme ve geri yüklemede sunucu bilgisayarında 1 sn civarı sürer;
+    200 MB'a yakın yedek ve büyük veritabanı bellekte işlenebilir.
+  - Windows'ta ikinci kopya klasörüne yazma izni: Yedekler sayfasındaki `icacls` komutu 6A'da programı
+    çalıştıran hesaba (`ALAN\kullanıcı`) izin verir; okulun etki alanı/yerel hesap düzeninde denenmedi.
+  - Dayanaklar: KVKK md. 12 ve "yeterli önlemler" kararı doğrulanacaklar listesindedir
+    (`docs/tasarim.md` §18); arayüzde atıf yoktur.
 
 ## 6. Sorun olursa
 

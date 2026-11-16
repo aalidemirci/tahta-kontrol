@@ -1,0 +1,67 @@
+{% extends "taban.html" %}
+{% from "_ariza.html" import durum_rozeti %}
+{% block baslik %}Arıza #{{ ariza.id }} · Tahta Kontrol{% endblock %}
+{# A6 §6.6 ayrıntı. Bağlam: ariza [ariza.satir_gorunumu; izinli_gecisler = [(kod, ad)]],
+   hareketler [{zaman, kullanici, eski, yeni, degisti, not_metni}], durumlar, girilen (reddedilen gönderimde
+   {durum, not_metni, cozum_notu}; yoksa None). Açıklama |safe ile BASILMAZ. #}
+{% block icerik %}
+{% set secili = girilen.durum if girilen else '' %}
+{% set cozum_degeri = girilen.cozum_notu if girilen and girilen.cozum_notu is not none else ariza.cozum_notu %}
+<p class="geri"><a href="/arizalar">← Arızalar</a></p>
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>Arıza #{{ ariza.id }} · {{ ariza.kategori_adi }} {{ durum_rozeti(ariza.durum, ariza.durum_adi) }}</h1>
+    <p>{% if ariza.tahta_kaldirildi %}{{ ariza.tahta_adi }} (kaldırıldı){% else %}<a href="/tahta/{{ ariza.tahta_id }}">{{ ariza.tahta_adi }}</a>{% endif %}{% if ariza.derslik %} · {{ ariza.derslik }}{% endif %}</p>
+  </div>
+</div>
+
+<div class="iki-sutun">
+  <section class="kutu" aria-labelledby="ayrinti-baslik">
+    <h2 id="ayrinti-baslik">Kayıt</h2>
+    <dl class="ozellikler">
+      <dt>Kaynak</dt><dd>{{ ariza.kaynak_metni }}</dd>
+      <dt>Açılış</dt><dd>{{ ariza.olusturma | zaman }}</dd>
+      <dt>Son güncelleme</dt><dd>{{ ariza.guncelleme | zaman }}</dd>
+      <dt>Açıklama</dt><dd>{{ ariza.aciklama or '—' }}</dd>
+      <dt>Çözüm notu</dt><dd>{{ ariza.cozum_notu or '—' }}</dd>
+    </dl>
+  </section>
+
+  <section class="kutu" aria-labelledby="guncelle-baslik">
+    <h2 id="guncelle-baslik">{{ 'Durumu değiştir ya da not ekle' if ariza.izinli_gecisler else 'Not ekle' }}</h2>
+    <form method="post" action="/ariza/{{ ariza.id }}">
+      {% if ariza.izinli_gecisler %}
+      <fieldset class="secim-grubu">
+        <legend>Yeni durum</legend>
+        <div class="dugme-secim">
+          <label><input type="radio" name="durum" value="" {% if secili not in ariza.izinli_gecisler | map('first') | list %}checked{% endif %}> Değiştirme ({{ ariza.durum_adi }})</label>
+          {% for kod, ad in ariza.izinli_gecisler %}<label><input type="radio" name="durum" value="{{ kod }}" {% if kod == secili %}checked{% endif %}> {{ ad }}</label>{% endfor %}
+        </div>
+      </fieldset>
+      {% else %}
+      <p class="ipucu">İptal edilen kayıt yeniden açılamaz; yalnız not eklenebilir.</p>
+      {% endif %}
+      <label for="ariza-not">Not (en çok 300 karakter)</label>
+      <p class="ipucu" id="ariza-not-ipucu">Ör. “Firma arandı.” Kişi adı yazmayın. Not hareket geçmişine eklenir.</p>
+      <textarea id="ariza-not" name="not_metni" maxlength="300" rows="2" aria-describedby="ariza-not-ipucu">{{ girilen.not_metni if girilen else '' }}</textarea>
+      <label for="ariza-cozum">Çözüm notu</label>
+      <textarea id="ariza-cozum" name="cozum_notu" maxlength="300" rows="2">{{ cozum_degeri or '' }}</textarea>
+      <p class="dugme-satiri"><button class="ana">Kaydet</button></p>
+    </form>
+  </section>
+</div>
+
+<h2 id="hareket-baslik">Hareket geçmişi</h2>
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="hareket-baslik">
+<table>
+  <thead><tr><th scope="col">Zaman</th><th scope="col">Kullanıcı</th><th scope="col">Durum</th><th scope="col">Not</th></tr></thead>
+  <tbody>
+  {% for h in hareketler %}
+  <tr><td data-etiket="Zaman" class="tarih-hucre">{{ h.zaman | zaman }}</td><td data-etiket="Kullanıcı">{{ h.kullanici }}</td>
+    <td data-etiket="Durum">{% if h.degisti %}{{ h.eski or 'Yeni kayıt' }} → {{ h.yeni }}{% else %}{{ h.yeni }}{% endif %}</td>
+    <td data-etiket="Not" class="kirp">{{ h.not_metni or '—' }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

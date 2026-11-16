@@ -45,6 +45,11 @@
 </section>
 {% endif %}
 
+{# A6 (§6.2): altyapı uyarı şeritleri, öncelik sırasıyla en çok üç (tur: tehlike | uyari). #}
+{% for u in altyapi_uyarilari %}
+<div class="bant {{ 'hata' if u.tur == 'tehlike' else 'uyari' }}" role="status" data-altyapi-uyari="{{ u.tur }}"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ u.metin }}{% if u.yol %} <a href="{{ u.yol }}">{{ u.yol_adi }}</a>{% endif %}</div>
+{% endfor %}
+
 <div class="bant uyari" id="yenile-bandi" hidden>Yeni tahta onaylandı ya da onay bekleyen sayısı değişti. <a href="/">Sayfayı yenile</a></div>
 
 {% if bekleyen %}

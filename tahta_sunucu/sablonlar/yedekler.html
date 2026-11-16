@@ -1,0 +1,120 @@
+{% extends "taban.html" %}
+{% block baslik %}Yedekler · Tahta Kontrol{% endblock %}
+{# A6 §6.4. Bağlam: yedek_ayari {parola_var, parola_zamani, saklama, kopya_dizini}, son_yedek {zaman, dosya, basarili, hata,
+   kopya_hata, son_basarili, son_basarili_dosya}, bugun_alindi, sonraki_otomatik, klasor, yedekler [{ad, tur, tur_adi,
+   tarih, boyut, boyut_metni}], saklama_aralik (alt, üst), parola_en_kisa, izin_komutu, kvkk_notu, bekleyen, yerel.
+   Parola hiçbir alana geri yazılmaz. #}
+{% block mesaj_yeri %}{% if mesaj %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}{% endblock %}
+{% block icerik %}
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>Yedekler</h1>
+    <p>Veritabanı ve sunucu sertifikası her gün bir kez, yedek parolasıyla şifrelenmiş tek dosya olarak yedeklenir.
+      Sertifika yedeği kaybolursa bütün tahtalara ajan yeniden kurulur.</p>
+  </div>
+</div>
+
+<div class="iki-sutun">
+  <section class="kutu" id="parola" aria-labelledby="parola-baslik">
+    <div class="kutu-bas">
+      <h2 id="parola-baslik">Yedek parolası</h2>
+      {% if yedek_ayari.parola_var %}
+      <span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Belirlendi · {{ yedek_ayari.parola_zamani | tarih }}</span>
+      {% else %}
+      <span class="rozet" data-durum="sorun"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Belirlenmedi</span>
+      {% endif %}
+    </div>
+    {% if not yedek_ayari.parola_var %}
+    <p class="bant hata" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>Yedek parolası belirlenmedi; otomatik yedek alınmıyor.</span></p>
+    {% endif %}
+    <p class="bant uyari"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>Yedek parolası unutulursa yedekler hiçbir yolla açılamaz. Kâğıda yazıp okulun kasasında saklayın.
+      Parola değişince eski yedekler eski parolayla açılır.</span></p>
+    <form method="post" action="/yedekler/parola" class="form-dar">
+      <label for="hesap_parolasi">Hesap parolanız</label>
+      <p class="ipucu" id="hesap-ipucu">Panele girdiğiniz parola; kimliğinizi doğrulamak içindir.</p>
+      <input type="password" id="hesap_parolasi" name="hesap_parolasi" autocomplete="current-password" aria-describedby="hesap-ipucu" required>
+      <label for="yedek_parola">Yeni yedek parolası (en az {{ parola_en_kisa }} karakter)</label>
+      <input type="password" id="yedek_parola" name="parola" minlength="{{ parola_en_kisa }}" autocomplete="new-password" required>
+      <label for="yedek_parola2">Yeni yedek parolası (yeniden)</label>
+      <input type="password" id="yedek_parola2" name="parola2" minlength="{{ parola_en_kisa }}" autocomplete="new-password" required>
+      <p class="dugme-satiri"><button class="ana">{{ 'Parolayı değiştir' if yedek_ayari.parola_var else 'Parolayı belirle' }}</button></p>
+    </form>
+  </section>
+
+  <section class="kutu" id="durum" aria-labelledby="durum-baslik">
+    <h2 id="durum-baslik">Durum</h2>
+    <dl class="ozellikler">
+      <dt>Son yedek</dt>
+      <dd>{% if son_yedek and son_yedek.zaman %}{{ son_yedek.zaman | tarih }}
+        {% if son_yedek.basarili %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Başarılı</span>
+        {% else %}<span class="rozet" data-durum="sorun"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Başarısız</span><div class="not">{{ son_yedek.hata }}</div>{% endif %}
+        {% else %}Henüz yedek alınmadı.{% endif %}</dd>
+      {% if son_yedek and not son_yedek.basarili and son_yedek.son_basarili %}
+      <dt>Son başarılı</dt><dd>{{ son_yedek.son_basarili | tarih }}</dd>
+      {% endif %}
+      {% if son_yedek and son_yedek.kopya_hata %}<dt>İkinci kopya</dt><dd><span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Yazılamadı</span><div class="not">{{ son_yedek.kopya_hata }}</div></dd>{% endif %}
+      <dt>Sonraki otomatik yedek</dt><dd>{{ sonraki_otomatik }}</dd>
+      <dt>Klasör</dt><dd><span class="kod">{{ klasor }}</span></dd>
+      {% if yedek_ayari.kopya_dizini %}<dt>İkinci kopya klasörü</dt><dd><span class="kod">{{ yedek_ayari.kopya_dizini }}</span></dd>{% endif %}
+    </dl>
+    <form method="post" action="/yedekler/al" class="dugme-satiri">
+      <button class="ana" {% if not yedek_ayari.parola_var %}disabled aria-describedby="al-ipucu"{% endif %}>Şimdi yedek al</button>
+    </form>
+    {% if not yedek_ayari.parola_var %}<p class="ipucu" id="al-ipucu">Önce yedek parolasını belirleyin.</p>{% endif %}
+  </section>
+</div>
+
+<section class="kutu" id="ayar" aria-labelledby="ayar-baslik">
+  <h2 id="ayar-baslik">Saklama ve ikinci kopya</h2>
+  <form method="post" action="/yedekler/ayar" class="form-dar">
+    <label for="saklama">Saklanacak günlük yedek sayısı ({{ saklama_aralik[0] }}–{{ saklama_aralik[1] }})</label>
+    <p class="ipucu" id="saklama-ipucu">Daha eski günlük yedekler silinir. Elle alınan yedeklerden en yeni 10 tanesi ayrıca tutulur; bu sayı kadar günden eski olanlar silinir.</p>
+    <input type="number" id="saklama" name="saklama" class="alan-dar" min="{{ saklama_aralik[0] }}" max="{{ saklama_aralik[1] }}" value="{{ yedek_ayari.saklama }}" aria-describedby="saklama-ipucu" required>
+    <label for="kopya_dizini">İkinci kopya klasörü (isteğe bağlı)</label>
+    <p class="ipucu" id="kopya-ipucu">Yedeği aynı diskte tutmak disk bozulmasına karşı korumaz. Başka bir disk ya da sürekli takılı bir sürücü seçin; boş bırakılırsa ikinci kopya alınmaz.</p>
+    <input type="text" id="kopya_dizini" name="kopya_dizini" value="{{ yedek_ayari.kopya_dizini }}" placeholder="D:\TahtaYedek" aria-describedby="kopya-ipucu">
+    <p class="dugme-satiri"><button class="ana">Kaydet</button></p>
+  </form>
+  <p class="not">Klasöre yazılamazsa ayar kaydedilmez. Yazma izni vermek için yönetici olarak açılmış komut isteminde:</p>
+  <div class="komut-kap">
+    <pre class="komut" id="izin-komutu">{{ izin_komutu }}</pre>
+    <button type="button" class="kopyala" data-kopyala="izin-komutu" hidden>Kopyala</button>
+  </div>
+</section>
+
+<section class="kutu" id="liste" aria-labelledby="liste-baslik">
+  <h2 id="liste-baslik">Yedek dosyaları</h2>
+  {% if yedekler %}
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="liste-baslik">
+  <table>
+    <thead><tr><th scope="col">Tür</th><th scope="col">Tarih</th><th scope="col">Boyut</th><th scope="col"><span class="gizli">İndir</span></th></tr></thead>
+    <tbody>
+    {% for y in yedekler %}
+    <tr><td data-etiket="Tür">{{ y.tur_adi }}</td><td data-etiket="Tarih" class="tarih-hucre">{{ y.tarih }}</td><td data-etiket="Boyut">{{ y.boyut_metni }}</td>
+      <td><a class="dugme" href="/yedekler/indir/{{ y.ad }}" download>İndir<span class="gizli"> ({{ y.tarih }})</span></a></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="not">İndirilen dosya şifrelidir; yalnız yedek parolasıyla açılır. İndirme işlem kaydına düşer.</p>
+  {% else %}<p class="bos-not">Henüz yedek yok.</p>{% endif %}
+  <p class="ipucu">{{ kvkk_notu }}</p>
+</section>
+
+<section class="kutu" id="geri-yukleme" aria-labelledby="geri-baslik">
+  <h2 id="geri-baslik">Yedekten geri yükleme</h2>
+  {% if not yerel %}
+  <p class="bant" role="status"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg><span>Geri yükleme yalnız sunucunun kurulu olduğu bilgisayardan yapılır.</span></p>
+  {% else %}
+  {% if bekleyen %}<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg><span>Denetlenmiş bir yedek onay bekliyor. <a href="/yedekler/geri-yukle/onay">Önizlemeyi aç</a></span></p>{% endif %}
+  <p class="not">Önce yedek denetlenir ve içeriği gösterilir; onaylamadıkça hiçbir şey değişmez. Onaydan sonra program kapatılıp açılınca bugünkü veri ayrı klasöre taşınır, yedek yerleştirilir.</p>
+  <form method="post" action="/yedekler/geri-yukle" enctype="multipart/form-data" class="form-dar">
+    <label for="geri-dosya">Yedek dosyası (.tkyedek, en çok 200 MB)</label>
+    <input type="file" id="geri-dosya" name="dosya" accept=".tkyedek" required>
+    <label for="geri-parola">Yedek parolası</label>
+    <input type="password" id="geri-parola" name="parola" autocomplete="off" required>
+    <p class="dugme-satiri"><button>Yedeği denetle</button></p>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

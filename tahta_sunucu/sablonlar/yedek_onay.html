@@ -1,0 +1,52 @@
+{% extends "taban.html" %}
+{% block baslik %}Geri yükleme onayı · Tahta Kontrol{% endblock %}
+{# A6 §4.1 önizleme. Bağlam: kurulum, onizleme {yedek_olusturma, surum, sema, okul_adi, tahta_sayisi,
+   kullanici_sayisi, parmak_izi, dosya_boyutu, onaylandi, hata}, simdiki_parmak_izi, sertifika_farkli, hizmet.
+   İlk kurulumda (kullanıcı yok) ilk kurulum çerçevesinde, oturumluyken panel sayfası olarak çizilir. #}
+{% block govde_sinifi %}{% if kurulum %}giris-sayfasi{% endif %}{% endblock %}
+{% block mesaj_yeri %}{% if mesaj and not kurulum %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}{% endblock %}
+{% block icerik %}
+{% macro onay_karti() %}
+  <h1>Yedekten geri yükleme</h1>
+  {% if onizleme.hata %}<p class="bant hata" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>Önceki uygulama denemesi başarısız oldu; bugünkü veri yerinde bırakıldı: {{ onizleme.hata }}</span></p>{% endif %}
+  <dl class="ozellikler">
+    <dt>Yedek tarihi</dt><dd>{{ onizleme.yedek_olusturma | tarih }}</dd>
+    <dt>Okul adı</dt><dd>{{ onizleme.okul_adi or '—' }}</dd>
+    <dt>Tahta sayısı</dt><dd>{{ onizleme.tahta_sayisi }}</dd>
+    <dt>Kullanıcı sayısı</dt><dd>{{ onizleme.kullanici_sayisi }}</dd>
+    <dt>Uygulama sürümü</dt><dd>{{ onizleme.surum }} · şema {{ onizleme.sema }}</dd>
+    <dt>Yedekteki parmak izi</dt><dd><span class="kod">{{ (onizleme.parmak_izi or '')[:16] }}…</span></dd>
+    <dt>Şimdiki parmak izi</dt><dd><span class="kod">{{ (simdiki_parmak_izi or '')[:16] }}…</span></dd>
+  </dl>
+  {% if sertifika_farkli %}
+  <p class="bant hata" role="status" data-sertifika-farkli><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>Bu yedekteki sertifika şimdikinden farklı. Geri yüklenince bu sunucuya kayıtlı tahtalar bağlanamaz, yedekteki sunucuya kayıtlı tahtalar bağlanır.</span></p>
+  {% endif %}
+  {% if onizleme.onaylandi %}
+  <p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg><span>Geri yükleme onaylandı. Tahta Kontrol programını kapatıp yeniden açın; yedek açılışta yerleştirilir.</span></p>
+  {% else %}
+  <p class="not">Geri yüklenince bugünkü veritabanı ve sertifika ayrı bir klasöre (<span class="kod">geri-yukleme-oncesi</span>) taşınır;
+    bütün oturumlar kapanır ve yedekteki kullanıcılarla giriş yapılır.</p>
+  {% if not hizmet %}<p class="not">Onaydan sonra Tahta Kontrol programını kapatıp yeniden açın; yedek açılışta yerleştirilir.</p>{% endif %}
+  {% endif %}
+  <form method="post" action="/yedekler/geri-yukle/uygula" class="dugme-satiri">
+    {% if not onizleme.onaylandi %}<button name="eylem" value="uygula" class="tehlike-dolu">{{ 'Geri yükle ve yeniden başlat' if hizmet else 'Geri yüklemeyi onayla' }}</button>{% endif %}
+    <button name="eylem" value="vazgec" formnovalidate>{{ 'Onayı geri al ve vazgeç' if onizleme.onaylandi else 'Vazgeç' }}</button>
+  </form>
+{% endmacro %}
+{% if kurulum %}
+<div class="giris-cerceve">
+  <aside class="giris-kimlik">
+    {% include "_logo.html" %}
+    <p class="giris-okul">{{ okul_adi or 'Tahta Kontrol' }}</p>
+    <p class="not">Tahta Kontrol · okul ağındaki etkileşimli tahtaların yönetimi</p>
+  </aside>
+  <div class="giris-yan">
+    {% if mesaj %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+    <div class="giris-kart kutu genis">{{ onay_karti() }}</div>
+  </div>
+</div>
+{% else %}
+<p class="geri"><a href="/yedekler#geri-yukleme">← Yedekler</a></p>
+<div class="kutu form-genis">{{ onay_karti() }}</div>
+{% endif %}
+{% endblock %}

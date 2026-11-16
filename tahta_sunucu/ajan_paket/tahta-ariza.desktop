@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Arıza bildir
+GenericName=Tahta arıza bildirimi
+Comment=Tahtanın arızasını okul idaresine bildirir
+Exec=/usr/bin/tahta-ajan ariza
+Icon=dialog-warning
+Terminal=false
+Categories=Utility;
+Keywords=arıza;bozuk;tamir;dokunmatik;

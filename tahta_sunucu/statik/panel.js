@@ -6,7 +6,8 @@
    program (pano şeridi ve kart rozetleri pano bölümünde; tahta ızgarasında "Tümünü işaretle"),
    sinav (sınav sayfasının canlı salon durumu, sınavdaki tahtaya duyuru/kilit açma ek onayı,
    salon yoklamasında gelmeyen sayısı), yoklama (Aşama 5: "e-Okul'a işlendi" kutusunun kendiliğinden
-   gönderimi, yok sayacı, icmal metnini kopyalama ve yazdırma, yoklama silme onayı, panoda "Yoklama alınıyor").
+   gönderimi, yok sayacı, icmal metnini kopyalama ve yazdırma, yoklama silme onayı, panoda "Yoklama alınıyor"),
+   altyapı (Aşama 6: panoda "Arıza" ve "Donanım değişti" rozetleri; th[data-sirala] tablolarında sütun sıralama).
    Her bölüm JS kapalıyken de çalışan sayfayı yalnız iyileştirir.
    Metin her zaman textContent ile yazılır; innerHTML kullanılmaz. */
 (function () {
@@ -272,6 +273,13 @@
     }
     return ek;
   }
+  // A6: süren (açık + inceleniyor) arıza sayısı ve donanım kimliği değişimi; sunucunun /api/durum alanlarından.
+  function altyapiRozetleri(t) {
+    var ek = [];
+    if (t.ariza_sayisi > 0) ek.push({ d: "sorun", m: t.ariza_sayisi > 1 ? t.ariza_sayisi + " arıza" : "Arıza", s: "s-sorun" });
+    if (t.donanim_degisti) ek.push({ d: "uyari", m: "Donanım değişti", s: "s-sorun" });
+    return ek;
+  }
   function programAjaniEski(t, programKilidiAcik) {
     return !!(programKilidiAcik && t.cevrimici && t.surum && t.program && t.program.program_yetenegi === false);
   }
@@ -303,7 +311,7 @@
       rozetler: rozetler,
       kilitMetni: kilitMetni(t),
       guncelMetni: programAjaniEski(t, programKilidiAcik) ? "Ajan güncellenmeli" : METIN.guncelleme,
-      ek: programRozetleri(t, programKilidiAcik).slice(0, 2),
+      ek: altyapiRozetleri(t).concat(programRozetleri(t, programKilidiAcik)).slice(0, 3),
       oturum: t.cevrimici ? (t.oturum || "") : "",
       alt: "Son görülme: " + t.son_gorulme + (t.surum ? " · ajan " + t.surum : "")
     };
@@ -1189,7 +1197,53 @@
     });
   }
 
+  /* ---- sıralama (A6 envanter): th[data-sirala] başlığı düğmeye döner, aria-sort ile duyurulur ----------
+     data-sirala="sayi" sütunlarında hücrenin data-deger'i sayı olarak, ötekilerde metin Türkçe
+     harf sırasıyla karşılaştırılır. Boş ("—") hücreler her iki yönde de sonda kalır. */
+  function siralamaKur() {
+    var basliklar = document.querySelectorAll("table th[data-sirala]");
+    if (!basliklar.length) return;
+    var harf = typeof Intl !== "undefined" ? new Intl.Collator("tr", { numeric: true, sensitivity: "base" }) : null;
+    Array.prototype.forEach.call(basliklar, function (th) {
+      var tablo = th.closest("table");
+      var govde = tablo && tablo.tBodies[0];
+      if (!govde) return;
+      var dugme = document.createElement("button");
+      dugme.type = "button";
+      dugme.className = "sirala";
+      while (th.firstChild) dugme.appendChild(th.firstChild);
+      var ok = simge("s-asagi");
+      ok.setAttribute("class", "simge sirala-ok");
+      dugme.appendChild(ok);
+      th.appendChild(dugme);
+      dugme.addEventListener("click", function () {
+        var sutun = Array.prototype.indexOf.call(th.parentNode.children, th);
+        var artan = th.getAttribute("aria-sort") !== "ascending";
+        Array.prototype.forEach.call(tablo.querySelectorAll("th[aria-sort]"), function (x) { x.removeAttribute("aria-sort"); });
+        th.setAttribute("aria-sort", artan ? "ascending" : "descending");
+        var sayi = th.getAttribute("data-sirala") === "sayi";
+        function deger(tr) {
+          var h = tr.cells[sutun];
+          if (!h) return "";
+          var d = h.getAttribute("data-deger");
+          var v = d !== null ? d : h.textContent.trim();
+          return v === "—" ? "" : v;
+        }
+        var satirlar = Array.prototype.slice.call(govde.rows);
+        satirlar.sort(function (a, b) {
+          var x = deger(a), y = deger(b);
+          if (!sayi && (x === "" || y === "")) return x === y ? 0 : (x === "" ? 1 : -1);
+          var f = sayi ? (parseFloat(x) || 0) - (parseFloat(y) || 0)
+            : (harf ? harf.compare(x, y) : (x < y ? -1 : x > y ? 1 : 0));
+          return artan ? f : -f;
+        });
+        satirlar.forEach(function (tr) { govde.appendChild(tr); });
+      });
+    });
+  }
+
   panoKur();
+  siralamaKur();
   sinavKur();
   yoklamaSayaciKur();
   otomatikGonderKur();

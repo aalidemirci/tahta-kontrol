@@ -1,0 +1,32 @@
+{% extends "taban.html" %}
+{% block baslik %}Yedekten geri yükle · Tahta Kontrol{% endblock %}
+{# A6 §6.8 — ilk kurulumda (kullanıcı yok) yalnız 127.0.0.1'den, oturumsuz. Bağlam: kurulum, bekleyen.
+   Görünüm ilk kurulum sayfasıyla aynı çerçevededir (giris-cerceve). #}
+{% block govde_sinifi %}giris-sayfasi{% endblock %}
+{% block mesaj_yeri %}{% endblock %}
+{% block icerik %}
+<div class="giris-cerceve">
+  <aside class="giris-kimlik">
+    {% include "_logo.html" %}
+    <p class="giris-okul">{{ okul_adi or 'Tahta Kontrol' }}</p>
+    <p class="not">Tahta Kontrol · okul ağındaki etkileşimli tahtaların yönetimi</p>
+  </aside>
+  <div class="giris-yan">
+    {% if mesaj %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+    <div class="giris-kart kutu">
+      <h1>Yedekten geri yükle</h1>
+      <p class="not">Önceki sunucunun yedek dosyasını ve yedek parolasını verin. Yedek önce denetlenir ve
+        içeriği gösterilir; onaylamadıkça hiçbir şey değişmez.</p>
+      {% if bekleyen %}<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg><span>Denetlenmiş bir yedek onay bekliyor. <a href="/yedekler/geri-yukle/onay">Önizlemeyi aç</a></span></p>{% endif %}
+      <form method="post" action="/yedekler/geri-yukle" enctype="multipart/form-data">
+        <label for="geri-dosya">Yedek dosyası (.tkyedek, en çok 200 MB)</label>
+        <input type="file" id="geri-dosya" name="dosya" accept=".tkyedek" required>
+        <label for="geri-parola">Yedek parolası</label>
+        <input type="password" id="geri-parola" name="parola" autocomplete="off" required>
+        <p class="dugme-satiri"><button class="ana tam">Yedeği denetle</button></p>
+      </form>
+      <p class="not"><a href="/kurulum">← İlk kuruluma dön</a></p>
+    </div>
+  </div>
+</div>
+{% endblock %}

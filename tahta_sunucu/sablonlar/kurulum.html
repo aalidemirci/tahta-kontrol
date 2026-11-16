@@ -37,6 +37,7 @@
         </fieldset>
         <p class="dugme-satiri"><button class="ana tam">Kurulumu tamamla</button></p>
       </form>
+      {% if geri_yukleme %}<p class="not">Önceki bir sunucunun yedeği varsa: <a href="/yedekler/geri-yukle">Yedekten geri yükle</a></p>{% endif %}
       {% endif %}
     </div>
   </div>

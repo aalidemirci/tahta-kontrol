@@ -6,14 +6,17 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.6.0, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
+- Durum: **0.7.0, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
   (0.1.1: kurulum, kilit, duyuru, kapatma, güncelleme çalıştı); 0.2.0'ın okul kimliği,
   0.3.0'ın duyuru planları, hedef grupları ve acil durum/tatbikat yayını, 0.4.0'ın ders
-  programı/program kilidi, 0.5.0'ın sınav kipi/sınav yoklaması ve 0.6.0'ın ders yoklaması
+  programı/program kilidi, 0.5.0'ın sınav kipi/sınav yoklaması, 0.6.0'ın ders yoklaması ve
+  0.7.0'ın altyapı çekirdeği (şifreli yedek, sunucu adres listesi, envanter, arıza bildirimi)
   yalnız Debian 12 kabında ve tarayıcıda denendi; gerçek bir ETAP tahtasında, gerçek Kelebek
-  çizelgesiyle ve gerçek e-Okul sınıf listesiyle henüz denenmedi.
+  çizelgesiyle ve gerçek e-Okul sınıf listesiyle henüz denenmedi. Windows hizmeti ve ajan paketi
+  imzası (Aşama 6B) yapılmadı.
 - Ders programı ve program kilidi `docs/tasarim.md` §12; sınav kipi §13; ders yoklaması §14;
-  yol haritası §15; kullanıcıya sorulacaklar §16 "Açık sorular"; doğrulanacak dayanaklar §17.
+  altyapı (yedek, adres listesi, envanter, arıza) §15; yol haritası §16; kullanıcıya sorulacaklar
+  §17 "Açık sorular"; doğrulanacak dayanaklar §18.
 
 ## Komutlar (PowerShell 5.1; `&&` yok)
 
@@ -45,10 +48,19 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   panel_yoklama.py  /yoklama (günlük ızgara, kayıt/düzeltme, panelden gir, icmal + .csv, e-Okul işareti),
                     /ogretmenler (PIN pusulası), /ogrenciler (önizle/aktar/temizle), /ajan/yoklama/*;
                     sonunda şablon bağlamlarının SÖZLEŞME bloğu
+  panel_altyapi.py  /yedekler (parola, ayar, al, indir, geri-yukle + onay/uygula), /envanter (+ .csv),
+                    /tahta/{id}/envanter, /tahta/{id}/donanim-goruldu, /arizalar, /ariza/{id}, /yerel/durum
+  yedek.py      şifreli yedek .tkyedek (scrypt → X25519 → HKDF → AES-GCM), saklama, ikinci kopya, geri yükleme
+                (denetle → onay → açılışta bekleyeni_uygula); yedek.KILIT = vt.KILIT (göç ve yedek aynı kilitte)
+  adresler.py   sunucu adres listesi (en çok 5): doğrulama, özet (ajanla aynı), eski sunucu_adresi geçişi
+  envanter.py   ajanın gönderdiği envanteri saklar/gösterir, donanım kimliği değişimi, CSV
+  ariza.py      arıza kayıtları: kategoriler, durum geçişleri, hareketler, tahtadan alma (yerel_id tekrarsız)
   sablonlar/    program.html, uyarilar.html ve ortak başları _program_bas.html (şerit + sekmeler);
                 sinavlar.html, sinav.html, sinav_yoklama.html, sinav_kodlar.html, sinav_icmal.html, _sinav.html;
                 yoklama*.html, ogretmenler.html, ogretmen_pusula.html, ogrenciler.html, ogrenci_onizleme.html
-                ve ortak başları _yoklama_bas.html (sekmeler + KVKK notu)
+                ve ortak başları _yoklama_bas.html (sekmeler + KVKK notu);
+                yedekler.html, yedek_onay.html, yedek_geri_yukle.html, envanter.html, arizalar.html,
+                ariza.html, _ariza.html (durum rozeti + açma formu makroları), _tahta_altyapi.html
   yoklama.py    ders yoklaması iş mantığı (FastAPI'siz): ayar, A3 uyarlama işlevleri, öneri, PIN kapısı
                 (3 katman), belirteç, yoklama_yaz (upsert + iz), günlük görünüm, icmal/metin/CSV, aktarım, imha
   eokul.py      öğrenci listesi ayrıştırıcı: e-Okul OOG01001R020 .xls (xlrd), düz .xlsx/.csv
@@ -72,18 +84,25 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   sunucu.py     iki dinleyici: yerel HTTP + ağ için HTTPS; zamanlayıcı (state.zamanlayicilar, 20 sn)
   pencere.py    masaüstü denetim penceresi (tkinter)
   statik/       stil.css (tek dosya, katmanlı), panel.js (tek dosya, kütüphanesiz), isaret.svg (nötr ürün işareti)
-  ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh, tahta-yoklama.desktop
+  ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh, tahta-yoklama.desktop,
+                tahta-ariza.desktop
 tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
   servis.py     yönetici yetkili sistem servisi: sunucu döngüsü, komutlar, acil durumu, süreli program kilidi,
                 sınav durumu (ayar.sinav, monotonik sayaç) ve gözetmen oturumu (belirteç yalnız burada),
                 ders yoklaması (ayar.yoklama_etkin, self.yoklama; belirteç yalnız _yoklama_belirtec'te), yerel soket
-                (ilk satır `arayuz: komut` ise kısa ömürlü istemci: ona yayın yok, ekran sayılmaz)
+                (ilk satır `arayuz: komut` ise kısa ömürlü istemci: ona yayın yok, ekran sayılmaz);
+                A6: adres listesi (_istemci_kur/_adres_hatasi/_adres_basarili), envanter (donanim_tazele,
+                envanter_iste), arıza kuyruğu (ariza_bildir, durum.json `ariza_kuyrugu`); döngünün bir turu _tur()
+  envanter.py   envanteri §5.4 biçiminde kurar (seri yer tutucuları boşaltılır), özet
+  ariza_penceresi.py  "Arıza bildir" penceresi (GTK3, ayrı süreç; kullanıcı yetkisiyle); gonder() servise
+                `merhaba arayuz=komut` + `ariza` yollar, `ariza_sonuc` bekler
   ekran.py      oturumda çalışan kilit/duyuru/kapatma/acil penceresi (GTK3), üst bantta logo ve okul adı;
                 program kilidinde "Teneffüs · Tahta 10:40'ta açılır." satırı (saat_eki sunucudakiyle aynı);
                 sınav sayfaları: sinav-giris, sinav, gozetmen-kod, gozetmen-menu, gozetmen-yoklama;
                 yoklama sayfaları: yoklama-pin, yoklama-liste, yoklama-onay, yoklama-ileti; kilitte "Yoklama al"
-  __main__.py   komut satırı; `tahta-ajan yoklama` ("Yoklama Al" kısayolu) servise yoklama_ac yollar
-  ayar.py       yapılandırma, varsayılan tahta paleti, logonun servis tarafında saklanması
+  __main__.py   komut satırı; `tahta-ajan yoklama` ("Yoklama Al" kısayolu) servise yoklama_ac yollar;
+                `tahta-ajan ariza` (pencere), `tahta-ajan sunucu ADRES` (parmak izi tutarsa yazar)
+  ayar.py       yapılandırma, varsayılan tahta paleti, logonun servis tarafında saklanması, adres doğrulama/sırası
   sistem.py     işletim sistemine dokunan HER ŞEY (yeni platform = bu dosya)
   tani.py       saha tanılaması (denetim listesi)
 packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
@@ -158,6 +177,23 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
    ekranlarına ve "ekran bağlı" sayımına katmaz. Ekran yardımcısı da bağlanır bağlanmaz `merhaba` yollar
    (servis ilk satırı 3 sn bekler; gelmezse eski davranışla ekran sayar).
 
+21. **Yedek parolası sunucuda saklanmaz;** yalnız X25519 açık anahtarı (`ayar.yedek`) durur. Parola
+   belirlenmeden otomatik yedek alınmaz (pano uyarır). Geri yükleme yalnız 127.0.0.1'den ve yöneticiyle
+   (ilk kurulumda oturumsuz, yine yalnız yerelden); önce denetlenir, onaylanınca program yeniden
+   açılırken uygulanır, eski dosyalar `geri-yukleme-oncesi/`'ne taşınır. KVKK: elle yedekler de saklama
+   gününden eskiyince, onaysız bekleyen geri yükleme 24 saatte, geri yükleme öncesi kopya (yalnız en
+   yenisi) saklama gününde silinir. `*.tkyedek` depoya girmez.
+22. **Sunucu adres listesi durumdur** (`ayar.sunucu_adresleri`, boşsa hiç gönderilmez; ajan boş ya da
+   eksik listeyle kendi listesini silmez). Adres root yetkili kur.sh'e yazıldığı için ana makine adı
+   yalnız geçerli IP ya da `[a-z0-9.-]` DNS adı olabilir (sunucu `adresler.dogrula_tek`, ajan
+   `ayar.adres_dogrula`; `paket.kurulum_betigi` ayrıca denetler). Ajan bir adrese art arda 3 BAĞLANTI hatasında (parmak izi
+   dahil; HTTP 401/403/5xx değil) sıradakine geçer, ulaştığı adresi `ajan.json`'da birincil yapar.
+   Parmak izi her adreste denetlendiği için yanlış adrese veri gitmez. Tarama/yayınla keşif yoktur.
+23. **Envanter cihaz verisidir; arıza metni tahtada gösterilmez.** Envanter yalnız sunucu `envanter_iste`
+   deyince (ya da `envanter` komutunda) gider; hesap adı, ev dizini, makine adı, açık kalma süresi girmez.
+   Tahtadan arıza yalnız hesap SINIFIYLA gelir; açıklama 300 karakter, T.C. no içeriyorsa sunucu metni
+   kaydetmez. Arıza kuyruğu tahtada en çok 10 öğe / 7 gün, saatte 3 bildirim. Arıza kaydı silinmez.
+
 ## Bilinen tuzaklar
 
 - **GtkButton.set_label etiketi yeniden kurar:** ortalama (`set_justify`) ve kısaltma kaybolur;
@@ -224,6 +260,13 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
   denemesinde paketi yeniden indirmek için deneme sunucusu yeniden başlatılır.
 - **Deneme sunucusunda giriş hız sınırı** (adres başına 5 dk'da 10): betik her adımda yeniden giriş
   yapmasın; oturum çerezini saklayıp yeniden kullansın.
+- **Arıza penceresinin "iletildi" iletisi sunucunun `ariza_alindi` yanıtına bağlıdır** (servis en çok
+  5 sn bekler); gelmezse "tahtada bekletiliyor" der ve kayıt kuyrukta kalır. Docker'da ilk bağlantı
+  uzun bekleme (25 sn) sürdüğü için adres listesi ve onay ancak bir tur sonra iner (16.11.2026).
+- **Ajan döngüsü `_tur()` olarak ayrıldı:** testler ağı sahte `Istemci` ile verip turları tek tek
+  çalıştırır (`tests/test_ajan_altyapi.py`); `_dongu` yalnız bekleme ekler.
+- **Şablon makro bağımsız değişkeninin adı `on…` ile başlamaz** (`onek=` gibi): CSP testi
+  ` on[a-z]+=` desenini satır içi olay işleyicisi sayar (16.11.2026).
 - **Deneme betiklerinde saat:** Git Bash'te `TZ=Europe/Istanbul date` UTC verir; saati Python ile hesapla.
 - **İlk kurulum yalnız 127.0.0.1'den yapılır;** ağdaki biri yönetici hesabını kapamasın.
 - **Docker'da deneme:** `debian:12` + `python3-gi gir1.2-gtk-3.0 xvfb openbox imagemagick`;
