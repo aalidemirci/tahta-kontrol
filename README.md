@@ -3,9 +3,10 @@
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.8.0, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
-> gerçek bir Pardus ETAP tahtasında henüz denenmedi. Okul genelinde kullanmadan
-> önce tek tahtada deneyin (`docs/saha-denemesi.md`).
+> **Durum: 0.12.0, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
+> gerçek bir Pardus ETAP tahtasında ilk deneme yapıldı (0.8.0; bulgular 0.9.0'da
+> giderildi), sonraki sürümler gerçek tahtada henüz denenmedi. Okul genelinde
+> kullanmadan önce tek tahtada deneyin (`docs/saha-denemesi.md`).
 
 ## Ne yapar
 
@@ -159,8 +160,7 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
   çalıştırır ve çıktıyı yapıştırır). Derslik, sınıf ve ders saati eşlemesi hatırlanır; önizleme
   eklenecek, silinecek ve değişecek ders saatlerini tahta tahta gösterir. Öğretmen ve ders adı
   okunmaz, saklanmaz. Her içe aktarmadan önce bütün derslik programı saklanır; son 10 sürüm
-  "Önceki programlar"dan geri yüklenir. e-Okul'un ders programı çıktısı, biçimi doğrulanamadığı için
-  okunmaz (yapay zekâ yolu ya da şablonla aktarılır).
+  "Önceki programlar"dan geri yüklenir.
 
 0.11.0 ile:
 
@@ -171,6 +171,14 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
   yalnız köşede küçük bir bildirim çıkar; yoklama ve kilit açma dokunuşla başlar. İdare anahtarlarında
   PIN de sorulur (Ayarlar'dan değiştirilir). Kaybolan anahtar panelden hemen iptal edilir. Sunucuya
   ulaşılamayan tahtada ve sınav ekranında çalışmaz.
+
+0.12.0 ile:
+
+- **e-Okul'dan ders programı:** sihirbaz e-Okul'un "Haftalık Ders Programları" raporunu (Excel olarak
+  kaydedilmiş .XLS) okur. Raporda şube adı olmadığı için şubeleri siz eşlersiniz (PDF'teki şube sırasını
+  yapıştırabilirsiniz); her şubenin dersi şubenin kendi tahtasına yazılır, ikili eğitimde aynı tahtaya
+  sabahçı ve öğlenci şube düşer. Zil saatleri tanımlı değilse ya da uymuyorsa zil çizelgesi de rapordaki
+  saatlerden oluşturulabilir. Öğretmen adları okunmaz ve saklanmaz; Tahta Kontrol e-Okul'a bağlanmaz.
 
 ## Çalıştırma (geliştirme)
 

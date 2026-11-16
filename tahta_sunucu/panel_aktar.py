@@ -1,9 +1,11 @@
-"""Panel: ders programını içe aktarma sihirbazı ve önceki programlar (0.10.0).
+"""Panel: ders programını içe aktarma sihirbazı ve önceki programlar (0.10.0; 0.12.0: e-Okul raporu kaynağı).
 
 Yalnız yönetici (derslik programını yalnız yönetici değiştirir; idarecinin denemesi işlem kaydına düşer).
 Yüklenen dosya diske yazılmaz (`bellekte_form`), saklanmaz; önizlemede yalnız SHA-256 özeti, ara biçim (sınıf,
 derslik, gün, ders saati) ve eşleme seçimleri durur (`ayar.program_onizleme`, tur='aktar', 30 dk, kullanıcıya
-bağlı belirteç). Öğretmen ve ders adı hiçbir aşamada okunmaz. İşlem kaydına yalnız biçim ve sayılar yazılır.
+bağlı belirteç). Öğretmen ve ders adı hiçbir aşamada okunmaz; tek istisna e-Okul raporunda eşleme ipucu olarak
+blok başına en çok üç ders adıdır (öğretmen adı asla; önizlemeyle birlikte silinir). İşlem kaydına yalnız biçim ve
+sayılar yazılır.
 
 Şablon sözleşmesi: `aktar_baglami` belgesi (program_aktar.html) ve `gecmis` (program_gecmis.html).
 """
@@ -14,7 +16,8 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, Response
 from starlette.datastructures import UploadFile
 
-from . import program, program_aktar, program_is, vt
+from . import eokul_program, metin, program, program_aktar, program_is, vt
+from .panel_cizelge import Etki, devre_sayilari
 from .panel_program import bellekte_form, govde_uzunlugu, onizleme_al, onizleme_yaz, simdi_dt, yetki_reddi
 
 KVKK_BANDI = (
@@ -41,6 +44,20 @@ TABLO_TARIFI = (
     "Kontrol onları atar; sube;gun;ders sütunlarını içeren ilk satır başlık sayılır."
 )
 ASC_GOVDE_PAYI = 256 * 1024
+EOKUL_ADIMLARI = [
+    f"e-Okul'da rapor listesinden “{eokul_program.RAPOR_ADI}” raporunu açın; bütün şubeleri seçin.",
+    "Raporu Excel olarak kaydedin (.XLS). Dosyayı açıp değiştirmeniz gerekmez.",
+    "Aynı raporu PDF olarak da açın: şube adı yalnız PDF'te, her sayfanın başında (“9. Sınıf / A Şubesi”) yazar. "
+    "Şube sırasını eşleme adımında oradan doğrulayacaksınız.",
+    ".XLS dosyasını aşağıdan yükleyin.",
+]
+EOKUL_NOTU = (
+    "Tahta Kontrol e-Okul'a bağlanmaz; yalnız yüklediğiniz dosyayı okur. Raporda şube adı ve derslik olmadığı için "
+    "eşleme adımında her bloğun şubesini siz onaylarsınız; her şubenin dersi şubenin kendi tahtasına yazılır. "
+    "Öğretmen adları okunmaz ve saklanmaz; eşleme ekranında blokları tanımanız için yalnız birkaç ders adı geçici "
+    "olarak gösterilir."
+)
+EOKUL_GOVDE_PAYI = 64 * 1024
 
 
 def kaydet(uygulama, y) -> None:
@@ -84,8 +101,12 @@ def kaydet(uygulama, y) -> None:
             "onizleme": None,
         }
         kayit = vt.ayar_al(b, "program_onizleme")
+        baglam["eokul_adimlari"] = EOKUL_ADIMLARI
+        baglam["eokul_notu"] = EOKUL_NOTU
+        baglam["sinirlar"]["eokul_mb"] = eokul_program.EN_COK_BAYT // (1024 * 1024)
         if (isinstance(kayit, dict) and kayit.get("tur") == "aktar" and kayit.get("kullanici") == k["ad"]
-                and int(kayit.get("bitis") or 0) > vt.simdi() and saatler):  # fmt: skip
+                and int(kayit.get("bitis") or 0) > vt.simdi()
+                and (saatler or (kayit.get("veri") or {}).get("kaynak") == "eokul")):  # fmt: skip
             veri = kayit["veri"]
             sonuc = program_aktar.coz(b, veri)
             baglam["onizleme"] = {
@@ -117,6 +138,11 @@ def kaydet(uygulama, y) -> None:
                 "yz_bandi": YZ_ONIZLEME_BANDI if veri["bicim"] in ("yz", "yz_dosya") else "",
                 "esleme_gerekli": sonuc["esleme_gerekli"],
                 "asc_deneme": veri["kaynak"] == "asc",
+                "eokul": sonuc["eokul"],
+                "sube_secenekleri": eokul_program.sistem_subeleri(b) if veri["kaynak"] == "eokul" else [],
+                "sube_listesi": ", ".join((veri.get("secimler") or {}).get("sube_listesi") or []),
+                "zil_etkisi": (eokul_program.zil_etkisi(b, sonuc["eokul"]["zil_onerisi"])
+                               if sonuc["eokul"] and sonuc["eokul"]["zil_onerisi"] else None),  # fmt: skip
             }
             if adim == "kaynak":
                 baglam["adim"] = "esleme" if sonuc["esleme_gerekli"] else "onizleme"
@@ -124,23 +150,27 @@ def kaydet(uygulama, y) -> None:
             baglam["adim"] = "kaynak"
         return baglam
 
-    def onizle_ve_yonlendir(istek, k, kaynak: str, bicim: str, bayt_ozeti: str, okunan: dict, asc=None):
+    def onizle_ve_yonlendir(istek, k, kaynak: str, bicim: str, bayt_ozeti: str, okunan: dict, asc=None, veri=None):
         try:
-            veri = program_aktar.onizleme_verisi(kaynak, bicim, bayt_ozeti, okunan, asc)
+            veri = veri or program_aktar.onizleme_verisi(kaynak, bicim, bayt_ozeti, okunan, asc)
         except ValueError as hata:
             return y.yonlendir("/program/aktar", str(hata), hata=True)
         with vt.islem() as b:
             onizleme_yaz(b, "aktar", veri, k)
             sonuc = program_aktar.coz(b, veri)
             eslesme = sonuc["cozum"]["eslesme"]["derslik"]
-            vt.kayit_dus(
-                b, k["ad"], "Ders programı önizlendi",
-                f"{program_aktar.BICIM_ADI.get(bicim, bicim)} · "
-                + (f"{okunan.get('kart_sayisi')} kart" if kaynak == "asc" else f"{okunan.get('satir_sayisi')} satır")
-                + f" · {sum(1 for e in eslesme if e['durum'] != 'eslesmedi')} derslik eşleşti, "
-                f"{sum(1 for e in eslesme if e['durum'] == 'eslesmedi')} eşleşmedi · {sonuc['hata_sayisi']} hatalı satır",
-                y.istemci_ip(istek),
-            )  # fmt: skip
+            if kaynak == "eokul":
+                e = sonuc["eokul"]
+                ayrinti = (f"{program_aktar.BICIM_ADI['eokul']} · {e['sayilar']['blok']} blok ("
+                           + ", ".join(f"{ad} {n}" for ad, n in e["devre_dagilimi"])
+                           + f") · {veri['eokul']['dolu_sayisi']} dolu, {veri['eokul']['bos_sayisi']} boş ders saati · "
+                           f"{sonuc['hata_sayisi']} hatalı satır")  # fmt: skip
+            else:
+                ayrinti = (f"{program_aktar.BICIM_ADI.get(bicim, bicim)} · "
+                           + (f"{okunan.get('kart_sayisi')} kart" if kaynak == "asc" else f"{okunan.get('satir_sayisi')} satır")
+                           + f" · {sum(1 for e in eslesme if e['durum'] != 'eslesmedi')} derslik eşleşti, "
+                           f"{sum(1 for e in eslesme if e['durum'] == 'eslesmedi')} eşleşmedi · {sonuc['hata_sayisi']} hatalı satır")  # fmt: skip
+            vt.kayit_dus(b, k["ad"], "Ders programı önizlendi", ayrinti, y.istemci_ip(istek))
         return y.yonlendir("/program/aktar?adim=" + ("esleme" if sonuc["esleme_gerekli"] else "onizleme"))
 
     # ---- sihirbaz sayfası --------------------------------------------------------------------------------
@@ -262,7 +292,119 @@ def kaydet(uygulama, y) -> None:
         okunan["uyarilar"] = uyarilar + okunan["uyarilar"]
         return onizle_ve_yonlendir(istek, k, "tablo", bicim, program_aktar.ozet(kaynak_bayt), okunan)
 
+    # ---- kaynak: e-Okul "Haftalık Ders Programları" raporu (0.12.0) -----------------------------------------
+    @uygulama.post("/program/aktar/eokul")
+    async def aktar_eokul(istek: Request):
+        k = y.kullanici(istek)
+        engel = yetkisiz(istek, k, "Ders programı e-Okul raporu yükleme")
+        if engel:
+            return engel
+        donus = "/program/aktar"
+        sinir = eokul_program.EN_COK_BAYT + EOKUL_GOVDE_PAYI
+        uzunluk = govde_uzunlugu(istek)
+        if uzunluk is None:
+            return y.yonlendir(donus, "Dosya okunamadı.", hata=True)
+        if uzunluk > sinir:
+            return y.yonlendir(donus, f"Dosya en çok {eokul_program.EN_COK_BAYT // (1024 * 1024)} MB olabilir.", hata=True)
+        try:
+            form = await bellekte_form(istek, sinir)  # dosya diske yazılmaz
+        except Exception:
+            return y.yonlendir(donus, "Dosya okunamadı.", hata=True)
+        try:
+            dosya = form.get("dosya")
+            if not isinstance(dosya, UploadFile) or not dosya.filename:
+                return y.yonlendir(donus, "e-Okul raporu (.XLS) seçilmedi.", hata=True)
+            bayt = await dosya.read(eokul_program.EN_COK_BAYT + 1)
+        finally:
+            await form.close()
+        try:
+            rapor = eokul_program.rapor_oku(eokul_program.matris_oku(bayt))
+        except ValueError as hata:
+            if str(hata) == eokul_program.TC_RET:
+                with vt.islem() as b:
+                    vt.kayit_dus(b, k["ad"], "Ders programı reddedildi", "e-Okul raporu · T.C. kimlik numarasına benzeyen değer",
+                                 y.istemci_ip(istek))  # fmt: skip
+            return y.yonlendir(donus, str(hata), hata=True)
+        veri = eokul_program.onizleme_verisi(program_aktar.ozet(bayt), rapor)
+        return onizle_ve_yonlendir(istek, k, "eokul", "eokul", veri["ozet"]["sha256"], {}, veri=veri)
+
+    @uygulama.post("/program/aktar/eokul/zil")
+    async def aktar_eokul_zil(istek: Request):
+        """Rapordaki saatlerden zil çizelgesi oluşturur (yeni çizelge + haftalık düzende rapordaki günler)."""
+        k = y.kullanici(istek)
+        engel = yetkisiz(istek, k, "Zil çizelgesini e-Okul raporundan oluşturma")
+        if engel:
+            return engel
+        form = await istek.form(max_files=0, max_fields=5)
+        donus = "/program/aktar?adim=esleme"
+        with vt.islem() as b:
+            kayit = onizleme_al(b, "aktar", str(form.get("onizleme", "")), k)
+            if not kayit or kayit["veri"].get("kaynak") != "eokul":
+                return y.yonlendir("/program/aktar", "Önizlemenin süresi geçmiş ya da başka bir kullanıcıya ait. Dosyayı yeniden yükleyin.", hata=True)
+            oneri = program_aktar.coz(b, kayit["veri"])["eokul"]["zil_onerisi"]
+            if not oneri or oneri["hatalar"]:
+                return y.yonlendir(donus, "Bu rapordan zil çizelgesi oluşturulamıyor; zil saatlerini elle girin.", hata=True)
+            if form.get("onay") != "1":
+                return y.yonlendir(donus, "Zil çizelgesi oluşturmak için onay kutusunu işaretleyin.", hata=True)
+            etki = Etki(b)
+            _kimlik, ad = eokul_program.zil_yaz(b, oneri, k["ad"])
+            iletiler = etki.bitir(b, k)
+            vt.kayit_dus(b, k["ad"], "Zil çizelgesi oluşturuldu",
+                         f"{ad} · {devre_sayilari(oneri['dersler'])} · e-Okul raporundan · {oneri['gun_metni']}",
+                         y.istemci_ip(istek))  # fmt: skip
+        if etki.bugun_degisti:
+            isleyici = getattr(uygulama.state, "program_isleyici", None)
+            if isleyici is not None:
+                isleyici.bugun_degisti()
+        y.uyandir_hepsi(etki.uyandir)
+        return y.yonlendir(donus, " ".join([f"“{ad}” zil çizelgesi oluşturuldu ve {oneri['gun_metni']} günlerine atandı.",
+                                            *iletiler]))  # fmt: skip
+
     # ---- eşleme ------------------------------------------------------------------------------------------------
+    def eokul_esle(istek, k, b, kayit: dict, veri: dict, sonuc: dict, form):
+        """e-Okul: yapıştırılan şube listesi (değiştiyse uygulanır, blok seçimleri sıfırlanır, eşlemeye dönülür) ve
+        b_<blok no> alanları (şube; boş = atla). Yönlendirme gerekiyorsa yanıt, yoksa None (genel eşleme sürer)."""
+        secimler = veri["secimler"]
+        ham_liste = form.get("sube_listesi")
+        if isinstance(ham_liste, str):
+            try:
+                liste, uyarilar = eokul_program.sube_listesi_coz(ham_liste)
+            except ValueError as hata:
+                return y.yonlendir("/program/aktar?adim=esleme", str(hata), hata=True)
+            if liste != (secimler.get("sube_listesi") or []):
+                secimler["sube_listesi"] = liste
+                secimler["blok"] = {}
+                onizleme_guncelle(b, kayit, veri)
+                vt.kayit_dus(b, k["ad"], "Ders programı eşlemesi değişti", f"e-Okul şube listesi: {len(liste)} şube",
+                             y.istemci_ip(istek))  # fmt: skip
+                bloklar = len(veri["eokul"]["bloklar"])
+                ileti = (f"Şube listesi uygulandı ({len(liste)} şube, {bloklar} blok). Blokları PDF'teki sırayla karşılaştırın."
+                         if liste else "Şube listesi temizlendi.")  # fmt: skip
+                return y.yonlendir("/program/aktar?adim=esleme", " ".join([ileti, *uyarilar]))
+        anlasilmayan = []
+        degisen = 0
+        for satir in sonuc["eokul"]["bloklar"]:
+            gelen = form.get(f"b_{satir['no']}")
+            if gelen is None:
+                continue
+            gelen = str(gelen).strip()[:30]
+            kanonik = metin.sube_duzelt(gelen) if gelen else ""
+            if kanonik is None:
+                anlasilmayan.append(str(satir["no"]))
+                continue
+            if kanonik == satir["deger"] and satir["durum"] != "secildi":
+                continue
+            secimler.setdefault("blok", {})[str(satir["no"])] = kanonik
+            degisen += 1
+        if degisen:
+            onizleme_guncelle(b, kayit, veri)
+            vt.kayit_dus(b, k["ad"], "Ders programı eşlemesi değişti", f"{degisen} blok şubesi", y.istemci_ip(istek))
+        if anlasilmayan:
+            return y.yonlendir("/program/aktar?adim=esleme",
+                               f"Şube anlaşılamadı ({', '.join(anlasilmayan[:10])}. blok); 9/A biçiminde yazın ya da boş bırakın.",
+                               hata=True)  # fmt: skip
+        return None
+
     @uygulama.post("/program/aktar/esle")
     async def aktar_esle(istek: Request):
         k = y.kullanici(istek)
@@ -278,6 +420,10 @@ def kaydet(uygulama, y) -> None:
             sonuc = program_aktar.coz(b, veri)
             secimler = veri.setdefault("secimler", {})
             degisen = 0
+            if veri["kaynak"] == "eokul":
+                yanit = eokul_esle(istek, k, b, kayit, veri, sonuc, form)
+                if yanit is not None:
+                    return yanit
             for onek, tur in (("d", "derslik"), ("s", "sinif"), ("p", "saat"), ("t", "sube")):
                 for n, e in enumerate(sonuc["cozum"]["eslesme"][tur]):
                     gelen = form.get(f"{onek}_{n}")
@@ -322,7 +468,7 @@ def kaydet(uygulama, y) -> None:
                                    "Satırların çoğu okunamadı; dosyayı kontrol edin ya da onay kutusunu işaretleyin.", hata=True)  # fmt: skip
             izinli = {t["id"] for t in sonuc["fark"]["dokunulmayan_programli"]}
             temizle = [int(t) for t in form.getlist("temizle_tahta") if str(t).isdigit() and int(t) in izinli]
-            kaynak = "asc" if veri["kaynak"] == "asc" else "tablo"
+            kaynak = veri["kaynak"] if veri["kaynak"] in ("asc", "eokul") else "tablo"
             sonuc_ = program_aktar.uygula(b, sonuc["cozum"], k["ad"], veri["bicim"], kaynak, temizle)
             vt.ayar_yaz(b, "program_onizleme", None)
             t = sonuc["fark"]["toplam"]

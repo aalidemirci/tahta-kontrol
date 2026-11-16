@@ -1,5 +1,6 @@
 """Ders programını içe aktarma sihirbazı (0.10.0): aSc Timetables XML, Tahta Kontrol şablonu (CSV/XLSX/XLS)
-ve yapay zekâ çıktısı (yapıştırılan CSV). e-Okul kaynağı YOKTUR (biçimi doğrulanamadı; şartname §1.2).
+ve yapay zekâ çıktısı (yapıştırılan CSV). 0.12.0: e-Okul "Haftalık Ders Programları" raporu (OOK11002_R01, .XLS;
+ayrıştırma ve şube/devre eşlemesi `eokul_program.py`'de, sonrası buradaki ortak yol).
 
 Yalnız derslik programı (`tahta_ders`) değişir; zil saatleri değişmez. Bütün kaynaklar aynı ara biçime iner:
 
@@ -25,7 +26,7 @@ import json
 import re
 from datetime import datetime
 
-from . import eokul, guvenli_xml, guvenlik, metin, program, vt, xlsx, zamanlama
+from . import eokul, eokul_program, guvenli_xml, guvenlik, metin, program, vt, xlsx, zamanlama
 
 ASC_EN_COK_BAYT = 10 * 1024 * 1024
 ASC_EN_COK_OGE = 300_000
@@ -45,7 +46,8 @@ SAAT_TOLERANS_DK = 5
 DENEME_SINIRI = 10
 
 BICIM_ADI = {"asc": "aSc Timetables XML", "csv": "CSV", "xlsx": "Excel (.xlsx)", "xls": "Excel 97-2003 (.xls)",
-             "yz": "Yapay zekâ çıktısı (yapıştırma)", "yz_dosya": "Yapay zekâ çıktısı (dosya)", "": "—"}  # fmt: skip
+             "yz": "Yapay zekâ çıktısı (yapıştırma)", "yz_dosya": "Yapay zekâ çıktısı (dosya)",
+             "eokul": "e-Okul raporu (OOK11002_R01)", "": "—"}  # fmt: skip
 NEDEN_ADI = {"aktarim": "İçe aktarma öncesi", "geri_yukleme": "Geri yükleme öncesi"}
 ASC_DEGIL = "Bu bir aSc Timetables XML dosyası değil."
 ASC_OKUNAMADI = "aSc XML dosyası okunamadı; aSc'den yeniden dışa aktarıp deneyin."
@@ -358,7 +360,7 @@ def tablo_matrisi(bayt: bytes) -> tuple[str, list[list[str]]]:
         raise ValueError("Dosya boş.")
     if bayt[:8] == OLE2:
         try:
-            satirlar = eokul.xls_oku(bayt)
+            satirlar = eokul.xls_oku(bayt, asiri_ileti="Dosya beklenenden büyük; programı devre devre ya da ayrı dosyalarla yükleyin.")
         except eokul.OkumaHatasi as hata:
             raise ValueError(str(hata)) from hata
         bicim = "xls"
@@ -675,7 +677,8 @@ def esle(veri: dict, saatler: list[tuple], tahtalar: list[dict], hatirlanan: dic
         no = int(no_s)
         gun = int(y["g"])
         if (gun, devre, no) not in nolar:
-            hatalar.append(f"{y['n']}. kart: {program.GUN_ADLARI[gun]} {no}. ders zil çizelgesinde yok.")
+            hatalar.append(f"{y['n']}. {'blok' if kaynak == 'eokul' else 'kart'}: {program.GUN_ADLARI[gun]} {no}. ders "
+                           "zil çizelgesinde yok.")
             continue
         subeler = sorted({sinif_sonuc.get(s) or "" for s in y["s"]} - {""}, key=sube_sira_anahtari)
         sube = subeler[0] if subeler else ""
@@ -692,18 +695,21 @@ def esle(veri: dict, saatler: list[tuple], tahtalar: list[dict], hatirlanan: dic
                     dersliksiz.append(f"{sinif_adi} · {program.GUN_ADLARI[gun]} {devre_adlari.get(devre, devre)} {no}. ders")
                 continue
             if sube not in sube_ihtiyaci:
+                # Öncelik: bu oturumda seçilen > tahta.subeler'de TEK tahta (güncel gerçek) > hatırlanan > yok.
+                # Hatırlanan, tahta.subeler'in önüne geçmez: şube başka dersliğe taşınınca eski tahtaya yazılmasın.
                 secim = sec("sube", sube)
+                adaylar = subeye.get(sube) or []
                 if secim is not None:
                     sube_ihtiyaci[sube] = [int(secim)] if str(secim).isdigit() and int(secim) in aktif else []
                     durum = "secildi"
+                elif len(adaylar) == 1:
+                    sube_ihtiyaci[sube], durum = adaylar, "otomatik"
                 elif ("sube", sube) in hatirlanan:
                     h = hatirlanan[("sube", sube)]
                     sube_ihtiyaci[sube] = [h["tahta_id"]] if h["tahta_id"] in aktif else []
                     durum = "hatirlanan"
                 else:
-                    adaylar = subeye.get(sube) or []
-                    sube_ihtiyaci[sube] = adaylar if len(adaylar) == 1 else None
-                    durum = "otomatik" if len(adaylar) == 1 else "eslesmedi"
+                    sube_ihtiyaci[sube], durum = None, "eslesmedi"
                 deger = sube_ihtiyaci[sube]
                 eslesme["sube"].append({"anahtar": sube, "ad": sube, "durum": durum, "deger": str(deger[0]) if deger else ""})
             idler = sube_ihtiyaci[sube]
@@ -871,6 +877,8 @@ def eslesmeleri_yaz(b, kaynak: str, cozum: dict) -> int:
         for e in liste:
             if e["durum"] == "eslesmedi" or e.get("coklu"):
                 continue
+            if tur == "sube" and e["durum"] == "otomatik":
+                continue  # tahta.subeler'den gelen eşleme hatırlanmaz; kaynak her seferinde tahta.subeler'dir
             if tur in ("derslik", "sube"):
                 tahta_id, deger = (int(e["deger"]) if str(e["deger"]).isdigit() else None), ""
             else:
@@ -1103,7 +1111,15 @@ def coz(b, veri: dict) -> dict:
     """Önizleme verisinden güncel çözüm + fark + gösterim alanları (her istekte yeniden hesaplanır)."""
     saatler = program.ders_saatleri_oku(b)
     secimler = veri.get("secimler") or {}
-    if veri["kaynak"] == "asc":
+    hatirlanan = hatirlanan_oku(b, veri["kaynak"] if veri["kaynak"] in ("asc", "eokul") else "tablo")
+    eokul_ = None
+    if veri["kaynak"] == "eokul":
+        eokul_ = eokul_program.hazirla(veri["eokul"], saatler, secimler, hatirlanan, eokul_program.sistem_subeleri(b))
+        girdi = eokul_["girdi"]
+        kaynak_hatalari, kaynak_hata_sayisi = veri["kaynak_hatalari"], veri["kaynak_hata_sayisi"]
+        kaynak_uyarilari = veri["kaynak_uyarilari"] + eokul_["uyarilar"]
+        donemler, secili_donem = [], None
+    elif veri["kaynak"] == "asc":
         okunan = asc_ara(veri["asc"], secimler)
         girdi = {"kaynak": "asc", "ara": okunan["ara"], "bilgi": okunan["bilgi"]}
         kaynak_hatalari, kaynak_hata_sayisi = okunan["hatalar"], okunan["hata_sayisi"]
@@ -1114,9 +1130,11 @@ def coz(b, veri: dict) -> dict:
         kaynak_hatalari, kaynak_hata_sayisi = veri["kaynak_hatalari"], veri["kaynak_hata_sayisi"]
         kaynak_uyarilari = veri["kaynak_uyarilari"]
         donemler, secili_donem = [], None
-    hatirlanan = hatirlanan_oku(b, "asc" if veri["kaynak"] == "asc" else "tablo")
     tahtalar = tahta_listesi(b)
     cozum = esle(girdi, saatler, tahtalar, hatirlanan, secimler)
+    if eokul_ is not None:  # onayda hatırlanacak blok → şube eşlemesi (eslesmeleri_yaz) ve blok sayısı
+        cozum["eslesme"]["blok"] = eokul_["bloklar"]
+        cozum["eslesme"]["blok_sayisi"] = [{"anahtar": "-", "deger": str(len(eokul_["bloklar"])), "durum": "otomatik"}]
     f = fark(b, cozum, saatler)
     hata_sayisi = kaynak_hata_sayisi + cozum["hata_sayisi"]
     toplam = max(1, cozum["yerlesim_sayisi"] + kaynak_hata_sayisi)
@@ -1134,7 +1152,8 @@ def coz(b, veri: dict) -> dict:
         "hata_sayisi": hata_sayisi,
         "uyarilar": kaynak_uyarilari + cozum["uyarilar"],
         "cok_hata": hata_sayisi > HATA_ORANI * toplam,
-        "onaylanabilir": f["toplam"]["tahta"] > 0 or bool(f["dokunulmayan_programli"] and cozum["kapsam"]),
+        "onaylanabilir": (f["toplam"]["tahta"] > 0 or bool(f["dokunulmayan_programli"] and cozum["kapsam"]))
+                         and not (eokul_ and eokul_["ciftler"]),  # fmt: skip
         "donemler": donemler,
         "secili_donem": secili_donem,
         "devre_sorusu": veri["kaynak"] == "asc" and len(devreler) > 1
@@ -1142,6 +1161,7 @@ def coz(b, veri: dict) -> dict:
         "devre_secenekleri": [(d, next(s[2] for s in saatler if s[1] == d)) for d in devreler],
         "saat_secenekleri": saat_secenekleri,
         "tahta_secenekleri": [(t["id"], t["ad"] + (f" · {t['derslik']}" if t["derslik"] else "")) for t in tahtalar],
-        "sube_sayilari": sube_sayilari(cozum) if veri["bicim"] in ("yz", "yz_dosya") else [],
-        "esleme_gerekli": veri["kaynak"] == "asc" or cozum["eslesmedi_sayisi"] > 0,
+        "sube_sayilari": sube_sayilari(cozum) if veri["bicim"] in ("yz", "yz_dosya", "eokul") else [],
+        "esleme_gerekli": veri["kaynak"] in ("asc", "eokul") or cozum["eslesmedi_sayisi"] > 0,
+        "eokul": eokul_,
     }

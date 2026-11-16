@@ -1,5 +1,5 @@
 ﻿; Tahta Kontrol sunucusu - Windows kurulum betiği (Inno Setup 6)
-; build.ps1 çağırır:  ISCC /DSurum=0.9.0 /DKaynak=...\dist\TahtaKontrol /DCikti=...\dist\cikti
+; build.ps1 çağırır:  ISCC /DSurum=0.12.0 /DKaynak=...\dist\TahtaKontrol /DCikti=...\dist\cikti
 ;
 ; 0.8.0'dan itibaren sunucu bir Windows hizmetidir: "TahtaKontrol", Yerel Hizmet
 ; (LocalService) hesabı, bilgisayar açılınca oturum açılmadan başlar. Veri

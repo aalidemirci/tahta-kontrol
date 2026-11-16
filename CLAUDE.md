@@ -6,7 +6,11 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.11.0, saha denemesi sürümü** (0.11.0: USB anahtar — bellekteki küçük anahtar dosyasıyla
+- Durum: **0.12.0, saha denemesi sürümü** (0.12.0: ders programı sihirbazına beşinci kaynak — e-Okul
+  "Haftalık Ders Programları" raporu (OOK11002_R01, .XLS): şube blokları ayrıştırılır, zil çizelgesi yoksa ya
+  da uymuyorsa rapordaki saatlerden oluşturulur, şube eşlemesi zorunlu adımdır (raporda şube adı yok), her
+  şubenin dersi şubenin tahtasına yazılır; yalnız sunucu, ajan değişmedi; bir okulun gerçek raporuyla yerel
+  uçtan uca denendi; tasarım §12.4; 0.11.0: USB anahtar — bellekteki küçük anahtar dosyasıyla
   idareciler her tahtada yoklama alır, isteyen öğretmenlere de anahtar üretilir, ayar açıksa anahtar kilidi
   açar; takılınca yalnız küçük bildirim, yoklama/kilit dokunuşla; varsayılan kapalı; yalnız Debian 12 kabında
   loop bellekle (USB benzetimi) denendi, gerçek USB bellek ve ETAP'ta denenmedi; tasarım §14.1;
@@ -67,7 +71,8 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   panel_cizelge.py  zil düzenleyici (0.10.0): /program/cizelge[/{id}[/hizli|kopyala|sil|csv]], /program/haftalik,
                     /program/tarihli[/{id}/sil], /program/gun (günü önizle); Etki: bugünkü plan değişirse açma
   panel_aktar.py    ders programı içe aktarma sihirbazı (0.10.0): /program/aktar[/asc|tablo|esle|onayla|sablon.csv|
-                    mevcut.csv|istem.txt], /program/gecmis[/{id}/geri-yukle]; eski /program/derslik/yukle|onayla → 303
+                    mevcut.csv|istem.txt], /program/gecmis[/{id}/geri-yukle]; eski /program/derslik/yukle|onayla → 303;
+                    0.12.0: /program/aktar/eokul (rapor yükleme), /program/aktar/eokul/zil (rapordan zil çizelgesi)
   panel_sinav.py    /sinavlar, /sinav/{id} (künye, eşleştirme, durum, uzatma, kip kaldırma, kodlar, şube
                     duyurusu, salon yoklaması, icmal), /api/sinav/{id}, /ajan/sinav/{kod,yoklama}
   panel_yoklama.py  /yoklama (günlük ızgara, kayıt/düzeltme, panelden gir, icmal + .csv, e-Okul işareti),
@@ -104,6 +109,9 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 TÜRETİLMİŞ tablodur, elle yazılmaz), tarihli_kural, numara_kaymasi, okulzili_yaz, ilk_tasima, CSV
   program_aktar.py  ders programı içe aktarma (0.10.0): asc_oku (izinli öznitelikler; öğretmen/ders adı okunmaz),
                 tablo_oku (v2, v1 uyumlu), yz_metni_temizle, esle, fark, uygula, program_surum (10), geri_yukle
+  eokul_program.py  e-Okul "Haftalık Ders Programları" (0.12.0, saf): matris_oku, rapor_oku (bloklar; yalnız dolu/boş
+                + blok başına ≤3 ders adı ipucu), devre_gruplari/devre_esle (±5 dk), zil_onerisi/zil_yaz,
+                sube_listesi_coz, blok_subeleri (öneri sırası), hazirla (→ program_aktar.esle girdisi)
   maske.py      tek maskeleme tanımı: kalabalik("Ah*** Yı****"), no_son("47"), sinif_etiketi("Ayşe Y.")
   program.py    zil saatleri, Okul Zili okuma, takvim (plan_hesapla yalnız burada; dışarıdan gun_plani(b, tarih)),
                 kilit aralıkları (saf); derslik CSV okuması program_aktar.tablo_oku'ya devredilir;
@@ -298,6 +306,12 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    kendiliğinden tanınması işlem kaydına YAZILMAZ (konum geçmişi birikmesin; yalnız `son_kullanim`); kilit açma
    iletileri yalnız ekrandaki oturumun yardımcısından kabul edilir (`_etkin_oturumdan`). İdare anahtarının
    tahtadaki etiketi panel kullanıcı adını taşımaz (görünen ad tek kelimeyse ya da kullanıcı adıysa "İdare").
+
+30. **e-Okul raporunda öğretmen adı hiçbir yere girmez** (0.12.0; `docs/tasarim.md` §12.4). Hücreden yalnız
+   "dolu mu" alınır; eşleme ipucu yalnız iki satırlı hücrenin İLK satırıdır (ders adı), blok başına en çok 3,
+   yalnız önizleme kaydında durur. Tek satırlı hücreden ipucu almayı "kolaylık" için açma. Raporda şube adı
+   yoktur: şube eşlemesi zorunlu adımdır, aynı şube iki bloğa atanamaz. Gerçek rapor ve PDF'i depoya,
+   teste, belgeye girmez; testler uydurma matrisle (`tests/test_eokul_program.py`) yazılır.
 
 ## Bilinen tuzaklar
 

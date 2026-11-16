@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.10.0)
+# Saha denemesi kılavuzu (0.12.0)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -47,6 +47,7 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Zil düzenleyici (0.10.0): 0.9.0 veritabanının yükseltmede çizelgelere taşınması; yeni çizelge (tek ve ikili), hızlı oluştur (kaydetmeden taslak; kaydedilmemiş satırlar da gider), "Araya ekle"/"Ders ekle", silme işareti, hatalı saatte 422 + alan iletisi, numara kaymasında "Anladım, kaydet", haftalık düzen, tarihe özel çizelge (Sürüyor rozeti), günü önizle, kullanılmayan çizelgeyi onaylı silme, idareci salt okunur görünüm, 375 px dar ekran (yatay kaydırma yok), koyu tema | Deneme sunucusu (8797, ayrı veri klasörü, uydurma veri), Chromium | Çalıştı |
 | Ders programı içe aktarma (0.10.0): yapay zekâ çıktısı yapıştırma (açıklama ve kod bloğu atıldı), şube → tahta eşlemesi, önizleme (tahta başına +/−/~), onay, "Önceki programlar"; aSc XML ve geri yükleme yalnız testlerde (uydurma XML) | Deneme sunucusu (8797), Chromium; birim testleri | Çalıştı |
 | **Gerçek aSc Timetables XML dosyası**, okulun gerçek zil saatleriyle taşıma | — | **Denenmedi** (§3.9) |
+| e-Okul "Haftalık Ders Programları" raporu (0.12.0): kullanıcının verdiği gerçek .XLS (ikili eğitim) boş sistemde yüklendi; rapordan zil çizelgesi (Sabah 8 + Öğleden sonra 8 ders) onayla kuruldu; PDF başlık biçiminde yapıştırılan şube listesi blok sırasına oturdu; tahta yokken onay kapalı kaldı; uydurma tahtalar (bir kısmı sabahçı + öğlenci şube taşır) eklenince önizleme, onay, "Önceki programlar", ikinci yüklemede hatırlanan eşleme; sayfalarda, işlem kaydında ve veritabanında öğretmen adı yok | Geliştirme bilgisayarı, ayrı veri dizini, deneme sunucusu (8797), betikle (tarayıcı değil) | Çalıştı (deneme verisi silindi) |
 | **Gerçek ETAP tahtası** | — | İlk deneme 16.11.2026 (0.8.0): bulgular G1–G3, `docs/tasarim.md` §5.1 |
 | Kurulum dosyasının başka bir bilgisayara kurulması | — | Denenmedi |
 | Gerçek kapatma / yeniden başlatma / uzaktan açma | — | Denenmedi (kapta benzetim) |
@@ -319,7 +320,8 @@ saklayın (gerçek kullanıcı dosyası adlarını depoya koymayın; `saha/` git
 
 ### 3.8 Saha bulguları G1–G3 (0.9.0)
 
-Hazırlık: sunucuyu 0.9.0'a yükseltin; tahtalar ajanı kendiliğinden günceller. Ayarlar › Tahtadaki yüzer
+Hazırlık: sunucuyu 0.9.0'a yükseltin. Tahtalar ajanı kendiliğinden güncellemez: panoda tahtaları seçip
+“Ajanı güncelle” deyin (tahta sayfasında “Güncelleme var” rozeti kalkmalı). Ayarlar › Tahtadaki yüzer
 düğme açık (varsayılan), kilit kodu belirlenmiş olsun. Ajanın kapatma komutunu uygulamaması için ilk
 denemelerde benzetimi açın (§3.6.1 hazırlığı).
 
@@ -351,8 +353,8 @@ denemelerde benzetimi açın (§3.6.1 hazırlığı).
 ### 3.9 Zil düzenleyici ve ders programı içe aktarma (0.10.0)
 
 Hazırlık: sunucuyu 0.10.0'a yükseltmeden önce Yedekler'den şifreli yedek alın (göç öncesi kopya ayrıca
-`goc-oncesi` klasörüne kendiliğinden alınır). Ajan değişmedi; tahtalar sürüm numarası yüzünden güncellenir,
-davranış aynıdır. Bu denemeler ders saatlerini **hemen** değiştirir: ilk denemeleri ders dışı saatte yapın.
+`goc-oncesi` klasörüne kendiliğinden alınır). Ajan değişmedi: panoda "Güncelleme var" görünür ama
+güncellemek gerekmez, davranış aynıdır (güncelleme yalnız panodan “Ajanı güncelle” ile yapılır). Bu denemeler ders saatlerini **hemen** değiştirir: ilk denemeleri ders dışı saatte yapın.
 Panelden ya da yazılımdan çıkan sayılar dışında gerçek veri, ekran görüntüsü depoya girmez (`saha/`).
 
 | # | Deneme | Beklenen | Sonuç |
@@ -374,7 +376,9 @@ Panelden ya da yazılımdan çıkan sayılar dışında gerçek veri, ekran gör
 
 ### 3.10 USB anahtar (0.11.0)
 
-Hazırlık: Ayarlar › USB anahtar'da "USB anahtar kullanılsın"ı açın. Yoklama › USB anahtarlar'dan kendinize
+Hazırlık: sunucuyu 0.11.0'a (ya da sonrasına) yükseltin ve panoda denenecek tahtaları seçip **“Ajanı
+güncelle”** deyin; tahta sayfasında "USB anahtar: ajan güncellenmeli" yazmamalı (tahtalar ajanı
+kendiliğinden güncellemez). Ayarlar › USB anahtar'da "USB anahtar kullanılsın"ı açın. Yoklama › USB anahtarlar'dan kendinize
 bir anahtar üretin (PIN'i not alın), bir öğretmene de anahtar üretin. İndirilen `tahta-kontrol.anahtar`
 dosyasını adını değiştirmeden iki ayrı belleğin en üst klasörüne kopyalayın (bellekte başka dosyalar da
 dursun; biçimlendirmeyin). Bilgisayardaki kopyayı silin.
@@ -407,6 +411,26 @@ dursun; biçimlendirmeyin). Bilgisayardaki kopyayı silin.
 - [ ] Aynı anahtarı iki derslikte 60 sn içinde kullanın: panelde "kopyalanmış olabilir" rozeti çıkıyor mu?
       Derslikler arası gerçek yürüme süresi 60 sn eşiğine uyuyor mu?
 - [ ] Tanılama raporunda "USB anahtar: …" satırları: udisks2 "çalışıyor" mu; yol, etiket, ad görünmüyor mu?
+
+### 3.11 e-Okul "Haftalık Ders Programları" raporu (0.12.0)
+
+Hazırlık: sunucuyu 0.12.0'a yükseltmeden önce Yedekler'den şifreli yedek alın. Ajan değişmedi
+(panoda "Güncelleme var" görünür, güncellemek gerekmez). Rapordan zil çizelgesi oluşturmak ders
+saatlerini **hemen** değiştirir: ilk denemeyi ders dışı saatte yapın. Rapor dosyası, PDF'i ve ekran
+görüntüsü depoya girmez (`saha/`); buraya yalnız sayılar yazılır.
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| E1 | e-Okul'da "Haftalık Ders Programları (OOK11002_R01)" raporunu bütün şubelerle Excel (.XLS) ve PDF olarak kaydedin; Program › Derslik programları › İçe aktar › e-Okul kartından .XLS'i yükleyin | Eşleme adımı; "Rapor" kutusunda blok sayısı PDF'in sayfa sayısına eşit; devreler (ikili eğitimde iki satır) doğru saatlerle | |
+| E2 | Zil saatleri girilmiş okulda | Rapordaki saatler zil çizelgesine uyuyorsa "zil çizelgesi oluştur" önerisi ÇIKMAZ; uymuyorsa çıkar ve hangi devrenin uymadığı görünür | |
+| E3 | (Deneme okulunda ya da zil yokken) "Bu rapordaki saatlerden zil çizelgesi oluştur" | Onay kutusu olmadan oluşmaz; oluşunca Zil saatleri'nde "e-Okul · Pzt–Cum" çizelgesi, haftalık düzende Pzt–Cum ona atanmış | |
+| E4 | PDF'teki sayfa başlıklarını (“9. Sınıf / A Şubesi”) sırayla kopyalayıp "Şube sırası" alanına yapıştırın, "Listeyi uygula" | Her blokta şube; ipuçları (ilk dersler) PDF'le aynı; blok/şube sayısı tutmazsa kırmızı-sarı uyarı | |
+| E5 | Bir bloğun şubesini silin (atla) ve iki bloğa aynı şubeyi yazın | Boş blok "Atlanacak"; aynı şube "İki blokta" ve onay kapalı | |
+| E6 | Tahtası olmayan şube | "Tahtası belli olmayan şubeler"de tahta seçilir; ikili eğitimde aynı tahtaya sabahçı ve öğlenci şube seçilebilir | |
+| E7 | Önizleme ve onay | Şube başına haftalık ders saati PDF'le aynı; boş hücreler (dersi olmayan saat) yazılmaz; sabahçı şube öğlenci satırlarını silmez | |
+| E8 | Önizleme sayfası, işlem kaydı | Öğretmen adı hiçbir yerde yok; işlem kaydında yalnız biçim ve sayılar | |
+| E9 | Aynı raporu yeniden yükleyin | Şubeler "Hatırlanan" rozetiyle gelir | |
+| E10 | Hiç dersi olmayan bloklar (e-Okul'da programı girilmemiş şubeler) | "N blokta hiç ders yok" uyarısı; o şubelerin tahtasına bir şey yazılmaz | |
 
 ### 3.7 Windows hizmeti (K8, 0.8.0)
 
@@ -593,6 +617,15 @@ ve güncellemeden sonra duruyor mu.
     - Köşedeki bildirim (override-redirect pencere) tam ekran sunumun üstünde görünür; XFCE'de odak çalmaz.
     - `tahta-kontrol.anahtar` adı ETAP'ın kendi "USB ile giriş" düzeninin dosya adıyla çakışmaz (doğrulanamadı).
     - 60 sn'lik "iki tahtada kısa arayla" eşiği derslikler arası yürüme süresinden kısadır.
+  - e-Okul "Haftalık Ders Programları" raporu (0.12.0; bir okulun gerçek raporuyla denendi, §3.11):
+    - Başka okulların raporu da aynı yerleşimdedir (ilk satır gün başlıkları, art arda bloklar, ders no
+      1'e dönünce yeni şube, ikinci sütunda saat aralığı); Cumartesi sütunu, hazırlık sınıfı ve tek devreli
+      okul örneği görülmedi.
+    - XLS'teki blok sırası PDF'in sayfa sırasıyla aynıdır (örnekte öyleydi); değilse yapıştırılan liste
+      blokları yanlış şubeye atar — kullanıcı ipuçlarını PDF'le karşılaştırmalıdır.
+    - İki satırlı hücrenin ilk satırı ders adıdır (örnekte bütün iki satırlı hücrelerde öyleydi); tek
+      satırlı hücrelerin ne taşıdığı kesin olmadığından ipucu alınmaz.
+    - Raporun "Excel olarak kaydet" çıktısı her sürümde eski ikili biçimdedir (.XLS, OLE2); .xlsx gelirse de okunur.
   - Dayanaklar: KVKK md. 12 ve "yeterli önlemler" kararı doğrulanacaklar listesindedir
     (`docs/tasarim.md` §18); arayüzde atıf yoktur.
 

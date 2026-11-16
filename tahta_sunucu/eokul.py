@@ -76,8 +76,9 @@ def _sayi_metni(deger) -> str:
     return _metin(deger)
 
 
-def xls_oku(veri: bytes) -> list[list[str]]:
-    """Excel 97-2003 (BIFF) ilk sayfa. Her bozukluk Türkçe OkumaHatasi'na döner (500 düşmesin)."""
+def xls_oku(veri: bytes, asiri_ileti: str | None = None) -> list[list[str]]:
+    """Excel 97-2003 (BIFF) ilk sayfa. Her bozukluk Türkçe OkumaHatasi'na döner (500 düşmesin).
+    `asiri_ileti`: sayfa sınırı aşınca gösterilecek ileti (varsayılan öğrenci listesi iletisi)."""
     import xlrd  # yerel: yalnız .xls yolunda yüklensin
 
     try:
@@ -89,7 +90,7 @@ def xls_oku(veri: bytes) -> list[list[str]]:
             raise OkumaHatasi("Excel dosyasında sayfa yok.")
         sayfa = kitap.sheet_by_index(0)
         if sayfa.nrows > SATIR_SINIRI * 3 or sayfa.ncols > 200:
-            raise OkumaHatasi(f"Dosyada en çok {SATIR_SINIRI} öğrenci satırı olabilir.")
+            raise OkumaHatasi(asiri_ileti or f"Dosyada en çok {SATIR_SINIRI} öğrenci satırı olabilir.")
         return [[_sayi_metni(sayfa.cell_value(r, c)) for c in range(sayfa.ncols)] for r in range(sayfa.nrows)]
     except OkumaHatasi:
         raise

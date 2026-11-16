@@ -548,8 +548,8 @@ saatleri tanımlı olmalı). Adımlar: kaynak → eşleme → önizleme ve onay.
   boyut/derinlik sınırları, `guvenli_xml.py`), Tahta Kontrol şablonu (CSV/XLSX/XLS, sürüm 2: derslik
   boşsa şubenin tahtası), **yapay zekâ ile dönüştür** (hazır istem + KVKK uyarısı; kullanıcı kendi
   aracında çalıştırır, Tahta Kontrol hiçbir dış hizmete bağlanmaz; çıktı güvenilmeyen girdi sayılır)
-  ve elle giriş (tahta sayfası). **e-Okul kaynağı yoktur:** Haftalık Ders Dağıtım Modülü'nün dışa
-  aktarma biçimi doğrulanamadı; örnek gelmeden ayrıştırıcı yazılmaz.
+  ve elle giriş (tahta sayfası). 0.12.0'dan beri beşinci kaynak **e-Okul "Haftalık Ders Programları"
+  raporu** (OOK11002_R01, .XLS; §12.4).
 - **Eşleme:** derslik → tahta, sınıf → şube, aSc ders saati → (devre, ders no), şube → tahta; onayda
   hatırlanır. İkili eğitimde dosyanın devresi saatlerden ya da soruyla belirlenir.
 - **Kapsam:** onayda yalnız içe aktarımda geçen (tahta, devre) çiftlerinin satırları değişir; sabahçı
@@ -559,6 +559,59 @@ saatleri tanımlı olmalı). Adımlar: kaynak → eşleme → önizleme ve onay.
   yalnız tahta·gün·devre·ders·şube); "Önceki programlar"dan geri yüklenir. İşlem kaydına yalnız biçim
   ve sayılar yazılır. Eski `/program/derslik/yukle` ve `/onayla` uçları sihirbaza yönlendirir; bir
   sürüm sonra silinir.
+
+### 12.4 e-Okul "Haftalık Ders Programları" raporu (0.12.0)
+
+Kullanıcının verdiği gerçek bir örnekten (ikili eğitimli bir lise; dosya depoda YOKTUR, testler uydurma
+matrisle çalışır) gözlenen yerleşim: tek sayfa; ilk satırda gün başlıkları (Pazartesi–Cuma, "ÇARSAMBA"
+gibi Ş'siz yazım olabilir; Türkçe katlamayla eşlenir); sonra şube blokları art arda — blok başlığı yok,
+**şube adı raporda hiç yok**. Satır = ders saati: 1. sütun ders no, 2. sütun "13:30-14:05", gün
+sütunlarında hücre ("DERS ADI\nÖĞRETMEN", seçmelide "SEÇMELİ DERS\nÖĞRETMEN - DERS"; boş = ders yok).
+Ders no 1'e (ya da öncekine eşit/küçüğe) dönünce yeni blok; ders no'suz satırlar (altbilgi) atlanır.
+Derslik yoktur. Şube adı ve sırası yalnız raporun PDF'indedir ("9. Sınıf / A Şubesi"; düzey artan, harf
+Türk abecesiyle … H, I, İ, J …); PDF ayrıştırılmaz (yeni bağımlılık yok), kullanıcı gözle doğrular.
+
+- **Okuma** (`eokul_program.py`, saf): ilk baytlardan OLE2 → `eokul.xls_oku` (xlrd; her hata Türkçe
+  iletiye döner), ZIP → `xlsx.oku`, PDF ve diğerleri Türkçe ret. 2 MB, 5000 satır, 300 blok sınırı; T.C.
+  kimlik numarasına benzeyen hücre varsa dosya reddedilir (işlem kaydına yalnız "reddedildi"). Dosya diske
+  yazılmaz (`bellekte_form`), saklanmaz; yalnız SHA-256 özeti.
+- **KVKK:** hücreden yalnız "dolu mu" alınır. Öğretmen adı (hücrenin ikinci ve sonraki satırları) hiç
+  saklanmaz, gösterilmez. Ders adı programa girmez; tek istisna eşleme ekranında blokları tanımaya yardım
+  eden blok başına en çok 3 ipucu ("Pzt 1: MATEMATİK", iki satırlı hücrenin İLK satırı; tek satırlı
+  hücreden ipucu alınmaz). İpucu yalnız önizleme kaydında durur ve önizlemeyle (30 dk, onay, vazgeç) silinir.
+- **Devre:** bloklar ilk dersin başlangıcına göre (±5 dk) gruplanır; grup, zil çizelgesindeki devreye
+  ilk dersin başlangıcı ±5 dk tutan ve en çok dersi tutan devre olarak eşlenir. Zil çizelgesi yoksa ya da
+  bir grup hiçbir devreye uymuyorsa (ya da bazı dersleri 5 dk'dan çok farklıysa) eşleme adımında **"Bu
+  rapordaki saatlerden zil çizelgesi oluştur"** önerilir: tek grup → Normal, iki grup → Sabah + Öğleden
+  sonra (zil çizelgesinde aynı sayıda devre varsa onların kimlik ve adları korunur; yoksa mevcut derslik
+  programı yetim kalabilir). Onay kutusunun üstünde kuru çalıştırmayla etkisi gösterilir
+  (`eokul_program.zil_etkisi`): o günlerin şu anki çizelgeleri (yeni çizelge yerlerini alır) ve karşılığı
+  kalmayacak derslik programı satırı sayısı. Zil uyuyor da yalnız bazı ders saatleri ±5 dk'dan çok farklıysa
+  bloklar yine yazılır; farklı dersler uyarıda listelenir, öneri ikincil kalır. İkiden çok başlangıç grubu
+  varsa öneri yapılmaz, nedeni yazılır ve zil düzenleyicisine yönlendirilir. Ayrı onay kutusuyla `zil_cizelgesi` (kaynak `eokul`, ad "e-Okul · Pzt–Cum") yazılır ve haftalık
+  düzende rapordaki günlere atanır; başka günler ve mevcut çizelgeler değişmez; zil yazımının bütün
+  etkileri (`panel_cizelge.Etki`: bugünün planı değiştiyse program kilitleri açılır, yetim uyarısı) geçerlidir.
+  Raporda her gün aynı saat yazar; farklı saatli gün (ör. Cuma) sonra zil düzenleyicisinde ayarlanır.
+  Hiçbir devreye uymayan grubun blokları yazılmaz (uyarı). Rapor zil çizelgesi yokken de yüklenebilir
+  (diğer kaynaklar zil ister).
+- **Şube eşlemesi zorunlu adımdır:** bloklar sırayla listelenir (blok no, devre ve saat, dolu ders sayısı,
+  ipucu); her blok için şube yazılır/seçilir (boş = atla). Öneri sırası: bu oturumda seçilen > yapıştırılan
+  sıralı şube listesi ("9/A, 9/B…", satır satır ya da PDF başlıkları "AL - 9. Sınıf / A Şubesi";
+  `metin.sube_duzelt`) > önceki onayda hatırlanan (`program_eslesme` `tur='blok'`, yalnız blok sayısı aynıysa)
+  > sistemde kayıtlı şubeler (tahtaların şubeleri + öğrenci listesi) düzey ve **Türk abecesi** sırasıyla
+  (`eokul_program.sube_sira_anahtari`, kod noktası sırası değil) > boş. Blok sayısı ile şube sayısı tutmazsa
+  belirgin uyarı; aynı şube iki bloğa atanırsa iki blok da yazılmaz ve onay kapalıdır. Hiç dolu hücresi
+  olmayan blok (e-Okul'da programı girilmemiş şube) uyarıyla gösterilir, tahtaya bir şey yazılmaz.
+- **Tahta:** derslik olmadığından her şubenin dersi `tahta.subeler`'inde o şube geçen tek tahtaya yazılır;
+  yoksa ya da birden çoksa "Tahtası belli olmayan şubeler" tablosunda tahta seçilir (hatırlanır, `tur='sube'`)
+  ya da atlanır. Öncelik: bu oturumda seçilen > `tahta.subeler`'de tek tahta > hatırlanan seçim; yani
+  `tahta.subeler`'den bulunan eşleme hatırlanmaz ve hatırlanan seçim güncel `tahta.subeler`'in önüne geçmez
+  (şube başka dersliğe taşınınca eski tahtaya yazılmasın; bu kural tablo kaynağı için de geçerlidir).
+  Tahtası bulunan şubeler eşleme ekranında kapalı bir bölümde durur. İkili eğitimde aynı tahtaya sabahçı bir şube ve öğlenci bir şube düşer; kapsam (tahta,
+  devre) olduğundan biri ötekini silmez.
+- Sonrası ortak yol: önizleme (tahta başına +/−/~, şube başına haftalık ders saati, dolu/boş ders saati
+  sayısı), onay, önceki sürümün saklanması, işlem kaydı (yalnız biçim ve sayılar). Yalnız yönetici.
+  Tahta Kontrol e-Okul'a bağlanmaz.
 
 ## 13. Sınav kipi ve sınav yoklaması
 
@@ -1065,7 +1118,8 @@ hizmet olarak çalışması henüz yönetici yetkili bir denemede doğrulanmadı
 | 6B | Sunucunun Windows hizmeti olarak çalışması (oturum açılmadan başlar, Yerel Hizmet hesabı, veri ProgramData'ya kurucuda kopyalanır, durum penceresi) | 0.8.0 (K8, §15.6) — birim testleriyle ve hizmet kipi uçbirimde denendi; gerçek hizmet kurulumu yönetici yetkili denemede doğrulanacak. Ajan paketi imzası sonraya |
 | K | 16.11.2026 kararları (§17): ikili eğitim denetimi ve düzeltmeleri (yoklama önerisi, devre süzgeci, sınav şube duyurusu, ızgara/icmalde devre adı), öğretim yılı sonuna kadar saklama, acil yayını bütün idarecilere açma, yardımcı kayıt metinleri, boş ders uyarısı varsayılan açık + rapor; gün sonu oturum temizliği (K7, §12.1) | 0.8.0 — testlerle ve tarayıcıda denendi; oturum temizliği Debian 12 kabında (Xvfb + openbox, sahte profil) denendi; ETAP'ta denenecek |
 | 5B | USB anahtar: bellekteki anahtar dosyasıyla idare ve isteyen öğretmen için yoklama, ayarla kilit açma; tek seferlik indirme, iptal, kopya uyarısı (§14.1) | 0.11.0 — testlerle, tarayıcıda ve Debian 12 kabında loop bellekle (USB benzetimi) denendi; gerçek USB bellek, udisks ve ETAP'ta denenecek |
-| 3B | Zil düzenleyici (çizelgeler, haftalık düzen, tarihe özel çizelge, günü önizle, CSV; Okul Zili'nden alma aynı yapıya yazar) ve ders programını içe aktarma sihirbazı (aSc XML deneme, şablon CSV/XLSX, yapay zekâ istemi, önceki programlar) | 0.10.0 (§12.2–12.3) — testlerle ve tarayıcıda uydurma veriyle denendi; gerçek aSc dosyası ve okulun gerçek zil saatleriyle denenecek. e-Okul kaynağı örnek dosya gelince |
+| 3B | Zil düzenleyici (çizelgeler, haftalık düzen, tarihe özel çizelge, günü önizle, CSV; Okul Zili'nden alma aynı yapıya yazar) ve ders programını içe aktarma sihirbazı (aSc XML deneme, şablon CSV/XLSX, yapay zekâ istemi, önceki programlar) | 0.10.0 (§12.2–12.3) — testlerle ve tarayıcıda uydurma veriyle denendi; gerçek aSc dosyası ve okulun gerçek zil saatleriyle denenecek |
+| 3C | Sihirbaza e-Okul "Haftalık Ders Programları" raporu (OOK11002_R01, .XLS): blok ayrıştırma, rapordan zil çizelgesi, zorunlu şube eşlemesi, şubenin tahtasına yazma (§12.4) | 0.12.0 — testlerle (uydurma matris) ve geliştirme bilgisayarında gerçek bir raporla (ayrı veri dizini, uydurma tahtalar) uçtan uca denendi; okulda denenecek |
 
 Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" ve "Seçili
 tahtalara alan ata", plan formunda "sonraki 3 gösterim" canlı önizlemesi, çakışan
@@ -1134,11 +1188,11 @@ Ders programı ve program kilidi (0.4.0):
     2 dakika uygun mu?
 11. **Dersi olmayan saatte kilit** varsayılan açık. Boş saatte tahtanın öğretmence bireysel
     çalışma için kullanılması okulda olağan mı? Olağansa varsayılan kapatılır.
-13. **Derslik programı kaynağı:** (0.10.0'da kısmen karşılandı: aSc XML, şablon CSV/XLSX ve yapay
-    zekâ yolu, §12.3.) Okulda program aSc'de mi, 2026–2027'den beri e-Okul Haftalık Ders Dağıtım
-    Modülü'nde mi hazırlanıyor? e-Okul'dan alınabilen dosyanın (Excel/PDF) kişi adları silinmiş bir
-    örneği ve aSc XML'in (öğretmenleri "Ö1, Ö2…" diye adlandırılmış kopyadan) bir örneği gelirse aSc
-    okuyucusunun "deneme" etiketi kalkar ve e-Okul ayrıştırıcısı yazılabilir.
+13. **Derslik programı kaynağı:** (0.10.0'da aSc XML, şablon CSV/XLSX ve yapay zekâ yolu, §12.3;
+    0.12.0'da e-Okul "Haftalık Ders Programları" raporu, §12.4.) Kalan: aSc XML'in (öğretmenleri "Ö1,
+    Ö2…" diye adlandırılmış kopyadan) bir örneği gelirse aSc okuyucusunun "deneme" etiketi kalkar. e-Okul
+    raporunda bir okulun örneği görüldü; başka okulun raporunda (tek devre, hazırlık sınıfı, Cumartesi,
+    farklı ders sayısı) yerleşim aynı mı, okulda denenecek.
 14. **Sınav pencereleri:** Okul Zili'nde planlanmış sınav sırasında program kilidi askıya
     alınıyor. Sınav sırasında tahtaların kilitli kalması mı istenir? (0.5.0'da Tahta Kontrol'ün
     kendi sınav kipi bu soruyu karşıladı: sınav penceresindeki tahta sınav ekranında kilitlidir.)

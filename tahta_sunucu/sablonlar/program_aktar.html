@@ -3,12 +3,15 @@
 {% block icerik %}
 {# Bağlam: aktar (panel_aktar.aktar_baglami belgesi), serit, bolum='derslik', yonetici.
    Form uçları ve alan adları SÖZLEŞMEDİR: /program/aktar/asc (dosya), /program/aktar/tablo (dosya | metin, bicim=tablo|yz),
-   /program/aktar/esle (onizleme, d_<n>, s_<n>, p_<n>, t_<n>, donem, devre_secimi), /program/aktar/onayla (onizleme,
-   eylem=onayla|vazgec, temizle_tahta…, onay_hatali=1). JS yalnız "İstemi kopyala" (panel.js kopyala bölümü). #}
+   /program/aktar/eokul (dosya), /program/aktar/eokul/zil (onizleme, onay: 1),
+   /program/aktar/esle (onizleme, d_<n>, s_<n>, p_<n>, t_<n>, b_<blok no>, sube_listesi, donem, devre_secimi),
+   /program/aktar/onayla (onizleme, eylem=onayla|vazgec, temizle_tahta…, onay_hatali=1).
+   JS yalnız "İstemi kopyala" (panel.js kopyala bölümü). #}
 {% include "_program_bas.html" %}
 {% set ADIMLAR = [('kaynak', 'Kaynak'), ('esleme', 'Eşleme'), ('onizleme', 'Önizleme ve onay')] %}
 {% set DURUM = {'hatirlanan': ('bilgi', 's-bilgi', 'Hatırlanan'), 'otomatik': ('tamam', 's-tamam', 'Otomatik'),
-                'secildi': ('onay', 's-onay', 'Seçildi'), 'eslesmedi': ('uyari', 's-sorun', 'Eşleşmedi')} %}
+                'secildi': ('onay', 's-onay', 'Seçildi'), 'eslesmedi': ('uyari', 's-sorun', 'Eşleşmedi'),
+                'liste': ('bilgi', 's-bilgi', 'Listeden'), 'sistem': ('bilgi', 's-bilgi', 'Sıradan öneri')} %}
 {% macro durum_rozeti(d) %}{% set x = DURUM.get(d, ('bilgi', 's-bilgi', d)) %}<span class="rozet" data-durum="{{ x[0] }}"><svg class="simge" aria-hidden="true"><use href="#{{ x[1] }}"/></svg>{{ x[2] }}</span>{% endmacro %}
 
 <div class="kutu-bas">
@@ -17,8 +20,8 @@
 </div>
 
 {% if not aktar.ders_saati_var %}
-<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Önce zil saatlerini girin; derslik programı ders saatlerine göre okunur.&nbsp;<a href="/program?bolum=zil">Zil saatleri</a></p>
-{% else %}
+<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Zil saatleri tanımlı değil. aSc, şablon ve yapay zekâ yolları ders saatlerine göre okunur; önce zil saatlerini girin. e-Okul raporundan ise zil çizelgesi de oluşturulabilir.&nbsp;<a href="/program?bolum=zil">Zil saatleri</a></p>
+{% endif %}
 
 <ol class="sihirbaz-adimlari" aria-label="Sihirbaz adımları">
   {% for a, ad in ADIMLAR %}<li{% if a == aktar.adim %} aria-current="step"{% endif %}>{{ ad }}</li>{% endfor %}
@@ -26,6 +29,18 @@
 
 {% if aktar.adim == 'kaynak' %}
 <div class="kaynak-kartlari">
+<section class="kutu" aria-labelledby="k-eokul">
+  <h2 id="k-eokul">e-Okul raporu (Haftalık Ders Programları)</h2>
+  <ol class="yz-adimlari">{% for a in aktar.eokul_adimlari %}<li>{{ a }}</li>{% endfor %}</ol>
+  <p class="not">{{ aktar.eokul_notu }}</p>
+  <form method="post" action="/program/aktar/eokul" enctype="multipart/form-data">
+    <label for="eokul-dosya">e-Okul raporu (.XLS; en çok {{ aktar.sinirlar.eokul_mb }} MB)</label>
+    <input type="file" id="eokul-dosya" name="dosya" accept=".xls,.xlsx,application/vnd.ms-excel" required>
+    <p class="dugme-satiri"><button class="ana">Yükle ve eşle</button></p>
+  </form>
+</section>
+
+{% if aktar.ders_saati_var %}
 <section class="kutu" aria-labelledby="k-asc">
   <h2 id="k-asc">aSc Timetables (XML) <span class="rozet" data-durum="onay"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Sınanıyor</span></h2>
   <p class="ipucu">{{ aktar.asc_metni }}</p>
@@ -97,6 +112,7 @@ Hazırlık/A;Cuma;2,4-6;;Z-04</pre>
     </form>
   </div>
 </section>
+{% endif %}
 
 </div>
 {% endif %}
@@ -105,6 +121,49 @@ Hazırlık/A;Cuma;2,4-6;;Z-04</pre>
 {% if o and aktar.adim in ('esleme', 'onizleme') %}
 <p class="kaynak-satiri not"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg><span>Kaynak: {{ o.bicim_adi }}{% if o.asc_deneme %} · {{ aktar.asc_deneme_notu }}{% endif %}</span>
   <a href="/program/aktar?yeni=1">Başka bir kaynak seç</a></p>
+
+{% if aktar.adim == 'esleme' and o.kaynak == 'eokul' %}
+{% set e = o.eokul %}
+<section class="kutu" aria-labelledby="eokul-rapor">
+  <h2 id="eokul-rapor">Rapor</h2>
+  <p>{{ e.sayilar.blok }} şube bloğu{% for ad, n in e.devre_dagilimi %} · {{ ad }}: {{ n }} blok{% endfor %}</p>
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="e-devreler">
+  <table class="esleme-tablo"><caption id="e-devreler">Rapordaki devreler</caption>
+  <thead><tr><th scope="col">Rapordaki saatler</th><th scope="col">Ders</th><th scope="col">Blok</th><th scope="col">Zil çizelgesinde</th></tr></thead><tbody>
+  {% for g in e.gruplar %}<tr><th scope="row">{{ g.bas }}–{{ g.bit }}</th><td data-etiket="Ders">{{ g.dersler | length }}</td><td data-etiket="Blok">{{ g.blok_sayisi }}</td>
+    <td data-etiket="Zil çizelgesinde">{% if g.devre %}{{ durum_rozeti('otomatik') }} {{ g.ad }}{% if g.farkli %} <span class="not">({{ g.farkli }} ders saati farklı)</span>{% endif %}{% else %}{{ durum_rozeti('eslesmedi') }} Uyan devre yok{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% if e.zil_onerilemez %}<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>{{ e.zil_onerilemez }}&nbsp;<a href="/program?bolum=zil">Zil saatleri</a></span></p>{% endif %}
+</section>
+{% if e.zil_onerisi %}
+{% set z = o.zil_etkisi %}
+<section class="kutu" aria-labelledby="eokul-zil">
+  <h2 id="eokul-zil">Zil çizelgesi</h2>
+  {% if e.zil_yalniz_fark %}
+  <p class="bant" role="status"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Zil çizelgeniz bu rapora uyuyor; yalnız bazı ders saatleri 5 dakikadan çok farklı (uyarılarda hangileri olduğu yazar). Bloklar yine programa yazılır. Yeni zil çizelgesi yalnız okulun zil saatleri gerçekten değiştiyse gerekir.</p>
+  {% else %}
+  <p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{% if not aktar.ders_saati_var %}Zil saatleri tanımlı değil.{% else %}Rapordaki ders saatleri zil çizelgenize uymuyor.{% endif %} Bu rapordaki saatlerden zil çizelgesi oluşturabilirsiniz; uymayan devrenin blokları programa yazılmaz.</p>
+  {% endif %}
+  <ul>{% for d in e.zil_onerisi.devreler %}<li><strong>{{ d.ad }}</strong> · {{ d.sayi }} ders · {{ d.aralik }}<br><span class="not">{{ d.saatler }}</span></li>{% endfor %}</ul>
+  {% if e.zil_onerisi.hatalar %}
+  <div class="bant hata" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><div><strong>Bu saatlerle çizelge oluşturulamıyor</strong><ul>{% for h in e.zil_onerisi.hatalar %}<li>{{ h }}</li>{% endfor %}</ul></div></div>
+  {% else %}
+  <form method="post" action="/program/aktar/eokul/zil">
+    <input type="hidden" name="onizleme" value="{{ o.kimlik }}">
+    <p class="ipucu">Yeni çizelge “e-Okul · {{ e.zil_onerisi.gun_metni }}” adıyla oluşturulur ve haftalık düzende {{ e.zil_onerisi.gun_metni }} günlerine atanır. Mevcut çizelgeler silinmez, başka günler değişmez. Raporda her gün aynı saat yazar; farklı saatli bir gününüz varsa (ör. Cuma) sonra zil düzenleyicisinde ayarlayın.{% if e.zil_onerisi.mevcut_kimlikler %} Devre adları zil çizelgenizdekilerle aynı kalır.{% endif %}</p>
+    {% if z and (z.atamalar or z.yetim_satir) %}
+    <div class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><div><strong>Onaylamadan önce bilin</strong><ul>
+      {% if z.atamalar %}<li>Bu günler şu an şu çizelgelere bağlı; yeni çizelge hepsinin yerini alır: {{ z.atamalar | join(' · ') }}.</li>{% endif %}
+      {% if z.yetim_satir %}<li>Mevcut derslik programında {{ z.yetim_tahta }} tahtanın {{ z.yetim_satir }} ders saatinin yeni çizelgede karşılığı kalmayacak (devre adı ya da ders numarası değişiyor). Bu satırlar silinmez ama hiçbir ders saatine bağlı olmaz (Program sayfasında uyarı olarak görünür).</li>{% endif %}
+    </ul></div></div>
+    {% endif %}
+    <label class="satir"><input type="checkbox" name="onay" value="1" required> Bu saatlerle zil çizelgesi oluşturulsun</label>
+    <p class="dugme-satiri"><button class="ana">Bu rapordaki saatlerden zil çizelgesi oluştur</button></p>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+{% endif %}
 
 {% if aktar.adim == 'esleme' %}
 <form method="post" action="/program/aktar/esle" class="kutu" aria-labelledby="esleme-baslik">
@@ -122,6 +181,26 @@ Hazırlık/A;Cuma;2,4-6;;Z-04</pre>
       <select id="devre-secimi" name="devre_secimi"><option value="">İkisi de — saatlerden eşle</option>{% for d, ad in o.devre_secenekleri %}<option value="{{ d }}"{% if d == o.devre_secimi %} selected{% endif %}>{{ ad }}</option>{% endfor %}</select></div>
     {% endif %}
   </div>
+  {% endif %}
+  {% if o.kaynak == 'eokul' %}
+  {% set e = o.eokul %}
+  <div class="alan"><label for="sube-listesi">Şube sırası (e-Okul PDF'indeki sayfa sırasıyla; virgülle ya da satır satır)</label>
+    <textarea id="sube-listesi" name="sube_listesi" rows="3" placeholder="9/A, 9/B, 9/C …" aria-describedby="sube-listesi-ipucu">{{ o.sube_listesi }}</textarea>
+    <p class="ipucu" id="sube-listesi-ipucu">PDF başlıklarını (“9. Sınıf / A Şubesi”) olduğu gibi de yapıştırabilirsiniz. Liste değişince bloklar listeye göre yeniden doldurulur. Liste boşsa sistemde kayıtlı şubeler (düzey ve abece sırasıyla) önerilir.</p>
+    <p class="dugme-satiri"><button name="eylem" value="liste">Listeyi uygula</button></p></div>
+  {% for u in e.uyarilar if 'blok var' in u or 'Sistemde kayıtlı şube yok' in u or 'bloklara atanmış' in u %}
+  <p class="bant uyari" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ u }}</p>
+  {% endfor %}
+  <datalist id="sube-secenekleri">{% for s_ in o.sube_secenekleri %}<option value="{{ s_ }}">{% endfor %}</datalist>
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="e-blok">
+  <table class="esleme-tablo"><caption id="e-blok">Şube blokları (rapordaki sırayla) · boş bırakılan blok atlanır</caption>
+  <thead><tr><th scope="col">Blok</th><th scope="col">Devre</th><th scope="col">İpucu (ders adı)</th><th scope="col">Şube</th><th scope="col">Durum</th></tr></thead><tbody>
+  {% for b_ in e.bloklar %}<tr><th scope="row">{{ b_.no }}. blok</th>
+    <td data-etiket="Devre">{{ b_.devre_adi }} <span class="not">{{ b_.saat }} · {{ b_.dolu }} ders</span></td>
+    <td data-etiket="İpucu">{% if b_.ipucu %}<span class="not">{{ b_.ipucu | join(' · ') }}</span>{% else %}<span class="not">—</span>{% endif %}</td>
+    <td data-etiket="Şube"><input type="text" name="b_{{ b_.no }}" value="{{ b_.deger }}" list="sube-secenekleri" maxlength="20" placeholder="boş = atla" aria-label="{{ b_.no }}. blok: şube"{% if b_.cift %} aria-invalid="true"{% endif %}></td>
+    <td data-etiket="Durum">{% if b_.cift %}<span class="rozet" data-durum="sorun"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>İki blokta</span>{% elif b_.durum == 'secildi' and not b_.deger %}<span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Atlanacak</span>{% else %}{{ durum_rozeti(b_.durum) }}{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
   {% endif %}
   {% if o.eslesme.saat %}
   <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="e-saat">
@@ -149,7 +228,29 @@ Hazırlık/A;Cuma;2,4-6;;Z-04</pre>
     <td data-etiket="Şube"><input type="text" name="s_{{ loop.index0 }}" value="{{ e.deger }}" maxlength="20" aria-label="{{ e.ad }}: şube" placeholder="ör. 9/A (boş = şubesiz)"></td><td data-etiket="Durum">{{ durum_rozeti(e.durum) }}</td></tr>{% endfor %}
   </tbody></table></div>
   {% endif %}
-  {% if o.eslesme.sube %}
+  {% if o.eslesme.sube and o.kaynak == 'eokul' %}
+  {% set belirsiz = o.eslesme.sube | selectattr('durum', 'equalto', 'eslesmedi') | list %}
+  {% if belirsiz %}
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="e-sube">
+  <table class="esleme-tablo"><caption id="e-sube">Tahtası belli olmayan şubeler ({{ belirsiz | length }}) · ikili eğitimde bir tahtaya sabahçı ve öğlenci şube seçilebilir</caption>
+  <thead><tr><th scope="col">Şube</th><th scope="col">Tahta</th><th scope="col">Durum</th></tr></thead><tbody>
+  {% for e in o.eslesme.sube %}{% if e.durum == 'eslesmedi' %}<tr><th scope="row">{{ e.ad }}</th>
+    <td data-etiket="Tahta"><select name="t_{{ loop.index0 }}" aria-label="{{ e.ad }}: tahta"><option value="">Tahtası yok (atla)</option>{% for tid, tad in o.tahta_secenekleri %}<option value="{{ tid }}"{% if tid | string == e.deger %} selected{% endif %}>{{ tad }}</option>{% endfor %}</select></td>
+    <td data-etiket="Durum">{{ durum_rozeti(e.durum) }}</td></tr>{% endif %}{% endfor %}
+  </tbody></table></div>
+  {% endif %}
+  {% if o.eslesme.sube | length > belirsiz | length %}
+  <details class="ek-bilgi"><summary>Tahtası bulunan şubeler ({{ (o.eslesme.sube | length) - (belirsiz | length) }}) · tahta kaydındaki şubelerden ya da önceki seçiminizden; değiştirmek gerekmez</summary>
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="e-sube-bulunan">
+  <table class="esleme-tablo"><caption id="e-sube-bulunan">Tahtası bulunan şubeler</caption>
+  <thead><tr><th scope="col">Şube</th><th scope="col">Tahta</th><th scope="col">Durum</th></tr></thead><tbody>
+  {% for e in o.eslesme.sube %}{% if e.durum != 'eslesmedi' %}<tr><th scope="row">{{ e.ad }}</th>
+    <td data-etiket="Tahta"><select name="t_{{ loop.index0 }}" aria-label="{{ e.ad }}: tahta"><option value="">Tahtası yok (atla)</option>{% for tid, tad in o.tahta_secenekleri %}<option value="{{ tid }}"{% if tid | string == e.deger %} selected{% endif %}>{{ tad }}</option>{% endfor %}</select></td>
+    <td data-etiket="Durum">{{ durum_rozeti(e.durum) }}</td></tr>{% endif %}{% endfor %}
+  </tbody></table></div>
+  </details>
+  {% endif %}
+  {% elif o.eslesme.sube %}
   <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="e-sube">
   <table class="esleme-tablo"><caption id="e-sube">Dersliği yazılmayan şubeler</caption>
   <thead><tr><th scope="col">Şube</th><th scope="col">Tahta</th><th scope="col">Durum</th></tr></thead><tbody>
@@ -170,7 +271,9 @@ Hazırlık/A;Cuma;2,4-6;;Z-04</pre>
     {% if o.sube_sayilari %}<p class="not">Şube başına haftalık ders saati:</p><ul class="sayi-tablosu">{% for s, n in o.sube_sayilari %}<li>{{ s }}: {{ n }} saat</li>{% endfor %}</ul>{% endif %}</div></div>{% endif %}
   {% if o.hatalar %}<div class="bant hata" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><div><strong>Hatalı satırlar ({{ o.hata_sayisi }}; atlanır)</strong><ul>{% for h in o.hatalar %}<li>{{ h }}</li>{% endfor %}</ul>{% if o.hata_sayisi > o.hatalar | length %}<p class="not">İlk {{ o.hatalar | length }} hata gösterildi.</p>{% endif %}</div></div>{% endif %}
   {% if o.uyarilar %}<div class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><div><strong>Uyarılar</strong><ul>{% for u in o.uyarilar %}<li>{{ u }}</li>{% endfor %}</ul></div></div>{% endif %}
-  {% if o.dersliksiz_sayi %}<div class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><div>Dersliği belli olmayan {{ o.dersliksiz_sayi }} ders (ör. beden eğitimi): hiçbir tahtaya yazılmadı.<ul>{% for d in o.dersliksiz %}<li>{{ d }}</li>{% endfor %}</ul></div></div>{% endif %}
+  {% if o.kaynak == 'eokul' %}<p class="not">e-Okul raporu: {{ o.eokul.sayilar.blok }} blok ({{ o.eokul.sayilar.atanan }} şubeye atandı, {{ o.eokul.sayilar.atlanan }} atlandı) · yazılacak {{ o.eokul.sayilar.dolu }} dolu ders saati · {{ o.eokul.sayilar.bos }} boş ders saati (o saatlerde ders yok sayılır)</p>
+    {% if o.sube_sayilari %}<details class="ek-bilgi"><summary>Şube başına haftalık ders saati (PDF'le karşılaştırın)</summary><ul class="sayi-tablosu">{% for s_, n in o.sube_sayilari %}<li>{{ s_ }}: {{ n }} saat</li>{% endfor %}</ul></details>{% endif %}{% endif %}
+  {% if o.dersliksiz_sayi %}<div class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><div>{% if o.kaynak == 'eokul' %}Tahtası belli olmayan şubelerin {{ o.dersliksiz_sayi }} dersi hiçbir tahtaya yazılmadı; eşlemede tahtasını seçin.{% else %}Dersliği belli olmayan {{ o.dersliksiz_sayi }} ders (ör. beden eğitimi): hiçbir tahtaya yazılmadı.{% endif %}<ul>{% for d in o.dersliksiz %}<li>{{ d }}</li>{% endfor %}</ul></div></div>{% endif %}
   {% if o.esleme_gerekli or o.eslesme.saat or o.eslesme.derslik or o.eslesme.sinif or o.eslesme.sube %}<p><a href="/program/aktar?adim=esleme">Eşlemeye dön</a></p>{% endif %}
 
   {% if o.tahtalar %}
@@ -201,7 +304,6 @@ Hazırlık/A;Cuma;2,4-6;;Z-04</pre>
       <button name="eylem" value="vazgec">Vazgeç</button></p>
   </form>
 </section>
-{% endif %}
 {% endif %}
 {% endif %}
 {% endblock %}
