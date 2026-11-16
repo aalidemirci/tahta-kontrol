@@ -120,23 +120,33 @@ def logo_oku(b) -> tuple[bytes, dict] | None:
 _surum_onbellegi: dict = {}
 
 
-def logo_surumu(b) -> str:
-    """Sayfalardaki logo adresinin sürümü (sha256'nın ilk 12 hanesi); logo kullanılamıyorsa boş.
+def logo_ozeti(b) -> str | None:
+    """Kullanılabilir logonun tam sha256 özeti; logo yoksa, dosya eksikse ya da özet tutmuyorsa None.
 
-    /marka/logo ile aynı ölçüt (logo_oku: dosya var ve özeti ayardakiyle tutuyor); yoksa sayfa
-    404 dönen bir adres ister ve kırık resim görünür. Özet her sayfada yeniden hesaplanmasın diye
-    dosyanın (yol, boyut, mtime) ve beklenen özete göre önbelleklenir.
+    logo_oku ile aynı ölçüt; ama dosyanın özeti her çağrıda yeniden hesaplanmaz: sonuç dosyanın
+    (yol, boyut, mtime) ve beklenen özete göre önbelleklenir. Her sayfada ve her /ajan/bekle
+    yanıtında çağrılır.
     """
     bilgi = _bilgi(b)
     if not bilgi:
-        return ""
+        return None
     yol = logo_yolu()
     try:
         d = yol.stat()
     except OSError:
-        return ""
+        return None
     anahtar = (str(yol), d.st_size, d.st_mtime_ns, bilgi["sha256"])
     if anahtar not in _surum_onbellegi:
         _surum_onbellegi.clear()
         _surum_onbellegi[anahtar] = logo_oku(b) is not None
-    return bilgi["sha256"][:12] if _surum_onbellegi[anahtar] else ""
+    return bilgi["sha256"] if _surum_onbellegi[anahtar] else None
+
+
+def logo_surumu(b) -> str:
+    """Sayfalardaki logo adresinin sürümü (sha256'nın ilk 12 hanesi); logo kullanılamıyorsa boş.
+
+    /marka/logo ile aynı ölçüt (dosya var ve özeti ayardakiyle tutuyor); yoksa sayfa 404 dönen
+    bir adres ister ve kırık resim görünür.
+    """
+    sha = logo_ozeti(b)
+    return sha[:12] if sha else ""

@@ -1,0 +1,77 @@
+{% extends "taban.html" %}
+{% block baslik %}Gruplar · Tahta Kontrol{% endblock %}
+{% block icerik %}
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1 id="grup-baslik">Tahta grupları</h1>
+    <p>Elle seçilen tahtalar (ör. "Fen laboratuvarları"). Duyurunun "Kime" bölümünde kullanılır; gruba sonradan eklenen tahta sonraki gösterimi alır.</p>
+  </div>
+  <p class="dugme-satiri sag"><a class="dugme" href="/tahtalar.csv">Tahtaları dışa aktar (CSV)</a>
+    {% if yonetici %}<a class="dugme" href="/tahtalar/ice-aktar">CSV'den içe aktar</a>{% endif %}</p>
+</div>
+{% if gruplar %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="grup-baslik">
+<table class="gruplar-tablo">
+  <thead><tr><th scope="col">Grup adı</th><th scope="col">Açıklama</th><th scope="col">Üye</th>{% if yonetici %}<th scope="col"><span class="gizli">İşlem</span></th>{% endif %}</tr></thead>
+  <tbody>
+  {% for g in gruplar %}
+  <tr>
+    <td data-etiket="Grup adı"><strong>{{ g.ad }}</strong>{% if g.olusturan %}<div class="not">{{ g.olusturan }}</div>{% endif %}</td>
+    <td data-etiket="Açıklama">{{ g.aciklama or '—' }}</td>
+    <td data-etiket="Üye">{{ g.uye_sayisi }} tahta{% if g.planlar %}<div class="not">{{ g.planlar | length }} duyuru planında kullanılıyor</div>{% endif %}</td>
+    {% if yonetici %}
+    <td data-etiket="İşlem">
+      <div class="islemler">
+        <details class="acilir">
+          <summary class="dugme">Üyeleri düzenle</summary>
+          <form method="post" action="/gruplar" class="acilir-ic">
+            <input type="hidden" name="id" value="{{ g.id }}">
+            <fieldset>
+              <legend>{{ g.ad }}: üyeler</legend>
+              <div class="secim-listesi">
+              {% for t in tahtalar %}<label class="satir"><input type="checkbox" name="tahta" value="{{ t.id }}" {% if t.id in g.uyeler %}checked{% endif %}> <span>{{ t.ad }}{% if t.derslik %} · {{ t.derslik }}{% endif %}{% if t.alanlar %} <span class="not">· {{ t.alanlar }}</span>{% endif %}</span></label>{% else %}<p class="not">Onaylı tahta yok.</p>{% endfor %}
+              </div>
+            </fieldset>
+            <p class="dugme-satiri"><button name="eylem" value="uyeler" class="ana">Üyeleri kaydet</button></p>
+          </form>
+        </details>
+        <details class="acilir">
+          <summary class="dugme">Yeniden adlandır</summary>
+          <form method="post" action="/gruplar" class="acilir-ic">
+            <input type="hidden" name="id" value="{{ g.id }}">
+            <label for="grup-ad-{{ g.id }}">Grup adı</label>
+            <input type="text" id="grup-ad-{{ g.id }}" name="ad" value="{{ g.ad }}" maxlength="{{ ad_en_uzun }}" required>
+            <label for="grup-aciklama-{{ g.id }}">Açıklama</label>
+            <input type="text" id="grup-aciklama-{{ g.id }}" name="aciklama" value="{{ g.aciklama }}" maxlength="{{ aciklama_en_uzun }}">
+            <p class="dugme-satiri"><button name="eylem" value="ad" class="ana">Kaydet</button></p>
+          </form>
+        </details>
+        <form method="post" action="/gruplar" class="satir-ici" id="grup-sil-{{ g.id }}">
+          <input type="hidden" name="id" value="{{ g.id }}">
+          <button type="button" class="tehlike" data-onay="grup_sil" aria-haspopup="dialog">Sil…</button>
+        </form>
+      </div>
+    </td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="bos-not">Henüz grup yok.{% if yonetici %} Aşağıdan ekleyin ya da CSV'nin "gruplar" sütununu doldurun.{% endif %}</p>
+{% endif %}
+{% if yonetici %}
+<section class="kutu" aria-labelledby="grup-ekle-baslik">
+  <h2 id="grup-ekle-baslik">Grup ekle</h2>
+  <form method="post" action="/gruplar" class="form-dar">
+    <label for="grup-ad">Grup adı</label>
+    <input type="text" id="grup-ad" name="ad" maxlength="{{ ad_en_uzun }}" required placeholder="ör. Fen laboratuvarları">
+    <label for="grup-aciklama">Açıklama (isteğe bağlı)</label>
+    <input type="text" id="grup-aciklama" name="aciklama" maxlength="{{ aciklama_en_uzun }}">
+    <p class="ipucu">Öğrenci ya da kişi adı yazmayın. Üyeleri ekledikten sonra tablodan seçersiniz.</p>
+    <p class="dugme-satiri"><button name="eylem" value="ekle" class="ana">Grubu ekle</button></p>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

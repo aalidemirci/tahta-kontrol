@@ -35,6 +35,10 @@
 </div>
 {% endif %}
 
+{% if kacirilan_sayisi %}
+<div class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-takvim"/></svg>Sunucu kapalıyken {{ kacirilan_sayisi }} zamanlanmış duyuru kaçırıldı. <a href="/duyurular#gecmis-baslik">Duyurular</a> sayfasından yeniden gönderebilirsiniz.</div>
+{% endif %}
+
 {% if not kilit_kodu_var %}
 <div class="bant" role="status">Kilit kodu tanımlı değil: kilitlenen tahta yalnız panelden açılır.
   {% if kullanici.rol == 'yonetici' %}<a href="/ayarlar">Ayarlar</a> sayfasından kod belirleyebilirsiniz.{% endif %}</div>
@@ -80,6 +84,7 @@
         <p class="not">Duyuru seçili tahtalarda tam ekran gösterilir ve süre dolunca kendiliğinden kalkar.
           Tahtada öğrenci adı ya da kişisel bilgi içeren duyuru yayımlamayın; ekran bütün sınıfa açıktır.</p>
         <p class="dugme-satiri"><button name="tur" value="duyuru" class="ana">Seçili tahtalara gönder</button></p>
+        <p class="not">İleri tarihli, tekrarlı ya da gruba duyuru için <a href="/duyurular/yeni">Duyurular → Yeni duyuru</a>.</p>
       </div>
     </div>
   </details>
@@ -92,6 +97,7 @@
         <div>
           <div class="ad"><a href="/tahta/{{ t.id }}">{{ t.ad }}</a></div>
           <div class="derslik">{{ t.derslik or 'Derslik atanmadı' }}</div>
+          {% if t.alanlar %}<div class="alanlar-satiri">{{ t.alanlar }}</div>{% endif %}
         </div>
       </div>
       <div class="rozetler" data-alan="rozetler"></div>
@@ -104,6 +110,6 @@
 
 <p id="canli-bolge" class="gizli" aria-live="polite"></p>
 <script id="ilk-veri" type="application/json">{{ onayli | tojson }}</script>
-<script id="pano-veri" type="application/json">{{ {"bekleyen": bekleyen | length} | tojson }}</script>
+<script id="pano-veri" type="application/json">{{ {"bekleyen": bekleyen | length, "acil": aktif_acil is not none} | tojson }}</script>
 {% endif %}
 {% endblock %}

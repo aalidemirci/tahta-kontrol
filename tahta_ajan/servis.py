@@ -28,6 +28,10 @@ gunluk = logging.getLogger("tahta-ajan")
 KOD_DENEME_SINIRI = 5
 KOD_BEKLEME_SN = 60
 LOGO_YENIDEN_DENEME_SN = 60
+# Sunucunun bu ajana uygulayabileceği yetenekler (sürüm karşılaştırması yerine).
+YETENEKLER = ["acil", "duyuru_id"]
+ACIL_TURLERI = {"acil": "acil durum", "tatbikat": "tatbikat"}
+ACIL_EN_UZUN_SN = 7200  # sunucu ne derse desin acil yayın tahtada en çok 2 saat kalır (kural 3)
 
 
 class Servis:
@@ -36,8 +40,11 @@ class Servis:
         self.dur = threading.Event()
         kayitli = ayar.durum_oku()
         self.kilitli = bool(kayitli.get("kilitli", False))
-        self.duyuru = None  # {"baslik","metin","bitis","kapatilabilir"}
+        self.duyuru = None  # {"id","baslik","metin","bitis","kapatilabilir"}; id = sunucudaki duyuru_id ya da None
         self.kapatma = None  # {"bitis","neden"}: uyarılı kapatma geri sayımı
+        # Acil yayın: sunucunun her yanıtta verdiği DURUM (ayar.acil). Yalnız bellekte tutulur;
+        # ajan yeniden başlarsa ilk turda sunucudan yeniden alır. Sır değildir.
+        self.acil = None  # {"id","tur","baslik","metin","bitis"}
         self.okul_adi = kayitli.get("okul_adi", "")
         self.kilit_kodu = kayitli.get("kilit_kodu")  # {"tuz","ozet","tur"} ya da None
         # Açılışta sunucuya ulaşmak için süre tanınır; yoksa kilit ilk saniyede kodsuz açılabilirdi.
@@ -90,6 +97,9 @@ class Servis:
             duyuru = self.duyuru
             if duyuru and duyuru["bitis"] <= time.time():
                 self.duyuru = duyuru = None
+            acil = self.acil
+            if acil and acil["bitis"] <= time.time():
+                self.acil = acil = None
             return {
                 "tur": "durum",
                 "surum": __version__,
@@ -107,6 +117,20 @@ class Servis:
                 "kapatma": (
                     {"kalan": max(0, int(self.kapatma["bitis"] - time.time())), "neden": self.kapatma["neden"]}
                     if self.kapatma
+                    else None
+                ),
+                # Acil yayın yalnız gösterilecek metni taşır; tahtadan yalnız sunucuya
+                # ulaşılamıyorken kapatılabilir (kural 3).
+                "acil": (
+                    {
+                        "id": acil["id"],
+                        "tur": acil["tur"],
+                        "baslik": acil["baslik"],
+                        "metin": acil["metin"],
+                        "kalan": max(0, int(acil["bitis"] - time.time())),
+                        "kapatilabilir": self.cevrimdisi(),
+                    }
+                    if acil
                     else None
                 ),
                 "okul_adi": self.okul_adi,
@@ -150,10 +174,15 @@ class Servis:
         oturum = sistem.etkin_oturum()
         parca = urlsplit(self.yapi.get("sunucu", ""))
         ag = sistem.ag_bilgisi(parca.hostname or "", parca.port or 443) if parca.hostname else {}
+        with self.kilit:
+            acil = self.acil
+            acil_id = acil["id"] if acil and acil["bitis"] > time.time() else None
         return {
             "kilitli": self.kilitli,
             "duyuru_var": self.duyuru is not None,
             "kapatma_bekliyor": self.kapatma is not None,
+            "yetenekler": list(YETENEKLER),
+            "acil_id": acil_id,
             "ekranlar": ekranlar,
             "oturum": oturum,
             "acik_sure": sistem.acik_sure(),
@@ -179,10 +208,16 @@ class Servis:
         elif tur == "kod":
             self._kod_dene(str(mesaj.get("kod", "")))
         elif tur == "cevrimdisi_ac":
+            # Tek çevrimdışı düğmesi: yalnız sunucuya ulaşılamıyorken kilidi açar ve acil
+            # yayını kapatır (kural 3). Sunucu dönünce yayın sürüyorsa yeniden gelir.
             if self.cevrimdisi() or not self.kayitli():
                 with self.kilit:
+                    if self.kilitli:
+                        self.olaylar.append("Kilit sunucuya ulaşılamadığı için tahtadan açıldı.")
+                    if self.acil:
+                        self.olaylar.append("Acil yayın sunucuya ulaşılamadığı için tahtadan kapatıldı.")
                     self.kilitli = False
-                    self.olaylar.append("Kilit sunucuya ulaşılamadığı için tahtadan açıldı.")
+                    self.acil = None
                     self._kaydet()
                 self.yayinla()
         elif tur == "kapatma_iptal":
@@ -241,17 +276,27 @@ class Servis:
             self.yayinla()
             return True, "Kilit açıldı."
         if tur == "duyuru":
+            kimlik = veri.get("duyuru_id")
             with self.kilit:
+                # Tek duyuru tutulur: sonra gelen öncekinin yerine geçer.
                 self.duyuru = {
+                    "id": kimlik if isinstance(kimlik, int) and not isinstance(kimlik, bool) else None,
                     "baslik": str(veri.get("baslik", ""))[:200],
                     "metin": str(veri.get("metin", ""))[:4000],
                     "bitis": time.time() + max(5, int(veri.get("sure_sn", 60))),
                     "kapatilabilir": bool(veri.get("kapatilabilir", True)),
                 }
+                acil_suruyor = self.acil is not None
             self.yayinla()
+            if acil_suruyor:
+                return True, "Duyuru alındı; acil yayın bitince kalan süresiyle görünecek."
             return True, self._ekran_notu("Duyuru gösterildi.")
         if tur == "duyuru_kaldir":
+            kimlik = veri.get("duyuru_id")
             with self.kilit:
+                if kimlik is not None and (self.duyuru is None or self.duyuru.get("id") != kimlik):
+                    # Panelde durdurulan yayın artık ekranda değil (yerine başka duyuru geçti).
+                    return True, "Ekrandaki duyuru başka; dokunulmadı."
                 self.duyuru = None
             self.yayinla()
             return True, "Duyuru kaldırıldı."
@@ -264,6 +309,10 @@ class Servis:
         if tur == "guncelle":
             return self._guncelle(veri)
         if tur == "kapat" and int(veri.get("uyari_sn", 0) or 0) > 0:
+            # Uyarılı (otomatik) kapatma acil yayın sürerken uygulanmaz: bilinçli atlama,
+            # hata değildir. Panelden verilen uyarısız kapatma ise her durumda uygulanır.
+            if self.acil is not None and self.acil["bitis"] > time.time():
+                return True, "Acil yayın sürüyor; otomatik kapatma uygulanmadı."
             # Uyarılı kapatma: tahta kullanılıyorsa (kilitli değil ve ekranı varsa)
             # önce geri sayım gösterilir; kullanan kişi vazgeçebilir. Kilitli ya da
             # oturumsuz tahtada uyaracak kimse yoktur, doğrudan kapanır.
@@ -336,6 +385,8 @@ class Servis:
                 bilgi = {"ad": _kisa(ayarlar["tahta"].get("ad")), "derslik": _kisa(ayarlar["tahta"].get("derslik"))}
                 if bilgi != self.tahta_bilgi:
                     self.tahta_bilgi, degisti = bilgi, True
+        # Acil yayın durumu: anahtar hiç yoksa (eski sunucu) dokunulmaz; null gelirse temizlenir.
+        acil_degisti = "acil" in ayarlar and self._acil_isle(ayarlar["acil"])
         logo_degisti = False
         if "logo_sha256" in ayarlar:
             sha = ayarlar["logo_sha256"]
@@ -352,8 +403,35 @@ class Servis:
                 self._kaydet()
         if logo_degisti:
             self.marka_yayinla()
-        if degisti or logo_degisti:
+        if degisti or logo_degisti or acil_degisti:
             self.yayinla()
+        if acil_degisti:
+            self.bildir()  # acil_id sunucuya beklemeden gitsin (teslim kaydı)
+
+    def _acil_isle(self, deger) -> bool:
+        """Sunucunun verdiği acil durumunu uygular; ekrana yansıyan bir değişiklik olduysa True."""
+        yeni = _acil_coz(deger)
+        with self.kilit:
+            eski = self.acil
+            if yeni is None:
+                if eski is None:
+                    return False
+                self.acil = None
+                self.olaylar.append("Acil yayın sona erdi (sunucu).")
+                return True
+            bitis = time.time() + min(ACIL_EN_UZUN_SN, max(5, yeni["kalan_sn"]))
+            if eski is not None and eski["id"] == yeni["id"]:
+                # Aynı yayın: yalnız kalan süre sunucuyla eşitlenir (tahta saatine güvenilmez).
+                degisti = abs(eski["bitis"] - bitis) > 2 or eski["baslik"] != yeni["baslik"] or eski["metin"] != yeni["metin"]
+                self.acil = dict(eski, bitis=bitis, baslik=yeni["baslik"], metin=yeni["metin"])
+                return degisti
+            self.acil = {k: yeni[k] for k in ("id", "tur", "baslik", "metin")}
+            self.acil["bitis"] = bitis
+            if self.kapatma is not None:
+                self.kapatma = None
+                self.olaylar.append("Kapatma geri sayımı acil yayın nedeniyle iptal edildi.")
+            self.olaylar.append(f"Acil yayın alındı (#{yeni['id']}, {ACIL_TURLERI[yeni['tur']]}).")
+            return True
 
     def _logo_indir(self, sha: str) -> bool:
         """Logoyu indirir, denetler ve saklar; başarılıysa True. Bozuk logo saklanmaz, eskisi kalır."""
@@ -455,8 +533,14 @@ class Servis:
             if suresi_doldu:
                 gunluk.info("Uyarı süresi doldu, kapatılıyor: %s", sistem.kapat())
                 self.yayinla()
+            with self.kilit:
+                # Acil yayın süresi dolunca (sunucuya ulaşılamasa da) tahta kendiliğinden bırakır.
+                acil_bitti = self.acil is not None and self.acil["bitis"] <= time.time()
+                if acil_bitti:
+                    self.acil = None
+                    self.olaylar.append("Acil yayının süresi doldu.")
             durum = (self.cevrimdisi(), self.duyuru is not None and self.duyuru["bitis"] <= time.time())
-            if durum != self._son_cevrimdisi or durum[1]:
+            if durum != self._son_cevrimdisi or durum[1] or acil_bitti:
                 self._son_cevrimdisi = durum
                 self.yayinla()
 
@@ -519,6 +603,31 @@ class Servis:
 
 def _kisa(deger) -> str:
     return str(deger or "").strip()[:60]
+
+
+def _acil_coz(deger) -> dict | None:
+    """`ayar.acil` değerini doğrular: {"id","tur","baslik","metin","kalan_sn"} ya da None.
+
+    Biçimi bozuk değer yok sayılır (None): tahtada belirsiz bir acil ekranı açılmaz.
+    """
+    if not isinstance(deger, dict):
+        return None
+    kimlik, tur = deger.get("id"), deger.get("tur")
+    if not isinstance(kimlik, int) or isinstance(kimlik, bool) or tur not in ACIL_TURLERI:
+        return None
+    try:
+        kalan = int(deger.get("kalan_sn") or 0)
+    except (TypeError, ValueError):
+        return None
+    if kalan <= 0:
+        return None
+    return {
+        "id": kimlik,
+        "tur": tur,
+        "baslik": str(deger.get("baslik") or "")[:120],
+        "metin": str(deger.get("metin") or "")[:1000],
+        "kalan_sn": kalan,
+    }
 
 
 def _sha_gecerli(deger) -> bool:

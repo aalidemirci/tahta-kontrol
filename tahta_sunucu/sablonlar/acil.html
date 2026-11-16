@@ -1,0 +1,125 @@
+{% extends "taban.html" %}
+{% block baslik %}Acil durum · Tahta Kontrol{% endblock %}
+{% block icerik %}
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>Acil durum ve tatbikat yayını</h1>
+    <p>Yayın bütün onaylı tahtalara ({{ hedef_sayisi }}) birkaç saniye içinde iner; kilitli tahtada da görünür ve tahtadan kapatılamaz.</p>
+  </div>
+</div>
+
+{% if aktif %}
+{# Süren yayın: teslim sayacı ve kalan süre panel.js ile 4 sn'de bir /api/durum'dan güncellenir. #}
+<section class="acil-kutu" data-tur="{{ aktif.tur }}" id="acil-aktif" data-acil-id="{{ aktif.id }}" aria-labelledby="acil-aktif-baslik">
+  <p class="acil-tur"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ 'TATBİKAT YAYINI SÜRÜYOR' if aktif.tur == 'tatbikat' else 'ACİL DURUM YAYINI SÜRÜYOR' }}</p>
+  <h2 id="acil-aktif-baslik">{{ aktif.baslik }}</h2>
+  <p class="acil-metin">{{ aktif.metin }}</p>
+  <dl class="acil-sayilar">
+    <div><dt>Görüntülenen</dt><dd><span id="acil-teslim">{{ aktif.teslim }}/{{ aktif.hedef }}</span> tahta</dd></div>
+    <div><dt>Kalan</dt><dd><span id="acil-kalan">{{ (aktif.kalan_sn / 60) | round(0, 'ceil') | int }}</span> dk</dd></div>
+    <div><dt>Başlatan</dt><dd>{{ aktif.baslatan }} · {{ aktif.baslangic | saat }}</dd></div>
+  </dl>
+  <p id="acil-bitti" class="bant" role="status" hidden>Yayın sona erdi. <a href="/acil">Sayfayı yenileyin</a>.</p>
+  <div class="dugme-satiri">
+    {% if yetkili %}
+    <form method="post" action="/acil/{{ aktif.id }}/bitir" class="satir-ici" id="acil-bitir">
+      <input type="hidden" name="donus" value="/acil">
+      <button type="button" class="tehlike-dolu" data-onay="acil_bitir" aria-haspopup="dialog">Yayını bitir…</button>
+    </form>
+    {% endif %}
+    <a class="dugme" href="/acil/{{ aktif.id }}">Rapor</a>
+  </div>
+</section>
+{% endif %}
+
+{% if yetkili %}
+<section class="kutu" aria-labelledby="baslat-baslik">
+  <h2 id="baslat-baslik">{{ 'Yeni yayın başlat' if aktif else 'Yayın başlat' }}</h2>
+  {% if aktif %}<p class="bant uyari" role="status">Bir yayın sürüyor; yenisi başlatılınca süren yayın biter.</p>{% endif %}
+  {% if eski_ajan_sayisi %}<p class="bant uyari" role="status">{{ eski_ajan_sayisi }} tahtada eski ajan var: yayın orada kapatılamaz bir duyuru olarak görünür. Ajanı panodan güncelleyin.</p>{% endif %}
+  <form method="post" action="/acil/baslat" id="acil-formu" class="acil-formu">
+    <fieldset class="secim-grubu">
+      <legend>1. Tür</legend>
+      <p class="ipucu">Hiçbiri seçili gelmez; birini seçmeden yayın başlamaz.</p>
+      <div class="tur-kartlari">
+        <label class="tur-kart" data-tur="acil">
+          <input type="radio" name="tur" value="acil" required{% if girilen.tur == 'acil' %} checked{% endif %}>
+          <span class="tur-ad">Gerçek acil durum</span>
+          <span class="not">Tahtalarda kırmızı zeminde "ACİL DURUM".</span>
+        </label>
+        <label class="tur-kart" data-tur="tatbikat">
+          <input type="radio" name="tur" value="tatbikat" required{% if girilen.tur == 'tatbikat' %} checked{% endif %}>
+          <span class="tur-ad">Tatbikat</span>
+          <span class="not">Tahtalarda kehribar zeminde "TATBİKAT — BU BİR TATBİKATTIR".</span>
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset class="secim-grubu">
+      <legend>2. Şablon</legend>
+      <p class="ipucu">Seçilen şablon başlık ve metni doldurur; yayından önce düzeltebilirsiniz.{% if kullanici.rol == 'yonetici' %} Şablonlar <a href="/ayarlar#acil-sablonlari">Ayarlar</a>'dan düzenlenir.{% endif %}</p>
+      <div class="secenekler sablonlar">
+        <label><input type="radio" name="sablon" value=""{% if not girilen.sablon or girilen.sablon not in sablonlar | map(attribute='kod') | list %} checked{% endif %}> Şablonsuz</label>
+        {% for s in sablonlar %}
+        <label><input type="radio" name="sablon" value="{{ s.kod }}" data-baslik="{{ s.baslik }}" data-metin="{{ s.metin }}"{% if girilen.sablon == s.kod %} checked{% endif %}> {{ s.ad }}</label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset class="secim-grubu">
+      <legend>3. Metin ve süre</legend>
+      <label for="acil-baslik">Başlık</label>
+      <input type="text" id="acil-baslik" name="baslik" maxlength="{{ baslik_en_uzun }}" placeholder="ör. TAHLİYE" value="{{ girilen.baslik }}">
+      <label for="acil-metin">Metin</label>
+      <textarea id="acil-metin" name="metin" maxlength="{{ metin_en_uzun }}" rows="4" required aria-describedby="acil-metin-sayac acil-metin-kvkk">{{ girilen.metin }}</textarea>
+      <p class="ipucu sayac" id="acil-metin-sayac" data-sayac="acil-metin">En çok {{ metin_en_uzun }} karakter.</p>
+      <p class="ipucu" id="acil-metin-kvkk">Öğrenci ya da kişi adı yazmayın.</p>
+      <label for="acil-sure">Süre (dakika)</label>
+      <input type="number" id="acil-sure" name="sure_dk" class="alan-dar" min="{{ sure_siniri[0] }}" max="{{ sure_siniri[1] }}" value="{{ girilen.sure_dk or varsayilan_sure }}" required>
+      <p class="ipucu">{{ sure_siniri[0] }}–{{ sure_siniri[1] }} dakika. Süre dolunca tahtalar yayını kendiliğinden bırakır.</p>
+    </fieldset>
+
+    <fieldset class="secim-grubu onay-alani">
+      <legend>4. Onay</legend>
+      <label class="satir"><input type="checkbox" name="onay" value="1" required>
+        <span id="acil-onay-metin" data-acil="{{ onay_metni.acil }}" data-tatbikat="{{ onay_metni.tatbikat }}">Seçtiğim yayın türünü onaylıyorum (gerçek acil durumda bu bir tatbikat değildir; tatbikatta tahtalarda "TATBİKAT" görünür).</span></label>
+      <label for="acil-parola">Parolanız</label>
+      <input type="password" id="acil-parola" name="parola" class="alan-orta" autocomplete="current-password" required>
+      <p class="ipucu">Panel ortak bilgisayarda açık kalmış olabilir; yayın parolanızla başlar.</p>
+    </fieldset>
+
+    <p class="dugme-satiri"><button class="tehlike-dolu" id="acil-gonder" data-acil="Acil yayını başlat" data-tatbikat="Tatbikat yayınını başlat">Yayını başlat</button></p>
+    <p class="bant"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Bu yayın binanın yangın alarmı ya da anons sisteminin yerine geçmez. Okulun acil durum planındaki ilk adımları uygulayın. Sunucu bilgisayarı kapalıysa yayın yapılamaz.</p>
+  </form>
+</section>
+{% else %}
+<p class="bant" role="status">Acil yayın yetkiniz yok; yöneticiden isteyin.</p>
+{% endif %}
+
+<h2 id="acil-gecmis">Geçmiş</h2>
+{% if gecmis %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="acil-gecmis">
+<table>
+  <caption class="gizli">Son {{ gecmis | length }} yayın</caption>
+  <thead><tr><th scope="col">Tür</th><th scope="col">Başlık</th><th scope="col">Başlangıç</th><th scope="col">Bitiş</th><th scope="col">Süre</th><th scope="col">Teslim</th><th scope="col">Başlatan / Bitiren</th><th scope="col">Bitiş nedeni</th><th scope="col"><span class="gizli">Rapor</span></th></tr></thead>
+  <tbody>
+  {% for g in gecmis %}
+  <tr>
+    <td data-etiket="Tür"><span class="rozet" data-durum="{{ 'sorun' if g.tur == 'acil' else 'uyari' }}"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ acil_turleri[g.tur] }}</span></td>
+    <td data-etiket="Başlık">{{ g.baslik }}</td>
+    <td data-etiket="Başlangıç" class="tarih-hucre">{{ g.baslangic | tarih }}</td>
+    <td data-etiket="Bitiş" class="tarih-hucre">{{ g.bitis | tarih if g.bitis else 'sürüyor' }}</td>
+    <td data-etiket="Süre">{{ g.sure_dk }} dk</td>
+    <td data-etiket="Teslim">{{ g.teslim }}/{{ g.hedef }}</td>
+    <td data-etiket="Başlatan / Bitiren">{{ g.baslatan }}{% if g.bitiren %} / {{ g.bitiren }}{% endif %}</td>
+    <td data-etiket="Bitiş nedeni">{{ acil_bitis_nedeni.get(g.bitis_nedeni, '—') }}</td>
+    <td data-etiket="Rapor"><a href="/acil/{{ g.id }}">Rapor</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="bos-not">Henüz yayın yapılmadı.</p>
+{% endif %}
+{% endblock %}

@@ -1,6 +1,9 @@
-/* Tahta Kontrol paneli 0.2.0 — kütüphane yok, derleme yok.
+/* Tahta Kontrol paneli — kütüphane yok, derleme yok.
    Sayfa kancalarına göre bölümler: onay (tehlikeli işlem dialogu), pano (canlı durum,
-   seçim, süzgeç, duyurucu), ayarlar (renk önizlemesi, logo), kopyala, dogrulama.
+   seçim, süzgeç, duyurucu, acil rozetleri), menu (açılır grupların kapanışı), sayac,
+   duyuru formu (koşullu alanlar, hedef önizlemesi), acil (tür, şablon, teslim sayacı),
+   yazdir, acil şablonları, ayarlar (renk önizlemesi, logo), kopyala, dogrulama.
+   Her bölüm JS kapalıyken de çalışan sayfayı yalnız iyileştirir.
    Metin her zaman textContent ile yazılır; innerHTML kullanılmaz. */
 (function () {
   "use strict";
@@ -46,6 +49,26 @@
       ad: "eylem", deger: "sil", evet: "Tahtayı kaldır",
       metin: "Ajanı sunucuya bağlanamaz; yeniden eklemek için kurulum gerekir.",
       baslik: function () { return "Bu tahta panelden kaldırılsın mı?"; }
+    },
+    acil_bitir: {
+      ad: "eylem", deger: "bitir", evet: "Yayını bitir",
+      metin: "Acil yayın bütün tahtalarda kaldırılacak.",
+      baslik: function () { return "Acil yayın bitirilsin mi?"; }
+    },
+    plan_sil: {
+      ad: "eylem", deger: "sil", evet: "Planı sil",
+      metin: "Plan bir daha gösterilmez; yayındaki gösterim varsa ayrıca durdurun.",
+      baslik: function () { return "Bu duyuru planı silinsin mi?"; }
+    },
+    grup_sil: {
+      ad: "eylem", deger: "sil", evet: "Grubu sil",
+      metin: "Grup silinir; tahtalar kalır.",
+      baslik: function () { return "Bu grup silinsin mi?"; }
+    },
+    sablon_varsayilan: {
+      ad: "eylem", deger: "varsayilan", evet: "Örneklere dön",
+      metin: "Düzenlediğiniz bütün acil şablonu metinleri silinir.",
+      baslik: function () { return "Şablonlar örneklere döndürülsün mü?"; }
     }
   };
   var pano = null; // pano bölümü kurulunca doldurulur
@@ -119,14 +142,19 @@
   };
   var METIN = {
     acik: "Açık", cevrimdisi: "Çevrimdışı", kilitli: "Kilitli",
-    duyuru: "Duyuru ekranda", sorun: "Ekran yardımcısı yok", guncelleme: "Güncelleme var"
+    duyuru: "Duyuru ekranda", sorun: "Ekran yardımcısı yok", guncelleme: "Güncelleme var",
+    acil_ekranda: "Acil yayın ekranda", eski_ajan: "Eski ajan (yedek duyuru)"
   };
+  // Rozet anahtarı → renk (data-durum). Belirtilmeyen anahtarın rengi kendi adıdır.
+  var RENK = { acil_ekranda: "sorun", eski_ajan: "uyari" };
+  SIMGE.acil_ekranda = "s-sorun";
+  SIMGE.eski_ajan = "s-guncel";
   var DEGISIM = {
     acik: "açıldı", cevrimdisi: "çevrimdışı oldu", kilitli: "kilitlendi",
     duyuru: "duyuru gösteriyor", sorun: "ekran yardımcısını yitirdi"
   };
 
-  function durumHesapla(t) {
+  function durumHesapla(t, acilSuruyor) {
     var birincil;
     if (!t.cevrimici) birincil = "cevrimdisi";
     else if (!t.ekran_bagli) birincil = "sorun";
@@ -134,9 +162,14 @@
     else if (t.kilitli) birincil = "kilitli";
     else birincil = "acik";
     var rozetler = [birincil];
+    // Acil yayın sürerken: ekrana aldıysa kırmızı rozet; ajan acil yeteneği bildirmiyorsa
+    // yayını yedek duyuru olarak alır (kapatılamaz) ve güncellenmelidir.
+    // acil_gorundu "bir kez ekrana aldı" demektir; çevrimdışı tahtada "şu an ekranda" denmez.
+    if (acilSuruyor && t.acil_gorundu && t.cevrimici) rozetler.unshift("acil_ekranda");
+    else if (acilSuruyor && t.cevrimici && !t.acil_yetenegi) rozetler.push("eski_ajan");
     if ((birincil === "duyuru" || birincil === "sorun") && t.kilitli) rozetler.push("kilitli");
     if (t.surum && !t.guncel) rozetler.push("guncelleme");
-    rozetler = rozetler.slice(0, 3);
+    rozetler = rozetler.slice(0, 4);
     return {
       birincil: birincil,
       rozetler: rozetler,
@@ -168,6 +201,7 @@
     var diyalog = $("onay-diyalog");
     var suzgec = "hepsi";
     var sonBasari = Date.now();
+    var acilSuruyor = !!panoVeri.acil;
 
     /* Duyurucu: yalnız değişimi, en çok 5 sn'de bir, birikenleri tek cümlede söyler. */
     var kuyruk = [];
@@ -217,7 +251,7 @@
       kart.classList.toggle("cevrimdisi", h.birincil === "cevrimdisi");
       var alan = kart.querySelector('[data-alan="rozetler"]');
       alan.textContent = "";
-      h.rozetler.forEach(function (d) { alan.appendChild(rozet(d, METIN[d], SIMGE[d])); });
+      h.rozetler.forEach(function (d) { alan.appendChild(rozet(RENK[d] || d, METIN[d], SIMGE[d])); });
       kart.querySelector('[data-alan="oturum"]').textContent = h.oturum;
       kart.querySelector('[data-alan="alt"]').textContent = h.alt;
     }
@@ -229,7 +263,7 @@
         var kart = kartlar.get(id);
         sonVeri.set(id, t);
         if (!kart) { bilinmeyen = true; return; }
-        var h = durumHesapla(t);
+        var h = durumHesapla(t, acilSuruyor);
         var imza = JSON.stringify(h);
         if (imzalar.get(id) !== imza) {
           kartiYaz(kart, h);
@@ -366,6 +400,7 @@
       }).then(function (v) {
         if (!v) return;
         sonBasari = Date.now();
+        acilSuruyor = !!v.acil;
         ciz(v.tahtalar || [], false);
         if (typeof v.bekleyen === "number" && v.bekleyen !== (panoVeri.bekleyen || 0)) yenileGoster();
         canliYaz(true);
@@ -531,7 +566,253 @@
     else window.addEventListener("load", odakla, { once: true });
   }
 
+  /* ---- menu: açılır gruplar (<details>) — JS'siz de çalışır; burada yalnız kapanış --- */
+  function menuKur() {
+    var gruplar = Array.prototype.slice.call(document.querySelectorAll("details.menu-grup"));
+    if (!gruplar.length) return;
+    function kapat(haric) {
+      gruplar.forEach(function (g) { if (g !== haric) g.open = false; });
+    }
+    gruplar.forEach(function (g) {
+      g.addEventListener("toggle", function () { if (g.open) kapat(g); });
+    });
+    document.addEventListener("click", function (olay) {
+      if (!olay.target.closest || !olay.target.closest("details.menu-grup")) kapat(null);
+    });
+    document.addEventListener("keydown", function (olay) {
+      if (olay.key !== "Escape") return;
+      var acik = gruplar.filter(function (g) { return g.open; })[0];
+      if (!acik) return;
+      acik.open = false;
+      acik.querySelector("summary").focus();
+    });
+  }
+
+  /* ---- sayac: metin alanının altında "123/4000" ---------------------------------- */
+  function sayacKur() {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-sayac]"), function (s) {
+      var alan = $(s.getAttribute("data-sayac"));
+      if (!alan) return;
+      var enCok = parseInt(alan.getAttribute("maxlength") || "0", 10);
+      var asil = s.textContent;
+      var yaz = function () {
+        var n = alan.value.length;
+        s.textContent = enCok ? n + "/" + enCok : String(n);
+        if (!n) s.textContent = asil;
+      };
+      alan.addEventListener("input", yaz);
+      yaz();
+    });
+  }
+
+  /* Bir radyo grubunun seçili değeri ("" = seçili yok). */
+  function secili(form, ad) {
+    var r = form.querySelector('input[name="' + ad + '"]:checked');
+    return r ? r.value : "";
+  }
+
+  /* ---- duyuru formu: koşullu alanlar, gönder metni, hedef önizlemesi -------------- */
+  function duyuruFormuKur() {
+    var form = $("duyuru-formu");
+    if (!form) return;
+    var kosullular = Array.prototype.slice.call(form.querySelectorAll(".kosullu[data-kosul]"));
+    var gonder = $("duyuru-gonder");
+    var onizleme = $("hedef-onizleme");
+    var plan = !!form.querySelector('input[name="eylem"][value="kaydet"]');
+
+    function kosullariUygula() {
+      kosullular.forEach(function (k) {
+        // İç içe koşul (Tekrarlı › Günlük/Haftalık): üstteki gizliyse içteki zaten görünmez.
+        // Gizli alanlar yine gönderilir; sunucu yalnız seçili zamanlamanın alanlarını okur.
+        k.hidden = secili(form, k.getAttribute("data-kosul")) !== k.getAttribute("data-deger");
+      });
+      if (gonder) {
+        var hemen = secili(form, "zaman") === "hemen" && !plan;
+        gonder.textContent = gonder.getAttribute(hemen ? "data-hemen" : "data-plan");
+      }
+    }
+
+    // Formdan hedef sözlüğü: sunucudaki hedef.formdan ile aynı kural.
+    function hedefTopla() {
+      if (secili(form, "kime") === "tumu") return { tumu: true };
+      var h = {};
+      function sayilar(ad) {
+        return Array.prototype.map.call(form.querySelectorAll('input[name="' + ad + '"]:checked'), function (x) { return parseInt(x.value, 10); });
+      }
+      function metinler(ad) {
+        return Array.prototype.map.call(form.querySelectorAll('input[name="' + ad + '"]:checked'), function (x) { return x.value; });
+      }
+      [["hedef_tahta", "tahtalar"], ["grup", "gruplar"], ["kat", "kat"]].forEach(function (c) {
+        var d = sayilar(c[0]);
+        if (d.length) h[c[1]] = d;
+      });
+      ["bina", "duzey", "devre"].forEach(function (a) {
+        var d = metinler(a);
+        if (d.length) h[a] = d;
+      });
+      return h;
+    }
+
+    var ozet = onizleme && onizleme.querySelector('[data-alan="ozet"]');
+    var liste = onizleme && onizleme.querySelector(".onizleme-liste");
+    var sira = 0;
+    var bekleme = null;
+    function onizlemeYaz(simgeAdi, durum, parcalar) {
+      var p = onizleme.querySelector("p");
+      var eski = p.querySelector("svg");
+      if (eski) p.replaceChild(simge(simgeAdi), eski);
+      if (durum) onizleme.setAttribute("data-durum", durum); else onizleme.removeAttribute("data-durum");
+      ozet.textContent = "";
+      parcalar.forEach(function (x) {
+        if (x && x.kalin) { var b = document.createElement("strong"); b.textContent = x.kalin; ozet.appendChild(b); }
+        else ozet.appendChild(document.createTextNode(x));
+      });
+    }
+    function onizle() {
+      bekleme = null;
+      if (!onizleme) return;
+      var h = hedefTopla();
+      if (!h.tumu && !Object.keys(h).length) {
+        onizlemeYaz("s-bilgi", "uyari", ["Duyurunun hangi tahtalara gideceğini seçin."]);
+        if (liste) liste.hidden = true;
+        return;
+      }
+      var benim = ++sira;
+      fetch("/api/hedef-onizleme?hedef=" + encodeURIComponent(JSON.stringify(h)), { credentials: "same-origin", cache: "no-store" })
+        .then(function (y) {
+          if (y.status === 401) { location.href = "/giris"; return null; }
+          return y.json().then(function (v) { return { ok: y.ok, v: v }; });
+        })
+        .then(function (s) {
+          if (!s || benim !== sira) return; // yalnız son isteğin yanıtı yazılır
+          if (!s.ok) { onizlemeYaz("s-sorun", "uyari", [s.v.hata || "Seçim okunamadı."]); return; }
+          var v = s.v;
+          if (!v.sayi) onizlemeYaz("s-sorun", "uyari", ["Bu seçim şu an ", { kalin: "hiçbir tahtaya" }, " ulaşmıyor · " + v.ozet]);
+          else onizlemeYaz("s-acik", "", ["Şu an ", { kalin: v.sayi + " tahtaya" }, " ulaşır · " + v.ozet]);
+          if (liste) {
+            var ul = liste.querySelector("ul");
+            ul.textContent = "";
+            (v.tahtalar || []).forEach(function (t) {
+              var li = document.createElement("li");
+              li.textContent = t.ad + (t.derslik ? " · " + t.derslik : "") + (t.cevrimici ? "" : " (çevrimdışı)");
+              ul.appendChild(li);
+            });
+            liste.querySelector("summary").textContent = "Tahtalar (" + v.sayi + ")";
+            liste.hidden = !v.sayi;
+          }
+        })
+        .catch(function () {});
+    }
+    function gecikmeliOnizle() {
+      clearTimeout(bekleme);
+      bekleme = setTimeout(onizle, 300);
+    }
+
+    form.addEventListener("change", function (olay) {
+      kosullariUygula();
+      var ad = olay.target && olay.target.name;
+      if (["kime", "bina", "kat", "duzey", "devre", "grup", "hedef_tahta"].indexOf(ad) >= 0) gecikmeliOnizle();
+    });
+    kosullariUygula();
+    if (onizleme && !form.querySelector("fieldset[disabled]")) onizle();
+  }
+
+  /* ---- acil: tür kartı, şablon, onay metni, süren yayının sayacı ------------------ */
+  function acilKur() {
+    var form = $("acil-formu");
+    if (form) {
+      var onayMetni = $("acil-onay-metin");
+      var gonder = $("acil-gonder");
+      var baslik = $("acil-baslik");
+      var metin = $("acil-metin");
+      var turUygula = function () {
+        var tur = secili(form, "tur");
+        form.setAttribute("data-tur", tur);
+        if (tur && onayMetni) onayMetni.textContent = onayMetni.getAttribute("data-" + tur);
+        if (gonder) {
+          gonder.textContent = tur ? gonder.getAttribute("data-" + tur) : "Yayını başlat";
+          gonder.classList.toggle("uyari-dolu", tur === "tatbikat");
+          gonder.classList.toggle("tehlike-dolu", tur !== "tatbikat");
+        }
+      };
+      form.addEventListener("change", function (olay) {
+        var t = olay.target;
+        if (t.name === "tur") {
+          turUygula();
+          // Tür değişince eski onay geçersizdir: kişi yeni metni okuyup yeniden işaretler.
+          var onay = form.querySelector('input[name="onay"]');
+          if (onay) onay.checked = false;
+        }
+        if (t.name === "sablon" && t.checked && t.value) {
+          baslik.value = t.getAttribute("data-baslik") || "";
+          metin.value = t.getAttribute("data-metin") || "";
+          metin.dispatchEvent(new Event("input"));
+        }
+      });
+      turUygula();
+    }
+
+    var kutu = $("acil-aktif");
+    if (!kutu) return;
+    var kimlik = parseInt(kutu.getAttribute("data-acil-id"), 10);
+    var teslim = $("acil-teslim");
+    var kalan = $("acil-kalan");
+    var bitti = $("acil-bitti");
+    var zaman = null;
+    function yokla() {
+      zaman = null;
+      if (document.visibilityState === "hidden") return;
+      fetch("/api/durum", { credentials: "same-origin", cache: "no-store" }).then(function (y) {
+        if (y.status === 401) { location.href = "/giris"; return null; }
+        return y.ok ? y.json() : null;
+      }).then(function (v) {
+        if (!v) return;
+        if (!v.acil || v.acil.id !== kimlik) {
+          if (bitti) bitti.hidden = false;
+          var dugme = kutu.querySelector("[data-onay]");
+          if (dugme) dugme.hidden = true;
+          return; // yayın bitti: yoklama durur
+        }
+        teslim.textContent = v.acil.teslim + "/" + v.acil.hedef;
+        kalan.textContent = String(Math.ceil(v.acil.kalan_sn / 60));
+        zaman = setTimeout(yokla, 4000);
+      }).catch(function () { zaman = setTimeout(yokla, 4000); });
+    }
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState !== "hidden" && !zaman && bitti && bitti.hidden) yokla();
+    });
+    zaman = setTimeout(yokla, 4000);
+  }
+
+  /* ---- rapor: Yazdır düğmesi (JS yoksa tarayıcının yazdırması kullanılır) --------- */
+  function yazdirKur() {
+    Array.prototype.forEach.call(document.querySelectorAll("button[data-yazdir]"), function (d) {
+      d.hidden = false;
+      d.addEventListener("click", function () { window.print(); });
+    });
+  }
+
+  /* ---- ayarlar: acil şablonu satırını sil (adı boşaltır; kaydedince silinir) ------ */
+  function sablonKur() {
+    Array.prototype.forEach.call(document.querySelectorAll("button[data-sablon-sil]"), function (d) {
+      d.hidden = false;
+      d.addEventListener("click", function () {
+        var satir = d.closest(".sablon-satiri");
+        Array.prototype.forEach.call(satir.querySelectorAll("input, textarea"), function (g) { g.value = ""; });
+        satir.hidden = true;
+        var ileti = $("acil-sablon-bilgi");
+        if (ileti) ileti.hidden = false;
+      });
+    });
+  }
+
   panoKur();
+  menuKur();
+  sayacKur();
+  duyuruFormuKur();
+  acilKur();
+  yazdirKur();
+  sablonKur();
   onayKur();
   ayarlarKur();
   kopyalaKur();

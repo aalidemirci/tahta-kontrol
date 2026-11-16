@@ -1,0 +1,64 @@
+{% extends "taban.html" %}
+{% block baslik %}Tahtaları içe aktar · Tahta Kontrol{% endblock %}
+{% block icerik %}
+<p class="geri"><a href="/gruplar">← Gruplar</a></p>
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>Tahta niteliklerini içe aktar</h1>
+    <p>Bina, kat, düzey, devre, şube ve grupları bir CSV dosyasıyla toplu doldurun. Önce önizlenir; "Uygula" demeden hiçbir şey değişmez.</p>
+  </div>
+</div>
+{% if hata %}<div class="bant hata" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span class="gizli">Hata: </span>{{ hata }}</div>{% endif %}
+{% if not cozum %}
+<ol class="adimlar">
+  <li class="kutu">
+    <h2>1. Listeyi indirin</h2>
+    <p><a class="dugme" href="/tahtalar.csv">Tahtaları dışa aktar (CSV)</a></p>
+    <p class="not">Dosya Excel'de Türkçe karakterlerle açılır. IP ve MAC adresi içermez.</p>
+  </li>
+  <li class="kutu">
+    <h2>2. Excel'de doldurun</h2>
+    <p>bina, kat, duzeyler, devre, subeler ve gruplar sütunlarını doldurun. <code>id</code> sütununa dokunmayın.</p>
+    <ul class="not">
+      <li>Kat: <code>Zemin</code>, <code>Bodrum</code>, <code>2. bodrum</code>, <code>3</code> ya da <code>3. kat</code></li>
+      <li>Düzey: <code>9</code>, <code>9|10</code>, <code>Hazırlık</code></li>
+      <li>Devre: <code>Sabah</code>, <code>Öğle</code>, <code>Sabah ve öğle</code></li>
+      <li>Şube: <code>9/A</code> ya da <code>9/A|10/B</code>; grup: <code>Fen laboratuvarları|Sınav salonları</code> (yoksa oluşturulur)</li>
+      <li>Dosyada olmayan sütuna dokunulmaz; sütun var ama hücre boşsa alan temizlenir.</li>
+    </ul>
+  </li>
+  <li class="kutu">
+    <h2>3. Yükleyin ve önizleyin</h2>
+    <form method="post" action="/tahtalar/ice-aktar" enctype="multipart/form-data" class="form-dar">
+      <label for="dosya">CSV dosyası (en çok 2 MB)</label>
+      <input type="file" id="dosya" name="dosya" accept=".csv,text/csv" required>
+      <p class="dugme-satiri"><button name="eylem" value="onizle" class="ana">Önizle</button></p>
+    </form>
+  </li>
+</ol>
+{% else %}
+<div class="bant{% if cozum.sayilar.hatali %} uyari{% endif %}" role="status">
+  <strong>{{ cozum.sayilar.degisecek }} tahta değişecek, {{ cozum.sayilar.degismiyor }} değişmiyor, {{ cozum.sayilar.hatali }} hatalı satır atlanacak{% if cozum.yeni_gruplar %}; yeni grup oluşturulacak: {{ cozum.yeni_gruplar | join(', ') }}{% endif %}.</strong>
+  <span>Hatalı satırlar varken de uygulanabilir; onlar atlanır.</span>
+</div>
+<div class="tablo-kap" role="region" tabindex="0" aria-label="Önizleme">
+<table>
+  <thead><tr><th scope="col">Satır</th><th scope="col">Tahta</th><th scope="col">Eski → Yeni</th><th scope="col">Durum</th></tr></thead>
+  <tbody>
+  {% for s in cozum.satirlar %}
+  <tr{% if s.durum == 'hatali' %} class="satir-hatali"{% endif %}>
+    <td data-etiket="Satır">{{ s.satir }}</td>
+    <td data-etiket="Tahta">{{ s.tahta or '—' }}</td>
+    <td data-etiket="Eski → Yeni">{% for d in s.degisiklikler %}<div class="degisim"><span class="not">{{ d.ad }}:</span> <del>{{ d.eski or '—' }}</del> → <ins>{{ d.yeni or '—' }}</ins></div>{% else %}—{% endfor %}</td>
+    <td data-etiket="Durum">{% if s.durum == 'hatali' %}<span class="rozet" data-durum="sorun"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Hatalı: {{ s.neden }}</span>{% elif s.durum == 'degisecek' %}<span class="rozet" data-durum="uyari">Değişecek</span>{% else %}<span class="rozet" data-durum="bilgi">Değişmiyor</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<form method="post" action="/tahtalar/ice-aktar">
+  <input type="hidden" name="icerik" value="{{ icerik }}">
+  <p class="dugme-satiri"><button name="eylem" value="uygula" class="ana"{% if not cozum.sayilar.degisecek %} disabled{% endif %}>Uygula</button> <a class="dugme" href="/tahtalar/ice-aktar">Vazgeç</a></p>
+</form>
+{% endif %}
+{% endblock %}

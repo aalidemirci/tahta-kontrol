@@ -23,6 +23,8 @@
   <symbol id="s-onay" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.5 1.5"/><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
   <symbol id="s-tamam" viewBox="0 0 16 16"><path d="M3 8.5 6.5 12 13 4.5" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
   <symbol id="s-bilgi" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 7v4.5M8 4.5v1" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="s-asagi" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="s-takvim" viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="10.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 7h12M5.5 2v3M10.5 2v3" stroke="currentColor" stroke-width="1.5"/></symbol>
 </svg>
 {% if kullanici %}
 <header class="ust"><div class="ust-ic">
@@ -34,15 +36,20 @@
     </span>
   </a>
   <nav class="ana-menu" aria-label="Ana menü">
-    {% set yol = request.url.path %}
-    <a href="/" {% if yol == '/' or yol.startswith('/tahta/') %}aria-current="page"{% endif %}>Pano</a>
-    <a href="/duyurular" {% if yol == '/duyurular' %}aria-current="page"{% endif %}>Duyurular</a>
-    <a href="/ekle" {% if yol == '/ekle' %}aria-current="page"{% endif %}>Tahta ekle</a>
-    <a href="/kayit" {% if yol == '/kayit' %}aria-current="page"{% endif %}>İşlem kaydı</a>
-    {% if kullanici.rol == 'yonetici' %}
-    <a href="/kullanicilar" {% if yol == '/kullanicilar' %}aria-current="page"{% endif %}>Kullanıcılar</a>
-    <a href="/ayarlar" {% if yol == '/ayarlar' %}aria-current="page"{% endif %}>Ayarlar</a>
+    {% for oge in menu %}
+    {% if oge.alt %}
+    {# Açılır grup JS'siz <details>; panel.js yalnız dışarı tıklayınca ve Esc ile kapatır. #}
+    <details class="menu-grup"{% if oge.secili %} data-secili{% endif %}>
+      <summary>{{ oge.ad }}<svg class="simge ok" aria-hidden="true"><use href="#s-asagi"/></svg></summary>
+      <div class="menu-alt">
+        {% for a in oge.alt %}<a href="{{ a.yol }}" {% if a.secili %}aria-current="page"{% endif %}>{{ a.ad }}</a>{% endfor %}
+      </div>
+    </details>
+    {% else %}
+    <a href="{{ oge.yol }}" {% if oge.secili %}aria-current="page"{% endif %}>{{ oge.ad }}</a>
     {% endif %}
+    {% endfor %}
+    <a href="{{ menu_acil.yol }}" class="menu-acil" {% if menu_acil.secili %}aria-current="page"{% endif %}><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ menu_acil.ad }}</a>
   </nav>
   <div class="oturum">
     <span>{{ kullanici.gorunen_ad }} · {{ roller[kullanici.rol] }}</span>
@@ -51,6 +58,24 @@
 </div></header>
 {% endif %}
 <main id="icerik">
+{% if aktif_acil %}
+{# Acil sürerken her sayfada: kırmızı (tatbikatta kehribar) bant; yetkiliye "Yayını bitir". #}
+<div class="acil-bant" data-tur="{{ aktif_acil.tur }}" role="alert">
+  <svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>
+  <p><strong>{{ 'TATBİKAT YAYINI SÜRÜYOR' if aktif_acil.tur == 'tatbikat' else 'ACİL DURUM YAYINI SÜRÜYOR' }}</strong>
+    <span>{{ aktif_acil.baslik }} · başlatan {{ aktif_acil.baslatan }} · başlangıç {{ aktif_acil.baslangic | saat }}
+    · kalan {{ (aktif_acil.kalan_sn / 60) | round(0, 'ceil') | int }} dk</span></p>
+  <div class="acil-bant-dugmeler">
+    <a class="dugme" href="/acil/{{ aktif_acil.id }}">Ayrıntı</a>
+    {% if acil_yetkili %}
+    <form method="post" action="/acil/{{ aktif_acil.id }}/bitir" class="satir-ici" id="acil-bitir-bant">
+      <input type="hidden" name="donus" value="{{ istek_yolu }}">
+      <button type="button" data-onay="acil_bitir" aria-haspopup="dialog">Yayını bitir…</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
 {% block mesaj_yeri %}{% if mesaj %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}{% endblock %}
 </main>

@@ -1,4 +1,4 @@
-"""Ekran yardımcısı: kilit, duyuru ve kapatma uyarısı penceresini çizer.
+"""Ekran yardımcısı: kilit, duyuru, kapatma uyarısı ve acil yayın penceresini çizer.
 
 Her masaüstü oturumunda (otomatik başlatma ile) kullanıcının yetkisiyle
 çalışır; ne göstereceğini ajan servisinden yerel soket üzerinden öğrenir.
@@ -9,6 +9,9 @@ Görünüm: her sayfanın üstünde okulun logosu ve adı olan bir bant durur. R
 sunucuda hesaplanır (okunurluk eşikleri orada tutturulur) ve servis üzerinden
 hex olarak gelir; burada yalnız doğrulanıp GTK stiline yazılır. Logo baytları
 servisten "marka" mesajıyla gelir; yüklenemezse ekran logosuz çalışır.
+
+Acil yayın sayfası okulun renginden bağımsız sabit renklerle (acil kırmızı, tatbikat
+kehribar) tam ekran çizilir; her şeyin üstündedir ve kilitli tahtada klavye kilidi sürer.
 """
 
 from __future__ import annotations
@@ -39,9 +42,51 @@ STIL_OLCU = b"""
 #kapatma-baslik { font-size: 64px; font-weight: 700; }
 #kapatma-sayac { font-size: 170px; font-weight: 700; }
 #kapatma-neden { font-size: 30px; }
+#acil-bant { font-size: 60px; font-weight: 800; }
+#acil-baslik { font-size: 84px; font-weight: 800; }
+#acil-metin { font-size: 54px; }
+#acil-metin.uzun { font-size: 40px; }
+#acil-metin.cok-uzun { font-size: 32px; }
+#acil-alt { font-size: 28px; }
+#acil-kapat { border-width: 3px; }
 button { font-size: 34px; font-weight: 600; padding: 14px 26px; border-radius: 12px; background-image: none;
          border-width: 1px; border-style: solid; box-shadow: none; text-shadow: none; }
 """
+
+# Acil yayın renkleri SABİTTİR (okulun renginden bağımsız; kapatma başlığı gibi). Anlam:
+# acil = koyu kırmızı zemin, beyaz yazı; tatbikat = koyu kehribar zemin, açık sarı bant.
+# Yanıp sönme ya da animasyon YOK. Beyaz/açık sarı yazı her iki zeminde 7:1'i aşar.
+ACIL_RENKLERI = (
+    "window.acil { background-color: #7f1d1d; }\n"
+    "window.acil label { color: #ffffff; }\n"
+    "window.acil #acil-bant { color: #fecaca; }\n"
+    "window.tatbikat { background-color: #713f12; }\n"
+    "window.tatbikat label { color: #ffffff; }\n"
+    "window.tatbikat #acil-bant { color: #fde68a; }\n"
+    "#acil-kapat { background-color: #1c1917; border-color: #ffffff; }\n"
+    "window.acil scrolledwindow, window.acil viewport, window.tatbikat scrolledwindow, "
+    "window.tatbikat viewport { background-color: transparent; border-width: 0; }\n"
+)
+
+ACIL_BANT = {"acil": "ACİL DURUM", "tatbikat": "TATBİKAT — BU BİR TATBİKATTIR"}
+
+
+def acil_basligi(baslik, tatbikat: bool) -> str:
+    """Acil sayfasındaki büyük başlık. Bant sözcüğünü tekrarlayan ya da boş başlık
+    gösterilmez ("ACİL DURUM" alt alta iki kez yazılmasın); boş metin = etiket gizli."""
+    metin = " ".join(str(baslik or "").split())
+
+    def katla(s: str) -> str:  # Türkçe büyük/küçük harf duyarsız karşılaştırma
+        return s.replace("İ", "I").replace("ı", "i").upper().rstrip(".!")
+
+    tekrar = {katla(s) for s in ("ACİL DURUM", "TATBİKAT", ACIL_BANT["tatbikat"])}
+    return "" if katla(metin) in tekrar else metin
+
+
+def acil_metin_sinifi(metin: str) -> str:
+    """Uzun acil metninde yazı küçülür (1920x1080'de 1000 karakter sığsın): "", "uzun", "cok-uzun"."""
+    uzunluk = len(metin or "")
+    return "" if uzunluk <= 300 else "uzun" if uzunluk <= 600 else "cok-uzun"
 
 LOGO_BOY = 96  # piksel; genişlik oran korunarak en çok LOGO_EN
 LOGO_EN = 320
@@ -69,6 +114,7 @@ def renk_stili(palet: dict) -> str:
         f"button:active {{ background-color: {p['yuzey']}; }}\n"
         f"#ana-dugme {{ background-color: {p['ana']}; border-color: {p['ana']}; }}\n"
         f"#ana-dugme label {{ color: {p['ana_metin']}; }}\n"
+        + ACIL_RENKLERI
     )
 
 
@@ -194,6 +240,8 @@ def calistir() -> int:
             self.yigin.add_named(self._kilit_sayfasi(), "kilit")
             self.yigin.add_named(self._duyuru_sayfasi(), "duyuru")
             self.yigin.add_named(self._kapatma_sayfasi(), "kapatma")
+            self.yigin.add_named(self._acil_sayfasi(), "acil")
+            self.pencere_sinifi = None  # "acil" | "tatbikat" | None
             # Sayfalar pencere açılmadan görünür kılınır: GtkStack, görünür olmayan
             # bir sayfaya geçiş isteğini yok sayar ve ilk sayfada (kilit) kalır.
             self.yigin.show_all()
@@ -332,6 +380,64 @@ def calistir() -> int:
                 kutu.pack_start(parca, False, False, 0)
             return self._sayfa(kutu)
 
+        def _acil_sayfasi(self):
+            """Acil durum / tatbikat: tam ekran, okul bandı yok; renk pencere sınıfından gelir.
+
+            Yerleşim üç kattır: üstte bant, ortada kaydırılabilir başlık + metin, altta okul ·
+            saat satırı ve "yayını kapat" düğmesi. Uzun metin ortayı büyütemez: alt kat (kural 3
+            düğmesi) her metin uzunluğunda ekranda kalır.
+            """
+            sayfa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=24)
+            sayfa.set_margin_start(80)
+            sayfa.set_margin_end(80)
+            sayfa.set_margin_top(40)
+            sayfa.set_margin_bottom(40)
+            self.acil_bant = self._etiket("acil-bant")
+            self.acil_baslik = self._etiket("acil-baslik")
+            self.acil_baslik.set_lines(2)
+            self.acil_baslik.set_ellipsize(Pango.EllipsizeMode.END)
+            self.acil_metin = self._etiket("acil-metin")
+            self.acil_alt = self._etiket("acil-alt")
+            # Yalnız sunucuya ulaşılamıyorken görünür; tek çevrimdışı iletisini gönderir (kural 3).
+            self.acil_kapat = Gtk.Button(label="Sunucuya ulaşılamıyor — yayını kapat")
+            self.acil_kapat.set_name("acil-kapat")
+            self.acil_kapat.set_halign(Gtk.Align.CENTER)
+            self.acil_kapat.set_can_focus(False)
+            self.acil_kapat.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "cevrimdisi_ac"}))
+
+            orta = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=30)
+            orta.set_valign(Gtk.Align.CENTER)
+            orta.pack_start(self.acil_baslik, False, False, 0)
+            orta.pack_start(self.acil_metin, False, False, 0)
+            kaydirma = Gtk.ScrolledWindow()
+            kaydirma.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            kaydirma.set_shadow_type(Gtk.ShadowType.NONE)
+            kaydirma.add(orta)  # kendi Viewport'unu ekler
+
+            alt = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+            alt.pack_start(self.acil_alt, False, False, 0)
+            alt.pack_start(self.acil_kapat, False, False, 0)
+
+            sayfa.pack_start(self.acil_bant, False, False, 0)
+            sayfa.pack_start(kaydirma, True, True, 0)
+            sayfa.pack_end(alt, False, False, 0)
+            return sayfa
+
+        def _pencere_sinifi(self, sinif):
+            """Acil/tatbikat rengini pencereye verir; başka sayfaya geçince kaldırır."""
+            if sinif == self.pencere_sinifi:
+                return
+            baglam = self.pencere.get_style_context()
+            if self.pencere_sinifi:
+                baglam.remove_class(self.pencere_sinifi)
+            if sinif:
+                baglam.add_class(sinif)
+            self.pencere_sinifi = sinif
+
+        def _acil_alt_yaz(self):
+            okul = (self.durum or {}).get("okul_adi") or "Tahta Kontrol"
+            self.acil_alt.set_text(f"{okul} · {time.strftime('%H:%M')}")
+
         # ---- olaylar ---------------------------------------------------------
         def _tus(self, _dugme, tus):
             if tus == "Sil":
@@ -416,6 +522,13 @@ def calistir() -> int:
             if self.durum and self.durum.get("kapatma"):
                 self.durum["kapatma"]["kalan"] = max(0, self.durum["kapatma"]["kalan"] - 1)
                 self.kapatma_sayac.set_text(str(self.durum["kapatma"]["kalan"]))
+            if self.durum and self.durum.get("acil"):
+                self.durum["acil"]["kalan"] -= 1
+                if self.durum["acil"]["kalan"] <= 0:
+                    self.durum["acil"] = None  # bir alt önceliğe düşer
+                    self._ciz()
+                else:
+                    self._acil_alt_yaz()
             if self.durum and self.durum.get("duyuru"):
                 self.durum["duyuru"]["kalan"] -= 1
                 if self.durum["duyuru"]["kalan"] <= 0:
@@ -434,7 +547,30 @@ def calistir() -> int:
             durum = self.durum or {}
             duyuru = durum.get("duyuru")
             kapatma = durum.get("kapatma")
+            acil = durum.get("acil")
             self._bantlari_ciz(durum)
+            # Öncelik (ortak sözlük §5.5): acil > kapatma > duyuru > kilit > gizli.
+            if acil:
+                tatbikat = acil.get("tur") == "tatbikat"
+                self.acil_bant.set_text(ACIL_BANT["tatbikat" if tatbikat else "acil"])
+                baslik = acil_basligi(acil.get("baslik"), tatbikat)
+                self.acil_baslik.set_text(baslik)
+                self.acil_baslik.set_visible(bool(baslik))
+                metin = acil.get("metin") or ""
+                self.acil_metin.set_text(metin)
+                metin_baglam = self.acil_metin.get_style_context()
+                for sinif in ("uzun", "cok-uzun"):
+                    metin_baglam.remove_class(sinif)
+                if acil_metin_sinifi(metin):
+                    metin_baglam.add_class(acil_metin_sinifi(metin))
+                self._acil_alt_yaz()
+                self.acil_kapat.set_visible(bool(acil.get("kapatilabilir")))
+                self._pencere_sinifi("tatbikat" if tatbikat else "acil")
+                self.yigin.set_visible_child_name("acil")
+                # Kilitli tahtada klavye kilidi sürer: acil ekranı kilidi atlatma yolu olmasın.
+                self._goster(kilit=bool(durum.get("kilitli")))
+                return
+            self._pencere_sinifi(None)
             if kapatma:
                 self.kapatma_sayac.set_text(str(kapatma.get("kalan", 0)))
                 self.kapatma_neden.set_text(

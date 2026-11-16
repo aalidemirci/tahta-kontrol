@@ -1,10 +1,11 @@
 {% extends "taban.html" %}
 {% block baslik %}Ayarlar · Tahta Kontrol{% endblock %}
 {# Okul kimliği işlemlerinin iletisi sayfa başında değil, #kimlik bölümünde çizilir (yönlendirme oraya kayar). #}
-{% block mesaj_yeri %}{% if mesaj and ileti_yeri != 'kimlik' %}{% include "_ileti.html" %}{% endif %}{% endblock %}
+{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in ('kimlik', 'acil') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}
 <div class="sayfa-bas"><h1>Ayarlar</h1></div>
 <form method="post" action="/ayarlar">
+<input type="hidden" name="bolum" value="genel">
 <div class="iki-sutun">
   <div class="kutu">
     <h2>Okul ve tahta güvenliği</h2>
@@ -61,6 +62,40 @@
 </div>
 <p><button class="ana">Ayarları kaydet</button></p>
 </form>
+
+{# Acil şablonları ayrı formdur (bolum=acil_sablonlari): genel ayarları ezmez. Alanlar paralel
+   listedir: s_ad, s_baslik, s_metin; adı boş satır silinmiş sayılır. #}
+<h2 id="acil-sablonlari">Acil yayın şablonları</h2>
+<section class="kutu" aria-labelledby="acil-sablonlari">
+  <p class="bant uyari"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{% if acil_sablon_ornek %}Aşağıdakiler örnek metinlerdir; mevzuat metni değildir. {% endif %}Şablonları okulunuzun acil durum planındaki ifadelere göre düzenleyin; iş güvenliği sorumlunuzun görüşünü alın. Öğrenci ya da kişi adı yazmayın.</p>
+  {% if mesaj and ileti_yeri == 'acil' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <p class="ipucu">En çok {{ acil_sablon_en_cok }} şablon. Bir şablonu silmek için adını boşaltıp kaydedin.</p>
+  <p class="bant uyari" id="acil-sablon-bilgi" role="status" hidden>Silinen şablon "Şablonları kaydet" deyince kalkar.</p>
+  <form method="post" action="/ayarlar" id="acil-sablon-formu">
+    <input type="hidden" name="bolum" value="acil_sablonlari">
+    <div class="sablon-listesi">
+    {% for s in acil_sablonlar %}
+    <fieldset class="sablon-satiri">
+      <legend class="gizli">Şablon {{ loop.index }}: {{ s.ad }}</legend>
+      <div><label for="s-ad-{{ loop.index }}">Ad</label><input type="text" id="s-ad-{{ loop.index }}" name="s_ad" value="{{ s.ad }}" maxlength="40"></div>
+      <div><label for="s-baslik-{{ loop.index }}">Tahtadaki başlık</label><input type="text" id="s-baslik-{{ loop.index }}" name="s_baslik" value="{{ s.baslik }}" maxlength="120"></div>
+      <div class="sablon-metin"><label for="s-metin-{{ loop.index }}">Metin</label><textarea id="s-metin-{{ loop.index }}" name="s_metin" rows="2" maxlength="1000">{{ s.metin }}</textarea></div>
+      <div class="sablon-sil"><button type="button" class="tehlike" data-sablon-sil hidden>Sil</button></div>
+    </fieldset>
+    {% endfor %}
+    {% if acil_sablonlar | length < acil_sablon_en_cok %}
+    <fieldset class="sablon-satiri yeni">
+      <legend class="gizli">Yeni şablon</legend>
+      <div><label for="s-ad-yeni">Yeni şablon adı</label><input type="text" id="s-ad-yeni" name="s_ad" maxlength="40" placeholder="ör. Gaz kaçağı"></div>
+      <div><label for="s-baslik-yeni">Tahtadaki başlık</label><input type="text" id="s-baslik-yeni" name="s_baslik" maxlength="120"></div>
+      <div class="sablon-metin"><label for="s-metin-yeni">Metin</label><textarea id="s-metin-yeni" name="s_metin" rows="2" maxlength="1000"></textarea></div>
+    </fieldset>
+    {% endif %}
+    </div>
+    <p class="dugme-satiri"><button name="eylem" value="kaydet" class="ana">Şablonları kaydet</button>
+      {% if not acil_sablon_ornek %}<button type="button" class="tehlike" data-onay="sablon_varsayilan" aria-haspopup="dialog">Örnek şablonlara dön…</button>{% endif %}</p>
+  </form>
+</section>
 
 <h2 id="kimlik">Okul kimliği</h2>
 {% if mesaj and ileti_yeri == 'kimlik' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}

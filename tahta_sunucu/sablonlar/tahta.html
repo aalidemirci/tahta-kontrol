@@ -18,7 +18,38 @@
       <label for="ad">Tahtanın adı</label>
       <input type="text" id="ad" name="ad" value="{{ t.ad }}" maxlength="60" required>
       <label for="derslik">Derslik</label>
-      <input type="text" id="derslik" name="derslik" value="{{ t.derslik }}" maxlength="60" placeholder="ör. 2. kat, 11/A sınıfı">
+      <input type="text" id="derslik" name="derslik" value="{{ t.derslik }}" maxlength="60" placeholder="ör. D-204, 11/A sınıfı">
+      {# Nitelik alanları: gizli "alanlar=1" işareti varsa sunucu bina/kat/düzey/devre/şube/grubu yazar. #}
+      <input type="hidden" name="alanlar" value="1">
+      <fieldset class="nitelikler">
+        <legend>Hedefleme nitelikleri</legend>
+        <p class="ipucu">Duyurular bina, kat, düzey, devre ve gruba göre hedeflenir. Boş bırakılan alan o ölçüte uymaz.
+          Toplu doldurmak için <a href="/tahtalar/ice-aktar">CSV ile içe aktarın</a>.</p>
+        <div class="alan-cifti">
+          <div>
+            <label for="bina">Bina</label>
+            <input type="text" id="bina" name="bina" value="{{ t.bina }}" maxlength="40" list="binalar" placeholder="ör. A Blok">
+            <datalist id="binalar">{% for b_ in binalar %}<option value="{{ b_ }}">{% endfor %}</datalist>
+          </div>
+          <div>
+            <label for="kat">Kat</label>
+            <select id="kat" name="kat">{% for v, ad in katlar %}<option value="{{ '' if v is none else v }}" {% if v == t.kat %}selected{% endif %}>{{ ad }}</option>{% endfor %}</select>
+          </div>
+        </div>
+        <fieldset class="olcut"><legend>Düzey</legend><div class="secenekler">{% for v, ad in duzeyler.items() %}<label><input type="checkbox" name="duzey" value="{{ v }}" {% if v in t.duzeyler %}checked{% endif %}> {{ ad }}</label>{% endfor %}</div></fieldset>
+        <div class="alan-cifti">
+          <div>
+            <label for="devre">Devre</label>
+            <select id="devre" name="devre"><option value="">Belirtilmemiş</option>{% for v, ad in devreler.items() %}<option value="{{ v }}" {% if v == t.devre %}selected{% endif %}>{{ ad }}</option>{% endfor %}</select>
+          </div>
+          <div>
+            <label for="subeler">Şube(ler)</label>
+            <input type="text" id="subeler" name="subeler" value="{{ t.subeler | join(', ') }}" placeholder="ör. 9/A ya da 9/A, 10/B">
+          </div>
+        </div>
+        {% if gruplar %}<fieldset class="olcut"><legend>Gruplar</legend><div class="secenekler">{% for g in gruplar %}<label><input type="checkbox" name="grup" value="{{ g.id }}" {% if g.id in t.gruplar %}checked{% endif %}> {{ g.ad }}</label>{% endfor %}</div></fieldset>
+        {% else %}<p class="not">Grup yok; <a href="/gruplar">Gruplar</a> sayfasından eklenir.</p>{% endif %}
+      </fieldset>
       <p class="dugme-satiri">
         {% if t.durum == 'bekliyor' %}
         <button name="eylem" value="onayla" class="ana">Onayla ve kaydet</button>
@@ -30,6 +61,7 @@
     </form>
     {% else %}
     <p>Derslik: {{ t.derslik or '—' }}</p>
+    <p>Nitelikler: {{ t.alanlar or '—' }}{% if t.subeler %} · {{ t.subeler | join(', ') }}{% endif %}</p>
     {% endif %}
   </div>
   <div class="kutu">

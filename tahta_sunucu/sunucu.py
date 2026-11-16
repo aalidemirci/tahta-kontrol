@@ -72,13 +72,22 @@ class Sunucu:
         for adres in self.ag_adresleri():
             gunluk.info("Panel (okul ağı)     : %s", adres)
 
-    def _zamanlayici(self) -> None:
-        """Otomatik kapatma kurallarını düzenli aralıkla işletir."""
-        while not any(s.should_exit for s in self.sunucular):
+    def zamanlayici_turu(self) -> None:
+        """Zamanlayıcı işlerini sırayla çalıştırır; biri çökerse diğerleri sürer (ortak sözlük §2.3)."""
+        for ad, is_ in self.uygulama.state.zamanlayicilar:
             try:
-                self.uygulama.state.zamanlayici()
+                is_()
             except Exception:  # zamanlayıcı hatası sunucuyu düşürmez
-                gunluk.exception("Otomatik kapatma denetimi başarısız")
+                gunluk.exception("Zamanlayıcı işi başarısız: %s", ad)
+
+    def _zamanlayici(self) -> None:
+        """Acil denetimi, otomatik kapatma ve duyuru planlarını 20 sn'de bir işletir.
+
+        İlk tur sunucu açılır açılmaz çalışır: kapalıyken kaçırılan gösterimler hemen
+        yayımlanır ya da "kaçırıldı" yazılır.
+        """
+        while not any(s.should_exit for s in self.sunucular):
+            self.zamanlayici_turu()
             time.sleep(20)
 
     def durdur(self) -> None:

@@ -6,10 +6,11 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.2.0, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
+- Durum: **0.3.0, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
   (0.1.1: kurulum, kilit, duyuru, kapatma, güncelleme çalıştı); 0.2.0'ın okul kimliği
-  (logo, renkler, yeni panel ve tahta ekranı) yalnız Debian 12 kabında ve tarayıcıda
-  denendi; gerçek bir ETAP tahtasında henüz denenmedi.
+  ve 0.3.0'ın duyuru planları, hedef grupları ve acil durum/tatbikat yayını yalnız
+  Debian 12 kabında ve tarayıcıda denendi; gerçek bir ETAP tahtasında henüz denenmedi.
+- Yol haritası `docs/tasarim.md` §12; kullanıcıya sorulacaklar §13 "Açık sorular".
 
 ## Komutlar (PowerShell 5.1; `&&` yok)
 
@@ -31,19 +32,28 @@ Ajan: `TAHTA_AJAN_DIZIN`, `TAHTA_AJAN_DURUM`, `TAHTA_AJAN_BENZETIM=1` (kapatma k
 
 ```
 tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
-  web.py        panel uçları, /marka/* (tema.css, logo) ve /ajan/* arayüzü (uzun bekleme)
+  web.py        uygulama_olustur: oturum, pano, tahta, ayarlar, /marka/*, /ajan/* (uzun bekleme), MENU
+  panel_duyuru.py   duyuru/plan uçları, /api/hedef-onizleme   (web.py'den `kaydet(uygulama, y)` ile)
+  panel_tahtalar.py gruplar, /tahtalar.csv ve CSV içe aktarma
+  panel_acil.py     /acil: başlatma, bitirme, rapor
+  komut.py      KOMUT_OMRU, KOMUT_ADI, komut_ekle (duyuru komutu ömrü açıkça ister)
+  duyuru.py     tek yayın yolu duyuru_yayimla, plan zamanlayıcısı, kaçırma kuralı, durdurma
+  zamanlama.py  plan takvimi (saf işlevler; Europe/Istanbul)
+  hedef.py      hedef şeması ve çözümü; tahta nitelikleri (bina, kat, düzey, devre, şube)
+  acil.py       acil/tatbikat yayını (durum tabanlı), yedek yol, teslim kaydı
+  metin.py      Türkçe metin, şube biçimi, CSV okuma/yazma (aşamalar arası ortak)
   tema.py       okul renklerinden bütün panel ve tahta tonları (OKLCH, kontrast eşikleri)
   marka.py      okul logosu: PNG/JPEG denetimi, ölçü okuma, saklama (veri_dizini/marka/logo)
-  vt.py         şema ve göçler (GOCLER listesi, PRAGMA user_version)
-  guvenlik.py   parola (scrypt), sunucu sertifikası ve parmak izi, kilit kodu özeti
+  vt.py         şema ve göçler (GOCLER listesi, PRAGMA user_version; göç öncesi kopya veri_dizini/goc-oncesi)
+  guvenlik.py   parola (scrypt), sunucu sertifikası ve parmak izi, kilit kodu özeti, tc_kimlik_var
   paket.py      ajan .deb paketini ve kurulum betiğini dış araç olmadan üretir
-  sunucu.py     iki dinleyici: yerel HTTP + ağ için HTTPS
+  sunucu.py     iki dinleyici: yerel HTTP + ağ için HTTPS; zamanlayıcı (state.zamanlayicilar, 20 sn)
   pencere.py    masaüstü denetim penceresi (tkinter)
   statik/       stil.css (tek dosya, katmanlı), panel.js (tek dosya, kütüphanesiz), isaret.svg (nötr ürün işareti)
   ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh
 tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
-  servis.py     yönetici yetkili sistem servisi: sunucu döngüsü, komutlar, yerel soket
-  ekran.py      oturumda çalışan kilit/duyuru/kapatma penceresi (GTK3), üst bantta logo ve okul adı
+  servis.py     yönetici yetkili sistem servisi: sunucu döngüsü, komutlar, acil durumu, yerel soket
+  ekran.py      oturumda çalışan kilit/duyuru/kapatma/acil penceresi (GTK3), üst bantta logo ve okul adı
   ayar.py       yapılandırma, varsayılan tahta paleti, logonun servis tarafında saklanması
   sistem.py     işletim sistemine dokunan HER ŞEY (yeni platform = bu dosya)
   tani.py       saha tanılaması (denetim listesi)
@@ -58,7 +68,9 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
    komut `/ajan/bekle` uzun beklemesiyle iner.
 3. **Sunucu arızası dersi rehin almaz.** Sunucuya `CEVRIMDISI_SN` (90 sn)
    ulaşılamazsa kilit tahtadan kodsuz açılır; ekran yardımcısı servisi 10 sn
-   göremezse penceresini kapatır. Bu davranışı "güvenlik açığı" diye kaldırma.
+   göremezse penceresini kapatır. Acil yayın da aynı tek düğmeyle (`cevrimdisi_ac`) yalnız
+   sunucuya ulaşılamıyorken tahtadan kapatılır ve tahtada en çok 2 saat kalır.
+   Bu davranışı "güvenlik açığı" diye kaldırma.
 4. **Sunucu sertifikası yenilenmez.** Tahtalar parmak izine bağlıdır; sertifika
    değişirse bütün tahtalara ajan yeniden kurulur.
 5. **Sır ekran yardımcısına gitmez.** Tahta anahtarı ve kilit kodu özeti yalnız
@@ -67,17 +79,34 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
    (yalnız hesap sınıfı: etapadmin/ogretmen/ogrenci/kişisel). Tanılama raporu ev
    dizini, dosya adı, kişisel hesap adı içermez. Gerçek okul verisi, tanılama
    dökümü, ekran görüntüsü depoya girmez (`saha/` gitignore'dadır).
-7. **Sürüm üç yerde birlikte değişir:** `VERSION`, `tahta_ajan/__init__.py`,
-   `tahta_sunucu/__init__.py` (`test_surumler_tutarli`). Tahtalar güncellemeyi
+7. **Sürüm dört yerde birlikte değişir:** `VERSION`, `tahta_ajan/__init__.py`,
+   `tahta_sunucu/__init__.py` (`test_surumler_tutarli`) ve `pyproject.toml` (+ `uv lock`). Tahtalar güncellemeyi
    sürüm numarasından anlar: ajan kodu değiştiyse sürüm yükseltilir.
-8. **Komut ömürleri bilinçlidir** (`web.py::KOMUT_OMRU`): "kapat" 2 dakikada
+8. **Komut ömürleri bilinçlidir** (`komut.py::KOMUT_OMRU`): "kapat" 2 dakikada
    düşer; sonradan açılan tahta eskimiş komutla kapanmaz.
 9. **Dil.** Arayüz, yorum, test adı, commit mesajı Türkçe; tanımlayıcılar ASCII
    Türkçe. `postinst`, `prerm`, `kur.sh` iletileri bilerek ASCII'dir (dash/UTF-8).
    `build.ps1` ve `.iss` UTF-8 BOM ile durur (PowerShell 5.1 BOM'suz dosyayı ANSI okur).
+10. **Acil yayın komut değil durumdur** (`ayar.acil`, her `/ajan/bekle` yanıtında yeniden
+   hesaplanır; komut tablosuna taşınmaz). Yalnız `acil` yeteneğini bildirmeyen eski ajana
+   yedek `duyuru` komutu gider. Acil sürerken otomatik kapatma komut vermez; ajan da uyarılı
+   `kapat`ı `(True, "...; uygulanmadı.")` ile atlar. Ajan anahtar hiç yoksa (eski sunucu)
+   acil durumuna dokunmaz, `null` gelirse temizler; yetenekleri `durum.yetenekler` ile bildirir.
+11. **Her duyuru gösterimi `duyuru.duyuru_yayimla` ile çıkar** (pano, plan, yeniden gönder,
+   sonraki aşamalar `uygulama.state.duyuru_yayimla`). Göç `GOCLER`'in sonuna tek öğe eklenir.
 
 ## Bilinen tuzaklar
 
+- **Statik dosya adresleri sürüm taşır** (`/statik/stil.css?v=<sürüm>`, `panel.js?v=<sürüm>`)
+  ve uzun önbellekle sunulur: `stil.css` ya da `panel.js` değişip sürüm yükseltilmezse
+  tarayıcı eskisini tutmaya devam eder. Statik dosya değiştiyse sürüm yükseltilir (16.11.2026).
+- **Panel menüsünün açılır grupları JS'siz `<details>`dır.** Dar ekranda menü yatay kayan
+  kutudur ve mutlak konumlu açılır kutuyu kırpar; bu yüzden grup dar ekranda satır içi, geniş
+  ekranda şeridin altına açılır (`stil.css`, `48rem`). `<form>` `<p>` içine konmaz (tarayıcı
+  `<p>`yi kapatır, düğme satırı dağılır); düğme satırında `<div class="dugme-satiri">` kullanılır.
+- **Acil sayfası da `yigin.show_all()`'dan önce eklenir** ve rengi pencereye eklenen stil
+  sınıfından (`acil`/`tatbikat`) gelir; başka sayfaya geçince sınıf kaldırılır. Acil renkleri
+  sabittir (`ekran.ACIL_RENKLERI`), okulun renginden türetilmez; yanıp sönme yoktur (16.11.2026).
 - **Paket içi dosya zamanı içerikten türetilir** (`paket.py`): sabit zaman,
   güncellenen dosyanın eski `__pycache__` ile çalışmasına yol açtı (15.11.2026).
   `postinst` ayrıca önbelleği siler.
@@ -89,7 +118,7 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
   ya da kapatma uyarısı yerine bozuk bir kilit sayfası çıkar (16.11.2026).
 - **Klavye kilidi pencere ekrana yerleşince alınır:** ilk deneme XFCE'de "not-viewable"
   ile düşer; kilit sürdükçe her saniye yeniden denenir (15.11.2026, Pardus 25 denemesi).
-- **Otomatik kapatma** (`web.py::zamanlayici`, 20 sn'de bir): yalnız o an çevrimiçi
+- **Otomatik kapatma** (`web.py::zamanlayici`, 20 sn'de bir; acil sürerken atlanır): yalnız o an çevrimiçi
   tahtalara, uyarılı (`uyari_sn`) komut verir; aynı gün-saat için bir kez (`kapatma_isaretleri`).
   Ajan, kilitli ya da ekransız tahtada uyarı göstermeden kapatır. Uzaktan açma
   (Wake-on-LAN) denenen bilgisayarda çalışmadı; düğme yalnız tahta sayfasında "deneysel" durur.

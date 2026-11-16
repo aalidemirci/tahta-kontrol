@@ -3,7 +3,7 @@
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.2.0, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
+> **Durum: 0.3.0, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
 > gerçek bir Pardus ETAP tahtasında henüz denenmedi. Okul genelinde kullanmadan
 > önce tek tahtada deneyin (`docs/saha-denemesi.md`).
 
@@ -21,8 +21,26 @@ sunucudan güncellenmesi, kullanıcı yetkileri ve işlem kaydı. Panel ve tahta
 ekranı okulun logosu ve renkleriyle biçimlendirilebilir; renkler hangi seçimde
 olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
 
-Planlananlar: duyuru zamanlama, ders programına bağlı otomatik kilit, sınav
-duyurusu ve sınav yoklaması, ders yoklaması (`docs/tasarim.md`, yol haritası).
+0.3.0 ile:
+
+- **Zamanlanmış duyuru:** hemen, ileri tarihte bir kez, günlük ya da haftalık;
+  planlar duraklatılır, düzenlenir, çoğaltılır. Sunucu kapalıyken saati gelen
+  gösterim süresi dolmadıysa kalan süreyle yayımlanır, dolduysa "kaçırıldı" diye
+  bildirilir ve tek tıkla yeniden gönderilir.
+- **Hedef grupları:** tahtalara bina, kat, düzey, devre ve şube bilgisi; elle
+  seçilen gruplar; duyurunun kaç tahtaya ulaşacağı canlı önizlenir. Nitelikler
+  CSV ile dışa ve içe aktarılır (Türkçe Excel uyumlu).
+- **Acil durum ve tatbikat yayını:** ayrı yetkiyle, parola ve açık onayla
+  başlatılır; bütün tahtalarda (kilitli olanlarda da) kırmızı ya da tatbikatta
+  kehribar tam ekran görünür, tahtadan kapatılamaz (sunucuya ulaşılamıyorsa
+  kapatılabilir). Panelin her sayfasında bant görünür; hangi tahtada ne zaman
+  göründüğünü gösteren yazdırılabilir rapor üretilir. Bu yayın binanın yangın
+  alarmı ya da anons sisteminin yerine geçmez.
+- Duyuru ve acil metninde T.C. kimlik numarasına benzeyen sayı reddedilir
+  (tahta herkese açık ekrandır).
+
+Planlananlar: ders programına bağlı otomatik kilit, sınav duyurusu ve sınav
+yoklaması, ders yoklaması (`docs/tasarim.md`, yol haritası).
 
 ## Çalıştırma (geliştirme)
 

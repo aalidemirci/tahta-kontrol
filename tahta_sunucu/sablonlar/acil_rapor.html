@@ -1,0 +1,56 @@
+{% extends "taban.html" %}
+{% block baslik %}{{ yayin.tur_adi }} raporu · Tahta Kontrol{% endblock %}
+{% block govde_sinifi %}rapor-sayfasi{% endblock %}
+{% block icerik %}
+{# Yazdırılabilir: @media print menüyü, bandı ve düğmeleri gizler. Kişi adı olarak yalnız panel kullanıcı adı geçer. #}
+<p class="geri yazdirma"><a href="/acil">← Acil durum</a></p>
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>{{ 'Tatbikat yayını raporu' if yayin.tur == 'tatbikat' else 'Acil durum yayını raporu' }}
+      <span class="rozet" data-durum="{{ 'sorun' if yayin.tur == 'acil' else 'uyari' }}"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ yayin.tur_adi }}</span>
+      {% if yayin.suruyor %}<span class="rozet" data-durum="duyuru"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Sürüyor</span>{% endif %}</h1>
+    <p>{{ okul_adi or 'Tahta Kontrol' }} · yayın #{{ yayin.id }}</p>
+  </div>
+  <p class="dugme-satiri sag yazdirma"><button type="button" class="ana" data-yazdir hidden>Yazdır</button></p>
+</div>
+<section class="kutu" aria-labelledby="ozet-baslik">
+  <h2 id="ozet-baslik">Özet</h2>
+  <dl class="ozellikler">
+    <dt>Tür</dt><dd>{{ yayin.tur_adi }}</dd>
+    <dt>Başlık</dt><dd>{{ yayin.baslik }}</dd>
+    <dt>Metin</dt><dd>{{ yayin.metin }}</dd>
+    <dt>Başlatan</dt><dd>{{ yayin.baslatan }}</dd>
+    <dt>Başlangıç</dt><dd>{{ yayin.baslangic | zaman }}</dd>
+    <dt>Bitiş</dt><dd>{{ yayin.bitis | zaman if yayin.bitis else 'sürüyor' }}</dd>
+    <dt>Bitiren</dt><dd>{{ yayin.bitiren or '—' }}</dd>
+    <dt>Bitiş nedeni</dt><dd>{{ yayin.bitis_nedeni_adi }}</dd>
+    <dt>Süre</dt><dd>{{ yayin.sure_dk }} dk</dd>
+    <dt>Hedef / teslim</dt><dd>{{ sayilar.teslim }}/{{ sayilar.hedef }} tahtada görüntülendi ({{ sayilar.acil_yol }} acil, {{ sayilar.yedek_yol }} yedek duyuru)</dd>
+  </dl>
+</section>
+<h2 id="tahta-baslik">Tahta bazında görüntülenme</h2>
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="tahta-baslik">
+<table>
+  <thead><tr><th scope="col">Tahta</th><th scope="col">Derslik</th><th scope="col">Bina/Kat</th><th scope="col">İlk görüntülenme</th><th scope="col">Gecikme (sn)</th><th scope="col">Ekran yardımcısı</th><th scope="col">Yol</th><th scope="col">Görüntülenmediyse neden</th></tr></thead>
+  <tbody>
+  {% for s in satirlar %}
+  <tr>
+    <td data-etiket="Tahta">{{ s.ad }}</td>
+    <td data-etiket="Derslik">{{ s.derslik or '—' }}</td>
+    <td data-etiket="Bina/Kat">{{ s.bina_kat or '—' }}</td>
+    <td data-etiket="İlk görüntülenme" class="tarih-hucre">{{ s.ilk_gorulme | zaman }}</td>
+    <td data-etiket="Gecikme (sn)">{{ s.gecikme_sn if s.gecikme_sn is not none else '—' }}</td>
+    <td data-etiket="Ekran yardımcısı">{{ '—' if s.ekran_var is none else ('Var' if s.ekran_var else 'Yok') }}</td>
+    <td data-etiket="Yol">{{ s.yol or '—' }}</td>
+    <td data-etiket="Neden">{% if s.neden != '—' %}<span class="rozet" data-durum="{{ 'cevrimdisi' if s.neden == 'Çevrimdışıydı' else 'sorun' }}">{{ s.neden }}</span>{% else %}—{% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="8">Onaylı tahta yok.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="not">Tahta listesi ve "neden" sütunu yayının başladığı andaki duruma göredir. "Görüntülendiği kaydedilmedi": yayın başlarken ulaşılabilir görünen tahta yayın süresince bildirim göndermedi.</p>
+<p class="not">Bu rapor tahta ekranlarında görüntülenmeyi gösterir; tahliyenin kendisini değil. Oturumu açık olmayan (giriş ekranındaki) tahtada yayın görünmez.</p>
+<p class="not yalniz-baski">Yazdırılma: Tahta Kontrol {{ surum }}</p>
+{% endblock %}

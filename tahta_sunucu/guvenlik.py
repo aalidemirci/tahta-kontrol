@@ -6,6 +6,7 @@ import datetime
 import hashlib
 import hmac
 import ipaddress
+import re
 import secrets
 import socket
 from pathlib import Path
@@ -49,6 +50,29 @@ def kilit_kodu_ozetle(kod: str) -> dict:
     tuz = secrets.token_bytes(16)
     deger = hashlib.pbkdf2_hmac("sha256", kod.encode("utf-8"), tuz, KILIT_KODU_TUR).hex()
     return {"tuz": tuz.hex(), "ozet": deger, "tur": KILIT_KODU_TUR}
+
+
+_ON_BIR_HANE = re.compile(r"(?<!\d)\d{11}(?!\d)")
+TC_KIMLIK_ILETISI = (
+    "Metinde T.C. kimlik numarasına benzeyen bir sayı var. Tahta herkese açık ekrandır; kişisel veri yazmayın."
+)
+
+
+def tc_kimlik_var(metin) -> bool:
+    """Metinde denetim haneleri tutan 11 haneli bir T.C. kimlik numarası var mı?
+
+    Her serbest metin alanında (duyuru, acil yayın, açıklamalar) çağrılır; tutan varsa kayıt
+    reddedilir. Denetim hanesi tutmayan 11 haneli sayı (ör. telefon) kabul edilir.
+    """
+    for eslesme in _ON_BIR_HANE.finditer(str(metin or "")):
+        h = [int(c) for c in eslesme.group()]
+        if h[0] == 0:
+            continue
+        if ((h[0] + h[2] + h[4] + h[6] + h[8]) * 7 - (h[1] + h[3] + h[5] + h[7])) % 10 != h[9]:
+            continue
+        if sum(h[:10]) % 10 == h[10]:
+            return True
+    return False
 
 
 def kayit_kodu() -> str:

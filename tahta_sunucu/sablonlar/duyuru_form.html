@@ -1,0 +1,149 @@
+{% extends "taban.html" %}
+{% block baslik %}{{ 'Duyuru planı' if plan else 'Yeni duyuru' }} · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Alan adları sözleşmedir (panel_duyuru.py, zamanlama.form_coz, hedef.formdan). JS kapalıyken bütün
+   alanlar görünür ve form yine çalışır; koşullu alanları, sayacı ve canlı önizlemeyi panel.js ekler. #}
+<p class="geri"><a href="/duyurular">← Duyurular</a></p>
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>{{ 'Duyuru planı #' ~ plan.id if plan else 'Yeni duyuru' }}
+      {% if plan %}<span class="rozet" data-durum="{{ {'etkin': 'acik', 'duraklatildi': 'uyari'}.get(plan.durum, 'bilgi') }}">{{ plan_durumu[plan.durum] }}</span>{% endif %}</h1>
+    <p>{% if plan %}Oluşturan {{ plan.olusturan }}. Değişiklik bundan sonraki gösterimlere uygulanır; yayındaki gösterim etkilenmez.
+      {% else %}Hemen, ileri tarihte bir kez ya da tekrarlı; bütün tahtalara ya da seçime göre.{% endif %}</p>
+  </div>
+  {% if plan %}<p class="dugme-satiri"><a class="dugme" href="/duyurular/yeni?kopya={{ plan.id }}">Çoğalt</a></p>{% endif %}
+</div>
+{% if hata %}<div class="bant hata" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span class="gizli">Hata: </span>{{ hata }}</div>{% endif %}
+{% if plan and not duzenlenebilir %}<div class="bant uyari" role="status">Bu plan {{ plan.olusturan }} kullanıcısına ait; yalnız oluşturan ya da yönetici değiştirebilir. Aşağıdaki bilgiler salt okunurdur; <a href="/duyurular/yeni?kopya={{ plan.id }}">çoğaltarak</a> kendi planınızı oluşturabilirsiniz.</div>{% endif %}
+
+<form method="post" action="{{ '/duyurular/plan/' ~ plan.id if plan else '/duyurular' }}" id="duyuru-formu" class="duyuru-formu">
+  {% if plan %}<input type="hidden" name="eylem" value="kaydet">{% endif %}
+  {# Sahibi olmayan kullanıcıda bütün alanlar devre dışı (salt okunur görünüm). #}
+  <fieldset class="duz"{% if not duzenlenebilir %} disabled{% endif %}>
+  <legend class="gizli">Duyuru</legend>
+  <div class="iki-sutun">
+    <section class="kutu" aria-labelledby="icerik-baslik">
+      <h2 id="icerik-baslik">İçerik</h2>
+      <label for="baslik">Başlık (isteğe bağlı)</label>
+      <input type="text" id="baslik" name="baslik" maxlength="200" value="{{ form.baslik }}" placeholder="DUYURU">
+      <label for="metin">Duyuru metni</label>
+      <textarea id="metin" name="metin" maxlength="4000" rows="6" aria-describedby="metin-sayac">{{ form.metin }}</textarea>
+      <p class="ipucu sayac" id="metin-sayac" data-sayac="metin">En çok 4000 karakter.</p>
+      <label for="sure_dk">Ekranda kalma süresi (dakika)</label>
+      <input type="number" id="sure_dk" name="sure_dk" class="alan-dar" min="{{ sure_siniri[0] }}" max="{{ sure_siniri[1] }}" value="{{ form.sure_dk }}">
+      <label class="satir"><input type="checkbox" name="kapatilabilir" value="1" {% if form.kapatilabilir %}checked{% endif %}> Öğretmen tahtadan kapatabilsin</label>
+      <p class="bant uyari kvkk-not"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Tahta bütün sınıfa açık ekrandır. Öğrenci adı, numarası ya da kişisel bilgi yazmayın.</p>
+    </section>
+
+    <section class="kutu" aria-labelledby="zaman-baslik">
+      <h2 id="zaman-baslik">Ne zaman</h2>
+      <fieldset class="secim-grubu">
+        <legend class="gizli">Gösterim zamanı</legend>
+        <div class="dugme-secim">
+          {% if not plan %}<label><input type="radio" name="zaman" value="hemen" {% if form.zaman == 'hemen' %}checked{% endif %}> Hemen</label>{% endif %}
+          <label><input type="radio" name="zaman" value="bir_kez" {% if form.zaman == 'bir_kez' %}checked{% endif %}> Bir kez</label>
+          <label><input type="radio" name="zaman" value="tekrarli" {% if form.zaman == 'tekrarli' %}checked{% endif %}> Tekrarlı</label>
+        </div>
+      </fieldset>
+
+      {% if not plan %}
+      <div class="kosullu" data-kosul="zaman" data-deger="hemen">
+        <p class="not">Duyuru "Kime" bölümündeki tahtalara hemen gönderilir; çevrimdışı tahta süre içinde açılırsa kalan süreyle alır.</p>
+      </div>
+      {% endif %}
+
+      <div class="kosullu" data-kosul="zaman" data-deger="bir_kez">
+        <div class="alan-cifti">
+          <div><label for="bir_tarih">Tarih</label><input type="date" id="bir_tarih" name="bir_tarih" value="{{ form.bir_tarih }}" min="{{ bugun }}"></div>
+          <div><label for="bir_saat">Saat</label><input type="time" id="bir_saat" name="bir_saat" value="{{ form.bir_saat }}"></div>
+        </div>
+      </div>
+
+      <div class="kosullu" data-kosul="zaman" data-deger="tekrarli">
+        <fieldset class="secim-grubu">
+          <legend>Sıklık</legend>
+          <div class="dugme-secim">
+            <label><input type="radio" name="siklik" value="gunluk" {% if form.siklik == 'gunluk' %}checked{% endif %}> Günlük</label>
+            <label><input type="radio" name="siklik" value="haftalik" {% if form.siklik == 'haftalik' %}checked{% endif %}> Haftalık</label>
+          </div>
+        </fieldset>
+        <div class="kosullu" data-kosul="siklik" data-deger="gunluk">
+          <label class="satir"><input type="checkbox" name="hafta_sonu" value="1" {% if form.hafta_sonu %}checked{% endif %}> Hafta sonu da gösterilsin</label>
+        </div>
+        <fieldset class="secim-grubu kosullu" data-kosul="siklik" data-deger="haftalik">
+          <legend>Günler</legend>
+          <div class="gunler">
+            {% for g in gun_kisa %}<label><input type="checkbox" name="gun" value="{{ loop.index0 }}" {% if loop.index0 in form.gunler %}checked{% endif %}> {{ g }}</label>{% endfor %}
+          </div>
+        </fieldset>
+        <label for="tekrar_saat">Saat</label>
+        <input type="time" id="tekrar_saat" name="tekrar_saat" class="alan-dar" value="{{ form.tekrar_saat }}">
+        <div class="alan-cifti">
+          <div><label for="baslangic">Başlangıç</label><input type="date" id="baslangic" name="baslangic" value="{{ form.baslangic or bugun }}"></div>
+          <div><label for="bitis">Bitiş</label><input type="date" id="bitis" name="bitis" value="{{ form.bitis }}" min="{{ bugun }}"></div>
+        </div>
+        <p class="not">Resmî tatil ve ara tatil bilinmez: tatil günlerinde planı duraklatın. En çok bir yıl sürebilir.</p>
+      </div>
+    </section>
+  </div>
+
+  <section class="kutu" aria-labelledby="kime-baslik">
+    <h2 id="kime-baslik">Kime</h2>
+    <fieldset class="secim-grubu">
+      <legend class="gizli">Hedef</legend>
+      <div class="dugme-secim">
+        <label><input type="radio" name="kime" value="tumu" {% if form.kime == 'tumu' %}checked{% endif %}> Tüm tahtalar</label>
+        <label><input type="radio" name="kime" value="secim" {% if form.kime == 'secim' %}checked{% endif %}> Seçime göre</label>
+      </div>
+    </fieldset>
+    {% set h = form.hedef or {} %}
+    <div class="kosullu hedef-secimi" data-kosul="kime" data-deger="secim">
+      <p class="ipucu">Aynı satırdaki seçeneklerden biri yeter; farklı satırlar birlikte aranır. Gruplar ve tek tek seçilen tahtalar bunlara eklenir.</p>
+      <fieldset class="olcut">
+        <legend>Bina</legend>
+        <div class="secenekler">{% for v in secenekler.binalar %}<label><input type="checkbox" name="bina" value="{{ v }}" {% if v in (h.bina or []) %}checked{% endif %}> {{ v }}</label>{% else %}<span class="not">Tahtalara henüz bina atanmadı.</span>{% endfor %}</div>
+      </fieldset>
+      <fieldset class="olcut">
+        <legend>Kat</legend>
+        <div class="secenekler">{% for v, ad in secenekler.katlar %}<label><input type="checkbox" name="kat" value="{{ v }}" {% if v in (h.kat or []) %}checked{% endif %}> {{ ad }}</label>{% else %}<span class="not">Tahtalara henüz kat atanmadı.</span>{% endfor %}</div>
+      </fieldset>
+      <fieldset class="olcut">
+        <legend>Düzey</legend>
+        <div class="secenekler">{% for v, ad in secenekler.duzeyler %}<label><input type="checkbox" name="duzey" value="{{ v }}" {% if v in (h.duzey or []) %}checked{% endif %}> {{ ad }}</label>{% else %}<span class="not">Tahtalara henüz düzey atanmadı.</span>{% endfor %}</div>
+      </fieldset>
+      <fieldset class="olcut">
+        <legend>Devre</legend>
+        <div class="secenekler">{% for v, ad in secenekler.devreler %}<label><input type="checkbox" name="devre" value="{{ v }}" {% if v in (h.devre or []) %}checked{% endif %}> {{ ad }}</label>{% else %}<span class="not">Tahtalara henüz devre atanmadı.</span>{% endfor %}</div>
+      </fieldset>
+      <fieldset class="olcut">
+        <legend>Gruplar</legend>
+        <div class="secenekler">{% for g in secenekler.gruplar %}<label{% if g.aciklama %} title="{{ g.aciklama }}"{% endif %}><input type="checkbox" name="grup" value="{{ g.id }}" {% if g.id in (h.gruplar or []) %}checked{% endif %}> {{ g.ad }} <span class="not">({{ g.uye_sayisi }})</span></label>{% else %}<span class="not">Grup yok. <a href="/gruplar">Gruplar</a> sayfasından eklenir.</span>{% endfor %}</div>
+      </fieldset>
+      <details class="tek-tek"{% if h.tahtalar %} open{% endif %}>
+        <summary>Tahtaları tek tek seç{% if h.tahtalar %} ({{ h.tahtalar | length }} seçili){% endif %}</summary>
+        <div class="secim-listesi">
+          {% for t in secenekler.tahtalar %}<label class="satir"><input type="checkbox" name="hedef_tahta" value="{{ t.id }}" {% if t.id in (h.tahtalar or []) %}checked{% endif %}> <span>{{ t.ad }}{% if t.derslik %} · {{ t.derslik }}{% endif %}{% if t.alanlar %} <span class="not">· {{ t.alanlar }}</span>{% endif %}</span></label>{% endfor %}
+        </div>
+      </details>
+    </div>
+    {# Canlı önizleme: panel.js 300 ms gecikmeyle /api/hedef-onizleme'yi sorar. #}
+    <div id="hedef-onizleme" class="hedef-onizleme" role="status" aria-live="polite"{% if onizleme and not onizleme.sayi %} data-durum="uyari"{% endif %}>
+      {% if onizleme %}
+      <p><svg class="simge" aria-hidden="true"><use href="#s-{{ 'acik' if onizleme.sayi else 'sorun' }}"/></svg>
+        <span data-alan="ozet">Şu an <strong>{{ onizleme.sayi }} tahtaya</strong> ulaşır · {{ onizleme.ozet }}</span></p>
+      {% else %}
+      <p><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg><span data-alan="ozet">Tahtaları seçin; kaç tahtaya ulaşacağı burada görünür.</span></p>
+      {% endif %}
+      <details class="onizleme-liste" hidden><summary>Tahtalar</summary><ul></ul></details>
+    </div>
+  </section>
+  </fieldset>
+
+  {% if duzenlenebilir %}
+  <p class="dugme-satiri">
+    <button class="ana" id="duyuru-gonder" data-hemen="Şimdi yayımla" data-plan="Planı kaydet">{{ 'Şimdi yayımla' if form.zaman == 'hemen' and not plan else 'Planı kaydet' }}</button>
+    <a class="dugme" href="/duyurular">Vazgeç</a>
+  </p>
+  {% endif %}
+</form>
+{% endblock %}

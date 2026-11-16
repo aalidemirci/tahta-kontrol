@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.2.0)
+# Saha denemesi kılavuzu (0.3.0)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -18,13 +18,15 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Otomatik kapatma: geri sayım, Vazgeç, süre sonunda kapatma | Debian 12 kabı | Çalıştı |
 | Okul kimliği (0.2.0): logo ve renklerin tahtaya inmesi; kilit, duyuru, kapatma ekranı; canlı renk ve logo değişimi, logonun kaldırılması | Debian 12 kabı + sanal ekran (1920×1080) | Çalıştı |
 | Panelin yeni tasarımı: açık/koyu görünüm, dar ekran, onay penceresi, logo yükleme | Chromium (geliştirme bilgisayarı) | Çalıştı |
+| Acil yayın ve tatbikat (0.3.0): kilitliyken üstte görünme, bitince kilidin dönmesi, acil bitince kalan süreli duyurunun dönmesi, acil sürerken uyarılı kapatmanın atlanması, sunucu kapalıyken 90 sn sonra "yayını kapat" düğmesi; düğmenin gönderdiği yerel iletiyle acilin ve kilidin kalkması (dokunma benzetilmedi) | Debian 12 kabı + sanal ekran (1920×1080), gerçek paket | Çalıştı |
+| Duyuru planları, hedef önizlemesi, gruplar, CSV önizleme, acil sayfası ve rapor, açılır menü | Chromium (geliştirme bilgisayarı), açık/koyu, dar ekran | Çalıştı |
 | **Gerçek ETAP tahtası** | — | **Denenmedi** |
 | Kurulum dosyasının başka bir bilgisayara kurulması | — | Denenmedi |
 | Gerçek kapatma / yeniden başlatma / uzaktan açma | — | Denenmedi (kapta benzetim) |
 
 ## 1. Sunucuyu kurun
 
-1. `dist\cikti\tahta-kontrol-0.2.0-windows-kurulum.exe` dosyasını sunucu olacak
+1. `dist\cikti\tahta-kontrol-0.3.0-windows-kurulum.exe` dosyasını sunucu olacak
    idari bilgisayara kurun (yönetici izni ister; güvenlik duvarında 8788 kapısını açar).
 2. Açılan pencerede **Paneli aç** deyin; ilk kurulumda okul adını ve yönetici
    hesabını oluşturun.
@@ -79,6 +81,27 @@ kapanırsa tahtalar çevrimdışı kalır (kilitleri tahtadan açılabilir).
 | 24 | Projeksiyonda / gün ışığında kilit ve duyuru ekranı | Okul adı, saat, bilgi yazısı ve duyuru başlığı sınıfın arkasından okunur | |
 | 25 | Üst bandın zemin rengi | Bant okul renginin koyu tonunda çizilir (çizilmiyorsa not alın) | |
 
+### 3.1 Acil yayın ve zamanlanmış duyuru (0.3.0)
+
+Acil denemesinden önce okulda herkese haber verin; ilk denemelerde **Tatbikat** türünü
+kullanın. Ekran görüntüleri depoya konmaz.
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| A1 | Tahta açık ve kilitsizken acil yayın | En çok 5 sn içinde kırmızı tam ekran | |
+| A2 | Aynısı tahta kilitliyken | Acil kilidin üstünde; Alt+Tab ile aşılamaz; "Yayını bitir" sonrası kilit ekranı döner | |
+| A3 | Tahtada tam ekran başka uygulama (video, EBA içeriği) açıkken | Acil penceresi üstte mi? | |
+| A4 | Oturum açık değilken (giriş ekranı) | Görünmez — bilinen sınır; raporda "Ekran yardımcısı yok" | |
+| A5 | 20+ tahtaya aynı anda acil | Hepsinde en çok 10 sn; sunucu yükü | |
+| A6 | Acil sürerken sunucu programı kapatılır | Yayın kalır; 90 sn sonra "Sunucuya ulaşılamıyor — yayını kapat" düğmesi | |
+| A7 | Tatbikat bandı sınıfın arkasından okunabiliyor mu | Yazı boyu ve kehribar zemin yeterli | |
+| A8 | Eski sürüm (0.2.0) ajanlı tahta | Yedek duyuru kilit üstünde, kapatılamaz; bitince kalkar; panoda "Eski ajan" | |
+| A9 | Acil sürerken otomatik kapatma saati gelir | Tahta kapanmaz; işlem kaydında "atlandı" | |
+| A10 | Rapor sayfasını yazdırın | Menü ve düğmeler çıkmaz; tablo tek sayfada okunur | |
+| D1 | Günlük plan; sunucu bilgisayarı gece kapalı, sabah açılıyor | İlk gösterim saatinde doğru; kaçırılan yok | |
+| D2 | Sunucu bilgisayarı planlı saatte uykuda | Uyanınca süre içindeyse kalan süreyle; değilse "Kaçırıldı" ve panoda not | |
+| D3 | Okulun bütün tahtalarına bina/kat/düzey/devre doldurma (CSV ile) | Yönetici için kabul edilebilir süre; Türkçe Excel'de dosya bozulmadan açılıp kaydediliyor mu | |
+
 ## 4. Otomatik giriş denemesi (elle)
 
 Yazılım otomatik girişi ayarlamaz. Tanılama raporundaki "Giriş ekranı ve
@@ -100,6 +123,11 @@ ve güncellemeden sonra duruyor mu.
 - ETAP'taki GTK 3.24 sürümü `Gtk.Box` zeminini CSS'ten çizer (Debian 12'de çiziyor;
   çizmezse üst bant `Gtk.EventBox` içine alınmalı).
 - GdkPixbuf'un PNG ve JPEG yükleyicileri ETAP'ta kurulu.
+- Acil penceresi (`keep_above` + `present` + tam ekran) ETAP'ın pencere yöneticisinde
+  tam ekran video ya da EBA içeriğinin üstüne çıkar (Debian 12 + openbox'ta çıktı).
+- Pencereye eklenen stil sınıfı (`window.acil`) ETAP'taki GTK 3.24 temasında zemini boyar.
+- Türkçe Excel CSV'yi `;` ile ve ANSI (cp1254) ya da UTF-8 olarak kaydeder; ikisi de okunur.
+- Sunucu bilgisayarının saati doğru ve Europe/Istanbul; planlar bu saatle işler.
 
 ## 6. Sorun olursa
 

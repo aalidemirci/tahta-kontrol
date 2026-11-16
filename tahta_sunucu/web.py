@@ -10,10 +10,12 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import re
 import time
 from collections import defaultdict
 from datetime import datetime
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Request
@@ -22,41 +24,62 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.datastructures import UploadFile
 
-from . import __version__, ayar, guvenlik, marka, paket, tema, vt, wol
+from . import __version__, acil, ayar, duyuru, guvenlik, hedef, marka, metin, paket, tema, vt, wol, zamanlama
+from .komut import KOMUT_ADI, KOMUT_DURUMU, KOMUT_OMRU, komut_ekle  # noqa: F401  (KOMUT_OMRU burada da anılır)
 
+gunluk = logging.getLogger("tahta-sunucu")
 ISTANBUL = ZoneInfo("Europe/Istanbul")
 CEREZ = "tk_oturum"
 ROLLER = {"yonetici": "Yönetici", "idareci": "İdareci"}
+DUZEYLER = hedef.DUZEYLER
+DEVRELER = hedef.DEVRELER
 
-# Komutun geçerlilik süresi (sn). Kapatma komutu kısa ömürlüdür: bir saat sonra
-# açılan tahta, eskimiş bir "kapat" komutuyla kapanmamalıdır.
-KOMUT_OMRU = {
-    "kilitle": 600,
-    "kilit_ac": 600,
-    "duyuru_kaldir": 600,
-    "kapat": 120,
-    "yeniden_baslat": 120,
-    "tani": 86400,
-    "guncelle": 86400,
-}
-KOMUT_ADI = {
-    "kilitle": "Kilitle",
-    "kilit_ac": "Kilidi aç",
-    "duyuru": "Duyuru",
-    "duyuru_kaldir": "Duyuruyu kaldır",
-    "kapat": "Kapat",
-    "yeniden_baslat": "Yeniden başlat",
-    "tani": "Tanılama",
-    "guncelle": "Ajanı güncelle",
-    "uyandir": "Uzaktan aç",
-}
-KOMUT_DURUMU = {
-    "bekliyor": "Tahta bekleniyor",
-    "gonderildi": "Tahtaya iletildi",
-    "tamam": "Uygulandı",
-    "hata": "Başarısız",
-    "zaman_asimi": "Süresi doldu",
-}
+# Üst menü (ortak sözlük §4). Her aşama yalnız kendi öğesini ekler. "rol" verilmişse
+# yalnız o role görünür; "esler" sayfanın hangi yollarda seçili sayılacağını söyler.
+MENU = [
+    {"ad": "Pano", "yol": "/", "esler": ["/", "/tahta/"]},
+    {"ad": "Duyurular", "yol": "/duyurular", "esler": ["/duyurular"]},
+    {
+        "ad": "Tahtalar",
+        "alt": [
+            {"ad": "Tahta ekle", "yol": "/ekle", "esler": ["/ekle"]},
+            {"ad": "Gruplar", "yol": "/gruplar", "esler": ["/gruplar", "/tahtalar/ice-aktar"]},
+        ],
+    },
+    {"ad": "İşlem kaydı", "yol": "/kayit", "esler": ["/kayit"]},
+    {
+        "ad": "Yönetim",
+        "rol": "yonetici",
+        "alt": [
+            {"ad": "Kullanıcılar", "yol": "/kullanicilar", "esler": ["/kullanicilar"]},
+            {"ad": "Ayarlar", "yol": "/ayarlar", "esler": ["/ayarlar"]},
+        ],
+    },
+]
+MENU_ACIL = {"ad": "Acil durum", "yol": "/acil", "esler": ["/acil"]}
+
+
+def _secili(oge: dict, yol: str) -> bool:
+    for es in oge.get("esler", []):
+        if yol == es or (es.endswith("/") and es != "/" and yol.startswith(es)) or (es != "/" and yol.startswith(es + "/")):
+            return True
+    return False
+
+
+def menu_gorunumu(k, yol: str) -> list[dict]:
+    """Kullanıcının rolüne göre süzülmüş menü; her öğede `secili`, grupta `alt` ve `secili`."""
+    sonuc = []
+    for oge in MENU:
+        if oge.get("rol") and (not k or k["rol"] != oge["rol"]):
+            continue
+        if "alt" in oge:
+            alt = [{"ad": a["ad"], "yol": a["yol"], "secili": _secili(a, yol)} for a in oge["alt"]]
+            sonuc.append({"ad": oge["ad"], "alt": alt, "secili": any(a["secili"] for a in alt)})
+        else:
+            sonuc.append({"ad": oge["ad"], "yol": oge["yol"], "secili": _secili(oge, yol)})
+    return sonuc
+
+
 OTURUM_SINIFI = {
     "etapadmin": "Yönetici hesabı (etapadmin)",
     "ogretmen": "Öğretmen hesabı (ortak)",
@@ -80,6 +103,14 @@ def zaman_yaz(epoch) -> str:
     return datetime.fromtimestamp(int(epoch), ISTANBUL).strftime("%d.%m.%Y %H:%M:%S")
 
 
+def saat_yaz(epoch) -> str:
+    return datetime.fromtimestamp(int(epoch), ISTANBUL).strftime("%H:%M") if epoch else "—"
+
+
+def tarih_yaz(epoch) -> str:
+    return datetime.fromtimestamp(int(epoch), ISTANBUL).strftime("%d.%m.%Y %H:%M") if epoch else "—"
+
+
 def gecen_sure(epoch) -> str:
     if not epoch:
         return "hiç bağlanmadı"
@@ -100,8 +131,23 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
     sablonlar = Jinja2Templates(directory=ayar.SUNUCU_DIZINI / "sablonlar")
     sablonlar.env.filters["zaman"] = zaman_yaz
     sablonlar.env.filters["gecen"] = gecen_sure
+    sablonlar.env.filters["saat"] = saat_yaz
+    sablonlar.env.filters["tarih"] = tarih_yaz
+    sablonlar.env.filters["kat_adi"] = hedef.kat_adi
     sablonlar.env.globals.update(
-        surum=__version__, komut_adi=KOMUT_ADI, komut_durumu=KOMUT_DURUMU, roller=ROLLER, oturum_sinifi=OTURUM_SINIFI
+        surum=__version__,
+        komut_adi=KOMUT_ADI,
+        komut_durumu=KOMUT_DURUMU,
+        roller=ROLLER,
+        oturum_sinifi=OTURUM_SINIFI,
+        duzeyler=DUZEYLER,
+        devreler=DEVRELER,
+        gun_kisa=zamanlama.GUN_KISA,
+        yayin_durumu=duyuru.YAYIN_DURUMU,
+        plan_durumu=duyuru.PLAN_DURUMU,
+        acil_turleri=acil.TURLER,
+        acil_bitis_nedeni=acil.BITIS_NEDENI,
+        katlar=[(None, "Belirtilmemiş")] + [(k, hedef.kat_adi(k)) for k in range(-2, 21)],
     )
 
     bekleyenler: dict[int, tuple[asyncio.AbstractEventLoop, asyncio.Event]] = {}
@@ -136,23 +182,45 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             adres += ("&" if "?" in adres else "?") + "m=" + quote(mesaj) + tur + isaret + parca
         return RedirectResponse(adres, status_code=303)
 
-    def sayfa(istek: Request, ad: str, k, **baglam) -> HTMLResponse:
+    def acil_ozeti(b, simdi: int | None = None) -> dict | None:
+        """Panel bandı ve /api/durum için süren acil yayın: {"id","tur","baslik","kalan_sn","baslatan","baslangic"}."""
+        simdi = vt.simdi() if simdi is None else simdi
+        yayin = acil.aktif(b, simdi)
+        if not yayin:
+            return None
+        return {
+            "id": yayin["id"],
+            "tur": yayin["tur"],
+            "baslik": yayin["baslik"],
+            "kalan_sn": max(0, yayin["bitis_plan"] - simdi),
+            "baslatan": yayin["baslatan"],
+            "baslangic": yayin["baslangic"],
+        }
+
+    def sayfa(istek: Request, ad: str, k, durum_kodu: int = 200, **baglam) -> HTMLResponse:
         with vt.islem() as b:
             okul_adi = vt.ayar_al(b, "okul_adi", "")
             ana, vurgu = tema.tema_al(b)
             logo_v = marka.logo_surumu(b)
+            aktif_acil = acil_ozeti(b) if k else None
         baglam.update(
+            menu=menu_gorunumu(k, istek.url.path) if k else [],
+            menu_acil={**MENU_ACIL, "secili": _secili(MENU_ACIL, istek.url.path)},
+            aktif_acil=aktif_acil,
+            acil_yetkili=bool(k and k["acil_yetki"]),
+            istek_yolu=istek.url.path,
             kullanici=k,
             okul_adi=okul_adi,
-            mesaj=istek.query_params.get("m", ""),
-            mesaj_hata=istek.query_params.get("t") == "hata",
-            ileti_yeri=istek.query_params.get("yer", ""),
             tema_v=tema.surum(ana, vurgu),
             tema_serit=tema.uret(ana, vurgu)["acik"]["serit"],
             logo_v=logo_v,
             monogram=tema.bas_harfler(okul_adi),
         )
-        return sablonlar.TemplateResponse(istek, ad, baglam)
+        # İleti yönlendirme adresinden gelir; aynı yanıtta yeniden çizilen form kendi iletisini verebilir.
+        baglam.setdefault("mesaj", istek.query_params.get("m", ""))
+        baglam.setdefault("mesaj_hata", istek.query_params.get("t") == "hata")
+        baglam.setdefault("ileti_yeri", istek.query_params.get("yer", ""))
+        return sablonlar.TemplateResponse(istek, ad, baglam, status_code=durum_kodu)
 
     def onayli_tahtalari_uyandir() -> None:
         with vt.islem() as b:
@@ -184,19 +252,32 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             dongu, olay = kayit
             dongu.call_soon_threadsafe(olay.set)
 
-    def komut_ekle(b, tahta_id: int, tur: str, veri: dict, olusturan: str, omur: int | None = None) -> None:
-        simdi = vt.simdi()
-        b.execute(
-            "INSERT INTO komut (tahta_id, tur, veri_json, olusturan, olusturma, bitis) VALUES (?, ?, ?, ?, ?, ?)",
-            (tahta_id, tur, json.dumps(veri, ensure_ascii=False), olusturan, simdi, simdi + (omur or KOMUT_OMRU[tur])),
-        )
+    def uyandir_hepsi(idler) -> None:
+        for tahta_id in set(idler):
+            uyandir(tahta_id)
 
-    def tahta_gorunumu(satir) -> dict:
+    def tahta_gorunumu(satir, acil_gorenler: set[int] | None = None, gruplar: dict | None = None) -> dict:
+        """Pano kartı ve /api/durum için tahta özeti.
+
+        acil_gorenler: süren acil yayını ekrana almış tahtaların kimlikleri (yoksa None).
+        gruplar: tahta kimliği → grup kimlikleri (pano ilk verisi için; yoksa boş liste).
+        """
         durum = json.loads(satir["durum_json"] or "{}")
         cevrimici = bool(satir["son_gorulme"]) and (vt.simdi() - satir["son_gorulme"]) < ayar.CEVRIMICI_ESIK_SN
         ekranlar = durum.get("ekranlar") or []
         oturum = (durum.get("oturum") or {}).get("sinif", "yok")
+        yetenekler = acil.yetenekler(satir)
         return {
+            "bina": satir["bina"],
+            "kat": satir["kat"],
+            "duzeyler": hedef.kume(satir["duzeyler"]),
+            "devre": satir["devre"],
+            "subeler": hedef.kume(satir["subeler"]),
+            "gruplar": (gruplar or {}).get(satir["id"], []),
+            "alanlar": hedef.alanlar_metni(satir),
+            "yetenekler": yetenekler,
+            "acil_yetenegi": acil.ACIL_YETENEK in yetenekler,
+            "acil_gorundu": bool(acil_gorenler) and satir["id"] in acil_gorenler,
             "id": satir["id"],
             "ad": satir["ad"],
             "derslik": satir["derslik"],
@@ -270,8 +351,9 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         if len(ad) < 3 or len(parola) < 8 or parola != str(form.get("parola2", "")):
             return yonlendir("/kurulum", "Kullanıcı adı en az 3, parola en az 8 karakter olmalı ve iki parola aynı girilmeli.", hata=True)
         with vt.islem() as b:
+            # İlk yönetici acil yetkisini de alır (göçteki kuralla aynı: sistem acil yetkilisiz kalmasın).
             b.execute(
-                "INSERT INTO kullanici (ad, gorunen_ad, parola_ozet, rol, olusturma) VALUES (?, ?, ?, 'yonetici', ?)",
+                "INSERT INTO kullanici (ad, gorunen_ad, parola_ozet, rol, olusturma, acil_yetki) VALUES (?, ?, ?, 'yonetici', ?, 1)",
                 (ad, str(form.get("gorunen_ad", "")).strip() or ad, guvenlik.parola_ozetle(parola), vt.simdi()),
             )
             vt.ayar_yaz(b, "okul_adi", str(form.get("okul_adi", "")).strip())
@@ -339,7 +421,12 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             ).fetchall()
             kilit_kodu_var = bool(vt.ayar_al(b, "kilit_kodu"))
             kapatma = kapatma_ozeti(vt.ayar_al(b, "otomatik_kapatma") or {})
-        tahtalar = [tahta_gorunumu(s) for s in satirlar]
+            gorenler = acil_gorenler(b)
+            uyelik = grup_uyelikleri(b)
+            kacirilan = b.execute(
+                "SELECT COUNT(*) FROM duyuru WHERE durum = 'kacirildi' AND olusturma > ?", (vt.simdi() - 86400,)
+            ).fetchone()[0]
+        tahtalar = [tahta_gorunumu(s, gorenler, uyelik) for s in satirlar]
         return sayfa(
             istek,
             "pano.html",
@@ -348,7 +435,20 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             bekleyen=[t for t in tahtalar if t["durum"] == "bekliyor"],
             kilit_kodu_var=kilit_kodu_var,
             kapatma=kapatma,
+            kacirilan_sayisi=kacirilan,
         )
+
+    def acil_gorenler(b) -> set[int] | None:
+        yayin = acil.aktif(b)
+        if not yayin:
+            return None
+        return {s["tahta_id"] for s in b.execute("SELECT tahta_id FROM acil_teslim WHERE acil_id = ?", (yayin["id"],))}
+
+    def grup_uyelikleri(b) -> dict[int, list[int]]:
+        sonuc: dict[int, list[int]] = {}
+        for s in b.execute("SELECT tahta_id, grup_id FROM tahta_grubu_uye ORDER BY grup_id"):
+            sonuc.setdefault(s["tahta_id"], []).append(s["grup_id"])
+        return sonuc
 
     @uygulama.get("/api/durum")
     async def api_durum(istek: Request):
@@ -357,7 +457,16 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         with vt.islem() as b:
             satirlar = b.execute("SELECT * FROM tahta WHERE durum = 'onayli'").fetchall()
             bekleyen = b.execute("SELECT COUNT(*) FROM tahta WHERE durum = 'bekliyor'").fetchone()[0]
-        return {"tahtalar": [tahta_gorunumu(s) for s in satirlar], "bekleyen": bekleyen}
+            ozet = acil_ozeti(b)
+            gorenler = acil_gorenler(b)
+        if ozet:
+            ozet["teslim"] = len(gorenler or ())
+            ozet["hedef"] = len(satirlar)
+        return {
+            "tahtalar": [tahta_gorunumu(s, gorenler) for s in satirlar],
+            "bekleyen": bekleyen,
+            "acil": ozet,
+        }
 
     @uygulama.post("/islem")
     async def islem(istek: Request):
@@ -366,29 +475,44 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             return yonlendir("/giris")
         form = await istek.form()
         tur = str(form.get("tur", ""))
-        idler = [int(d) for d in form.getlist("tahta") if str(d).isdigit()]
+        idler = [int(d) for d in form.getlist("tahta") if str(d).isdigit() and hedef.kimlik_mi(d)]
         if not idler:
             return yonlendir("/", "Önce en az bir tahta seçin.", hata=True)
         if tur not in KOMUT_ADI:
             return yonlendir("/", "Bilinmeyen işlem.", hata=True)
+        donus = str(form.get("donus", "/")) if str(form.get("donus", "/")).startswith("/") else "/"
         veri: dict = {}
-        omur = None
         if tur == "duyuru":
+            # Panodaki hemen gönderim: tek yayın yolundan, hedef seçili tahtalar.
             metin = str(form.get("metin", "")).strip()
+            baslik = str(form.get("baslik", "")).strip()[:200]
             if not metin:
-                return yonlendir("/", "Duyuru metni boş olamaz.", hata=True)
+                return yonlendir(donus, "Duyuru metni boş olamaz.", hata=True)
+            if guvenlik.tc_kimlik_var(metin) or guvenlik.tc_kimlik_var(baslik):
+                with vt.islem() as b:
+                    vt.kayit_dus(b, k["ad"], "Duyuru reddedildi", "T.C. kimlik numarasına benzeyen sayı", istemci_ip(istek))
+                return yonlendir(donus, guvenlik.TC_KIMLIK_ILETISI, hata=True)
             try:
                 sure_dk = max(1, min(240, int(str(form.get("sure_dk", "5")))))
             except ValueError:
                 sure_dk = 5
-            veri = {
-                "baslik": str(form.get("baslik", "")).strip()[:200],
-                "metin": metin[:4000],
-                "sure_sn": sure_dk * 60,
-                "kapatilabilir": form.get("kapatilabilir") == "1",
-                "bitis_sunucu": vt.simdi() + sure_dk * 60,
-            }
-            omur = sure_dk * 60
+            with vt.islem() as b:
+                if not hedef.coz(b, {"tahtalar": idler}):
+                    return yonlendir(donus, "Seçilen tahtalar bulunamadı.", hata=True)
+                _, idler = duyuru.duyuru_yayimla(
+                    b,
+                    baslik=baslik,
+                    metin=metin[:4000],
+                    sure_sn=sure_dk * 60,
+                    kapatilabilir=form.get("kapatilabilir") == "1",
+                    hedef={"tahtalar": idler},
+                    olusturan=k["ad"],
+                    an=vt.simdi(),
+                    ip=istemci_ip(istek),
+                )
+            uyandir_hepsi(idler)
+            return yonlendir(donus, f"Duyuru: {len(idler)} tahtaya gönderildi.")
+        omur = None
         if tur == "guncelle":
             veri = {"sha256": paket.ajan_paketi().sha256, "surum": paket.ajan_paketi().surum}
         notlar = []
@@ -412,12 +536,6 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             else:
                 for t in tahtalar:
                     komut_ekle(b, t["id"], tur, veri, k["ad"], omur)
-                if tur == "duyuru":
-                    b.execute(
-                        "INSERT INTO duyuru (baslik, metin, sure_sn, kapatilabilir, hedef, olusturan, olusturma) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (veri["baslik"], veri["metin"], veri["sure_sn"], int(veri["kapatilabilir"]), adlar, k["ad"], vt.simdi()),
-                    )
             vt.kayit_dus(b, k["ad"], KOMUT_ADI[tur], f"{len(tahtalar)} tahta: {adlar}", istemci_ip(istek))
         for t in tahtalar:
             uyandir(t["id"])
@@ -441,26 +559,83 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             komutlar = b.execute(
                 "SELECT * FROM komut WHERE tahta_id = ? ORDER BY id DESC LIMIT 30", (tahta_id,)
             ).fetchall()
+            gruplar = b.execute("SELECT id, ad FROM tahta_grubu ORDER BY ad COLLATE NOCASE").fetchall()
+            uyelik = grup_uyelikleri(b)
+            binalar = mevcut_binalar(b)
         tani = json.loads(satir["tani_json"]) if satir["tani_json"] else None
         durum = json.loads(satir["durum_json"] or "{}")
         return sayfa(
-            istek, "tahta.html", k, t=tahta_gorunumu(satir), ham=satir, komutlar=komutlar, tani=tani, durum=durum
+            istek,
+            "tahta.html",
+            k,
+            t=tahta_gorunumu(satir, None, uyelik),
+            ham=satir,
+            komutlar=komutlar,
+            tani=tani,
+            durum=durum,
+            gruplar=gruplar,
+            binalar=binalar,
         )
+
+    def mevcut_binalar(b) -> list[str]:
+        """Kayıtlı tahtalarda geçen bina adları (datalist önerisi; büyük/küçük harf duyarsız tekil)."""
+        gorulen: dict[str, str] = {}
+        for s in b.execute("SELECT bina FROM tahta WHERE durum != 'iptal' AND bina != '' ORDER BY bina"):
+            gorulen.setdefault(hedef.bina_anahtari(s["bina"]), s["bina"].strip())
+        return sorted(gorulen.values(), key=lambda a: metin.tr_sirala_anahtari(a))
+
+    def tahta_alanlari_coz(form) -> dict:
+        """Tahta formundaki nitelik alanları; hatada iletiyle ValueError."""
+        bina = " ".join(str(form.get("bina", "")).split())
+        if len(bina) > hedef.BINA_EN_UZUN:
+            raise ValueError(f"Bina adı en çok {hedef.BINA_EN_UZUN} karakter olabilir.")
+        duzeyler = [d for d in DUZEYLER if d in {str(x) for x in form.getlist("duzey")}]
+        if any(str(x) not in DUZEYLER for x in form.getlist("duzey")):
+            raise ValueError("Düzey değeri geçersiz.")
+        devre = str(form.get("devre", ""))
+        if devre and devre not in DEVRELER:
+            raise ValueError("Devre değeri geçersiz.")
+        return {
+            "bina": bina,
+            "kat": hedef.kat_coz(form.get("kat", "")),
+            "duzeyler": ",".join(duzeyler),
+            "devre": devre,
+            "subeler": ",".join(hedef.subeler_coz(form.get("subeler", ""))),
+            "gruplar": sorted({int(g) for g in form.getlist("grup") if str(g).isdigit() and hedef.kimlik_mi(g)}),
+        }
+
+    def grup_uyeligi_yaz(b, tahta_id: int, grup_idler) -> None:
+        b.execute("DELETE FROM tahta_grubu_uye WHERE tahta_id = ?", (tahta_id,))
+        for grup_id in grup_idler:
+            b.execute(
+                "INSERT OR IGNORE INTO tahta_grubu_uye (grup_id, tahta_id) SELECT id, ? FROM tahta_grubu WHERE id = ?",
+                (tahta_id, grup_id),
+            )
 
     @uygulama.post("/tahta/{tahta_id}/kaydet")
     async def tahta_kaydet(istek: Request, tahta_id: int):
         k = kullanici(istek)
         if not k or k["rol"] != "yonetici":
+            if k:
+                with vt.islem() as b:
+                    vt.kayit_dus(b, k["ad"], "Yetkisiz işlem reddedildi", f"Tahta #{tahta_id} düzenleme", istemci_ip(istek))
             return yonlendir(f"/tahta/{tahta_id}", "Bu işlem için yönetici yetkisi gerekir.", hata=True)
         form = await istek.form()
         ad = str(form.get("ad", "")).strip()[:60]
         eylem = str(form.get("eylem", "kaydet"))
+        alanlar = None
+        if form.get("alanlar") == "1":  # nitelik alanları formda varsa (gizli işaret) yazılır
+            try:
+                alanlar = tahta_alanlari_coz(form)
+            except ValueError as hata:
+                return yonlendir(f"/tahta/{tahta_id}", str(hata), hata=True)
         with vt.islem() as b:
             satir = b.execute("SELECT * FROM tahta WHERE id = ?", (tahta_id,)).fetchone()
             if not satir:
                 return yonlendir("/", "Tahta bulunamadı.", hata=True)
             if eylem == "sil":
                 b.execute("UPDATE tahta SET durum = 'iptal', anahtar_ozet = '' WHERE id = ?", (tahta_id,))
+                b.execute("DELETE FROM tahta_grubu_uye WHERE tahta_id = ?", (tahta_id,))
                 vt.kayit_dus(b, k["ad"], "Tahta kaldırıldı", satir["ad"], istemci_ip(istek))
                 return yonlendir("/", f"{satir['ad']} kaldırıldı. Tahtadaki ajan artık sunucuya bağlanamaz.")
             if not ad:
@@ -470,8 +645,17 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                 "UPDATE tahta SET ad = ?, derslik = ?, durum = ? WHERE id = ?",
                 (ad, str(form.get("derslik", "")).strip()[:60], yeni_durum, tahta_id),
             )
+            ayrinti = ad
+            if alanlar is not None:
+                b.execute(
+                    "UPDATE tahta SET bina = ?, kat = ?, duzeyler = ?, devre = ?, subeler = ? WHERE id = ?",
+                    (alanlar["bina"], alanlar["kat"], alanlar["duzeyler"], alanlar["devre"], alanlar["subeler"], tahta_id),
+                )
+                grup_uyeligi_yaz(b, tahta_id, alanlar["gruplar"])
+                guncel = b.execute("SELECT * FROM tahta WHERE id = ?", (tahta_id,)).fetchone()
+                ayrinti += " · " + (hedef.alanlar_metni(guncel) or "nitelik yok")
             vt.kayit_dus(
-                b, k["ad"], "Tahta onaylandı" if eylem == "onayla" else "Tahta düzenlendi", ad, istemci_ip(istek)
+                b, k["ad"], "Tahta onaylandı" if eylem == "onayla" else "Tahta düzenlendi", ayrinti, istemci_ip(istek)
             )
         uyandir(tahta_id)
         return yonlendir(f"/tahta/{tahta_id}", "Kaydedildi.")
@@ -501,6 +685,9 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
     async def ekle_ayarla(istek: Request):
         k = kullanici(istek)
         if not k or k["rol"] != "yonetici":
+            if k:
+                with vt.islem() as b:
+                    vt.kayit_dus(b, k["ad"], "Yetkisiz işlem reddedildi", "Tahta ekleme penceresi", istemci_ip(istek))
             return yonlendir("/ekle", "Bu işlem için yönetici yetkisi gerekir.", hata=True)
         form = await istek.form()
         with vt.islem() as b:
@@ -544,16 +731,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             headers={"Content-Disposition": 'attachment; filename="tahta-kurulum.zip"'},
         )
 
-    # ---- duyurular, kayıt, kullanıcılar, ayarlar -----------------------------
-    @uygulama.get("/duyurular", response_class=HTMLResponse)
-    async def duyurular(istek: Request):
-        k = kullanici(istek)
-        if not k:
-            return yonlendir("/giris")
-        with vt.islem() as b:
-            satirlar = b.execute("SELECT * FROM duyuru ORDER BY id DESC LIMIT 100").fetchall()
-        return sayfa(istek, "duyurular.html", k, duyurular=satirlar)
-
+    # ---- kayıt, kullanıcılar, ayarlar (duyurular: panel_duyuru.py) ------------
     @uygulama.get("/kayit", response_class=HTMLResponse)
     async def kayit(istek: Request):
         k = kullanici(istek)
@@ -574,11 +752,19 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             satirlar = b.execute("SELECT * FROM kullanici ORDER BY ad").fetchall()
         return sayfa(istek, "kullanicilar.html", k, kullanicilar=satirlar)
 
+    def yetkisiz_reddet(istek: Request, k, islem: str):
+        """Yönetici olmayanın yetkili işlem denemesini kayda düşürüp reddeder (oturum yoksa girişe)."""
+        if not k:
+            return yonlendir("/giris")
+        with vt.islem() as b:
+            vt.kayit_dus(b, k["ad"], "Yetkisiz işlem reddedildi", islem, istemci_ip(istek))
+        return yonlendir("/", "Bu işlem için yönetici yetkisi gerekir.", hata=True)
+
     @uygulama.post("/kullanicilar")
     async def kullanici_islem(istek: Request):
         k = kullanici(istek)
         if not k or k["rol"] != "yonetici":
-            return yonlendir("/", "Bu işlem için yönetici yetkisi gerekir.", hata=True)
+            return yetkisiz_reddet(istek, k, "Kullanıcı işlemi")
         form = await istek.form()
         eylem = str(form.get("eylem", ""))
         with vt.islem() as b:
@@ -617,6 +803,20 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                 if hedef["id"] != k["id"]:
                     b.execute("DELETE FROM oturum WHERE kullanici_id = ?", (hedef["id"],))
                 vt.kayit_dus(b, k["ad"], "Parola değiştirildi", hedef["ad"], istemci_ip(istek))
+            elif eylem == "acil_yetki":
+                ver = not hedef["acil_yetki"]
+                if not ver and hedef["id"] == k["id"]:
+                    vt.kayit_dus(b, k["ad"], "Acil yetkisi değişikliği reddedildi", "Kendi yetkisini kaldırma denemesi", istemci_ip(istek))
+                    return yonlendir("/kullanicilar", "Kendi acil yetkinizi kaldıramazsınız.", hata=True)
+                b.execute("UPDATE kullanici SET acil_yetki = ? WHERE id = ?", (int(ver), hedef["id"]))
+                vt.kayit_dus(
+                    b, k["ad"], "Acil yetkisi verildi" if ver else "Acil yetkisi alındı", hedef["ad"], istemci_ip(istek)
+                )
+                return yonlendir(
+                    "/kullanicilar", f"{hedef['ad']}: acil yayın yetkisi {'verildi' if ver else 'kaldırıldı'}."
+                )
+            else:
+                return yonlendir("/kullanicilar", "Bilinmeyen işlem.", hata=True)
         return yonlendir("/kullanicilar", "Kaydedildi.")
 
     @uygulama.get("/ayarlar", response_class=HTMLResponse)
@@ -626,12 +826,19 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             return yonlendir("/giris")
         if k["rol"] != "yonetici":
             return yonlendir("/", "Bu sayfa için yönetici yetkisi gerekir.", hata=True)
+        return ayarlar_sayfasi(istek, k)
+
+    def ayarlar_sayfasi(istek: Request, k, sablon_formu: list | None = None, sablon_hata: str = "") -> HTMLResponse:
+        """Ayarlar sayfası. sablon_formu/sablon_hata: acil şablonu doğrulama hatasında gönderilen
+        değerler aynı yanıtta (400) yeniden çizilir; düzenlemeler kaybolmaz."""
         with vt.islem() as b:
             kilit_kodu_var = bool(vt.ayar_al(b, "kilit_kodu"))
             kayitli_adres = vt.ayar_al(b, "sunucu_adresi", "")
             kapatma = vt.ayar_al(b, "otomatik_kapatma") or {}
             ana, vurgu = tema.tema_al(b)
             logo = marka.logo_oku(b)
+            acil_sablonlar = acil.sablonlar(b)
+            acil_sablon_ornek = not isinstance(vt.ayar_al(b, "acil_sablonlar"), list)
         uretilen = tema.uret(ana, vurgu)
         logo_bilgi = None
         if logo:
@@ -643,10 +850,16 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                 "kb": max(1, round(int(bilgi.get("boyut") or 0) / 1024)),
                 "zaman": datetime.fromtimestamp(int(bilgi.get("zaman") or 0), ISTANBUL).strftime("%d.%m.%Y %H:%M"),
             }
+        ek: dict = {}
+        if sablon_formu is not None:
+            acil_sablonlar = sablon_formu
+            ek = {"mesaj": sablon_hata, "mesaj_hata": True, "ileti_yeri": "acil"}
         return sayfa(
             istek,
             "ayarlar.html",
             k,
+            durum_kodu=400 if sablon_formu is not None else 200,
+            **ek,
             tema_ana=ana,
             tema_vurgu=vurgu,
             varsayilan_vurgu=tema.VARSAYILAN_VURGU,
@@ -660,14 +873,67 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             https_port=ayar.HTTPS_PORT,
             parmak_izi=parmak_izi,
             veri_dizini=str(ayar.veri_dizini()),
+            acil_sablonlar=acil_sablonlar,
+            acil_sablon_ornek=acil_sablon_ornek,
+            acil_sablon_en_cok=acil.SABLON_EN_COK,
         )
+
+    def acil_sablonlarini_kaydet(istek: Request, k, form, ip: str):
+        """Ayarlar › Acil şablonları (bolum=acil_sablonlari).
+
+        Alanlar paralel listelerdir: s_ad, s_baslik, s_metin (satır sırasıyla). Adı boş satır
+        silinmiş sayılır. eylem=varsayilan örnek şablonlara döndürür. Doğrulama hatasında
+        sayfa gönderilen değerlerle yeniden çizilir (düzenlemeler kaybolmaz).
+        """
+        adres = "/ayarlar?yer=acil#ileti"  # ileti şablon bölümünün içinde çizilir ve odaklanır
+        if form.get("eylem") == "varsayilan":
+            with vt.islem() as b:
+                vt.ayar_yaz(b, "acil_sablonlar", None)
+                vt.kayit_dus(b, k["ad"], "Acil şablonları örneklere döndürüldü", "", ip)
+            return yonlendir(adres, "Acil şablonları örnek metinlere döndürüldü.")
+        adlar, basliklar, metinler = form.getlist("s_ad"), form.getlist("s_baslik"), form.getlist("s_metin")
+        kullanilan: set[str] = set()
+        gonderilen = []
+        yeni = []
+        hata = ""
+        for sira, ad in enumerate(adlar):
+            ad = " ".join(str(ad).split())[:40]
+            baslik = str(basliklar[sira] if sira < len(basliklar) else "").strip()[: acil.BASLIK_EN_UZUN]
+            metin_ = str(metinler[sira] if sira < len(metinler) else "").strip()[: acil.METIN_EN_UZUN]
+            if not ad:
+                continue
+            gonderilen.append({"ad": ad, "baslik": baslik, "metin": metin_})
+            if hata:
+                continue
+            if not metin_:
+                hata = f"'{ad}' şablonunun metni boş olamaz."
+            elif guvenlik.tc_kimlik_var(baslik) or guvenlik.tc_kimlik_var(metin_):
+                hata = guvenlik.TC_KIMLIK_ILETISI
+                with vt.islem() as b:  # numaranın kendisi kayda yazılmaz
+                    vt.kayit_dus(b, k["ad"], "Acil şablonu reddedildi", "T.C. kimlik numarasına benzeyen sayı", ip)
+            else:
+                yeni.append({"kod": acil.sablon_kodu(ad, kullanilan), "ad": ad, "baslik": baslik, "metin": metin_})
+        if not hata and len(yeni) > acil.SABLON_EN_COK:
+            hata = f"En çok {acil.SABLON_EN_COK} şablon tanımlanabilir."
+        if hata:
+            return ayarlar_sayfasi(istek, k, sablon_formu=gonderilen[: acil.SABLON_EN_COK], sablon_hata=hata)
+        with vt.islem() as b:
+            vt.ayar_yaz(b, "acil_sablonlar", yeni)
+            vt.kayit_dus(b, k["ad"], "Acil şablonları kaydedildi", f"{len(yeni)} şablon", ip)
+        return yonlendir(adres, "Acil şablonları kaydedildi.")
 
     @uygulama.post("/ayarlar")
     async def ayarlar_kaydet(istek: Request):
         k = kullanici(istek)
         if not k or k["rol"] != "yonetici":
-            return yonlendir("/", "Bu işlem için yönetici yetkisi gerekir.", hata=True)
+            return yetkisiz_reddet(istek, k, "Ayarlar")
         form = await istek.form()
+        # Ayarlar bölümlüdür: her bölüm yalnız kendi anahtarlarını yazar (gizli "bolum").
+        bolum = str(form.get("bolum", "genel")) or "genel"
+        if bolum == "acil_sablonlari":
+            return acil_sablonlarini_kaydet(istek, k, form, istemci_ip(istek))
+        if bolum != "genel":
+            return yonlendir("/ayarlar", "Bilinmeyen ayar bölümü.", hata=True)
         with vt.islem() as b:
             vt.ayar_yaz(b, "okul_adi", str(form.get("okul_adi", "")).strip()[:120])
             adres = str(form.get("sunucu_adresi", "")).strip().rstrip("/")
@@ -841,9 +1107,12 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             ).fetchone()
 
     def ajan_ayari(b, tahta) -> dict:
-        """Onaylı tahtaya her yanıtta inen ayarlar. Logo baytları buraya girmez (yalnız özeti)."""
+        """Onaylı tahtaya her yanıtta inen ayarlar. Logo baytları buraya girmez (yalnız özeti).
+
+        `acil` bir DURUMDUR (komut değil): anahtar her zaman bulunur, yayın yoksa None.
+        Logo özeti dosya-özeti önbelleğinden gelir; logo her çağrıda yeniden özetlenmez.
+        """
         ana, vurgu = tema.tema_al(b)
-        logo = marka.logo_oku(b)
         # Ad ve derslik uzun bekleme sırasında değişmiş olabilir: güncel satırdan okunur.
         guncel = b.execute("SELECT ad, derslik FROM tahta WHERE id = ?", (tahta["id"],)).fetchone() or tahta
         return {
@@ -852,8 +1121,9 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             "sunucu_saat": time.time(),
             "ajan_surumu": paket.ajan_paketi().surum,
             "tema": dict(tema.uret(ana, vurgu)["tahta"]),
-            "logo_sha256": logo[1]["sha256"] if logo else None,
+            "logo_sha256": marka.logo_ozeti(b),
             "tahta": {"ad": guncel["ad"], "derslik": guncel["derslik"]},
+            "acil": acil.ajan_gorunumu(b),
         }
 
     @uygulama.post("/ajan/kaydol")
@@ -928,11 +1198,16 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                     vt.kayit_dus(b, f"tahta:{tahta['ad']}", "Tahta olayı", str(olay), istemci_ip(istek))
             else:
                 b.execute("UPDATE tahta SET son_gorulme = ?, ip = ? WHERE id = ?", (vt.simdi(), istemci_ip(istek), tahta["id"]))
+            if durum is not None and tahta["durum"] == "onayli" and durum.get("acil_id") is not None:
+                # Ajan ekrana aldığı acil yayının kimliğini bildirir: ilk görülme kaydı.
+                yayin = acil.aktif(b)
+                if yayin and durum.get("acil_id") == yayin["id"]:
+                    acil.teslim_yaz(b, yayin["id"], tahta["id"], durum, "acil")
             for sonuc in (govde.get("sonuclar") or [])[:50]:
                 komut = b.execute(
                     "SELECT * FROM komut WHERE id = ? AND tahta_id = ?", (sonuc.get("komut_id"), tahta["id"])
                 ).fetchone()
-                if not komut or komut["durum"] in ("tamam", "hata"):
+                if not komut or komut["durum"] in ("tamam", "hata", "iptal"):
                     continue
                 cikti = str(sonuc.get("cikti", ""))
                 basarili = bool(sonuc.get("basarili"))
@@ -942,6 +1217,10 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                         (cikti[:200000], vt.simdi(), tahta["id"]),
                     )
                     cikti = "Tanılama raporu alındı."
+                if komut["tur"] == "duyuru" and basarili:
+                    acil_id = acil.yedek_teslim_acil_id(json.loads(komut["veri_json"] or "{}"))
+                    if acil_id:  # eski ajana yedek yolla giden acil yayın gösterildi
+                        acil.teslim_yaz(b, acil_id, tahta["id"], durum or json.loads(tahta["durum_json"] or "{}"), "yedek_duyuru")
                 b.execute(
                     "UPDATE komut SET durum = ?, sonuc = ?, tamamlanma = ? WHERE id = ?",
                     ("tamam" if basarili else "hata", cikti[:4000], vt.simdi(), komut["id"]),
@@ -961,9 +1240,18 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                 satirlar = b.execute(
                     "SELECT * FROM komut WHERE tahta_id = ? AND durum = 'bekliyor' ORDER BY id", (tahta["id"],)
                 ).fetchall()
+                guncel = b.execute("SELECT durum_json FROM tahta WHERE id = ?", (tahta["id"],)).fetchone()
+                acil_yetenekli = acil.ACIL_YETENEK in acil.yetenekler(guncel)
                 cikti = []
                 for s in satirlar:
                     veri = json.loads(s["veri_json"] or "{}")
+                    if s["tur"] == "duyuru" and acil_yetenekli and acil.yedek_teslim_acil_id(veri):
+                        # Tahta bu arada güncellendi: acil yayını ayar.acil ile alır, yedek duyuru gerekmez.
+                        b.execute(
+                            "UPDATE komut SET durum = 'iptal', tamamlanma = ?, sonuc = ? WHERE id = ?",
+                            (vt.simdi(), "Ajan acil yayını kendisi gösteriyor; yedek duyuru gerekmedi.", s["id"]),
+                        )
+                        continue
                     if s["tur"] == "duyuru":  # tahtanın saatine güvenilmez; kalan süre burada hesaplanır
                         veri["sure_sn"] = max(5, int(veri.pop("bitis_sunucu", vt.simdi() + 60)) - vt.simdi())
                     cikti.append({"id": s["id"], "tur": s["tur"], "veri": veri})
@@ -1030,6 +1318,9 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                 for t in b.execute("SELECT * FROM tahta WHERE durum = 'onayli'").fetchall()
                 if t["son_gorulme"] and vt.simdi() - t["son_gorulme"] < ayar.CEVRIMICI_ESIK_SN
             ]
+            # Acil yayın sürerken otomatik kapatma hiç komut vermez (saat işareti yine yazılır
+            # ki yayın bitince geç kapatma yapılmasın).
+            acil_suruyor = acil.aktif(b) is not None
             if simdi.weekday() < 5:
                 isaretler = vt.ayar_al(b, "kapatma_isaretleri") or []
                 for saat in kural.get("saatler", []) if kural.get("etkin") else []:
@@ -1037,9 +1328,12 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                     isaret = f"{simdi:%Y-%m-%d} {saat}"
                     if 0 <= (simdi - an).total_seconds() < 600 and isaret not in isaretler:
                         vt.ayar_yaz(b, "kapatma_isaretleri", (isaretler + [isaret])[-20:])
+                        if acil_suruyor:
+                            vt.kayit_dus(b, "sistem", "Otomatik kapatma acil yayın nedeniyle atlandı", f"saat {saat}")
+                            return 0
                         hedefler, neden = acik, f"Otomatik kapatma (saat {saat})"
                         break
-            elif kural.get("hafta_sonu"):
+            elif kural.get("hafta_sonu") and not acil_suruyor:
                 sinir = int(kural.get("hafta_sonu_dk", 60)) * 60
                 for t in acik:
                     acik_sure = json.loads(t["durum_json"] or "{}").get("acik_sure", 0)
@@ -1055,5 +1349,55 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             uyandir(t["id"])
         return len(hedefler)
 
+    # ---- duyuru planları ve acil denetimi ---------------------------------------
+    def duyuru_zamanlayici(simdi: datetime | None = None) -> int:
+        """Duyuru planlarını işletir (20 sn'de bir ve açılışta); yayımlanan gösterim sayısını döndürür."""
+        simdi = simdi or datetime.now(ISTANBUL)
+        with vt.islem() as b:
+            sayi, idler = duyuru.planlari_isle(b, simdi)
+        uyandir_hepsi(idler)
+        return sayi
+
+    def acil_denetim(simdi: datetime | None = None) -> int:
+        """Süresi dolan acil yayını zamanında kapatır (kayıt düşsün); süren yayın varsa 1."""
+        an = int(simdi.timestamp()) if simdi else None
+        with vt.islem() as b:
+            return 1 if acil.aktif(b, an) else 0
+
+    def yayimla(b, **kw) -> tuple[int | None, list[int]]:
+        """Sonraki aşamalar için tek yayın yolu (duyuru.duyuru_yayimla); uyandırmayı çağıran yapar."""
+        return duyuru.duyuru_yayimla(b, **kw)
+
+    # ---- panel bölümleri (ayrı modüller) ---------------------------------------
+    y = SimpleNamespace(
+        kullanici=kullanici,
+        sayfa=sayfa,
+        yonlendir=yonlendir,
+        uyandir=uyandir,
+        uyandir_hepsi=uyandir_hepsi,
+        istemci_ip=istemci_ip,
+        hiz_siniri=hiz_siniri,
+        giris_denemeleri=giris_denemeleri,
+        tahta_gorunumu=tahta_gorunumu,
+        grup_uyelikleri=grup_uyelikleri,
+        grup_uyeligi_yaz=grup_uyeligi_yaz,
+        mevcut_binalar=mevcut_binalar,
+        acil_ozeti=acil_ozeti,
+    )
+    from . import panel_acil, panel_duyuru, panel_tahtalar
+
+    panel_duyuru.kaydet(uygulama, y)
+    panel_tahtalar.kaydet(uygulama, y)
+    panel_acil.kaydet(uygulama, y)
+
     uygulama.state.zamanlayici = zamanlayici
+    uygulama.state.duyuru_zamanlayici = duyuru_zamanlayici
+    uygulama.state.acil_denetim = acil_denetim
+    uygulama.state.duyuru_yayimla = yayimla
+    # sunucu.py::_zamanlayici bunları sırayla, her birini ayrı try içinde çağırır (ortak sözlük §2.3).
+    uygulama.state.zamanlayicilar = [
+        ("acil_denetim", acil_denetim),
+        ("otomatik_kapatma", zamanlayici),
+        ("duyuru_planlari", duyuru_zamanlayici),
+    ]
     return uygulama

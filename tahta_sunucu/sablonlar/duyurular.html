@@ -1,32 +1,105 @@
 {% extends "taban.html" %}
 {% block baslik %}Duyurular · Tahta Kontrol{% endblock %}
 {% block icerik %}
+{% set PLAN_RENGI = {'etkin': 'acik', 'duraklatildi': 'uyari'} %}
+{% set PLAN_SIMGESI = {'etkin': 's-acik', 'duraklatildi': 's-onay'} %}
+{% set YAYIN_RENGI = {'gonderildi': 'tamam', 'durduruldu': 'bilgi', 'kacirildi': 'uyari', 'hedefsiz': 'uyari'} %}
+{% set YAYIN_SIMGESI = {'gonderildi': 's-tamam', 'durduruldu': 's-bilgi', 'kacirildi': 's-sorun', 'hedefsiz': 's-sorun'} %}
 <div class="sayfa-bas">
   <div class="bas-yazi">
-    <h1 id="duyuru-baslik">Gönderilen duyurular</h1>
-    <p>Yeni duyuru <a href="/">Pano</a> sayfasından, tahtalar seçilerek gönderilir.</p>
+    <h1>Duyurular</h1>
+    <p>Hemen, ileri tarihte bir kez ya da tekrarlı duyuru; bütün tahtalara ya da bina, kat, düzey, devre ve gruplara göre.</p>
   </div>
+  <p class="dugme-satiri sag"><a class="dugme ana" href="/duyurular/yeni"><svg class="simge" aria-hidden="true"><use href="#s-duyuru"/></svg>Yeni duyuru</a></p>
 </div>
-{% if duyurular %}
-<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="duyuru-baslik">
+
+<h2 id="yayinda-baslik">Şu an yayında</h2>
+{% if yayinda %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="yayinda-baslik">
 <table>
-  <caption class="gizli">Son 100 duyuru</caption>
-  <thead><tr><th scope="col">Zaman</th><th scope="col">Başlık</th><th scope="col">Metin</th><th scope="col">Süre</th><th scope="col">Tahtalar</th><th scope="col">Gönderen</th></tr></thead>
+  <thead><tr><th scope="col">Başlık</th><th scope="col">Hedef</th><th scope="col">Bitiş</th><th scope="col">Teslim</th><th scope="col"><span class="gizli">İşlem</span></th></tr></thead>
   <tbody>
-  {% for d in duyurular %}
+  {% for d in yayinda %}
   <tr>
-    <td data-etiket="Zaman">{{ d.olusturma | zaman }}</td>
-    <td data-etiket="Başlık">{{ d.baslik or '—' }}</td>
-    <td data-etiket="Metin">{{ d.metin }}</td>
-    <td data-etiket="Süre">{{ d.sure_sn // 60 }} dk{% if d.kapatilabilir %} · kapatılabilir{% endif %}</td>
-    <td data-etiket="Tahtalar">{{ d.hedef }}</td>
-    <td data-etiket="Gönderen">{{ d.olusturan }}</td>
+    <td data-etiket="Başlık"><strong>{{ d.baslik or 'DUYURU' }}</strong><div class="not kirp">{{ d.metin }}</div></td>
+    <td data-etiket="Hedef">{{ d.hedef }}</td>
+    <td data-etiket="Bitiş">{{ d.bitis | saat }}</td>
+    <td data-etiket="Teslim">{{ d.teslim.ulasan }}/{{ d.teslim.toplam }} tahtada gösterildi</td>
+    <td data-etiket="İşlem">{% if d.durdurabilir %}<form method="post" action="/duyurular/yayin/{{ d.id }}/durdur" class="satir-ici"><button class="tehlike">Durdur</button></form>{% endif %}</td>
   </tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
 {% else %}
-<div class="kutu"><p class="not">Henüz duyuru gönderilmedi.</p></div>
+<p class="bos-not">Şu an yayında duyuru yok.</p>
+{% endif %}
+
+<h2 id="plan-baslik">Planlar</h2>
+{% if planlar %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="plan-baslik">
+<table>
+  <thead><tr><th scope="col">Başlık</th><th scope="col">Zamanlama</th><th scope="col">Hedef</th><th scope="col">Sonraki gösterim</th><th scope="col">Durum</th><th scope="col">Oluşturan</th><th scope="col"><span class="gizli">İşlem</span></th></tr></thead>
+  <tbody>
+  {% for p in planlar %}
+  <tr>
+    <td data-etiket="Başlık"><a href="/duyurular/plan/{{ p.id }}">{{ p.baslik or (p.metin | truncate(60)) }}</a></td>
+    <td data-etiket="Zamanlama">{{ p.zamanlama }}</td>
+    <td data-etiket="Hedef">{{ p.hedef }}</td>
+    <td data-etiket="Sonraki gösterim">{{ p.sonraki | tarih }}</td>
+    <td data-etiket="Durum"><span class="rozet" data-durum="{{ PLAN_RENGI.get(p.durum, 'bilgi') }}"><svg class="simge" aria-hidden="true"><use href="#{{ PLAN_SIMGESI.get(p.durum, 's-kapali') }}"/></svg>{{ plan_durumu[p.durum] }}</span></td>
+    <td data-etiket="Oluşturan">{{ p.olusturan }}</td>
+    <td data-etiket="İşlem">
+      <div class="islemler">
+        {% if p.yetkili %}<a class="dugme" href="/duyurular/plan/{{ p.id }}">Düzenle</a>{% endif %}
+        <a class="dugme" href="/duyurular/yeni?kopya={{ p.id }}">Çoğalt</a>
+        {% if p.yetkili %}
+        <form method="post" action="/duyurular/plan/{{ p.id }}" class="satir-ici" id="plan-{{ p.id }}">
+          {% if p.durum == 'etkin' %}<button name="eylem" value="duraklat">Duraklat</button>
+          {% elif p.durum == 'duraklatildi' %}<button name="eylem" value="surdur">Sürdür</button>{% endif %}
+          <button type="button" class="tehlike" data-onay="plan_sil" aria-haspopup="dialog">Sil…</button>
+        </form>
+        {% endif %}
+      </div>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="not">Duraklatma ya da silme o an yayındaki gösterimi durdurmaz; onu "Şu an yayında" bölümünden durdurun.</p>
+{% else %}
+<p class="bos-not">Henüz plan yok. İleri tarihli ya da tekrarlı duyuru için <a href="/duyurular/yeni">Yeni duyuru</a>.</p>
+{% endif %}
+
+<h2 id="gecmis-baslik">Geçmiş</h2>
+{% if gecmis %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="gecmis-baslik">
+<table>
+  <caption class="gizli">Son 100 yayın</caption>
+  <thead><tr><th scope="col">Zaman</th><th scope="col">Başlık</th><th scope="col">Metin</th><th scope="col">Süre</th><th scope="col">Hedef</th><th scope="col">Teslim</th><th scope="col">Durum</th><th scope="col">Gönderen</th><th scope="col"><span class="gizli">İşlem</span></th></tr></thead>
+  <tbody>
+  {% for d in gecmis %}
+  <tr>
+    <td data-etiket="Zaman" class="tarih-hucre">{{ d.an | tarih }}</td>
+    <td data-etiket="Başlık">{{ d.baslik or '—' }}</td>
+    <td data-etiket="Metin" class="kirp">{{ d.metin }}</td>
+    <td data-etiket="Süre">{{ d.sure_dk }} dk{% if d.kapatilabilir %}<div class="not">kapatılabilir</div>{% endif %}</td>
+    <td data-etiket="Hedef">{{ d.hedef }}</td>
+    <td data-etiket="Teslim">{{ d.teslim.ulasan }}/{{ d.teslim.toplam }}</td>
+    <td data-etiket="Durum"><span class="rozet" data-durum="{{ YAYIN_RENGI.get(d.durum, 'bilgi') }}"><svg class="simge" aria-hidden="true"><use href="#{{ YAYIN_SIMGESI.get(d.durum, 's-bilgi') }}"/></svg>{{ yayin_durumu.get(d.durum, d.durum) }}</span></td>
+    <td data-etiket="Gönderen">{{ d.gonderen }}</td>
+    <td data-etiket="İşlem">{% if d.yeniden %}
+      <div class="islemler">
+        <form method="post" action="/duyurular/yayin/{{ d.id }}/yeniden" class="satir-ici"><button>Yeniden gönder</button></form>
+        <a class="dugme" href="/duyurular/yeni?yayin={{ d.id }}">Düzenleyip gönder</a>
+      </div>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="bos-not">Henüz duyuru gönderilmedi.</p>
 {% endif %}
 {% endblock %}
