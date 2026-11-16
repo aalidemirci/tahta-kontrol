@@ -70,7 +70,23 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
 - Öğrencinin adı sunucuda saklanmaz (yalnız maske); tahtaya tam okul numarası gitmez;
   öğrenci listesi 30 gün sonra kendiliğinden silinir.
 
-Planlananlar: ders yoklaması (`docs/tasarim.md`, yol haritası).
+0.6.0 ile:
+
+- **Ders yoklaması:** öğretmen tahtada "Yoklama Al" kısayoluna ya da kilit ekranındaki
+  "Yoklama al" düğmesine dokunur, 3 haneli öğretmen kodunu ve 6 haneli PIN'ini girer; şube ve
+  ders saati programdan önerilir. Liste maskeli adlarla ("Ayşe Y.") gelir; öğretmen yalnız
+  gelmeyenlere dokunur, onaylayıp kaydeder. Liste tahtaya yazılmaz, birkaç dakika dokunulmazsa
+  kapanır.
+- **Öğrenci listesi:** e-Okul'un sınıf listesi Excel çıktısı (ya da düz tablo) önizlenip
+  aktarılır; yalnız şube, okul no, ad ve soyad saklanır.
+- **Panel:** günün şube × ders saati ızgarası ("alınmadı" uyarısı programdan), kayıt düzeltme
+  (gerekçeyle), tahta bozukken panelden yoklama, öğretmen kodları ve yazdırılabilir PIN pusulası,
+  e-Okul girişine yardımcı icmal (yazdırma, kopyalanabilir metin, CSV) ve "e-Okul'a işlendi"
+  işareti. e-Okul'a giriş idarece elle yapılır; Tahta Kontrol e-Okul'a bağlanmaz.
+- Yoklama kayıtları ayarlanan süre (varsayılan 30 gün) sonunda kendiliğinden silinir; öğretim
+  yılı sonunda bütün öğrenci ve yoklama verisi tek işlemle silinebilir.
+
+Planlananlar: şifreli yedek, tahta envanteri ve arıza bildirimi (`docs/tasarim.md`, yol haritası).
 
 ## Çalıştırma (geliştirme)
 
@@ -95,6 +111,9 @@ Panel `http://127.0.0.1:8787` adresinde açılır. Windows kurulum dosyası
   açılabilir.
 - Sınav listesinde ad soyad saklanmaz; tahtada yalnız maskeli ad, numaranın son iki hanesi,
   şube ve koltuk görünür. Liste tahtada diske yazılmaz ve 30 gün sonra sunucudan silinir.
+- Ders yoklamasında tahtada öğrenci yalnız maskeli adla görünür; liste tahtada diske yazılmaz.
+  Öğretmen PIN'i sunucuda yalnız geri çevrilemez özet olarak durur ve tahtaya gitmez. Yoklama
+  kayıtları saklama süresi sonunda silinir; öğrenci listesi dışa verilmez.
 - Panel dış kaynak (font, CDN, analitik) yüklemez; satır içi betik ve stil
   içermez, içerik güvenliği politikası (CSP) bunu zorlar. Logo yalnız PNG ya da
   JPEG olarak kabul edilir.

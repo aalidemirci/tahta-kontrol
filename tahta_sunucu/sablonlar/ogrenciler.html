@@ -1,0 +1,84 @@
+{% extends "taban.html" %}
+{% block baslik %}Öğrenci listesi · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Öğrenci listesi (Aşama 5 §6.6). Bağlam: panel_yoklama.py SÖZLEŞME — subeler, sube, ogrenciler, aktarimlar, toplam, pasif,
+   yonetici, dosya_siniri_mb, satir_siniri, adli_not. Liste dışa verilmez (yalnız icmal CSV'si vardır). #}
+{% with bolum='ogrenciler', bas_baslik='Öğrenci listesi',
+        bas_aciklama='Ders yoklamasının sınıf listesi. Yalnız şube, okul no, ad ve soyad saklanır; T.C. kimlik no, cinsiyet ve veli bilgisi okunmaz.' %}
+{% include "_yoklama_bas.html" %}
+{% endwith %}
+
+<ul class="sayi-kutulari" aria-label="Özet">
+  <li class="sayi-kutusu"><span class="deger">{{ toplam }}</span><span class="etiket">Etkin öğrenci</span></li>
+  <li class="sayi-kutusu"><span class="deger">{{ subeler | length }}</span><span class="etiket">Şube</span></li>
+  {% if pasif %}<li class="sayi-kutusu"><span class="deger">{{ pasif }}</span><span class="etiket">Listeden çıkmış (yoklama kaydı imha edilince silinir)</span></li>{% endif %}
+</ul>
+
+<div class="iki-sutun">
+  <section class="kutu" aria-labelledby="sube-baslik">
+    <h2 id="sube-baslik">Şubeler</h2>
+    {% if subeler %}
+    <div class="liste-kap" role="region" tabindex="0" aria-labelledby="sube-baslik">
+    <table>
+      <thead><tr><th scope="col">Şube</th><th scope="col" class="sayi-hucre">Öğrenci</th></tr></thead>
+      <tbody>{% for s in subeler %}<tr><td data-etiket="Şube"><a href="/ogrenciler?sube={{ s.sube | urlencode }}" {% if s.sube == sube %}aria-current="page"{% endif %}>{{ s.sube }}</a></td><td data-etiket="Öğrenci" class="sayi-hucre">{{ s.sayi }}</td></tr>{% endfor %}</tbody>
+    </table>
+    </div>
+    {% else %}<p class="bos-not">Öğrenci listesi yüklenmemiş.{% if yonetici %} Aşağıdan e-Okul dosyasını yükleyin.{% endif %}</p>{% endif %}
+  </section>
+  <section class="kutu" aria-labelledby="liste-baslik">
+    <h2 id="liste-baslik">{{ sube or 'Şube listesi' }}</h2>
+    {% if sube and ogrenciler %}
+    <div class="liste-kap" role="region" tabindex="0" aria-labelledby="liste-baslik">
+    <table>
+      <thead><tr><th scope="col">No</th><th scope="col">Adı</th><th scope="col">Soyadı</th></tr></thead>
+      <tbody>{% for o in ogrenciler %}<tr><td data-etiket="No" class="kod">{{ o.okul_no }}</td><td data-etiket="Adı">{{ o.ad }}</td><td data-etiket="Soyadı">{{ o.soyad }}</td></tr>{% endfor %}</tbody>
+    </table>
+    </div>
+    <p class="not">{{ ogrenciler | length }} öğrenci; okul numarasına göre.</p>
+    {% elif sube %}<p class="bos-not">{{ sube }} şubesinde etkin öğrenci yok.</p>
+    {% else %}<p class="bos-not">Listesini görmek için soldan bir şube seçin.</p>{% endif %}
+  </section>
+</div>
+
+{% if yonetici %}
+<section class="kutu ice-aktar" aria-labelledby="aktar-baslik">
+  <h2 id="aktar-baslik">e-Okul'dan aktar</h2>
+  <form method="post" action="/ogrenciler/onizle" enctype="multipart/form-data" class="form-dar">
+    <label for="ogr-dosya">Sınıf listesi dosyası (.xls, .xlsx ya da .csv; en çok {{ dosya_siniri_mb }} MB)</label>
+    <input id="ogr-dosya" type="file" name="dosya" accept=".xls,.xlsx,.csv" required aria-describedby="ogr-dosya-not">
+    <p class="not" id="ogr-dosya-not">e-Okul'daki <strong>OOG01001R020 — Sınıf/Şube Öğrenci Listesi</strong> raporunun Excel çıktısını olduğu gibi
+      yükleyin; elle hazırlanmış düz tablo (Şube · Okul No · Adı · Soyadı) da olur. Dosya sunucuda saklanmaz; önce önizleme gösterilir,
+      "Aktar" demeden hiçbir şey yazılmaz. Dosyadaki her şube tam liste sayılır: o şubede dosyada olmayan öğrenci listeden çıkar,
+      dosyada geçmeyen şubelere dokunulmaz. En çok {{ satir_siniri }} öğrenci satırı.</p>
+    <p class="dugme-satiri"><button class="ana">Önizle</button></p>
+  </form>
+</section>
+{% endif %}
+
+{% if aktarimlar %}
+<h2 id="aktarim-baslik">Son aktarımlar</h2>
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="aktarim-baslik">
+<table>
+  <thead><tr><th scope="col">Zaman</th><th scope="col">Kullanıcı</th><th scope="col">Biçim</th><th scope="col" class="sayi-hucre">Şube</th><th scope="col" class="sayi-hucre">Eklenen</th><th scope="col" class="sayi-hucre">Güncellenen</th><th scope="col" class="sayi-hucre">Listeden çıkan</th><th scope="col" class="sayi-hucre">Atlanan satır</th></tr></thead>
+  <tbody>{% for a in aktarimlar %}<tr><td data-etiket="Zaman" class="tarih-hucre">{{ a.zaman }}</td><td data-etiket="Kullanıcı">{{ a.kullanici }}</td><td data-etiket="Biçim">{{ a.bicim }}</td>
+    <td data-etiket="Şube" class="sayi-hucre">{{ a.sube_sayisi }}</td><td data-etiket="Eklenen" class="sayi-hucre">{{ a.eklenen }}</td><td data-etiket="Güncellenen" class="sayi-hucre">{{ a.guncellenen }}</td>
+    <td data-etiket="Listeden çıkan" class="sayi-hucre">{{ a.pasif }}</td><td data-etiket="Atlanan" class="sayi-hucre">{{ a.atlanan }}</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+{% endif %}
+
+{% if yonetici %}
+<details class="kutu tehlike-kutu">
+  <summary><h2 class="satir-ici">Öğretim yılı sonu</h2></summary>
+  <form method="post" action="/ogrenciler/temizle" class="form-dar">
+    <p class="bant hata" role="note"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Bütün öğrenciler, yoklama kayıtları, değişiklik geçmişi ve
+      "e-Okul'a işlendi" işaretleri silinir. Geri alınamaz. Öğretmenler ve PIN'leri kalır. İşlem kaydına yalnız sayılar düşer.</p>
+    <label for="ogr-sil-onay">Onay için büyük harflerle <strong>SİL</strong> yazın</label>
+    <input id="ogr-sil-onay" name="onay" autocomplete="off" required pattern="SİL" class="alan-sayi" aria-describedby="ogr-sil-hata">
+    <p class="hata-ileti" id="ogr-sil-hata">Büyük harflerle SİL yazın.</p>
+    <p class="dugme-satiri"><button class="tehlike-dolu">Tüm öğrenci ve yoklama verisini sil</button></p>
+  </form>
+</details>
+{% endif %}
+{% endblock %}

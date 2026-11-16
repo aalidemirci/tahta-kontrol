@@ -342,7 +342,7 @@ bitiş, okulun sınav kuralları; son 5 dakikada sayaç kehribar). Liste sınav 
 kilit kodu kabul edilmez (kod sınıfın önünde girildiği için öğrencilerce bilinebilir). Panelden
 "Kilidi aç" sınav ekranını kaldırmaz; sınav ekranı süre bitince, "Sınavı bitir" ya da salonda
 "Sınav kipini kaldır" ile kalkar ve alttaki kilit durumu görünür. Ekran önceliği:
-acil > kapatma uyarısı > gözetmen > duyuru > sınav > kilit. Liste ve gözetmen belirteci
+acil > kapatma uyarısı > gözetmen > (0.6.0: ders yoklaması) > duyuru > sınav > kilit. Liste ve gözetmen belirteci
 `durum.json`'a, günlüğe ve tanılama raporuna yazılmaz.
 
 **Kural 3 sınavda da geçerlidir:** sunucuya 90 sn ulaşılamazsa sınav ekranında "Kilidi aç"
@@ -391,7 +391,106 @@ gözetmen menüsünde "Sınav ekranını bu tahtada kapat" (açık soru 20; kip 
 yapılır), 60'tan kalabalık salonda tahtada sayfalı yoklama ızgarası, Aşama 5'ten sonra gözetmen
 ekranında öğretmen PIN'i.
 
-## 14. Yol haritası
+## 14. Ders yoklaması
+
+Öğretmen derste tahtadan, ders saati bazında **yalnız gelmeyenleri** işaretler; idare gün sonu
+icmalini e-Okul'a **elle** işler. Tahta Kontrol e-Okul'a bağlanmaz, veri göndermez, ondan veri
+çekmez; resmî devamsızlık kaydı e-Okul'dadır. Özür, rapor, izin nedeni tutulmaz (sağlık verisi
+olabilir); "geç geldi" ayrı işaret değildir; yarım gün/tam gün hesabı yapılmaz.
+
+**Sınıf listesi:** e-Okul'un "OOG01001R020 — Sınıf/Şube Öğrenci Listesi" Excel çıktısı (`.XLS`,
+blok düzenli; şube yalnız blok başlığında) olduğu gibi yüklenir; elle hazırlanmış düz tablo
+(`.xlsx`, `.csv`) da kabul edilir (`eokul.py`; `.xls` için `xlrd`, `.xlsx` için A4'ün
+`xlsx.py`'si). Yalnız şube, okul no, ad, soyad okunur; T.C. kimlik no, cinsiyet, pansiyon ve
+bilinmeyen sütunlar okunmaz (T.C. sütunu görülürse önizlemede "okunmadı" denir). Dosya diske
+yazılmaz; önizleme yalnız bellekte 15 dakika ve yalnız yükleyen kullanıcı için durur, "Aktar"
+tek kullanımlıktır. Dosyadaki her şube **tam liste** sayılır: o şubede dosyada olmayan öğrenci
+listeden çıkar (pasif), dosyada geçmeyen şubelere dokunulmaz.
+
+**Öğretmen kimliği:** öğretmen panel kullanıcısı değildir. Her öğretmene 3 haneli **öğretmen
+kodu** (gizli değil) ve 6 haneli **PIN** verilir. PIN sunucuda yalnız scrypt özeti olarak durur;
+düz PIN yalnız üretildiği POST yanıtındaki **pusulada** bir kez görünür (`no-store`, yönlendirme
+yok). Tahtaya ne PIN ne özeti gider; doğrulama her seferinde sunucudadır. Deneme sınırları üç
+katmanlıdır: tahta başına 10 dakikada 10 hata → o tahtada 10 dakika kapalı; öğretmen kodu +
+tahta çifti art arda 3 hata → 120 sn bekleme; öğretmen başına 24 saatte 10 hata → PIN
+**kilitlenir**, yalnız panelden açılır. Bilinmeyen kod, pasif öğretmen ve yanlış PIN aynı yanıtı
+alır ve aynı süreyi harcar. Bir öğrencinin bilerek hatalı girip öğretmeni kilitlemesi mümkündür;
+bunun bedeli idarenin tek tıkla kilidi açmasıdır, kaba kuvvet ise imkânsız kalır. Doğru PIN
+**kilidi açmaz**; kilitli tahtada yoklama sürerken klavye kilidi sürer, yoklama bitince kilit
+ekranı geri gelir.
+
+**Tahtada akış:** "Yoklama Al" kısayolu (`/usr/share/applications/tahta-yoklama.desktop` →
+`tahta-ajan yoklama`) ya da kilit ekranındaki **Yoklama al** düğmesi (yoklama etkin, tahta
+çevrimiçi ve kayıtlıyken). Kısayol servise yerel soketle "yoklama aç" der ve kapanır; bu kısa
+ömürlü istemci kendini `arayuz: komut` diye tanıtır, servis ona hiçbir durum yayını göndermez ve
+onu ekran yardımcısı saymaz. Servis sunucudan **öneri** alır (bugünün tarihi, şubenin ders
+saatleri ve hangilerinin başladığı, programdaki şu anki ders ya da tahtanın tek şubesi; öğrenci
+verisi yok). Öğretmen kodunu ve PIN'ini tuş takımıyla girer (fiziksel klavyeden de olur);
+sunucu 3–15 dakikalık (varsayılan 8) bir **belirteç** verir. Belirteç yalnız yönetici yetkili
+serviste ve sunucuda (özetiyle) durur, ekran yardımcısına gitmez (kural 5). Şube ve ders saati
+biliniyorsa liste hemen gelir; değilse öğretmen şubeyi ve başlamış bir ders saatini seçer (zil
+saati yoksa 1–12). Liste düğmeleri maskeli etiket taşır ("Ayşe Y.", çakışmada "Ayşe Y. (47)", yine çakışırsa
+yalnız o öğrenciler için "1047 A. Y."; ayarla hep "1047 A. Y."); tahtada ad ve okul numarası
+hiçbir zaman ikisi birden açık görünmez. Çakışma eki düğmede ikinci satırdadır: uzun ad üç
+noktayla kısalsa da ek kesilmez.
+Öğretmen gelmeyenlere dokunur (kırmızı zemin + "YOK" yazısı), **Kaydet** → onay sayfası
+("2 öğrenci yok yazılacak: …") → **Onayla**. Kayıt tek seferliktir: belirteç silinir, liste
+ve işaretler ekrandan ve servisin belleğinden atılır; "Kaydedildi" iletisi 3 sn görünür. Aynı
+öğretmen aynı ders saatine yeniden PIN girerse önceki işaretleri hazır gelir ve kayıt güncellenir.
+Dokunulmazsa (varsayılan 3 dk) ya da süre dolunca ekran sessizce kapanır; bitime 1 dk kala
+"Süre dolmak üzere; kaydedin." yazar. Ağ kaydet anında koparsa işaretler kalır ve yeniden
+denenebilir; ikinci denemede oturum bulunamazsa "Yoklama kaydedilmiş olabilir; panelde kontrol
+edilir." denir (kayıt upsert olduğu için çift kayıt oluşmaz).
+
+**Bildirimsel `ayar.yoklama_etkin`:** her `/ajan/bekle` yanıtında yalnız açık/kapalı bayrağı
+gider; maske ve süreler sunucuda uygulanır. Ajan `durum.yetenekler`'e `yoklama` ve
+`durum.yoklama_acik` (yalnız bayrak) ekler; şube, öğretmen, öğrenci sunucuya giden duruma
+girmez. Eski ajan anahtarı yok sayar, panel tahta sayfasında "Yoklama: ajan güncellenmeli"
+der. Eski sunucu anahtarı göndermez; yeni ajan kilit ekranında düğmeyi göstermez, kısayolla
+açılan yoklama sunucunun 404'ünde "Sunucu ders yoklamasını desteklemiyor" der.
+
+**Ekran önceliği:** acil > kapatma uyarısı > gözetmen > **yoklama** > duyuru > sınav > kilit.
+Yoklama öğretmenin başlattığı kısa etkileşimdir; dokunurken ekran değişirse yanlış işaret olur.
+Gelen duyuru serviste bekler, yoklama kapanınca kalan süresiyle görünür. Sınav penceresinde
+yoklama açılmaz (sunucu da reddeder); acil sürerken açılmaz. Yoklama açıkken tahta kilitli olsa
+da "kullanılıyor" sayılır: uyarılı otomatik kapatma önce geri sayım gösterir.
+
+**Kural 3:** sunucuya ulaşılamıyorsa yoklama açılmaz ("Sunucuya ulaşılamıyor. Bu dersin
+yoklamasını e-Okul'a doğrudan girin."); PIN tahtada doğrulanamaz, liste tahtaya kalıcı
+yazılmaz. Kilit davranışı değişmez.
+
+**Panel:** üst menüde **Yoklama**; sayfa içi sekmeler Günlük görünüm · Panelden gir ·
+Öğretmenler ve PIN · Öğrenci listesi. Günlük görünüm şube × ders saati ızgarasıdır: "0"
+(alındı, yok yok), "3 yok", "alınmadı" (programda ders var, bitişinden 15 dk geçti; program
+yoksa hiç üretilmez), "·". Aynı saatin birden çok kaydı (bölünmüş ders, panel kaydı) **birleşim**
+olarak gösterilir. Satır sonunda "e-Okul'a işlendi" kutusu (değişince kendiliğinden kaydedilir;
+JS'siz "Kaydet" düğmesi). Kayıt ayrıntısında düzeltme ve silme **gerekçe** ister (T.C. kimlik
+no reddedilir); gerekçe ve öğrenci kimlikli değişiklik izi yalnız `yoklama_iz`'de durur, işlem
+kaydına yalnız sayılar ve öğretmen kodu yazılır. Panelden yoklama bugün ve son 7 gün içindir.
+İcmal yazdırılabilir (A4, şube başına sayfa, okul adı yazdırılmaz; "e-Okul girişine yardımcı
+çalışma belgesi"), sekmeyle ayrılmış metin olarak kopyalanabilir ve CSV (UTF-8 BOM, `;`)
+indirilebilir; görüntüleme ve indirme işlem kaydına düşer. Öğrenci adı içeren her sayfanın
+başında "Bu sayfa öğrenci adları içerir" notu vardır. Öğrenci listesi dışa verilmez.
+
+**Yetki:** görme, düzeltme, panelden yoklama, icmal, yeni PIN, PIN kilidini açma iki role açık;
+öğretmen ekleme/düzenleme/pasifleştirme, toplu PIN, öğrenci aktarma, yıl sonu silme ve ayarlar
+yalnız yöneticinin.
+
+**Saklama ve imha:** yoklama kayıtları ayarlanan süre (varsayılan 30 gün, 7–365) sonunda
+saatte bir çalışan imha işiyle silinir (`secure_delete` + WAL budama); hiçbir kaydın
+göstermediği pasif öğrenciler de silinir. Öğretim yılı sonunda "Tüm öğrenci ve yoklama
+verisini sil" (`SİL` onayı). Yedekler (varsa) bu mekanizmanın dışındadır.
+
+**Bilinen sınırlar:** sunucu kapalıyken yoklama alınamaz; yerel soket `127.0.0.1` TCP'dir ve o
+tahtadaki herhangi bir yerel süreç yoklama açıkken ekrandaki etiketleri alabilir (belirteç ve
+PIN yayına girmez; Unix soketine taşıma ayrı iş); PIN sınıf önünde girilir, gözetlenmeye karşı
+önlem kısa oturum ve deneme sınırıdır.
+
+Sonraya bırakılanlar (göç gerektirmez): e-Okul personel listesi (OOK01001R1) aktarımı
+(öğretmenler elle eklenir); günlük ızgarada "programdaki öğretmenden farklı" işareti (Aşama 3
+öğretmen tutmaz).
+
+## 15. Yol haritası
 
 | Aşama | İçerik | Durum |
 |---|---|---|
@@ -400,7 +499,7 @@ ekranında öğretmen PIN'i.
 | 2 | Duyuru zamanlama ve hedef grupları (bina, kat, düzey, devre, gruplar, CSV), acil durum ve tatbikat yayını | 0.3.0 — Debian 12 kabında denendi; ETAP'ta denenecek |
 | 3 | Ders programı ve zil saatleri (Okul Zili'nden ya da elle), derslik programı, programa bağlı otomatik kilit/açma, istisnalar, boş geçen ders uyarısı | 0.4.0 — Debian 12 kabında denendi; ETAP'ta denenecek. Oturum temizliği sonraya (§12) |
 | 4 | Kelebek sınav duyurusu ve sınav kipi (Kelebek Sınav verisinden, maskeli liste), sınav yoklaması | 0.5.0 — Debian 12 kabında denendi; ETAP'ta ve gerçek Kelebek çizelgesiyle denenecek. Tablo gösterimi, tahtadan sınav ekranını kapatma ve sayfalı ızgara sonraya (§13) |
-| 5 | Ders yoklaması (öğretmen PIN'i, e-Okul'a giriş için icmal) | — |
+| 5 | Ders yoklaması (öğretmen kodu + PIN, e-Okul sınıf listesi, tahtadan ve panelden yoklama, icmal, imha) | 0.6.0 — Debian 12 kabında denendi; ETAP'ta ve gerçek e-Okul dosyasıyla denenecek. e-Okul personel listesi aktarımı sonraya (§14) |
 
 Ayrıca bekleyenler: sunucunun Windows hizmeti olarak çalışması (şimdi oturum
 açılınca başlar), şifreli yedek, paket imzası, sunucu IP'si değişince ajanın
@@ -410,7 +509,7 @@ Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" v
 tahtalara alan ata", plan formunda "sonraki 3 gösterim" canlı önizlemesi, çakışan
 plan uyarısı.
 
-## 15. Açık sorular
+## 16. Açık sorular
 
 Yanıt gelene kadar bu belgedeki karar geçerlidir.
 
@@ -444,7 +543,7 @@ Ders programı ve program kilidi (0.4.0):
     çalışma için kullanılması okulda olağan mı? Olağansa varsayılan kapatılır.
 12. **Boş ders uyarısı** personel denetimi gibi algılanabilir. Açılmadan önce öğretmenler
     kurulunda ya da yazılı bilgilendirmeyle duyurulmalı mı, okulun aydınlatma metnine
-    eklenmeli mi? 30 günlük saklama uygun mu? (Dayanak §16'da doğrulanacak.)
+    eklenmeli mi? 30 günlük saklama uygun mu? (Dayanak §17'de doğrulanacak.)
 13. **Derslik programı kaynağı:** okulda ders programı hangi programla hazırlanıyor
     (e-Okul, bir ders dağıtım programı, Excel)? Dışa aktardığı dosyanın uydurma verili bir
     örneği paylaşılırsa ikinci bir içe aktarma biçimi eklenebilir; şimdilik yalnız kendi
@@ -483,7 +582,39 @@ Sınav kipi ve sınav yoklaması (0.5.0):
 26. **Gözetmen adı** fişte ve icmalde isteğe bağlı elle yazılıyor (Kelebek'in görevlendirme
     çıktısı içe aktarılmıyor). Yeterli mi?
 
-## 16. Doğrulanacak dayanaklar
+Ders yoklaması (0.6.0):
+
+27. **e-Okul'a giriş biçimi:** devamsızlık e-Okul'a ders saati bazında mı, yarım gün/tam gün
+    olarak mı işleniyor? Ders saatlerinden güne çevirme kuralı doğrulanırsa icmale gün sütunu
+    eklenir (dayanak §17'de doğrulanacak).
+28. **"Geç geldi"** ayrı işaret olarak gerekli mi? (Şimdi tek durum: yok.)
+29. **Kilitli tahtada doğru PIN kilidi de açsın mı?** Karar: açmaz; yoklama bitince kilit geri gelir.
+30. **PIN'i öğretmen kendisi değiştirebilsin mi?** Karar: hayır; idare yeni PIN üretir (sınıf
+    önünde iki kez PIN yazdırmak gözetlenme riskini artırır).
+31. **Tahtadaki ad görünümü:** varsayılan "Ayşe Y." uygun mu? Seçenek: "1047 A. Y.". Ad soyadın
+    açık gösterimi bilerek kaldırıldı.
+32. **Saklama süresi** 30 gün okulun kişisel veri saklama ve imha politikasıyla uyumlu mu?
+    Sunucu yedeklerinin (varsa) saklama süresi ne?
+33. **Aydınlatma:** okulun öğrenci/veli aydınlatma metni "ders yoklamasının etkileşimli tahtadan
+    alınıp okul sunucusunda tutulmasını" kapsıyor mu?
+34. **Öğretmen listesi kaynağı:** öğretmenler elle ekleniyor; e-Okul personel listesi (OOK01001R1)
+    aktarımı istenir mi?
+35. **İcmal üstbilgisi:** yazdırılan icmalde okul adı istenir mi? (Şimdi yok; "Düzenleyen/İmza"
+    satırı var.)
+36. **Kimler icmal görür:** bütün idareci hesapları mı, yalnız devamsızlıktan sorumlu müdür
+    yardımcısı mı? (Şimdi bütün idareciler.)
+37. **Yoklaması alınmayan derse tahtada hatırlatma** (ders ortasında küçük uyarı) istenir mi?
+    (Kapsam dışı bırakıldı.)
+38. **"Yoklama Al" kısayolu** ETAP'ta öğretmen hesabının menüsünde görünüyor; masaüstüne de
+    konulsun mu? (Sahada denenecek.)
+39. **İkinci çakışma:** ortak sözlük M1 "yine çakışırsa tam no" diyor, M2 ise "ad ve numara
+    tahtada hiçbir zaman ikisi birden açık görünmez". "Ayşe Y. (1047)" M2'ye aykırı olacağından
+    ikinci çakışmada o öğrenciler "1047 A. Y." biçimine geçer. Uygun mu?
+40. **Program yokken icmal:** ders programı yüklenmemişse icmal, günlük ızgara gibi 8 ders
+    saati varsayar ("ders programı yüklü değil, 8 saat varsayıldı"). Okulun günlük ders sayısı
+    farklıysa programın yüklenmesi gerekir.
+
+## 17. Doğrulanacak dayanaklar
 
 Arayüzde hiçbir mevzuat maddesine atıf yapılmaz. Belgeye dayanak olarak yazılmadan
 önce metni yerelde doğrulanması gerekenler:
@@ -502,3 +633,8 @@ Arayüzde hiçbir mevzuat maddesine atıf yapılmaz. Belgeye dayanak olarak yaz�
 - Etkileşimli tahtaların kullanımına ilişkin MEB/YEĞİTEK düzenlemesi (varsa). Teneffüs
   kilidi bir okul yönetimi tedbiridir; öğrencinin kendi bilişim aracıyla ilgili disiplin
   hükmü okulun tahtası için dayanak gösterilmez (soru 15).
+- Ders yoklaması: okulun devam takibi yükümlülüğüne ilişkin Ortaöğretim Kurumları
+  Yönetmeliği md. 36'nın yoklamaya ilişkin fıkrası ve ders saatinden yarım/tam güne çevirme
+  kuralı (soru 27) — depoda yalnız md. 36/7 (özür belgesi) metni var; fıkra numarası
+  yazılmadı. KVKK md. 12 (veri güvenliği) yoklama için de doğrulanacak. Aydınlatma metninin
+  kapsamı (KVKK md. 10, soru 33) ve 30 günlük saklamanın imha politikasıyla uyumu (soru 32).

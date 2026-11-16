@@ -99,6 +99,10 @@ def ajan_paketi() -> Paket:
         ("./etc/xdg/", 0o755, None),
         ("./etc/xdg/autostart/", 0o755, None),
         ("./etc/xdg/autostart/tahta-ekran.desktop", 0o644, _sablon("tahta-ekran.desktop")),
+        # Ders yoklaması kısayolu (A5): menüde "Yoklama Al" → tahta-ajan yoklama.
+        ("./usr/share/", 0o755, None),
+        ("./usr/share/applications/", 0o755, None),
+        ("./usr/share/applications/tahta-yoklama.desktop", 0o644, _sablon("tahta-yoklama.desktop")),
     ]
     kontrol_metni = (
         _sablon("control").decode("utf-8").replace("@SURUM@", surum).replace("@BOYUT@", str(max(1, boyut // 1024)))

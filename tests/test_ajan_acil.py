@@ -145,7 +145,7 @@ def test_ajan_durum_ozeti_yetenek_ve_acil_id_bildirir(servis, monkeypatch):
     monkeypatch.setattr(servis_mod.sistem, "etkin_oturum", lambda: {"sinif": "ogretmen"})
     monkeypatch.setattr(servis_mod.sistem, "acik_sure", lambda: 100)
     ozet = servis.durum_ozeti()
-    assert ozet["yetenekler"] == ["acil", "duyuru_id", "program_kilidi", "sinav"] and ozet["acil_id"] is None
+    assert ozet["yetenekler"] == ["acil", "duyuru_id", "program_kilidi", "sinav", "yoklama"] and ozet["acil_id"] is None
     servis._yanit_isle(acil_yaniti(ACIL))
     assert servis.durum_ozeti()["acil_id"] == 12
     # Süresi dolmuş yayın bildirilmez.

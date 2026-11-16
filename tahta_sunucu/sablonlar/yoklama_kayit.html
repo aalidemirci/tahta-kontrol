@@ -1,0 +1,83 @@
+{% extends "taban.html" %}
+{% block baslik %}{{ kayit.sube }} {{ kayit.ders_no }}. ders yoklaması · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Yoklama ayrıntısı ve düzeltme (Aşama 5 §6.2). Bağlam: kayit (yoklama.kayit_ayrintisi), adli_not.
+   Düzeltme ve silme gerekçe ister (≥ 5 karakter, T.C. kimlik no reddedilir); gerekçe yalnız yoklama_iz'e yazılır. #}
+<p class="geri"><a href="/yoklama?tarih={{ kayit.tarih }}">← Yoklama · {{ kayit.tarih_yazi }}</a></p>
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>{{ kayit.sube }} · {{ kayit.ders_no }}. ders yoklaması</h1>
+    <p>{{ kayit.tarih_yazi }} · {{ kayit.yok_sayisi }} yok · {{ kayit.mevcut }} mevcut (kayıt anında)</p>
+  </div>
+</div>
+<p class="bant uyari kvkk-bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ adli_not }}</p>
+
+<section class="kutu" aria-labelledby="kayit-bilgi">
+  <h2 id="kayit-bilgi">Kayıt</h2>
+  <dl class="ozellikler">
+    <dt>Tarih</dt><dd>{{ kayit.tarih_yazi }}</dd>
+    <dt>Şube · ders saati</dt><dd>{{ kayit.sube }} · {{ kayit.ders_no }}. ders{% if kayit.ders_adi %} · {{ kayit.ders_adi }}{% endif %}</dd>
+    <dt>Öğretmen</dt><dd>{{ kayit.ogretmen or '—' }}{% if kayit.ogretmen_kod %} <span class="not">(kod <span class="kod">{{ kayit.ogretmen_kod }}</span>)</span>{% endif %}</dd>
+    <dt>Kaynak</dt><dd><span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#{{ 's-acik' if kayit.kaynak_turu == 'tahta' else 's-onay' }}"/></svg>{{ kayit.kaynak }}</span></dd>
+    <dt>İlk kayıt · son değişiklik</dt><dd>{{ kayit.olusturma }} · {{ kayit.guncelleme }}</dd>
+  </dl>
+</section>
+
+<form method="post" action="/yoklama/kayit/{{ kayit.id }}" id="duzelt-formu" class="kutu">
+  <input type="hidden" name="eylem" value="duzelt">
+  <h2 id="duzelt-baslik">Düzelt</h2>
+  <p class="ipucu">Derste olmayan öğrencileri işaretleyin; işaretsizler "var" sayılır. Liste şubenin bugünkü etkin öğrencileridir.</p>
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="duzelt-baslik">
+  <table class="yoklama-tablo">
+    <thead><tr><th scope="col">No</th><th scope="col">Ad Soyad</th><th scope="col">Durum</th></tr></thead>
+    <tbody>
+    {% for o in kayit.ogrenciler %}
+    <tr>
+      <td data-etiket="No" class="kod">{{ o.okul_no }}</td>
+      <td data-etiket="Ad Soyad">{{ o.ad_soyad }}{% if o.pasif %} <span class="rozet" data-durum="bilgi">listeden çıkmış</span>{% endif %}</td>
+      <td data-etiket="Durum"><label class="gelmedi-kutu"><input type="checkbox" name="yok" value="{{ o.id }}" {% if o.yok %}checked{% endif %}><span>Yok</span><span class="gizli"> ({{ o.ad_soyad }})</span></label></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="3">Bu şubenin öğrenci listesi boş.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="not" data-sayac-yok aria-live="polite"></p>
+  <label for="duzelt-aciklama">Gerekçe (zorunlu)</label>
+  <input id="duzelt-aciklama" name="aciklama" required minlength="5" maxlength="300" class="alan-genis"
+         placeholder="ör. öğrenci 2. derste geldi, öğretmen bildirdi" aria-describedby="duzelt-not">
+  <p class="hata-ileti" id="duzelt-hata">En az 5 karakterlik bir gerekçe yazın.</p>
+  <p class="not" id="duzelt-not">Gerekçe değişiklik geçmişine yazılır. Öğrenci ya da kişi adı, kimlik numarası yazmayın.</p>
+  <p class="dugme-satiri"><button class="ana"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Düzeltmeyi kaydet</button></p>
+</form>
+
+<details class="kutu">
+  <summary><h2 class="satir-ici">Yoklamayı sil</h2></summary>
+  <form method="post" action="/yoklama/kayit/{{ kayit.id }}" id="sil-formu" class="form-dar">
+    <input type="hidden" name="eylem" value="sil">
+    <p class="ipucu">Yanlış şubeye ya da saate alınmış yoklamayı siler; işaretler ve değişiklik geçmişi de gider. İşlem kaydına sayılar ve silme gerekçesi düşer.</p>
+    <label for="sil-aciklama">Silme gerekçesi (zorunlu)</label>
+    <input id="sil-aciklama" name="aciklama" required minlength="5" maxlength="300" placeholder="ör. yanlış ders saatine alındı"
+           aria-describedby="sil-not">
+    <p class="not" id="sil-not">Gerekçe işlem kaydına yazılır. Öğrenci ya da kişi adı, kimlik numarası yazmayın.</p>
+    <p class="dugme-satiri"><button type="button" class="tehlike" data-onay="yoklama_sil" aria-haspopup="dialog">Yoklamayı sil…</button></p>
+  </form>
+</details>
+
+<h2 id="iz-baslik">Değişiklik geçmişi</h2>
+{% if kayit.izler %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="iz-baslik">
+<table>
+  <thead><tr><th scope="col">Zaman</th><th scope="col">Kim</th><th scope="col">İşlem</th><th scope="col">Eklenen (yok)</th><th scope="col">Çıkarılan</th><th scope="col">Gerekçe</th></tr></thead>
+  <tbody>
+  {% for iz in kayit.izler %}
+  <tr><td data-etiket="Zaman" class="tarih-hucre">{{ iz.zaman }}</td><td data-etiket="Kim">{{ iz.kim }}</td><td data-etiket="İşlem">{{ iz.islem }}</td>
+    <td data-etiket="Eklenen">{{ iz.eklenen | join(', ') or '—' }}</td><td data-etiket="Çıkarılan">{{ iz.cikarilan | join(', ') or '—' }}</td>
+    <td data-etiket="Gerekçe" class="kirp">{{ iz.aciklama or '—' }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}<p class="bos-not">Değişiklik yok.</p>{% endif %}
+{% endblock %}

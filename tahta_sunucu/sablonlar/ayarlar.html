@@ -116,6 +116,37 @@
   </form>
 </section>
 
+{# Ders yoklaması (A5): ayrı form (bolum=yoklama); yalnız `yoklama` anahtarını yazar. Tahtaya yalnız açık/kapalı bayrağı
+   gider (ayar.yoklama_etkin); maske ve süreler sunucuda uygulanır. #}
+<h2 id="ders-yoklamasi">Ders yoklaması</h2>
+<section class="kutu" aria-labelledby="ders-yoklamasi">
+  {% if mesaj and ileti_yeri == 'yoklama' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <p class="ipucu">Öğretmen tahtada öğretmen kodu ve PIN ile girer, yalnız derste olmayanlara dokunur. Öğrenci listesi, öğretmenler ve
+    PIN'ler <a href="/yoklama">Yoklama</a> sayfasının sekmelerinden yönetilir.</p>
+  <form method="post" action="/ayarlar">
+    <input type="hidden" name="bolum" value="yoklama">
+    <div class="onay-alani"><label class="satir"><input type="checkbox" name="yk_etkin" value="1" {% if yoklama_ayari.etkin %}checked{% endif %}> Ders yoklaması etkin (tahtalarda "Yoklama al" düğmesi ve kısayolu çalışır)</label></div>
+    {% if not yoklama_ogrenci_sayisi %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Öğrenci listesi henüz yüklenmedi (<a href="/ogrenciler">Yoklama › Öğrenci listesi</a>). Etkinleştirilebilir; tahtada liste "yüklenmemiş" der.</p>{% endif %}
+    <label for="yk_maske">Tahtada öğrenci adının görünümü</label>
+    <select id="yk_maske" name="yk_maske" aria-describedby="yk-maske-not" class="alan-oto">
+      {% for kod, ad in yoklama_maskeleri.items() %}<option value="{{ kod }}" {% if yoklama_ayari.maske == kod %}selected{% endif %}>{{ ad }}</option>{% endfor %}
+    </select>
+    <p class="not" id="yk-maske-not">Tahta bütün sınıfa açık ekrandır; gerektiğinden fazla bilgi göstermeyin. Ad ve okul numarası tahtada hiçbir zaman ikisi birden açık görünmez.</p>
+    <div class="alan-cifti">
+      <div><label for="yk_oturum_dk">Yoklama oturumu en çok (dk)</label>
+        <input id="yk_oturum_dk" name="yk_oturum_dk" type="number" required class="alan-sayi" min="{{ yoklama_sinirlari.oturum_dk[0] }}" max="{{ yoklama_sinirlari.oturum_dk[1] }}" value="{{ yoklama_ayari.oturum_dk }}" aria-describedby="yk-oturum-not">
+        <p class="not" id="yk-oturum-not">{{ yoklama_sinirlari.oturum_dk[0] }}–{{ yoklama_sinirlari.oturum_dk[1] }} dk; süre bitimine 1 dk kala tahta uyarır.</p></div>
+      <div><label for="yk_bosta_dk">Dokunulmazsa kapanma (dk)</label>
+        <input id="yk_bosta_dk" name="yk_bosta_dk" type="number" required class="alan-sayi" min="{{ yoklama_sinirlari.bosta_dk[0] }}" max="{{ yoklama_sinirlari.bosta_dk[1] }}" value="{{ yoklama_ayari.bosta_dk }}">
+        <p class="not">{{ yoklama_sinirlari.bosta_dk[0] }}–{{ yoklama_sinirlari.bosta_dk[1] }} dk.</p></div>
+      <div><label for="yk_saklama_gun">Saklama süresi (gün)</label>
+        <input id="yk_saklama_gun" name="yk_saklama_gun" type="number" required class="alan-sayi" min="{{ yoklama_sinirlari.saklama_gun[0] }}" max="{{ yoklama_sinirlari.saklama_gun[1] }}" value="{{ yoklama_ayari.saklama_gun }}" aria-describedby="yk-saklama-not">
+        <p class="not" id="yk-saklama-not">{{ yoklama_sinirlari.saklama_gun[0] }}–{{ yoklama_sinirlari.saklama_gun[1] }} gün. Süresi dolan yoklamalar kendiliğinden silinir; e-Okul'a işlendikten sonra saklama gerekçesi azalır.</p></div>
+    </div>
+    <p class="dugme-satiri"><button class="ana">Yoklama ayarlarını kaydet</button></p>
+  </form>
+</section>
+
 <h2 id="kimlik">Okul kimliği</h2>
 {% if mesaj and ileti_yeri == 'kimlik' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
 <div class="iki-sutun">

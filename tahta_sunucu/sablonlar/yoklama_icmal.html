@@ -1,0 +1,74 @@
+{% extends "taban.html" %}
+{% block baslik %}Devamsızlık icmali · {{ icmal.tarih_kisa }} · Tahta Kontrol{% endblock %}
+{% block govde_sinifi %}rapor-sayfasi{% endblock %}
+{% block icerik %}
+{# Yazdırılabilir icmal (Aşama 5 §6.4): A4 dikey, şube başına bir sayfa; ekrandaki araç çubuğu ve metin yazdırılmaz.
+   Bağlam: icmal (yoklama.icmal), metin (kopyalanacak düz metin), sube, subeler, uretim, surum (taban), adli_not.
+   Okul adı yazdırılmaz (resmî evrak değildir; çalışma belgesidir). Görüntüleme işlem kaydına düşer. #}
+<div class="yazdirma">
+  <p class="geri"><a href="/yoklama?tarih={{ icmal.tarih }}">← Yoklama · {{ icmal.tarih_yazi }}</a></p>
+  <div class="sayfa-bas">
+    <div class="bas-yazi">
+      <h1>Devamsızlık icmali · {{ icmal.tarih_yazi }}</h1>
+      <p>{{ sube or 'Tüm şubeler' }} · e-Okul girişine yardımcı çalışma belgesi</p>
+    </div>
+  </div>
+  <p class="bant uyari kvkk-bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ adli_not }}</p>
+  <div class="arac-cubugu" role="toolbar" aria-label="İcmal">
+    <button type="button" class="ana" data-yazdir hidden>Yazdır</button>
+    <button type="button" data-kopyala="icmal-metni" data-kopyala-yedek hidden>Metni kopyala</button>
+    <a class="dugme" href="/yoklama/icmal.csv?tarih={{ icmal.tarih }}{% if sube %}&amp;sube={{ sube | urlencode }}{% endif %}" download>CSV indir</a>
+    <span class="ayrac" aria-hidden="true"></span>
+    <form method="get" action="/yoklama/icmal" class="satir-ici tarih-sec">
+      <input type="hidden" name="tarih" value="{{ icmal.tarih }}">
+      <label for="icmal-sube">Şube</label>
+      <select id="icmal-sube" name="sube"><option value="">Tüm şubeler</option>{% for s in subeler %}<option {% if s == sube %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+      <button>Göster</button>
+    </form>
+  </div>
+  <p class="not" id="kopyala-ileti" role="status" hidden></p>
+</div>
+
+{% for s in icmal.subeler %}
+<article class="icmal icmal-sube" aria-labelledby="icmal-{{ loop.index }}">
+  <header class="icmal-ust">
+    <h2 id="icmal-{{ loop.index }}">DERS YOKLAMASI İCMALİ</h2>
+    <p class="icmal-tarih">{{ icmal.tarih_yazi }}</p>
+  </header>
+  <p class="icmal-meta"><span>Şube: <strong>{{ s.sube }}</strong></span> <span>Mevcut: <strong>{{ s.mevcut }}</strong></span>
+    <span>Yoklaması alınan ders saati: <strong>{{ s.alinan_metni }}</strong> ({{ s.alinan_sayisi }} / {{ s.sutun_sayisi }}{% if not s.program_bilinir %}; ders programı yüklü değil, {{ s.sutun_sayisi }} saat varsayıldı{% endif %})</span></p>
+  {% if not s.alinan_sayisi %}
+  <p class="bos-not">Bu şubede bu gün hiç yoklama alınmadı.</p>
+  {% elif s.ogrenciler %}
+  <div class="tablo-kap icmal-kap">
+  <table class="icmal-tablo yk-icmal-tablo">
+    <thead><tr><th scope="col">No</th><th scope="col">Adı Soyadı</th>{% for n in s.sutunlar %}<th scope="col" class="isaret-hucre">{{ n }}</th>{% endfor %}<th scope="col" class="sayi-hucre">Yok</th></tr></thead>
+    <tbody>
+    {% for o in s.ogrenciler %}
+    <tr><td class="kod">{{ o.okul_no }}</td><td>{{ o.ad_soyad }}</td>
+      {%- for h in o.hucreler %}<td class="isaret-hucre{% if h == 'Y' %} yok-isaret{% elif h == '-' %} alinmadi-isaret{% endif %}">{{ h }}</td>{% endfor -%}
+      <td class="sayi-hucre"><strong>{{ o.sayi }}</strong></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="bos-not">Bu şubede bu gün yok yazılan öğrenci yok.</p>
+  {% endif %}
+  {% if s.alinan_sayisi %}
+  <p class="not icmal-lejant">Y: yok · .: derste · -: yoklama alınmadı</p>
+  <p class="not">Yoklamayı alan: {% for a in s.alanlar %}{{ a.ders_no }}. {{ a.metin }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</p>
+  {% endif %}
+  <p class="icmal-not">Bu çizelge e-Okul girişine yardımcı çalışma belgesidir; resmî devamsızlık kaydı e-Okul'dadır.</p>
+  <p class="imza-satiri">Düzenleyen: <span class="cizgi-alan"></span> İmza: <span class="cizgi-alan kisa"></span></p>
+  <p class="not icmal-alt">Üretim: {{ uretim }} · Tahta Kontrol {{ surum }}</p>
+</article>
+{% else %}
+<p class="bos-not">Bu tarih için şube yok.</p>
+{% endfor %}
+
+<details class="kutu yazdirma" id="metin-kutusu">
+  <summary>Kopyalanacak metin (e-Okul girişi için, sekmeyle ayrılmış)</summary>
+  <pre id="icmal-metni" class="icmal-metni" tabindex="0">{{ metin }}</pre>
+</details>
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends "taban.html" %}
+{% block baslik %}Yoklama · {{ g.tarih_yazi }} · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Günlük görünüm (Aşama 5 §6.1). Bağlam: panel_yoklama.py SÖZLEŞME — g (yoklama.gunluk_gorunum), yoklama_etkin,
+   eksik_tahtalar, ogrenci_var, bugun_iso, adli_not. Sayfa kendini yenilemez; "Yenile" bağlantısı yeterlidir. #}
+{% with bolum='gunluk', bas_baslik='Yoklama · ' ~ g.tarih_yazi,
+        bas_aciklama='Ders saati bazında tahtadan alınan yoklamalar. Hücreye dokununca kayıt açılır; e-Okul girişi idarece elle yapılır.' %}
+{% include "_yoklama_bas.html" %}
+{% endwith %}
+{% if not yoklama_etkin %}
+<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Ders yoklaması kapalı: tahtalarda "Yoklama al" düğmesi görünmez.
+  {% if kullanici.rol == 'yonetici' %}<a href="/ayarlar#ders-yoklamasi">Ayarlar › Ders yoklaması</a> bölümünden açın.{% else %}Yönetici Ayarlar'dan açar.{% endif %}</p>
+{% endif %}
+{% if not ogrenci_var %}
+<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Öğrenci listesi yüklenmemiş; tahtada liste açılmaz. <a href="/ogrenciler">Öğrenci listesi</a> sekmesinden e-Okul dosyasını yükleyin.</p>
+{% endif %}
+
+<div class="arac-cubugu" role="toolbar" aria-label="Gün ve çıktılar">
+  <a class="dugme" href="/yoklama?tarih={{ g.onceki }}">‹ Önceki gün</a>
+  <a class="dugme" href="/yoklama?tarih={{ bugun_iso }}"{% if g.bugun %} aria-current="date"{% endif %}>Bugün</a>
+  <a class="dugme" href="/yoklama?tarih={{ g.sonraki }}">Sonraki gün ›</a>
+  <form method="get" action="/yoklama" class="satir-ici tarih-sec">
+    <label for="yk-tarih" class="gizli">Tarih</label><input id="yk-tarih" type="date" name="tarih" value="{{ g.tarih }}" required><button>Git</button>
+  </form>
+  <span class="ayrac" aria-hidden="true"></span>
+  <a class="dugme" href="/yoklama/icmal?tarih={{ g.tarih }}">İcmal (tüm şubeler)</a>
+  <a class="dugme" href="/yoklama/icmal.csv?tarih={{ g.tarih }}" download>CSV</a>
+  <span class="ayrac" aria-hidden="true"></span>
+  <a class="dugme" href="/yoklama?tarih={{ g.tarih }}">Yenile</a>
+</div>
+
+<ul class="sayi-kutulari" aria-label="Günün özeti">
+  <li class="sayi-kutusu"><span class="deger">{{ g.ozet.alinan }}{% if g.ozet.beklenen is not none %} <small>/ {{ g.ozet.beklenen }}</small>{% endif %}</span>
+    <span class="etiket">Yoklaması alınan ders{% if g.ozet.beklenen is none %} (program yok){% endif %}</span></li>
+  <li class="sayi-kutusu"{% if g.ozet.yok_ogrenci %} data-durum="sorun"{% endif %}><span class="deger">{{ g.ozet.yok_ogrenci }}</span><span class="etiket">Yok yazılan öğrenci</span></li>
+  <li class="sayi-kutusu"><span class="deger">{{ g.ozet.butun_gun_yok }}</span><span class="etiket">Bütün gün yok</span></li>
+  <li class="sayi-kutusu"{% if g.ozet.sube_sayisi and g.ozet.islenen == g.ozet.sube_sayisi %} data-durum="tamam"{% endif %}><span class="deger">{{ g.ozet.islenen }} <small>/ {{ g.ozet.sube_sayisi }}</small></span><span class="etiket">e-Okul'a işlenen şube</span></li>
+</ul>
+{% if g.tatil %}<p class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-takvim"/></svg>Tatil: {{ g.tatil }}. Yoklama yine alınabilir; "alınmadı" uyarısı üretilmez.</p>{% endif %}
+
+<h2 id="izgara-baslik">Şube × ders saati</h2>
+<div class="yk-izgara-kap" role="region" tabindex="0" aria-labelledby="izgara-baslik">
+<table class="yoklama-izgara" id="e-okul">
+  <thead><tr><th scope="col">Şube</th>{% for n in g.sutunlar %}<th scope="col" class="sayi-hucre"><abbr title="{{ n }}. ders">{{ n }}</abbr></th>{% endfor %}<th scope="col">e-Okul</th></tr></thead>
+  <tbody>
+  {% for s in g.satirlar %}
+  <tr{% if s.islendi %} class="islendi"{% endif %}>
+    <th scope="row">{{ s.sube }}</th>
+    {% for h in s.hucreler %}
+    <td class="yk-hucre" {% if h.baslik %}title="{{ h.baslik }}"{% endif %}>
+      {%- if h.durum == 'alindi' -%}
+      <a class="rozet" data-durum="{{ 'sorun' if h.yok else 'tamam' }}" href="/yoklama/kayit/{{ h.kayit_id }}" aria-label="{{ s.sube }} {{ h.ders_no }}. ders: {{ h.yok ~ ' öğrenci yok' if h.yok else 'yok yazılan yok' }}{% if h.kayit_sayisi > 1 %}, {{ h.kayit_sayisi }} yoklama birleştirildi{% endif %}">{{ h.yok ~ ' yok' if h.yok else '0' }}{% if h.kayit_sayisi > 1 %}<span class="birlesik" aria-hidden="true">×{{ h.kayit_sayisi }}</span>{% endif %}</a>
+      {%- elif h.durum == 'alinmadi' -%}
+      <a class="rozet" data-durum="uyari" href="/yoklama/gir?tarih={{ g.tarih }}&amp;sube={{ s.sube | urlencode }}&amp;ders_no={{ h.ders_no }}" aria-label="{{ s.sube }} {{ h.ders_no }}. ders: yoklama alınmadı; panelden gir">alınmadı</a>
+      {%- else -%}<span class="bos-hucre" aria-hidden="true">·</span>
+      {%- endif -%}
+    </td>
+    {% endfor %}
+    <td class="eokul-hucre">
+      <form method="post" action="/yoklama/islendi" class="islendi-formu">
+        <input type="hidden" name="tarih" value="{{ g.tarih }}"><input type="hidden" name="sube" value="{{ s.sube }}">
+        <label class="satir"><input type="checkbox" name="deger" value="1" data-otomatik-gonder {% if s.islendi %}checked{% endif %}
+          aria-describedby="islendi-{{ loop.index }}"> İşlendi<span class="gizli"> ({{ s.sube }})</span></label>
+        <button class="kucuk" data-js-gizle aria-label="{{ s.sube }}: işlendi bilgisini kaydet">Kaydet</button>
+      </form>
+      <span class="not" id="islendi-{{ loop.index }}">{{ s.islendi_metni }}</span>
+      <a href="/yoklama/icmal?tarih={{ g.tarih }}&amp;sube={{ s.sube | urlencode }}" aria-label="{{ s.sube }} icmali">İcmal</a>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="{{ g.sutunlar | length + 2 }}"><p class="bos-not">Bu gün için şube yok: öğrenci listesi yüklenmemiş ve yoklama alınmamış.</p></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="not yk-lejant"><span class="rozet" data-durum="tamam">0</span> alındı, yok yazılan yok ·
+  <span class="rozet" data-durum="sorun">3 yok</span> alındı ·
+  <span class="rozet" data-durum="uyari">alınmadı</span> programda ders var, bitişinden 15 dk geçti ·
+  · ders yok, henüz bitmedi ya da program bilinmiyor. Aynı saatin birden çok kaydı (bölünmüş ders) birleştirilir.</p>
+
+<details class="kutu" open>
+  <summary><h2 class="satir-ici" id="ogrenci-baslik">Öğrenci bazında</h2> <span class="not">({{ g.ogrenciler | length }})</span></summary>
+  {% if g.ogrenciler %}
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="ogrenci-baslik">
+  <table>
+    <thead><tr><th scope="col">Şube</th><th scope="col">No</th><th scope="col">Ad Soyad</th><th scope="col">Yok olduğu ders saatleri</th><th scope="col" class="sayi-hucre">Sayı / alınan</th></tr></thead>
+    <tbody>
+    {% for o in g.ogrenciler %}
+    <tr><td data-etiket="Şube">{{ o.sube }}</td><td data-etiket="No" class="kod">{{ o.okul_no }}</td><td data-etiket="Ad Soyad">{{ o.ad_soyad }}{% if o.butun_gun %} <span class="rozet" data-durum="sorun">bütün gün</span>{% endif %}</td>
+      <td data-etiket="Ders saatleri">{{ o.saatler_metni }}</td><td data-etiket="Sayı / alınan" class="sayi-hucre">{{ o.sayi }} / {{ o.alinan }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="bos-not">Bu gün yok yazılan öğrenci yok.</p>{% endif %}
+</details>
+
+<details class="kutu">
+  <summary><h2 class="satir-ici">Tahtalar</h2> <span class="not">({{ eksik_tahtalar | length }} tahtada eksik)</span></summary>
+  {% if eksik_tahtalar %}
+  <p class="ipucu">Şubesi boş tahtada öneri gelmez; öğretmen şubeyi kendisi seçer. Şube tahta sayfasındaki "Şube(ler)" alanından verilir.</p>
+  <ul class="istisna-listesi">
+    {% for t in eksik_tahtalar %}<li><a href="/tahta/{{ t.id }}">{{ t.ad }}</a>{% if t.derslik %} · {{ t.derslik }}{% endif %} — {{ t.neden }}</li>{% endfor %}
+  </ul>
+  {% else %}<p class="bos-not">Bütün onaylı tahtalar yoklamaya hazır.</p>{% endif %}
+</details>
+{% endblock %}

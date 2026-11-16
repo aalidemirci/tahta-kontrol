@@ -224,6 +224,73 @@ GOCLER = [
     ALTER TABLE duyuru ADD COLUMN sinav_id INTEGER;
     CREATE INDEX duyuru_sinav ON duyuru (sinav_id);
     """,
+    # 0.6.0 — ders yoklaması: öğretmen kodu + PIN, sınıf listesi, yoklama, icmal (öğrenci verisi saklama süreli)
+    """
+    CREATE TABLE ogretmen (
+        id INTEGER PRIMARY KEY, ad TEXT NOT NULL, soyad TEXT NOT NULL DEFAULT '',
+        aktif INTEGER NOT NULL DEFAULT 1);
+    -- PIN verisi öğretmen tablosundan AYRI durur: öğretmen listesini okuyan sorgu özetleri taşımasın.
+    CREATE TABLE ogretmen_pin (
+        ogretmen_id INTEGER PRIMARY KEY REFERENCES ogretmen(id) ON DELETE CASCADE,
+        kod TEXT NOT NULL UNIQUE,               -- '101'..'999'; gizli değildir
+        pin_ozet TEXT,                          -- guvenlik.parola_ozetle; NULL = PIN verilmedi
+        pin_zamani INTEGER,
+        hatali_sayi INTEGER NOT NULL DEFAULT 0,
+        hatali_ilk INTEGER,                     -- 24 saatlik sayaç penceresinin başı
+        kilitli INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE ogrenci (
+        id INTEGER PRIMARY KEY,
+        sube TEXT NOT NULL,                     -- kanonik '10/A'
+        okul_no TEXT NOT NULL,                  -- metin: baştaki sıfırlar korunur
+        ad TEXT NOT NULL, soyad TEXT NOT NULL,
+        aktif INTEGER NOT NULL DEFAULT 1,
+        guncelleme INTEGER NOT NULL);
+    CREATE UNIQUE INDEX ogrenci_okul_no ON ogrenci (okul_no);
+    CREATE INDEX ogrenci_sube ON ogrenci (sube, aktif);
+    CREATE TABLE yoklama (
+        id INTEGER PRIMARY KEY,
+        tarih TEXT NOT NULL,                    -- 'YYYY-MM-DD', Europe/Istanbul, SUNUCU saatiyle
+        ders_no INTEGER NOT NULL,
+        sube TEXT NOT NULL,
+        ogretmen_id INTEGER REFERENCES ogretmen(id) ON DELETE SET NULL,
+        ders_adi TEXT NOT NULL DEFAULT '',
+        tahta_id INTEGER REFERENCES tahta(id) ON DELETE SET NULL,
+        kaynak TEXT NOT NULL,                   -- 'tahta' | 'panel'
+        kaydeden TEXT NOT NULL,                 -- 'ogretmen:112' ya da panel kullanıcı adı
+        mevcut INTEGER NOT NULL,                -- kayıt anında şubedeki etkin öğrenci sayısı
+        olusturma INTEGER NOT NULL, guncelleme INTEGER NOT NULL);
+    -- Aynı öğretmen aynı ders saatine tek kayıt; farklı öğretmenler ve panel kaydı ayrı satırdır (icmal birleşimi alır).
+    CREATE UNIQUE INDEX yoklama_tek ON yoklama (tarih, sube, ders_no, IFNULL(ogretmen_id, 0), kaynak);
+    CREATE INDEX yoklama_tarih ON yoklama (tarih);
+    CREATE TABLE yoklama_yok (
+        yoklama_id INTEGER NOT NULL REFERENCES yoklama(id) ON DELETE CASCADE,
+        ogrenci_id INTEGER NOT NULL REFERENCES ogrenci(id),
+        PRIMARY KEY (yoklama_id, ogrenci_id));
+    CREATE INDEX yoklama_yok_ogrenci ON yoklama_yok (ogrenci_id);
+    -- Kim neyi değiştirdi. Öğrenci kimliği içerdiği için 'kayit'e değil buraya yazılır, yoklamayla imha edilir.
+    CREATE TABLE yoklama_iz (
+        id INTEGER PRIMARY KEY,
+        yoklama_id INTEGER NOT NULL REFERENCES yoklama(id) ON DELETE CASCADE,
+        zaman INTEGER NOT NULL, kim TEXT NOT NULL,
+        islem TEXT NOT NULL,                    -- 'olustur' | 'guncelle' | 'duzelt'
+        eklenen TEXT NOT NULL DEFAULT '[]',     -- ogrenci_id JSON listesi
+        cikarilan TEXT NOT NULL DEFAULT '[]',
+        aciklama TEXT NOT NULL DEFAULT '');
+    CREATE TABLE yoklama_belirtec (
+        belirtec_ozet TEXT PRIMARY KEY,         -- guvenlik.ozet(belirtec)
+        ogretmen_id INTEGER NOT NULL REFERENCES ogretmen(id) ON DELETE CASCADE,
+        tahta_id INTEGER NOT NULL REFERENCES tahta(id) ON DELETE CASCADE,
+        bitis INTEGER NOT NULL, olusturma INTEGER NOT NULL);
+    CREATE TABLE eokul_islendi (
+        tarih TEXT NOT NULL, sube TEXT NOT NULL,
+        kullanici TEXT NOT NULL, zaman INTEGER NOT NULL,
+        PRIMARY KEY (tarih, sube));
+    CREATE TABLE ogrenci_aktarim (
+        id INTEGER PRIMARY KEY, zaman INTEGER NOT NULL, kullanici TEXT NOT NULL,
+        bicim TEXT NOT NULL,                    -- 'eokul_xls' | 'xlsx' | 'csv'
+        sube_sayisi INTEGER NOT NULL, eklenen INTEGER NOT NULL, guncellenen INTEGER NOT NULL,
+        pasif INTEGER NOT NULL, atlanan INTEGER NOT NULL);
+    """,
 ]
 GOC_ONCESI_KALAN = 3
 

@@ -19,7 +19,7 @@ a = Analysis(
     [str(KOK / "packaging" / "windows" / "giris.py")],
     pathex=[str(KOK)],
     datas=datas,
-    hiddenimports=collect_submodules("uvicorn") + ["python_multipart", "tahta_sunucu.pencere"],
+    hiddenimports=collect_submodules("uvicorn") + ["python_multipart", "tahta_sunucu.pencere", "xlrd"],
     excludes=["gi", "pytest", "httpx"],
     noarchive=False,
 )

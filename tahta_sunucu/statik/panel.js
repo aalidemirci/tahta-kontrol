@@ -5,7 +5,8 @@
    yazdir, acil şablonları, ayarlar (renk önizlemesi, logo), kopyala, dogrulama,
    program (pano şeridi ve kart rozetleri pano bölümünde; tahta ızgarasında "Tümünü işaretle"),
    sinav (sınav sayfasının canlı salon durumu, sınavdaki tahtaya duyuru/kilit açma ek onayı,
-   salon yoklamasında gelmeyen sayısı).
+   salon yoklamasında gelmeyen sayısı), yoklama (Aşama 5: "e-Okul'a işlendi" kutusunun kendiliğinden
+   gönderimi, yok sayacı, icmal metnini kopyalama ve yazdırma, yoklama silme onayı, panoda "Yoklama alınıyor").
    Her bölüm JS kapalıyken de çalışan sayfayı yalnız iyileştirir.
    Metin her zaman textContent ile yazılır; innerHTML kullanılmaz. */
 (function () {
@@ -99,6 +100,12 @@
       metin: "Öğrenci listesi, okul numaraları, yoklama işaretleri, gözetmen kodları ve adları silinir; salon başına sayılar kalır. İcmali yazdırdıysanız devam edin. Geri alınamaz.",
       baslik: function () { return "Kişisel veri şimdi silinsin mi?"; }
     },
+    /* Ders yoklaması (Aşama 5). dogrula: form önce tarayıcıda doğrulanır (gerekçe zorunlu). */
+    yoklama_sil: {
+      ad: "eylem", deger: "sil", evet: "Yoklamayı sil", dogrula: true,
+      metin: "Bu ders saatinin yoklaması, işaretleri ve değişiklik geçmişi silinir. Geri alınamaz.",
+      baslik: function () { return "Bu yoklama silinsin mi?"; }
+    },
     sinav_sil: {
       ad: "eylem", deger: "sil", evet: "Sınavı sil",
       metin: "Sınav, salonları ve öğrenci listesi tamamen silinir; icmal de üretilemez. Geri alınamaz.",
@@ -179,6 +186,8 @@
         var tanim = ONAY[tetik.getAttribute("data-onay")];
         var form = tetik.form || tetik.closest("form");
         if (!tanim || !form || !form.id) return;
+        // Onay düğmesi formnovalidate'tir; zorunlu alanı olan işlemde form önce burada doğrulanır.
+        if (tanim.dogrula && form.reportValidity && !form.reportValidity()) return;
         var n = null;
         liste.textContent = "";
         liste.hidden = true;
@@ -252,6 +261,8 @@
     var ek = [];
     var sr = sinavRozeti(t);
     if (sr) ek.push(sr);
+    // Ders yoklaması (A5): ajanın bildirdiği bayrak; şube, öğretmen, öğrenci bilgisi gelmez.
+    if (t.cevrimici && t.yoklama_acik) ek.push({ d: "duyuru", m: "Yoklama alınıyor", s: "s-onay" });
     // Kapalı (çevrimdışı) tahta boş dersin en sık nedenidir; rozet o durumda da çizilir.
     if (p.bos_ders) ek.push({ d: "sorun", m: "Boş ders: " + p.bos_ders, s: "s-sorun" });
     if (p.muaf) ek.push({ d: "bilgi", m: "Programdan muaf", s: "s-bilgi" });
@@ -663,20 +674,45 @@
   }
 
   /* ---- kopyala ------------------------------------------------------------------ */
+  // data-kopyala-yedek: pano erişimi yoksa ya da reddedilirse metin seçili hâle getirilir ve
+  // "Ctrl+C ile kopyalayın" denir (yoklama icmali). Yedeksiz düğme pano yoksa gizli kalır (eski davranış).
+  function metniSec(hedef) {
+    var kutu = hedef.closest("details");
+    if (kutu) kutu.open = true;
+    hedef.focus();
+    var secim = window.getSelection();
+    var aralik = document.createRange();
+    aralik.selectNodeContents(hedef);
+    secim.removeAllRanges();
+    secim.addRange(aralik);
+  }
   function kopyalaKur() {
-    if (!navigator.clipboard || !window.isSecureContext) return;
+    var pano = !!(navigator.clipboard && window.isSecureContext);
     Array.prototype.forEach.call(document.querySelectorAll("button[data-kopyala]"), function (d) {
       var hedef = $(d.getAttribute("data-kopyala"));
-      if (!hedef) return;
+      var yedek = d.hasAttribute("data-kopyala-yedek");
+      if (!hedef || (!pano && !yedek)) return;
       d.hidden = false;
       var asil = d.textContent;
+      var ileti = $("kopyala-ileti");
       var zaman = null;
+      function bildir(metin) {
+        if (!ileti) return;
+        ileti.textContent = metin;
+        ileti.hidden = !metin;
+      }
+      function elle() {
+        metniSec(hedef);
+        bildir("Metin seçildi: Ctrl+C ile kopyalayın.");
+      }
       d.addEventListener("click", function () {
+        if (!pano) { elle(); return; }
         navigator.clipboard.writeText(hedef.textContent).then(function () {
           d.textContent = "Kopyalandı";
+          bildir("");
           clearTimeout(zaman);
           zaman = setTimeout(function () { d.textContent = asil; }, 2000);
-        }).catch(function () {});
+        }).catch(function () { if (yedek) elle(); });
       });
     });
   }
@@ -1109,9 +1145,56 @@
     say();
   }
 
+  /* ---- ders yoklaması (A5): "e-Okul'a işlendi" kutusu kendiliğinden gönderilir; yok sayacı --- */
+  function otomatikGonderKur() {
+    Array.prototype.forEach.call(document.querySelectorAll("input[data-otomatik-gonder]"), function (k) {
+      var form = k.form;
+      if (!form) return;
+      // JS varsa yedek "Kaydet" düğmesi gizlenir; kutu değişince form gönderilir.
+      Array.prototype.forEach.call(form.querySelectorAll("[data-js-gizle]"), function (d) { d.hidden = true; });
+      k.addEventListener("change", function () {
+        if (form.requestSubmit) form.requestSubmit(); else form.submit();
+      });
+    });
+  }
+  // Panelden yoklama: üstteki seçim (ders saati, öğretmen…) "Listeyi getir" denmeden değişirse kayıt
+  // formu eski değerleri gönderirdi; Kaydet kapatılır ve uyarı gösterilir.
+  function secimDegisimiKur() {
+    Array.prototype.forEach.call(document.querySelectorAll("form[data-secim-formu]"), function (secim) {
+      var kayit = document.getElementById(secim.getAttribute("data-secim-formu"));
+      if (!kayit) return;
+      var ilk = new URLSearchParams(new FormData(secim)).toString();
+      secim.addEventListener("change", function () {
+        var degisti = new URLSearchParams(new FormData(secim)).toString() !== ilk;
+        Array.prototype.forEach.call(kayit.querySelectorAll("button.ana"), function (d) {
+          if (degisti) { if (!d.disabled) { d.disabled = true; d.setAttribute("data-secim-kapatti", ""); } }
+          else if (d.hasAttribute("data-secim-kapatti")) { d.disabled = false; d.removeAttribute("data-secim-kapatti"); }
+        });
+        var uyari = kayit.querySelector("[data-secim-uyari]");
+        if (uyari) uyari.hidden = !degisti;
+      });
+    });
+  }
+  function yokSayaciKur() {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-sayac-yok]"), function (sayac) {
+      var form = sayac.closest("form");
+      if (!form) return;
+      var toplam = form.querySelectorAll('input[name="yok"]').length;
+      function say() {
+        var n = form.querySelectorAll('input[name="yok"]:checked').length;
+        sayac.textContent = "Yok: " + n + " · Derste: " + (toplam - n) + "/" + toplam;
+      }
+      form.addEventListener("change", say);
+      say();
+    });
+  }
+
   panoKur();
   sinavKur();
   yoklamaSayaciKur();
+  otomatikGonderKur();
+  secimDegisimiKur();
+  yokSayaciKur();
   izgaraKur();
   menuKur();
   sayacKur();

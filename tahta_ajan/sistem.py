@@ -17,6 +17,8 @@ import uuid
 
 LINUX = sys.platform.startswith("linux")
 STANDART_HESAPLAR = ("etapadmin", "ogretmen", "ogrenci")
+# Ders yoklaması kısayolu (A5; paketle gelir). Menüde "Yoklama Al" adıyla görünür.
+YOKLAMA_KISAYOLU = "/usr/share/applications/tahta-yoklama.desktop"
 
 
 def calistir(komut: list[str], zaman_asimi: float = 8) -> tuple[int | None, str]:

@@ -1,0 +1,32 @@
+{% extends "taban.html" %}
+{% block baslik %}PIN pusulası · Tahta Kontrol{% endblock %}
+{% block govde_sinifi %}rapor-sayfasi{% endblock %}
+{% block icerik %}
+{# PIN pusulası (Aşama 5 §6.5): yalnız POST yanıtı (Cache-Control: no-store; yönlendirme yok, adres satırına girmez).
+   Bağlam: pusulalar[{ad_soyad, kod, pin "482 913"}]. Yazdırmada A4'e 2 × 4 pusula, kesik çizgili kenar. #}
+<div class="yazdirma">
+  <p class="geri"><a href="/ogretmenler">← Öğretmenler ve PIN</a></p>
+  <div class="sayfa-bas">
+    <div class="bas-yazi">
+      <h1>PIN pusulası</h1>
+      <p>{{ pusulalar | length }} öğretmen · kesik çizgilerden kesip öğretmenlere verin</p>
+    </div>
+    <p class="dugme-satiri sag"><button type="button" class="ana" data-yazdir hidden>Yazdır</button> <a class="dugme" href="/ogretmenler">Öğretmenlere dön</a></p>
+  </div>
+  <p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg><strong>PIN'ler yalnız bu sayfada bir kez görünür.</strong>
+    Yazdırmadan sayfayı kapatırsanız yeniden üretmeniz gerekir. Sayfayı ekranda açık bırakmayın.</p>
+</div>
+<div class="fisler pusulalar">
+{% for p in pusulalar %}
+<section class="fis pusula" aria-label="{{ p.ad_soyad }} PIN pusulası">
+  <p class="fis-okul">Tahta Kontrol · Yoklama PIN'i</p>
+  <p class="fis-salon">Öğretmen: <strong>{{ p.ad_soyad }}</strong></p>
+  <p class="fis-etiket">Öğretmen kodu</p>
+  <p class="pusula-kod">{{ p.kod }}</p>
+  <p class="fis-etiket">PIN</p>
+  <p class="pusula-pin">{{ p.pin }}</p>
+  <p class="not">PIN'inizi kimseyle paylaşmayın; tahtaya girerken tuş takımını elinizle kapatın. Unutursanız idareden yeni PIN isteyin.</p>
+</section>
+{% endfor %}
+</div>
+{% endblock %}

@@ -18,6 +18,12 @@ _ABECE = "abcçdefgğhıijklmnoöprsştuüvyz"
 _SIRA = {h: i for i, h in enumerate(_ABECE)}
 
 
+def rakam_mi(s) -> bool:
+    """Yalnız ASCII 0-9'dan oluşan, boş olmayan metin. `str.isdigit()` "²", "١" gibi karakterleri de
+    kabul eder ama `int()` onları çeviremez; sayı denetimleri bunu kullanır."""
+    return isinstance(s, str) and s.isascii() and s.isdigit()
+
+
 def katla(s) -> str:
     """Türkçe harfleri ASCII'ye indirip küçük harfe çevirir; boşlukları sadeleştirir.
 

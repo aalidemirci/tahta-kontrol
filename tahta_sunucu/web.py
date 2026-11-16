@@ -35,6 +35,7 @@ from . import (
     metin,
     paket,
     panel_program,
+    panel_yoklama,
     program_is,
     sinav,
     tema,
@@ -43,6 +44,7 @@ from . import (
     zamanlama,
 )
 from . import program as program_mod
+from . import yoklama as yoklama_mod
 from .komut import KOMUT_ADI, KOMUT_DURUMU, KOMUT_OMRU, komut_ekle  # noqa: F401  (KOMUT_OMRU burada da anılır)
 
 gunluk = logging.getLogger("tahta-sunucu")
@@ -59,6 +61,7 @@ MENU = [
     {"ad": "Duyurular", "yol": "/duyurular", "esler": ["/duyurular"]},
     {"ad": "Program", "yol": "/program", "esler": ["/program"]},
     {"ad": "Sınavlar", "yol": "/sinavlar", "esler": ["/sinavlar", "/sinav"]},
+    {"ad": "Yoklama", "yol": "/yoklama", "esler": ["/yoklama", "/ogretmenler", "/ogrenciler"]},
     {
         "ad": "Tahtalar",
         "alt": [
@@ -313,7 +316,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             "cevrimici": cevrimici,
             "kilitli": bool(durum.get("kilitli")) if cevrimici else None,
             "duyuru_var": bool(durum.get("duyuru_var")) if cevrimici else False,
-            "ekran_bagli": any(e.get("arayuz") not in (None, "yok") for e in ekranlar),
+            "ekran_bagli": any(e.get("arayuz") not in (None, "yok", "komut") for e in ekranlar),
             "oturum": OTURUM_SINIFI.get(oturum, oturum),
             "oturum_acik": cevrimici and oturum != "yok",
             "son_gorulme": gecen_sure(satir["son_gorulme"]),
@@ -326,6 +329,9 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             "sinav": (sinavlar or {}).get(satir["id"]),
             "sinav_ekran": sinav_ekran_evresi(durum) if cevrimici else None,
             "sinav_yetenegi": sinav.SINAV_YETENEGI in yetenekler,
+            # A5: rozet "Yoklama: ajan güncellenmeli" yetenekten üretilir; yoklama_acik ajanın bildirdiği bayraktır.
+            "yoklama_yetenegi": yoklama_mod.YOKLAMA_YETENEGI in yetenekler,
+            "yoklama_acik": bool(durum.get("yoklama_acik")) if cevrimici else False,
         }
 
     def sinav_ekran_evresi(durum: dict) -> str | None:
@@ -691,6 +697,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                 b.execute("DELETE FROM tahta_grubu_uye WHERE tahta_id = ?", (tahta_id,))
                 b.execute("DELETE FROM tahta_ders WHERE tahta_id = ?", (tahta_id,))  # K34
                 b.execute("DELETE FROM program_isaret WHERE tahta_id = ?", (tahta_id,))
+                b.execute("DELETE FROM yoklama_belirtec WHERE tahta_id = ?", (tahta_id,))
                 vt.kayit_dus(b, k["ad"], "Tahta kaldırıldı", satir["ad"], istemci_ip(istek))
                 return yonlendir("/", f"{satir['ad']} kaldırıldı. Tahtadaki ajan artık sunucuya bağlanamaz.")
             if not ad:
@@ -899,6 +906,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             acil_sablon_ornek = not isinstance(vt.ayar_al(b, "acil_sablonlar"), list)
             sinav_kurallari = sinav.kurallar(b)
             sinav_kurallari_ozel = isinstance(vt.ayar_al(b, "sinav_kurallari"), str)
+            yoklama_baglami = panel_yoklama.ayar_baglami(b)
         uretilen = tema.uret(ana, vurgu)
         logo_bilgi = None
         if logo:
@@ -943,6 +951,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             sinav_kurallari_ozel=sinav_kurallari_ozel,
             sinav_kurallari_varsayilan=sinav.SINAV_KURALLARI_VARSAYILAN,
             sinav_kurallari_en_uzun=sinav.KURALLAR_EN_UZUN,
+            **yoklama_baglami,
         )
 
     def acil_sablonlarini_kaydet(istek: Request, k, form, ip: str):
@@ -1015,6 +1024,29 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         onayli_tahtalari_uyandir()
         return yonlendir(adres, "Sınav kuralları kaydedildi." if metin_ else "Sınav kuralları varsayılan metne döndürüldü.")
 
+    def yoklama_ayarlarini_kaydet(k, form, ip: str):
+        """Ayarlar › Ders yoklaması (bolum=yoklama): yalnız `yoklama` anahtarı yazılır."""
+        adres = "/ayarlar?yer=yoklama#ileti"
+        try:
+            yeni = yoklama_mod.ayar_coz(form)
+        except ValueError as hata:
+            return yonlendir(adres, str(hata), hata=True)
+        with vt.islem() as b:
+            onceki = yoklama_mod.ayar_al(b)
+            vt.ayar_yaz(b, "yoklama", yeni)
+            ogrenci_yok = not b.execute("SELECT 1 FROM ogrenci WHERE aktif = 1 LIMIT 1").fetchone()
+            vt.kayit_dus(
+                b, k["ad"], "Yoklama ayarları kaydedildi",
+                f"{'etkin' if yeni['etkin'] else 'kapalı'} · {yeni['maske']} · oturum {yeni['oturum_dk']} dk · "
+                f"boşta {yeni['bosta_dk']} dk · saklama {yeni['saklama_gun']} gün", ip,
+            )  # fmt: skip
+        if onceki["etkin"] != yeni["etkin"]:
+            onayli_tahtalari_uyandir()  # yoklama_etkin tahtalara hemen insin
+        mesaj = "Yoklama ayarları kaydedildi."
+        if yeni["etkin"] and ogrenci_yok:
+            mesaj += " Uyarı: öğrenci listesi henüz yüklenmedi; tahtada liste boş görünür."
+        return yonlendir(adres, mesaj)
+
     @uygulama.post("/ayarlar")
     async def ayarlar_kaydet(istek: Request):
         k = kullanici(istek)
@@ -1027,6 +1059,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             return acil_sablonlarini_kaydet(istek, k, form, istemci_ip(istek))
         if bolum == "sinav":
             return sinav_kurallarini_kaydet(istek, k, form, istemci_ip(istek))
+        if bolum == "yoklama":
+            return yoklama_ayarlarini_kaydet(k, form, istemci_ip(istek))
         if bolum != "genel":
             return yonlendir("/ayarlar", "Bilinmeyen ayar bölümü.", hata=True)
         with vt.islem() as b:
@@ -1221,6 +1255,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             "acil": acil.ajan_gorunumu(b),
             # A4: durum tabanlı; pencere dışında None (ajan None görünce sınav ekranını kaldırır).
             "sinav": sinav.tahta_sinavi(b, tahta["id"], vt.simdi()),
+            # A5: durum tabanlı, yalnız açık/kapalı (başka yoklama ayarı tahtaya gitmez).
+            "yoklama_etkin": yoklama_mod.etkin(b),
         }
 
     @uygulama.post("/ajan/kaydol")
@@ -1507,6 +1543,18 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         uyandir_hepsi(idler)
         return idler
 
+    # ---- ders yoklaması (Aşama 5) ------------------------------------------------------------------
+    yoklama_isleyici = yoklama_mod.YoklamaZamanlayici()
+
+    def yoklama_zamanlayici(simdi: datetime | None = None) -> bool:
+        """Saatte en çok bir kez imha (saklama süresi, referanssız pasif öğrenci, eski oturumlar)."""
+        an = int(simdi.timestamp()) if simdi else vt.simdi()
+        with vt.islem() as b:
+            silindi = yoklama_isleyici.calistir(b, an)
+        if silindi:
+            vt.wal_buda()
+        return silindi
+
     def yayimla(b, **kw) -> tuple[int | None, list[int]]:
         """Sonraki aşamalar için tek yayın yolu (duyuru.duyuru_yayimla); uyandırmayı çağıran yapar."""
         return duyuru.duyuru_yayimla(b, **kw)
@@ -1535,6 +1583,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
     panel_acil.kaydet(uygulama, y)
     panel_program.kaydet(uygulama, y)
     panel_sinav.kaydet(uygulama, y)
+    panel_yoklama.kaydet(uygulama, y)
 
     uygulama.state.zamanlayici = zamanlayici
     uygulama.state.program_zamanlayici = program_zamanlayici
@@ -1547,6 +1596,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         lambda b, tahta_id, an: tahta_id in sinav.pencere_tahtalari(b, an, sinav.PROGRAM_ONCESI_SN)
     )
     uygulama.state.sinav_zamanlayici = sinav_zamanlayici
+    uygulama.state.yoklama_zamanlayici = yoklama_zamanlayici
     uygulama.state.duyuru_zamanlayici = duyuru_zamanlayici
     uygulama.state.acil_denetim = acil_denetim
     uygulama.state.duyuru_yayimla = yayimla
@@ -1557,5 +1607,6 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         ("duyuru_planlari", duyuru_zamanlayici),
         ("program", program_zamanlayici),
         ("sinav_saklama", sinav_zamanlayici),
+        ("yoklama_imha", yoklama_zamanlayici),
     ]
     return uygulama

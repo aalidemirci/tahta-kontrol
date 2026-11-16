@@ -120,11 +120,11 @@ def kurallar(b) -> str:
 def sirala_anahtari(ad: str) -> tuple:
     """Salon/şube adları için doğal sıra: "9/A" < "10/A"; Türk abecesi."""
     parcalar = re.split(r"(\d+)", str(ad))
-    return tuple((0, int(p), ()) if p.isdigit() else (1, 0, metin.tr_sirala_anahtari(p)) for p in parcalar if p)
+    return tuple((0, int(p), ()) if metin.rakam_mi(p) else (1, 0, metin.tr_sirala_anahtari(p)) for p in parcalar if p)
 
 
 def no_anahtari(okul_no: str) -> tuple:
-    return (0, int(okul_no), "") if str(okul_no).isdigit() else (1, 0, str(okul_no))
+    return (0, int(okul_no), "") if metin.rakam_mi(str(okul_no)) else (1, 0, str(okul_no))
 
 
 # ---- R5 ayrıştırma ----------------------------------------------------------------------------

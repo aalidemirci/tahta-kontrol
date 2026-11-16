@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Yoklama Al
+GenericName=Ders yoklaması
+Comment=Ders yoklamasını öğretmen kodu ve PIN ile tahtadan alır
+Exec=/usr/bin/tahta-ajan yoklama
+Icon=x-office-address-book
+Terminal=false
+Categories=Education;
+Keywords=yoklama;devamsızlık;

@@ -6,13 +6,14 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.5.0, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
+- Durum: **0.6.0, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
   (0.1.1: kurulum, kilit, duyuru, kapatma, güncelleme çalıştı); 0.2.0'ın okul kimliği,
   0.3.0'ın duyuru planları, hedef grupları ve acil durum/tatbikat yayını, 0.4.0'ın ders
-  programı/program kilidi ve 0.5.0'ın sınav kipi/sınav yoklaması yalnız Debian 12 kabında ve
-  tarayıcıda denendi; gerçek bir ETAP tahtasında ve gerçek Kelebek çizelgesiyle henüz denenmedi.
-- Ders programı ve program kilidi `docs/tasarim.md` §12; sınav kipi §13; yol haritası §14;
-  kullanıcıya sorulacaklar §15 "Açık sorular"; doğrulanacak dayanaklar §16.
+  programı/program kilidi, 0.5.0'ın sınav kipi/sınav yoklaması ve 0.6.0'ın ders yoklaması
+  yalnız Debian 12 kabında ve tarayıcıda denendi; gerçek bir ETAP tahtasında, gerçek Kelebek
+  çizelgesiyle ve gerçek e-Okul sınıf listesiyle henüz denenmedi.
+- Ders programı ve program kilidi `docs/tasarim.md` §12; sınav kipi §13; ders yoklaması §14;
+  yol haritası §15; kullanıcıya sorulacaklar §16 "Açık sorular"; doğrulanacak dayanaklar §17.
 
 ## Komutlar (PowerShell 5.1; `&&` yok)
 
@@ -41,12 +42,20 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   panel_program.py  /program (sekmeler: zil, derslik, kurallar, istisnalar), /program/uyarilar, /tahta/{id}/program
   panel_sinav.py    /sinavlar, /sinav/{id} (künye, eşleştirme, durum, uzatma, kip kaldırma, kodlar, şube
                     duyurusu, salon yoklaması, icmal), /api/sinav/{id}, /ajan/sinav/{kod,yoklama}
+  panel_yoklama.py  /yoklama (günlük ızgara, kayıt/düzeltme, panelden gir, icmal + .csv, e-Okul işareti),
+                    /ogretmenler (PIN pusulası), /ogrenciler (önizle/aktar/temizle), /ajan/yoklama/*;
+                    sonunda şablon bağlamlarının SÖZLEŞME bloğu
   sablonlar/    program.html, uyarilar.html ve ortak başları _program_bas.html (şerit + sekmeler);
-                sinavlar.html, sinav.html, sinav_yoklama.html, sinav_kodlar.html, sinav_icmal.html, _sinav.html
+                sinavlar.html, sinav.html, sinav_yoklama.html, sinav_kodlar.html, sinav_icmal.html, _sinav.html;
+                yoklama*.html, ogretmenler.html, ogretmen_pusula.html, ogrenciler.html, ogrenci_onizleme.html
+                ve ortak başları _yoklama_bas.html (sekmeler + KVKK notu)
+  yoklama.py    ders yoklaması iş mantığı (FastAPI'siz): ayar, A3 uyarlama işlevleri, öneri, PIN kapısı
+                (3 katman), belirteç, yoklama_yaz (upsert + iz), günlük görünüm, icmal/metin/CSV, aktarım, imha
+  eokul.py      öğrenci listesi ayrıştırıcı: e-Okul OOG01001R020 .xls (xlrd), düz .xlsx/.csv
   sinav.py      sınav iş mantığı: R5 ayrıştırma, içe aktarma, eşleşme önerisi, süreler/evreler, ayar.sinav,
                 gözetmen kapısı (bellekte), yoklama, şube duyurusu, icmal, saklama temizliği
   xlsx.py       yalnız standart kitaplıkla .xlsx okuyucu (zip/DOCTYPE sınırları; A5 de kullanır)
-  maske.py      tek maskeleme tanımı: kalabalik("Ah*** Yı****"), no_son("47")
+  maske.py      tek maskeleme tanımı: kalabalik("Ah*** Yı****"), no_son("47"), sinif_etiketi("Ayşe Y.")
   program.py    zil saatleri, Okul Zili okuma, takvim (plan_hesapla/gun_plani), derslik CSV, kilit aralıkları (saf)
   program_is.py program zamanlayıcısı (kilit, açma yedeği, boş ders uyarısı, bakım), istisnalar, özetler
   komut.py      KOMUT_OMRU, KOMUT_ADI, komut_ekle (duyuru komutu ömrü açıkça ister)
@@ -63,13 +72,17 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   sunucu.py     iki dinleyici: yerel HTTP + ağ için HTTPS; zamanlayıcı (state.zamanlayicilar, 20 sn)
   pencere.py    masaüstü denetim penceresi (tkinter)
   statik/       stil.css (tek dosya, katmanlı), panel.js (tek dosya, kütüphanesiz), isaret.svg (nötr ürün işareti)
-  ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh
+  ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh, tahta-yoklama.desktop
 tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
   servis.py     yönetici yetkili sistem servisi: sunucu döngüsü, komutlar, acil durumu, süreli program kilidi,
-                sınav durumu (ayar.sinav, monotonik sayaç) ve gözetmen oturumu (belirteç yalnız burada), yerel soket
+                sınav durumu (ayar.sinav, monotonik sayaç) ve gözetmen oturumu (belirteç yalnız burada),
+                ders yoklaması (ayar.yoklama_etkin, self.yoklama; belirteç yalnız _yoklama_belirtec'te), yerel soket
+                (ilk satır `arayuz: komut` ise kısa ömürlü istemci: ona yayın yok, ekran sayılmaz)
   ekran.py      oturumda çalışan kilit/duyuru/kapatma/acil penceresi (GTK3), üst bantta logo ve okul adı;
                 program kilidinde "Teneffüs · Tahta 10:40'ta açılır." satırı (saat_eki sunucudakiyle aynı);
-                sınav sayfaları: sinav-giris, sinav, gozetmen-kod, gozetmen-menu, gozetmen-yoklama
+                sınav sayfaları: sinav-giris, sinav, gozetmen-kod, gozetmen-menu, gozetmen-yoklama;
+                yoklama sayfaları: yoklama-pin, yoklama-liste, yoklama-onay, yoklama-ileti; kilitte "Yoklama al"
+  __main__.py   komut satırı; `tahta-ajan yoklama` ("Yoklama Al" kısayolu) servise yoklama_ac yollar
   ayar.py       yapılandırma, varsayılan tahta paleti, logonun servis tarafında saklanması
   sistem.py     işletim sistemine dokunan HER ŞEY (yeni platform = bu dosya)
   tani.py       saha tanılaması (denetim listesi)
@@ -132,8 +145,25 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
 17. **Sınavda ad soyad saklanmaz** (yalnız `maske.kalabalik`); tahtaya tam okul no ve ders gitmez;
    işlem kaydına ad, maske, okul no yazılmaz. Kişisel veri 30 gün sonra `secure_delete` + WAL
    budamayla silinir. Okul no yalnız panelde salon yoklaması ve icmal sayfalarındadır.
+18. **Öğrenci listesi tahtada diske yazılmaz; yoklama belirteci ekran yardımcısına gitmez.**
+   Liste, işaretler ve belirteç yalnız servisin belleğindedir (`durum.json`, günlük, tanılama
+   raporu yok); kaydedilince ya da süre dolunca bellekten de atılır. Sunucuya giden durumda yalnız
+   `yoklama_acik` bayrağı olur. Tahtada öğrenci ancak maskeli etiketle (`maske.sinif_etiketi`)
+   görünür; ad ve okul no hiçbir zaman ikisi birden açık değildir (`tam` maskesi yoktur).
+19. **PIN düz metni yalnız pusula yanıtında görünür** (POST, `no-store`, yönlendirme yok); sunucuda
+   scrypt özeti, tahtaya ne PIN ne özeti gider. İşlem kaydına öğretmen için yalnız kod, öğrenci için
+   yalnız sayı yazılır; düzeltme gerekçesi ve öğrenci kimlikli iz `yoklama_iz`'dedir ve imhayla gider.
+20. **Kısa ömürlü yerel istemci kendini tanıtır:** yerel sokete bağlanan komut istemcisi ilk satırda
+   `{"tur":"merhaba","arayuz":"komut"}` yollar; servis ona durum yayını göndermez, `durum_ozeti`
+   ekranlarına ve "ekran bağlı" sayımına katmaz. Ekran yardımcısı da bağlanır bağlanmaz `merhaba` yollar
+   (servis ilk satırı 3 sn bekler; gelmezse eski davranışla ekran sayar).
 
 ## Bilinen tuzaklar
+
+- **GtkButton.set_label etiketi yeniden kurar:** ortalama (`set_justify`) ve kısaltma kaybolur;
+  yoklama düğmesinin metni değişince `ekran._ogrenci_etiketi` ile yeniden verilir (16.11.2026, Docker).
+- **Kapta `pkill -f "tahta-ajan ekran"`, aynı metni taşıyan `sh -c` komutunu da öldürür;**
+  deneme betiklerini dosyaya yazıp `sh dosya` ile çalıştırın (16.11.2026).
 
 - **Statik dosya adresleri sürüm taşır** (`/statik/stil.css?v=<sürüm>`, `panel.js?v=<sürüm>`)
   ve uzun önbellekle sunulur: `stil.css` ya da `panel.js` değişip sürüm yükseltilmezse

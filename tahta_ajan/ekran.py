@@ -17,6 +17,12 @@ Sınav kipi (Aşama 4): giriş ekranı (maskeli oturma listesi, yalnız başlang
 sınav ekranı (büyük geri sayım, bitiş, kurallar) ve gözetmen sayfaları (kod, menü, yoklama
 ızgarası). Hepsinde klavye ve fare pencereye bağlıdır; ortak kilit kodu kabul edilmez. Gözetmen
 belirteci bu yardımcıya hiç gelmez; kod servise iletilir ve sunucuda doğrulanır.
+
+Ders yoklaması (Aşama 5): PIN sayfası (öğretmen kodu + PIN, tuş takımı), sınıf listesi (maskeli
+etiketli düğmeler; yalnız "yok" olanlara dokunulur), onay ve ileti sayfaları. Liste yalnız servisten
+gelen durum iletisinde ve düğmelerde durur; yoklama kapanınca düğmeler yok edilir. Yoklama belirteci
+bu yardımcıya hiç gelmez; PIN servise iletilir, burada saklanmaz. Öncelik: acil > kapatma > gözetmen >
+yoklama > duyuru > sınav > kilit. Klavye kilidi yalnız tahta kilitliyse alınır.
 """
 
 from __future__ import annotations
@@ -72,6 +78,18 @@ STIL_OLCU = b"""
 #gozetmen-bilgi { font-size: 28px; }
 #gozetmen-hata { font-size: 28px; font-weight: 600; }
 #koltuk { font-size: 22px; font-weight: 600; padding: 6px 8px; }
+#yoklama-baslik { font-size: 52px; font-weight: 700; }
+#yoklama-bilgi { font-size: 28px; }
+#yoklama-adim { font-size: 32px; font-weight: 600; }
+#yoklama-hata { font-size: 28px; font-weight: 600; }
+#yoklama-ust { font-size: 34px; font-weight: 600; }
+#yoklama-kalan { font-size: 34px; font-weight: 600; }
+#yoklama-sayi { font-size: 32px; font-weight: 600; }
+#yoklama-onay-liste { font-size: 34px; }
+#yoklama-ileti { font-size: 52px; font-weight: 600; }
+#ogrenci { font-size: 26px; font-weight: 600; padding: 8px 10px; }
+#ogrenci.uzun { font-size: 20px; }
+#secim { font-size: 30px; padding: 10px 16px; }
 .liste-no { font-weight: 700; }
 #ana-dugme:disabled, button:disabled { opacity: 0.45; }
 button { font-size: 34px; font-weight: 600; padding: 14px 26px; border-radius: 12px; background-image: none;
@@ -102,6 +120,13 @@ SINAV_RENKLERI = (
     "#gozetmen-hata { color: #fca5a5; }\n"
     "#koltuk:checked { background-color: #991b1b; border-color: #fca5a5; }\n"
     "#koltuk:checked label { color: #ffffff; }\n"
+)
+# Ders yoklaması: "yok" işaretli öğrenci düğmesi koyu kırmızı zemin + beyaz yazı + "YOK" satırı
+# (renk tek başına anlam taşımaz); hata ve süre uyarısı açık kırmızı. Markadan bağımsız sabit renkler.
+YOKLAMA_RENKLERI = (
+    "#ogrenci:checked { background-color: #991b1b; border-color: #fca5a5; }\n"
+    "#ogrenci:checked label { color: #ffffff; }\n"
+    "#yoklama-hata { color: #fca5a5; }\n"
 )
 SINAV_SON_DAKIKALAR_SN = 300
 GOZETMEN_KOD_ZAMAN_ASIMI_SN = 60  # gözetmen kodu sayfası dokunulmazsa kapanır (öğrenci önünde açık kalmasın)
@@ -193,6 +218,73 @@ def acil_basligi(baslik, tatbikat: bool) -> str:
     return "" if katla(metin) in tekrar else metin
 
 
+# ---- ders yoklaması (A5): saf yardımcılar (test edilir) -------------------------------------
+YOKLAMA_SUTUN_EN_COK = 6
+YOKLAMA_DUGME_EN = 260
+YOKLAMA_DUGME_BOY = 96
+YOKLAMA_DUGME_SIGAN = 14  # 260 px düğmede 26 px kalın yazıyla kısalmadan sığan harf sayısı (yaklaşık)
+YOKLAMA_KOD_HANE = 3
+YOKLAMA_PIN_HANE = 6
+
+
+def yoklama_ust_metni(yoklama: dict) -> str:
+    """Liste sayfasının üst satırı: "10/A · 3. ders (09:50–10:30) · A. Örnek"."""
+    ogretmen = (yoklama.get("ogretmen") or {}).get("etiket") or ""
+    parcalar = [yoklama.get("sube") or "Şube seçilmedi", yoklama.get("ders_metni") or "", yoklama.get("ders_adi") or "", ogretmen]
+    return " · ".join(p for p in parcalar if p)
+
+
+def yoklama_sayi_metni(yok_sayisi: int, mevcut: int) -> str:
+    """Alt çubuk: "Yok: 2 · Mevcut: 32/34" (mevcut = derste olan / listedeki)."""
+    return f"Yok: {yok_sayisi} · Mevcut: {max(0, mevcut - yok_sayisi)}/{mevcut}"
+
+
+def yoklama_onay_metni(etiketler: list[str]) -> tuple[str, str]:
+    """Onay sayfası: başlık ve yok yazılacakların etiketleri."""
+    if not etiketler:
+        return "Bütün öğrenciler derste.", ""
+    return f"{len(etiketler)} öğrenci yok yazılacak:", ", ".join(etiketler)
+
+
+def ogrenci_etiket_parcalari(etiket: str) -> tuple[str, str]:
+    """Sunucunun çakışma eki adın sonundan ayrılır: "Mehmet Ali Y. (23)" → ("Mehmet Ali Y.", "(23)").
+
+    Uzun ad düğmede üç noktayla kısalırsa adaşları ayıran ek kesilmesin diye ek ayrı satıra gider.
+    """
+    ana, _, ek = str(etiket).rpartition(" ")
+    if ana and len(ek) >= 3 and ek[0] == "(" and ek[-1] == ")" and all(c in "0123456789" for c in ek[1:-1]):
+        return ana, ek
+    return str(etiket), ""
+
+
+def ogrenci_dugme_metni(etiket: str, yok: bool) -> str:
+    """Öğrenci düğmesi: ilk satır ad, ikinci satır çakışma eki ve işaretliyse "YOK" (renk tek
+    başına anlam taşımaz). En çok iki satır; üç noktayla kısalabilen yalnız ilk satırdır."""
+    ana, ek = ogrenci_etiket_parcalari(etiket)
+    alt = " · ".join(p for p in (ek, "YOK" if yok else "") if p)
+    return f"{ana}\n{alt}" if alt else ana
+
+
+def ogrenci_uzun_mu(ad: str) -> bool:
+    """Düğmede 26 px yazıyla sığmayan ad: daha küçük yazıyla gösterilir (#ogrenci.uzun)."""
+    return len(ad) > YOKLAMA_DUGME_SIGAN
+
+
+def yoklama_sutun(ekran_eni: int) -> int:
+    """Liste ızgarasının sütun sayısı: ekran enine göre, en çok 6."""
+    return max(1, min(YOKLAMA_SUTUN_EN_COK, ((ekran_eni or 1920) - 120) // (YOKLAMA_DUGME_EN + 16)))
+
+
+def yoklama_pin_hatasi(yoklama: dict) -> str:
+    """PIN sayfasındaki hata/bilgi satırı."""
+    if yoklama.get("istek"):
+        return "Doğrulanıyor…"
+    bekleme = int(yoklama.get("bekleme") or 0)
+    if bekleme > 0:
+        return f"Çok fazla hatalı deneme. {bekleme} saniye bekleyin."
+    return str(yoklama.get("hata") or "")
+
+
 DUYURU_SUTUN_ESIGI = 12  # bundan çok satırlı duyuru (ör. şube oturma listesi) sütunlara bölünür
 KURALLAR_EKRAN_SATIRI = 8  # sınav kuralları ekranda en çok bu kadar satır (alt satır ekranda kalsın)
 
@@ -272,7 +364,9 @@ def renk_stili(palet: dict) -> str:
         f"#sinav-salon, #sinav-bilgi, #sinav-fazla, #sinav-cevrimdisi, #gozetmen-bilgi {{ color: {p['soluk']}; }}\n"
         f"#sinav-durum {{ color: {p['bilgi']}; }}\n"
         f".liste-no {{ color: {p['vurgu']}; }}\n"
+        + f"#yoklama-bilgi, #yoklama-kalan {{ color: {p['soluk']}; }}\n"
         + SINAV_RENKLERI
+        + YOKLAMA_RENKLERI
         + ACIL_RENKLERI
         # Kaydırılabilir duyuru/sınav ortası pencere zeminini örtmesin.
         + "scrolledwindow, viewport { background-color: transparent; border-width: 0; }\n"
@@ -422,6 +516,16 @@ def calistir() -> int:
             self.izgara_dugmeleri: dict[int, tuple] = {}
             self.liste_imza = None
             self.sinav_altlari = []  # her sınav sayfasının alt satırı: (saat, bilgi, çevrimdışı düğmesi)
+            # Ders yoklaması (A5): girilen kod/PIN yalnız gönderilene dek burada; liste düğmeleri
+            # yoklama kapanınca yok edilir (etiketler bellekte kalmaz).
+            self.yk_oturum = None
+            self.yk_adim = "kod"  # "kod" | "pin"
+            self.yk_kod = ""
+            self.yk_pin = ""
+            self.yk_liste_imza = None
+            self.yk_secim_imza = None
+            self.yk_dugmeler: dict[int, tuple] = {}  # id -> (düğme, etiket)
+            self.yk_guncelleniyor = False
 
             # İki sağlayıcı: ölçüler bir kez yüklenir; renkler tema değişince yenilenir.
             ekran = Gdk.Screen.get_default()
@@ -467,6 +571,13 @@ def calistir() -> int:
             self.yigin.add_named(self._gozetmen_kod_sayfasi(), "gozetmen-kod")
             self.yigin.add_named(self._gozetmen_menu_sayfasi(), "gozetmen-menu")
             self.yigin.add_named(self._gozetmen_yoklama_sayfasi(), "gozetmen-yoklama")
+            # Ders yoklaması sayfaları (A5) da show_all()'dan ÖNCE eklenir (GtkStack tuzağı).
+            self.yigin.add_named(self._yoklama_pin_sayfasi(), "yoklama-pin")
+            self.yigin.add_named(self._yoklama_liste_sayfasi(), "yoklama-liste")
+            self.yigin.add_named(self._yoklama_onay_sayfasi(), "yoklama-onay")
+            self.yigin.add_named(self._yoklama_ileti_sayfasi(), "yoklama-ileti")
+            # Fiziksel klavyeden rakam (yalnız yoklama PIN sayfasında; kilit davranışı değişmez).
+            self.pencere.connect("key-press-event", self._tus_basildi)
             self.pencere_sinifi = None  # "acil" | "tatbikat" | None
             # Sayfalar pencere açılmadan görünür kılınır: GtkStack, görünür olmayan
             # bir sayfaya geçiş isteğini yok sayar ve ilk sayfada (kilit) kalır.
@@ -558,6 +669,13 @@ def calistir() -> int:
             self.cevrimdisi_dugmesi.set_can_focus(False)
             self.cevrimdisi_dugmesi.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "cevrimdisi_ac"}))
             sol.pack_start(self.cevrimdisi_dugmesi, False, False, 16)
+            # Ders yoklaması (A5): yoklama etkin, tahta çevrimiçi ve kayıtlıysa görünür. Kilidi AÇMAZ;
+            # yoklama bitince kilit ekranı geri gelir.
+            self.kilit_yoklama = Gtk.Button(label="Yoklama al")
+            self.kilit_yoklama.set_halign(Gtk.Align.CENTER)
+            self.kilit_yoklama.set_can_focus(False)
+            self.kilit_yoklama.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "yoklama_ac"}))
+            sol.pack_start(self.kilit_yoklama, False, False, 16)
 
             self.kod_kutusu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
             self.kod_kutusu.set_halign(Gtk.Align.CENTER)
@@ -852,6 +970,148 @@ def calistir() -> int:
             govde.pack_end(alt, False, False, 0)
             return self._sayfa_dolu(govde)
 
+        # ---- ders yoklaması sayfaları (A5) -----------------------------------------------
+        def _yoklama_pin_sayfasi(self):
+            """Öğretmen kodu (3 hane) ve PIN (6 hane): kilit tuş takımıyla aynı ölçüde 12 tuş."""
+            govde = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=120)
+            sol = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            sol.set_valign(Gtk.Align.CENTER)
+            sol.set_size_request(720, -1)  # hata metni gelince tuş takımı kaymasın
+            sol.pack_start(self._etiket("yoklama-baslik", "Ders yoklaması"), False, False, 0)
+            self.yp_bilgi = self._etiket("yoklama-bilgi")
+            self.yp_bilgi.set_max_width_chars(40)
+            self.yp_sube = self._etiket("yoklama-bilgi")
+            self.yp_adim = self._etiket("yoklama-adim")
+            self.yp_adim.set_max_width_chars(36)
+            self.yp_hata = self._etiket("yoklama-hata")
+            self.yp_hata.set_max_width_chars(36)
+            ipucu = self._etiket("yoklama-bilgi", "PIN'i girerken tuş takımını elinizle kapatın.")
+            ipucu.set_max_width_chars(40)
+            for parca in (self.yp_bilgi, self.yp_sube, self.yp_adim, self.yp_hata, ipucu):
+                sol.pack_start(parca, False, False, 0)
+            vazgec = self._dugme("Vazgeç", lambda: self.baglanti.gonder({"tur": "yoklama_kapat"}), en=300, boy=90)
+            vazgec.set_halign(Gtk.Align.CENTER)
+            sol.pack_start(vazgec, False, False, 24)
+            sag = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            sag.set_valign(Gtk.Align.CENTER)
+            self.yp_kod = self._etiket("kod", "")
+            sag.pack_start(self.yp_kod, False, False, 6)
+            self.yp_tuslar = Gtk.Grid(row_spacing=10, column_spacing=10)
+            self.yp_tuslar.set_column_homogeneous(True)
+            for sira, tus in enumerate(["1", "2", "3", "4", "5", "6", "7", "8", "9", "Sil", "0", "Tamam"]):
+                dugme = self._dugme(tus, lambda t=tus: self._yoklama_tus(t), ana=tus == "Tamam", en=150, boy=96)
+                self.yp_tuslar.attach(dugme, sira % 3, sira // 3, 1, 1)
+            sag.pack_start(self.yp_tuslar, False, False, 0)
+            govde.pack_start(sol, False, False, 0)
+            govde.pack_start(sag, False, False, 0)
+            return self._sayfa(govde)
+
+        def _yoklama_liste_sayfasi(self):
+            """Üst satır (şube · ders · öğretmen · kalan süre), ortada kaydırılabilir öğrenci düğmeleri
+            ya da şube/ders saati seçimi, altta "Yok: 2 · Mevcut: 32/34" [Vazgeç] [Kaydet]."""
+            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            ust = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
+            self.yl_ust = Gtk.Label(label="")
+            self.yl_ust.set_name("yoklama-ust")
+            self.yl_ust.set_xalign(0)
+            self.yl_ust.set_ellipsize(Pango.EllipsizeMode.END)
+            self.yl_degistir = self._dugme("Şube / saat", lambda: self.baglanti.gonder({"tur": "yoklama_sec", "ders_no": None}))
+            self.yl_kalan = Gtk.Label(label="")
+            self.yl_kalan.set_name("yoklama-kalan")
+            ust.pack_start(self.yl_ust, True, True, 0)
+            ust.pack_end(self.yl_kalan, False, False, 0)
+            ust.pack_end(self.yl_degistir, False, False, 0)
+            self.yl_bilgi = Gtk.Label(label="")
+            self.yl_bilgi.set_name("yoklama-bilgi")
+            self.yl_bilgi.set_xalign(0)
+            self.yl_bilgi.set_line_wrap(True)
+            self.yl_hata = Gtk.Label(label="")
+            self.yl_hata.set_name("yoklama-hata")
+            self.yl_hata.set_xalign(0)
+            self.yl_hata.set_line_wrap(True)
+
+            self.yl_akis = Gtk.FlowBox()
+            self.yl_akis.set_selection_mode(Gtk.SelectionMode.NONE)
+            self.yl_akis.set_homogeneous(True)
+            self.yl_akis.set_max_children_per_line(YOKLAMA_SUTUN_EN_COK)
+            self.yl_akis.set_row_spacing(12)
+            self.yl_akis.set_column_spacing(12)
+            self.yl_akis.set_valign(Gtk.Align.START)
+            self.yl_kaydirma = Gtk.ScrolledWindow()
+            self.yl_kaydirma.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            self.yl_kaydirma.set_shadow_type(Gtk.ShadowType.NONE)
+            self.yl_kaydirma.add(self.yl_akis)
+
+            secim = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            self.yl_sube_baslik = Gtk.Label(label="Şube")
+            self.yl_sube_baslik.set_name("yoklama-adim")
+            self.yl_sube_baslik.set_xalign(0)
+            self.yl_subeler = Gtk.FlowBox()
+            self.yl_dersler = Gtk.FlowBox()
+            for akis in (self.yl_subeler, self.yl_dersler):
+                akis.set_selection_mode(Gtk.SelectionMode.NONE)
+                akis.set_homogeneous(True)
+                akis.set_max_children_per_line(8)
+                akis.set_row_spacing(10)
+                akis.set_column_spacing(10)
+                akis.set_valign(Gtk.Align.START)
+            ders_baslik = Gtk.Label(label="Ders saati")
+            ders_baslik.set_name("yoklama-adim")
+            ders_baslik.set_xalign(0)
+            for parca in (self.yl_sube_baslik, self.yl_subeler, ders_baslik, self.yl_dersler):
+                secim.pack_start(parca, False, False, 0)
+            self.yl_secim = Gtk.ScrolledWindow()
+            self.yl_secim.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            self.yl_secim.set_shadow_type(Gtk.ShadowType.NONE)
+            self.yl_secim.add(secim)
+
+            alt = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+            self.yl_sayi = Gtk.Label(label="")
+            self.yl_sayi.set_name("yoklama-sayi")
+            self.yl_sayi.set_xalign(0)
+            self.yl_kaydet = self._dugme("Kaydet", lambda: self.baglanti.gonder({"tur": "yoklama_kaydet"}), ana=True, en=300, boy=90)
+            vazgec = self._dugme("Vazgeç", lambda: self.baglanti.gonder({"tur": "yoklama_kapat"}), en=240, boy=90)
+            alt.pack_start(self.yl_sayi, True, True, 0)
+            alt.pack_end(self.yl_kaydet, False, False, 0)
+            alt.pack_end(vazgec, False, False, 0)
+
+            govde.pack_start(ust, False, False, 0)
+            govde.pack_start(self.yl_bilgi, False, False, 0)
+            govde.pack_start(self.yl_hata, False, False, 0)
+            govde.pack_start(self.yl_kaydirma, True, True, 4)
+            govde.pack_start(self.yl_secim, True, True, 4)
+            govde.pack_end(alt, False, False, 0)
+            return self._sayfa_dolu(govde)
+
+        def _yoklama_onay_sayfasi(self):
+            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=24)
+            self.yo_ust = self._etiket("yoklama-bilgi")
+            self.yo_baslik = self._etiket("yoklama-baslik")
+            self.yo_liste = self._etiket("yoklama-onay-liste")
+            self.yo_liste.set_max_width_chars(60)
+            self.yo_hata = self._etiket("yoklama-hata")
+            self.yo_hata.set_max_width_chars(50)
+            dugmeler = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+            dugmeler.set_halign(Gtk.Align.CENTER)
+            self.yo_geri = self._dugme("Geri", lambda: self.baglanti.gonder({"tur": "yoklama_geri"}), en=300, boy=96)
+            self.yo_onayla = self._dugme("Onayla", lambda: self.baglanti.gonder({"tur": "yoklama_onayla"}), ana=True, en=300, boy=96)
+            dugmeler.pack_start(self.yo_geri, False, False, 0)
+            dugmeler.pack_start(self.yo_onayla, False, False, 0)
+            for parca in (self.yo_ust, self.yo_baslik, self.yo_liste, self.yo_hata):
+                govde.pack_start(parca, False, False, 0)
+            govde.pack_start(dugmeler, False, False, 16)
+            return self._sayfa(govde)
+
+        def _yoklama_ileti_sayfasi(self):
+            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=40)
+            self.yi_metin = self._etiket("yoklama-ileti")
+            self.yi_metin.set_max_width_chars(40)
+            self.yi_kapat = self._dugme("Kapat", lambda: self.baglanti.gonder({"tur": "yoklama_kapat"}), en=300, boy=90)
+            self.yi_kapat.set_halign(Gtk.Align.CENTER)
+            govde.pack_start(self.yi_metin, False, False, 0)
+            govde.pack_start(self.yi_kapat, False, False, 0)
+            return self._sayfa(govde)
+
         def _pencere_sinifi(self, sinif):
             """Acil/tatbikat rengini pencereye verir; başka sayfaya geçince kaldırır."""
             if sinif == self.pencere_sinifi:
@@ -987,6 +1247,230 @@ def calistir() -> int:
                     ara.set_size_request(56, -1)
                     self.sg_liste.attach(ara, kolon * 5 + 4, 0, 1, 1)
             self.sg_liste.show_all()
+
+        # ---- ders yoklaması (A5) ------------------------------------------------------------
+        def _tus_basildi(self, _pencere, olay):
+            """Fiziksel klavye: yalnız yoklama PIN sayfasında rakam, BackSpace (Sil), Enter (Tamam)."""
+            if self.yigin.get_visible_child_name() != "yoklama-pin" or not self.yp_tuslar.get_sensitive():
+                return False
+            ad = Gdk.keyval_name(olay.keyval) or ""
+            ad = ad[3:] if ad.startswith("KP_") else ad
+            if len(ad) == 1 and ad.isdigit():
+                self._yoklama_tus(ad)
+            elif ad == "BackSpace":
+                self._yoklama_tus("Sil")
+            elif ad in ("Return", "Enter"):
+                self._yoklama_tus("Tamam")
+            else:
+                return False
+            return True
+
+        def _yoklama_tus(self, tus):
+            if tus == "Sil":
+                if self.yk_adim == "pin" and not self.yk_pin:
+                    self.yk_adim = "kod"  # boş PIN'de Sil: öğretmen kodunu düzeltmeye dön
+                elif self.yk_adim == "pin":
+                    self.yk_pin = self.yk_pin[:-1]
+                else:
+                    self.yk_kod = self.yk_kod[:-1]
+            elif tus == "Tamam":
+                if self.yk_adim == "kod" and len(self.yk_kod) == YOKLAMA_KOD_HANE:
+                    self.yk_adim = "pin"
+                elif self.yk_adim == "pin" and len(self.yk_pin) == YOKLAMA_PIN_HANE:
+                    # PIN servise iletilir ve sunucuda doğrulanır; burada saklanmaz.
+                    self.baglanti.gonder({"tur": "yoklama_pin", "kod": self.yk_kod, "pin": self.yk_pin})
+                    self.yk_pin = ""
+            elif self.yk_adim == "kod":
+                self.yk_kod = (self.yk_kod + tus)[:YOKLAMA_KOD_HANE]
+                if len(self.yk_kod) == YOKLAMA_KOD_HANE:
+                    self.yk_adim = "pin"  # üçüncü haneden sonra PIN'e geçilir
+            elif len(self.yk_pin) < YOKLAMA_PIN_HANE:
+                self.yk_pin += tus
+            self._yoklama_pin_yaz()
+
+        def _yoklama_pin_yaz(self):
+            if self.yk_adim == "kod":
+                self.yp_adim.set_text("Öğretmen kodunuz (3 hane)")
+                # Öğretmen kodu gizli değildir; PIN yalnız nokta olarak görünür.
+                self.yp_kod.set_text(self.yk_kod + "_" * (YOKLAMA_KOD_HANE - len(self.yk_kod)))
+            else:
+                self.yp_adim.set_text(f"PIN (6 hane) · öğretmen kodu {self.yk_kod}")
+                self.yp_kod.set_text("●" * len(self.yk_pin) + "○" * (YOKLAMA_PIN_HANE - len(self.yk_pin)))
+
+        def _yoklama_liste_temizle(self):
+            """Öğrenci düğmeleri yok edilir: etiketler pencerede ve bellekte kalmaz."""
+            for cocuk in self.yl_akis.get_children():
+                cocuk.destroy()
+            self.yk_dugmeler = {}
+            self.yk_liste_imza = None
+
+        def _yoklama_temizle(self):
+            self._yoklama_liste_temizle()
+            for akis in (self.yl_subeler, self.yl_dersler):
+                for cocuk in akis.get_children():
+                    cocuk.destroy()
+            self.yk_secim_imza = None
+            self.yk_oturum = None
+            self.yk_adim, self.yk_kod, self.yk_pin = "kod", "", ""
+            self.yp_kod.set_text("")
+            # Onay ve liste sayfasındaki etiketler (yok yazılanların maskeli adları) de bellekte kalmaz.
+            for etiket in (self.yo_ust, self.yo_baslik, self.yo_liste, self.yl_ust, self.yl_bilgi):
+                etiket.set_text("")
+
+        def _ogrenci_etiketi(self, dugme, metin):
+            """Düğme metni; set_label etiketi yeniden kurduğu için ortalama her seferinde yeniden verilir."""
+            dugme.set_label(metin)
+            baglam = dugme.get_style_context()
+            if ogrenci_uzun_mu(metin.split("\n", 1)[0]):
+                baglam.add_class("uzun")
+            else:
+                baglam.remove_class("uzun")
+            etiket = dugme.get_child()
+            if isinstance(etiket, Gtk.Label):
+                etiket.set_justify(Gtk.Justification.CENTER)
+                etiket.set_ellipsize(Pango.EllipsizeMode.END)  # satır satır: ek ve "YOK" ikinci satırda kesilmez
+
+        def _ogrenci_degisti(self, dugme, oge):
+            if self.yk_guncelleniyor:
+                return
+            self._ogrenci_etiketi(dugme, ogrenci_dugme_metni(oge["etiket"], dugme.get_active()))
+            self.baglanti.gonder({"tur": "yoklama_isaret", "id": oge["id"]})
+            yok = sum(1 for d, _ in self.yk_dugmeler.values() if d.get_active())
+            self.yl_sayi.set_text(yoklama_sayi_metni(yok, len(self.yk_dugmeler)))
+
+        def _yoklama_izgara_kur(self, yoklama, imza):
+            self._yoklama_liste_temizle()
+            yok = set(yoklama.get("yok") or [])
+            self.yl_akis.set_min_children_per_line(yoklama_sutun(self._geometri()[0]))
+            for oge in yoklama.get("ogrenciler") or []:
+                isaretli = oge["id"] in yok
+                dugme = Gtk.ToggleButton(label=ogrenci_dugme_metni(oge["etiket"], isaretli))
+                dugme.set_name("ogrenci")
+                dugme.set_can_focus(False)
+                dugme.set_size_request(YOKLAMA_DUGME_EN, YOKLAMA_DUGME_BOY)
+                dugme.set_active(isaretli)
+                self._ogrenci_etiketi(dugme, ogrenci_dugme_metni(oge["etiket"], isaretli))
+                dugme.connect("toggled", self._ogrenci_degisti, oge)
+                self.yl_akis.add(dugme)
+                self.yk_dugmeler[oge["id"]] = (dugme, oge["etiket"])
+            self.yl_akis.show_all()  # yalnız akışın içi (yığın sayfaları değil)
+            self.yk_liste_imza = imza
+
+        def _yoklama_isaretleri_esitle(self, yok: set):
+            """Servisin işaretleriyle düğmeleri eşitler; ızgara yeniden kurulmaz."""
+            self.yk_guncelleniyor = True
+            try:
+                for kimlik, (dugme, etiket) in self.yk_dugmeler.items():
+                    if dugme.get_active() != (kimlik in yok):
+                        dugme.set_active(kimlik in yok)
+                        self._ogrenci_etiketi(dugme, ogrenci_dugme_metni(etiket, kimlik in yok))
+            finally:
+                self.yk_guncelleniyor = False
+
+        def _yoklama_secim_kur(self, yoklama):
+            subeler = yoklama.get("subeler") or []
+            dersler = yoklama.get("ders_saatleri") or []
+            sube, ders_no, istek = yoklama.get("sube"), yoklama.get("ders_no"), bool(yoklama.get("istek"))
+            imza = (yoklama.get("oturum"), sube, ders_no, istek, tuple(subeler),
+                    tuple((d.get("ders_no"), d.get("secilebilir"), d.get("metin")) for d in dersler))  # fmt: skip
+            if imza == self.yk_secim_imza:
+                return
+            self.yk_secim_imza = imza
+            for akis in (self.yl_subeler, self.yl_dersler):
+                for cocuk in akis.get_children():
+                    cocuk.destroy()
+            self.yl_sube_baslik.set_text("Şube" if subeler else "Şube · öğrenci listesi yüklenmemiş; okul idaresine bildirin.")
+            for s in subeler:
+                dugme = self._dugme(s, lambda s=s: self.baglanti.gonder({"tur": "yoklama_sec", "sube": s}), ana=s == sube, en=200, boy=80)
+                if s != sube:
+                    dugme.set_name("secim")
+                dugme.set_sensitive(not istek)
+                self.yl_subeler.add(dugme)
+            for d in dersler:
+                no = d.get("ders_no")
+                dugme = self._dugme(str(d.get("metin") or f"{no}. ders"),
+                                    lambda no=no: self.baglanti.gonder({"tur": "yoklama_sec", "sube": sube, "ders_no": no}),
+                                    ana=no == ders_no, en=330, boy=80)  # fmt: skip
+                if no != ders_no:
+                    dugme.set_name("secim")
+                dugme.set_sensitive(bool(sube) and bool(d.get("secilebilir")) and not istek)
+                self.yl_dersler.add(dugme)
+            self.yl_subeler.show_all()
+            self.yl_dersler.show_all()
+
+        def _yoklama_liste_ciz(self, yoklama):
+            istek = bool(yoklama.get("istek"))
+            self.yl_ust.set_text(yoklama_ust_metni(yoklama))
+            kalan = yoklama.get("kalan")
+            self.yl_kalan.set_text(f"Kalan {sayac_metni(kalan)}" if kalan is not None else "")
+            hata = yoklama.get("hata") or ("Süre dolmak üzere; kaydedin." if yoklama.get("uyari") else "")
+            self.yl_hata.set_text(hata)
+            self.yl_hata.set_visible(bool(hata))
+            liste_yuklu = bool(yoklama.get("liste_yuklu"))
+            if liste_yuklu:
+                ogrenciler = yoklama.get("ogrenciler") or []
+                imza = (yoklama.get("oturum"), yoklama.get("sube"), yoklama.get("ders_no"), tuple(o.get("id") for o in ogrenciler))
+                if imza != self.yk_liste_imza:
+                    self._yoklama_izgara_kur(yoklama, imza)
+                else:
+                    self._yoklama_isaretleri_esitle(set(yoklama.get("yok") or []))
+                bilgi = [yoklama.get("liste_ileti") or ("Yalnız derste olmayan öğrencilere dokunun; dokunulmayanlar “var” sayılır."
+                                                         if ogrenciler else "")]  # fmt: skip
+                if yoklama.get("baska_yoklama"):
+                    bilgi.append("Bu ders saatinde başka bir yoklama da var; ikisi birleştirilir.")
+                self.yl_bilgi.set_text("  ".join(p for p in bilgi if p))
+                self.yl_sayi.set_text(yoklama_sayi_metni(len(yoklama.get("yok") or []), len(ogrenciler)) if ogrenciler else "")
+                self.yl_kaydet.set_sensitive(bool(ogrenciler) and not istek)
+            else:
+                self._yoklama_liste_temizle()
+                self._yoklama_secim_kur(yoklama)
+                self.yl_bilgi.set_text("Liste yükleniyor…" if istek else "Şubeyi ve ders saatini seçin.")
+                self.yl_sayi.set_text("")
+                self.yl_kaydet.set_sensitive(False)
+            self.yl_bilgi.set_visible(bool(self.yl_bilgi.get_text()))
+            self.yl_kaydirma.set_visible(liste_yuklu)
+            self.yl_secim.set_visible(not liste_yuklu)
+            self.yl_degistir.set_visible(liste_yuklu)
+            self.yl_degistir.set_sensitive(not istek)
+
+        def _yoklama_ciz(self, yoklama):
+            asama = yoklama.get("asama")
+            if yoklama.get("oturum") != self.yk_oturum:
+                self._yoklama_temizle()
+                self.yk_oturum = yoklama.get("oturum")
+            if asama in ("yukleniyor", "ileti"):
+                self._yoklama_liste_temizle()
+                self.yi_metin.set_text(yoklama.get("ileti") or "Yoklama açılıyor…")
+                self.yi_kapat.set_label("Kapat" if asama == "ileti" else "Vazgeç")
+                self.yigin.set_visible_child_name("yoklama-ileti")
+            elif asama == "pin":
+                self._yoklama_liste_temizle()
+                bilgi = " · ".join(p for p in (yoklama.get("tarih_yazi"), yoklama.get("ders_metni")) if p)
+                self.yp_bilgi.set_text(bilgi or "Ders yoklaması")
+                self.yp_sube.set_text(f"Şube: {yoklama['sube']}" if yoklama.get("sube") else "Şube ve ders saati PIN'den sonra seçilir.")
+                hata = yoklama_pin_hatasi(yoklama)
+                self.yp_hata.set_text(hata)
+                self.yp_hata.set_visible(bool(hata))
+                self.yp_tuslar.set_sensitive(not yoklama.get("istek") and not int(yoklama.get("bekleme") or 0))
+                self._yoklama_pin_yaz()
+                self.yigin.set_visible_child_name("yoklama-pin")
+            elif asama == "liste":
+                self._yoklama_liste_ciz(yoklama)
+                self.yigin.set_visible_child_name("yoklama-liste")
+            else:  # onay | kaydediliyor
+                yok = set(yoklama.get("yok") or [])
+                baslik, liste = yoklama_onay_metni([o["etiket"] for o in yoklama.get("ogrenciler") or [] if o.get("id") in yok])
+                self.yo_ust.set_text(yoklama_ust_metni(yoklama))
+                self.yo_baslik.set_text(baslik)
+                self.yo_liste.set_text(liste)
+                self.yo_liste.set_visible(bool(liste))
+                kaydediliyor = asama == "kaydediliyor"
+                hata = "Kaydediliyor…" if kaydediliyor else yoklama.get("hata") or ""
+                self.yo_hata.set_text(hata)
+                self.yo_hata.set_visible(bool(hata))
+                self.yo_geri.set_sensitive(not kaydediliyor)
+                self.yo_onayla.set_sensitive(not kaydediliyor)
+                self.yigin.set_visible_child_name("yoklama-onay")
 
         def _sinav_alt_ciz(self):
             durum = self.durum or {}
@@ -1173,6 +1657,18 @@ def calistir() -> int:
                         gozetmen["bekleme"] = int(gozetmen["bekleme"]) - 1
                         if self.gozetmen_kod_acik and gozetmen["bekleme"] % 60 in (0, 59):
                             self._ciz()
+            yoklama = self.durum.get("yoklama") if self.durum and isinstance(self.durum.get("yoklama"), dict) else None
+            if yoklama:
+                # Kalan süre ve PIN beklemesi yerelde azalır; kaynak her durum iletisinde servisten gelir.
+                if yoklama.get("kalan") is not None:
+                    yoklama["kalan"] = max(0, int(yoklama["kalan"]) - 1)
+                    self.yl_kalan.set_text(f"Kalan {sayac_metni(yoklama['kalan'])}")
+                    if yoklama["kalan"] <= 60 and not yoklama.get("uyari"):
+                        yoklama["uyari"] = True
+                        self._ciz()
+                if int(yoklama.get("bekleme") or 0) > 0:
+                    yoklama["bekleme"] = int(yoklama["bekleme"]) - 1
+                    self._ciz()
             if self.gozetmen_kod_acik and time.time() - self.gozetmen_dokunma > GOZETMEN_KOD_ZAMAN_ASIMI_SN:
                 self._gozetmen_vazgec()
             if self.gorunur:
@@ -1199,8 +1695,12 @@ def calistir() -> int:
             gozetmen_sayfasi = bool(sinav) and (bool(gozetmen.get("durum")) or self.gozetmen_kod_acik)
             if not gozetmen_sayfasi and self.izgara_oturum is not None:
                 self._izgara_temizle()
+            # Ders yoklaması (A5). Eski servis "yoklama" alanını göndermez: yoklama yok sayılır.
+            yoklama = durum.get("yoklama") if isinstance(durum.get("yoklama"), dict) else None
+            if not yoklama and self.yk_oturum is not None:
+                self._yoklama_temizle()
             self._bantlari_ciz(durum)
-            # Öncelik (ortak sözlük §5.5): acil > kapatma > gozetmen-* > duyuru > sinav-giris/sinav > kilit > gizli.
+            # Öncelik (ortak sözlük §5.5): acil > kapatma > gozetmen-* > yoklama-* > duyuru > sinav-giris/sinav > kilit > gizli.
             if acil:
                 tatbikat = acil.get("tur") == "tatbikat"
                 self.acil_bant.set_text(ACIL_BANT["tatbikat" if tatbikat else "acil"])
@@ -1232,6 +1732,11 @@ def calistir() -> int:
                 self._goster(kilit=False)
             elif gozetmen_sayfasi:
                 self._gozetmen_ciz(sinav, gozetmen)
+            elif yoklama:
+                # Öğretmenin başlattığı kısa etkileşim: duyuru serviste bekler, yoklama kapanınca görünür.
+                # Klavye kilidi yalnız tahta kilitliyse (yoklama kilidi açmaz).
+                self._yoklama_ciz(yoklama)
+                self._goster(kilit=bool(durum.get("kilitli")))
             elif duyuru:
                 self.duyuru_baslik.set_text(duyuru.get("baslik") or "DUYURU")
                 self._duyuru_metni_yaz(duyuru.get("metin") or "")
@@ -1261,6 +1766,7 @@ def calistir() -> int:
                 self.program_bilgi.set_visible(bool(program))
                 self.kod_kutusu.set_visible(kod_var and not bekleme and not cevrimdisi)
                 self.cevrimdisi_dugmesi.set_visible(cevrimdisi)
+                self.kilit_yoklama.set_visible(bool(durum.get("yoklama_etkin")) and not cevrimdisi)
                 self.yigin.set_visible_child_name("kilit")
                 self._goster(kilit=True)
             else:
@@ -1304,6 +1810,7 @@ def calistir() -> int:
             self.gk_kod.set_text("")
             self._izgara_temizle()
             self._liste_kur([])
+            self._yoklama_temizle()
 
         def _klavye_kilitle(self):
             """Klavye ve fareyi bu pencereye bağlar (X11'de Alt+Tab'ı keser)."""

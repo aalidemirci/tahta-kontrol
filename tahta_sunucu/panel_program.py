@@ -145,6 +145,22 @@ def govde_uzunlugu(istek: Request) -> int | None:
     return uzunluk if uzunluk >= 0 else None
 
 
+async def bellekte_form(istek: Request, sinir: int, *, max_files: int = 1, max_fields: int = 3):
+    """Kişisel veri taşıyan yüklemeyi diske taşırmadan ayrıştırır.
+
+    Starlette dosya parçasını 1 MB'tan sonra %TEMP% altında geçici dosyaya taşır (spool_max_size);
+    öğrenci listesi orada iz bırakmasın diye sınır bu ayrıştırıcı için gövde sınırına çekilir.
+    Çağıran gövde boyunu önce `govde_uzunlugu` ile `sinir`e karşı denetlemiş olmalıdır.
+    Yalnız multipart/form-data kabul eder; başkası ValueError."""
+    from starlette.formparsers import MultiPartParser
+
+    if not istek.headers.get("content-type", "").lower().startswith("multipart/form-data"):
+        raise ValueError("Dosya okunamadı.")
+    ayristirici = MultiPartParser(istek.headers, istek.stream(), max_files=max_files, max_fields=max_fields)
+    ayristirici.spool_max_size = sinir + 1
+    return await ayristirici.parse()
+
+
 def tahta_program_baglami(b, tahta) -> dict:
     """tahta.html'in `program` bağlamı (bkz. modül sonundaki sözleşme)."""
     saatler = program.ders_saatleri_oku(b)

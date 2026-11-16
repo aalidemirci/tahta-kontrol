@@ -747,3 +747,98 @@
 @layer bilesen {
   .salon-tablo .islemler :where(button, .dugme) { white-space: nowrap; }
 }
+/* ---- 0.6.0 (Aşama 5): ders yoklaması — günlük ızgara, sayı kutuları, icmal ve PIN pusulası yazdırma.
+        Yalnız tema ve durum belirteçleri; yazdırmada siyah-beyaz. ---- */
+@layer bilesen {
+  .kvkk-bant { font-size: .875rem; }
+  .sayi-kutulari { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; gap: .75rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
+  .sayi-kutusu { display: grid; gap: .15rem; padding: .75rem 1rem; background: var(--yuzey); border: 1px solid var(--cizgi);
+    border-inline-start: 4px solid var(--d, var(--cizgi)); border-radius: .75rem; }
+  .sayi-kutusu .deger { font-size: 1.625rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .sayi-kutusu .deger small { font-size: 1rem; font-weight: 600; color: var(--soluk); }
+  .sayi-kutusu .etiket { color: var(--soluk); font-size: .8125rem; }
+  .sayi-kutusu[data-durum] .deger { color: var(--d); }
+  .tarih-sec label { margin: 0; }
+  :where(button, .dugme).kucuk { min-block-size: 1.75rem; padding: .15rem .5rem; font-size: .8125rem; }
+
+  /* Günlük ızgara: dar ekranda da tablo kalır, yatay kayar (genel tablo-kap blok düzenine girmez). */
+  .yk-izgara-kap { overflow: auto; background: var(--yuzey); border: 1px solid var(--cizgi); border-radius: .75rem; margin-block-end: .5rem; }
+  .yoklama-izgara { inline-size: auto; min-inline-size: 100%; }
+  .yoklama-izgara :is(th, td) { padding: .4rem .5rem; white-space: nowrap; vertical-align: middle; }
+  .yoklama-izgara thead th { text-align: center; }
+  .yoklama-izgara thead th abbr { text-decoration: none; }
+  .yoklama-izgara tbody th { position: sticky; inset-inline-start: 0; background: var(--yuzey); z-index: 1; }
+  .yoklama-izgara td.yk-hucre { text-align: center; min-inline-size: 3.5rem; }
+  .yoklama-izgara .rozet { justify-content: center; min-inline-size: 2.75rem; padding-block: .3rem; }
+  .yoklama-izgara .birlesik { font-weight: 500; opacity: .8; margin-inline-start: .15rem; }
+  .yoklama-izgara .bos-hucre { color: var(--soluk); }
+  .yoklama-izgara tr.islendi > th { box-shadow: inset 4px 0 0 var(--d-acik); }
+  .eokul-hucre { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .75rem; }
+  .islendi-formu { display: inline-flex; align-items: center; gap: .4rem; }
+  .islendi-formu label.satir { margin: 0; }
+  .eokul-hucre .not:empty { display: none; }
+  .yk-lejant { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-block-end: 1rem; }
+  details.kutu > summary { cursor: pointer; }
+  details.kutu > summary h2 { font-size: 1.125rem; }
+  tr.pasif > :is(th, td) { color: var(--soluk); }
+  .ogretmen-tablo .islemler { min-inline-size: 14rem; }
+  .ogretmen-tablo details.acilir[open] { flex-basis: 100%; }
+  .alan-genis { inline-size: min(100%, 36rem); }
+  .tehlike-kutu { border-color: color-mix(in oklab, var(--d-sorun) 40%, var(--cizgi)); }
+
+  /* İcmal (A4 sınav icmaliyle aynı aile) */
+  .icmal-sube { margin-block-end: 2rem; }
+  .icmal-ust { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .5rem 1rem;
+    border-block-end: 2px solid var(--metin); padding-block-end: .35rem; }
+  .icmal-ust h2 { margin: 0; letter-spacing: .04em; font-size: 1.125rem; }
+  .icmal-tarih { font-weight: 650; }
+  .icmal-meta { display: flex; flex-wrap: wrap; gap: .25rem 1.5rem; margin-block: .5rem; font-size: .9375rem; }
+  .icmal-kap { max-block-size: none; }
+  .yk-icmal-tablo .isaret-hucre { text-align: center; inline-size: 2rem; font-family: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; }
+  .yk-icmal-tablo .yok-isaret { font-weight: 700; color: var(--d-sorun); }
+  .yk-icmal-tablo .alinmadi-isaret { color: var(--soluk); }
+  .imza-satiri { margin-block: 1.5rem .5rem; display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: baseline; }
+  .cizgi-alan.kisa { inline-size: 8rem; }
+  .icmal-metni { max-block-size: 20rem; overflow: auto; padding: .75rem 1rem; background: var(--yuzey2); border-radius: .5rem; white-space: pre; }
+
+  /* PIN pusulası (gözetmen fişi ailesi) */
+  .pusula .pusula-kod, .pusula .pusula-pin { font-family: "Cascadia Mono", Consolas, monospace; font-weight: 700; line-height: 1.1; }
+  .pusula .pusula-kod { font-size: 1.5rem; letter-spacing: .2ch; }
+  .pusula .pusula-pin { font-size: 2.25rem; letter-spacing: .25ch; padding: .25rem .6rem; justify-self: start;
+    border: 1px solid var(--cizgi); border-radius: .5rem; background: var(--yuzey2); }
+
+  @media print {
+    .icmal-sube { break-after: page; margin: 0; }
+    .icmal-sube:last-of-type { break-after: auto; }
+    .icmal-ust { border-color: #000; }
+    .yk-icmal-tablo :is(th, td) { padding: .15rem .3rem; border-color: #999; }
+    .yk-icmal-tablo .yok-isaret { color: #000; }
+    .yk-icmal-tablo .alinmadi-isaret { color: #000; }
+    .icmal-metni { display: none; }
+    /* 66 mm'ye 7 satır sığsın: güvenlik notu kesilmemeli (overflow: hidden gözetmen fişinden gelir).
+       Uzun adda kutu büyür (min-block-size), bölünmez. */
+    .pusulalar .fis { block-size: auto; min-block-size: 66mm; overflow: visible; gap: .5mm; padding: 4mm 5mm; break-inside: avoid; }
+    .pusulalar .fis :is(.fis-etiket, .fis-salon, .not) { margin-block-start: 0; }
+    .pusulalar .fis .fis-okul { font-size: 9pt; }
+    .pusulalar .fis .fis-salon { font-size: 10.5pt; line-height: 1.25; }
+    .pusulalar .fis .fis-etiket { font-size: 7.5pt; }
+    .pusula .pusula-kod { font-size: 14pt; }
+    .pusula .pusula-pin { border-color: #000; background: none; color: #000; font-size: 20pt; padding: .5mm 2mm; }
+    .pusula .not { font-size: 8pt; line-height: 1.3; color: #000; }
+    .pusulalar .fis:nth-child(6n) { break-after: auto; }
+    .pusulalar .fis:nth-child(8n) { break-after: page; }
+  }
+  @media (forced-colors: active) {
+    .sayi-kutusu { border: 1px solid CanvasText; }
+  }
+}
+@layer bilesen {
+  .arac-cubugu .tarih-sec { flex-wrap: nowrap; }
+  .arac-cubugu .tarih-sec :is(select, input) { inline-size: auto; min-inline-size: 0; }
+}
+@layer bilesen {
+  /* Yarım genişlikte kısa listeler (öğrenci listesi sekmesi): dar kutuda da tablo kalır, dikey kayar. */
+  .liste-kap { overflow: auto; max-block-size: min(70vh, 36rem); border: 1px solid var(--cizgi); border-radius: .5rem; }
+  .liste-kap thead th { background: var(--yuzey2); }
+}

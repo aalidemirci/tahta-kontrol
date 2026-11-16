@@ -52,7 +52,7 @@ def yetenekler(tahta) -> list[str]:
 
 def ekran_var(durum: dict) -> bool:
     ekranlar = durum.get("ekranlar") if isinstance(durum, dict) else None
-    return any(isinstance(e, dict) and e.get("arayuz") not in (None, "yok") for e in (ekranlar or []))
+    return any(isinstance(e, dict) and e.get("arayuz") not in (None, "yok", "komut") for e in (ekranlar or []))
 
 
 def baslangic_durumu(tahta, simdi: int) -> str:

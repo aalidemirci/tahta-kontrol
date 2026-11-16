@@ -1,0 +1,83 @@
+{% extends "taban.html" %}
+{% block baslik %}Öğretmenler ve PIN · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Öğretmenler ve yoklama PIN'leri (Aşama 5 §6.5). Bağlam: ogretmenler (yoklama.ogretmen_listesi), yonetici, pin_yok_sayisi.
+   Yeni PIN ve kilit açma iki role açık; ekleme, düzenleme, pasifleştirme ve toplu PIN yalnız yönetici.
+   PIN düz metni bu sayfada yoktur: yalnız POST yanıtındaki pusulada bir kez görünür. #}
+{% with bolum='ogretmenler', bas_baslik='Öğretmenler ve PIN',
+        bas_aciklama='Öğretmen tahtada 3 haneli öğretmen koduyla ve 6 haneli PIN ile yoklama alır. Öğretmen panel kullanıcısı değildir; PIN kilidi açmaz.' %}
+{% include "_yoklama_bas.html" %}
+{% endwith %}
+
+{% if yonetici %}
+<div class="arac-cubugu" role="toolbar" aria-label="Öğretmen işlemleri">
+  <form method="post" action="/ogretmenler" class="satir-ici">
+    <input type="hidden" name="eylem" value="toplu_pin">
+    <button class="ana" {% if not pin_yok_sayisi %}disabled{% endif %}><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>PIN'i olmayanların hepsine PIN üret ({{ pin_yok_sayisi }})</button>
+  </form>
+  <span class="not">Pusula sayfası yalnız bir kez açılır; yazdırıp kesin ve dağıtın.</span>
+</div>
+<details class="kutu"{% if not ogretmenler %} open{% endif %}>
+  <summary><h2 class="satir-ici">Öğretmen ekle</h2></summary>
+  <form method="post" action="/ogretmenler">
+    <input type="hidden" name="eylem" value="ekle">
+    <div class="satir-form">
+      <div><label for="og-ad">Ad</label><input id="og-ad" name="ad" required maxlength="60" autocomplete="off"></div>
+      <div><label for="og-soyad">Soyad</label><input id="og-soyad" name="soyad" maxlength="60" autocomplete="off"></div>
+      <div><label for="og-kod">Öğretmen kodu</label><input id="og-kod" name="kod" inputmode="numeric" pattern="[1-9][0-9]{2}" maxlength="3" class="alan-sayi" aria-describedby="og-kod-not" autocomplete="off"></div>
+      <div><button class="ana">Ekle</button></div>
+    </div>
+    <p class="not" id="og-kod-not">Kod boş bırakılırsa 101'den başlayan ilk boş kod verilir. Kod gizli değildir; PIN gizlidir.</p>
+  </form>
+</details>
+{% endif %}
+
+{% if ogretmenler %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="ogretmen-tablo">
+<table class="ogretmen-tablo">
+  <caption id="ogretmen-tablo">{{ ogretmenler | length }} öğretmen</caption>
+  <thead><tr><th scope="col">Ad Soyad</th><th scope="col">Kod</th><th scope="col">PIN</th><th scope="col" class="sayi-hucre">Son 24 sa hatalı</th><th scope="col">İşlemler</th></tr></thead>
+  <tbody>
+  {% for o in ogretmenler %}
+  <tr{% if not o.aktif %} class="pasif"{% endif %}>
+    <th scope="row" data-etiket="Ad Soyad">{{ o.ad_soyad }}{% if not o.aktif %} <span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-kapali"/></svg>Pasif</span>{% endif %}</th>
+    <td data-etiket="Kod" class="kod">{{ o.kod }}</td>
+    <td data-etiket="PIN">
+      {%- if o.pin_durumu == 'kilitli' %}<span class="rozet" data-durum="sorun"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>PIN kilitli</span>
+      {%- elif o.pin_durumu == 'var' %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>{{ o.pin_metni }}</span>
+      {%- else %}<span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>PIN yok</span>{% endif -%}
+    </td>
+    <td data-etiket="Son 24 sa hatalı" class="sayi-hucre">{{ o.hatali }}</td>
+    <td data-etiket="İşlemler">
+      <div class="islemler">
+        {% if o.kilitli %}<form method="post" action="/ogretmenler"><input type="hidden" name="eylem" value="pin_kilit_ac"><input type="hidden" name="id" value="{{ o.id }}"><button class="ana">Kilidi aç</button></form>{% endif %}
+        {% if o.aktif %}<form method="post" action="/ogretmenler"><input type="hidden" name="eylem" value="pin_uret"><input type="hidden" name="id" value="{{ o.id }}"><button>{{ 'Yeni PIN' if o.pin_durumu != 'yok' else 'PIN üret' }}</button></form>{% endif %}
+        {% if yonetici %}
+        <form method="post" action="/ogretmenler"><input type="hidden" name="eylem" value="durum"><input type="hidden" name="id" value="{{ o.id }}"><button{% if o.aktif %} class="tehlike"{% endif %}>{{ 'Pasifleştir' if o.aktif else 'Etkinleştir' }}</button></form>
+        <details class="acilir">
+          <summary class="dugme">Düzenle</summary>
+          <form method="post" action="/ogretmenler" class="acilir-ic">
+            <input type="hidden" name="eylem" value="duzenle"><input type="hidden" name="id" value="{{ o.id }}">
+            <div class="satir-form">
+              <div><label for="d-ad-{{ o.id }}">Ad</label><input id="d-ad-{{ o.id }}" name="ad" value="{{ o.ad }}" required maxlength="60"></div>
+              <div><label for="d-soyad-{{ o.id }}">Soyad</label><input id="d-soyad-{{ o.id }}" name="soyad" value="{{ o.soyad }}" maxlength="60"></div>
+              <div><label for="d-kod-{{ o.id }}">Kod</label><input id="d-kod-{{ o.id }}" name="kod" value="{{ o.kod }}" inputmode="numeric" pattern="[1-9][0-9]{2}" maxlength="3" class="alan-sayi"></div>
+              <div><button class="ana">Kaydet</button></div>
+            </div>
+            <p class="not">Kod değişirse öğretmenin açık yoklama oturumu kapanır.</p>
+          </form>
+        </details>
+        {% endif %}
+      </div>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="bos-not">Henüz öğretmen yok.{% if yonetici %} Yukarıdan ekleyin.{% else %} Öğretmenleri yönetici ekler.{% endif %}</p>
+{% endif %}
+<p class="not">PIN sunucuda yalnız geri çevrilemez özet olarak durur; tahtaya ne PIN ne özeti gider. Aynı öğretmen 24 saatte 10 kez hatalı PIN
+  girerse PIN kilitlenir ve yalnız buradan açılır ("Kilidi aç" aynı PIN'i geçerli kılar). Unutulan PIN için "Yeni PIN" üretin.</p>
+{% endblock %}

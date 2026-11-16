@@ -217,6 +217,13 @@ def _araclar():
     return BILGI, "bulunan: " + (", ".join(bulunan) or "hiçbiri")
 
 
+def _yoklama_kisayolu():
+    """Yalnız kısayol dosyasının varlığı denetlenir; yoklama verisi (liste, belirteç) OKUNMAZ."""
+    if os.path.exists(sistem.YOKLAMA_KISAYOLU):
+        return TAMAM, f"{sistem.YOKLAMA_KISAYOLU} kurulu (menüde \"Yoklama Al\")"
+    return UYARI, f"{sistem.YOKLAMA_KISAYOLU} yok; ajan paketini yeniden kurun"
+
+
 def _servis():
     if not os.path.isdir("/run/systemd/system"):
         return UYARI, "systemd çalışmıyor; ajan servis olarak başlatılamaz."
@@ -246,6 +253,7 @@ def topla(sunucu_makine: str = "", sunucu_port: int = 0, sunucu_saat=None, ekran
         ("Hesaplar", _hesaplar),
         ("Ekran yardımcısı", lambda: _ekran(ekranlar)),
         ("Sınav kipi", lambda: (BILGI, sinav_kipi or "yok")),
+        ("Yoklama kısayolu", _yoklama_kisayolu),
         ("Kapatma / yeniden başlatma yetkisi", _guc),
         ("Ağ", lambda: _ag(ag)),
         ("Uzaktan açma (Wake-on-LAN)", lambda: _wol(ag.get("arayuz"))),

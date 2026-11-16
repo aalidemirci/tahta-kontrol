@@ -145,7 +145,7 @@ def kimlik_mi(d) -> bool:
     """Sayısal kimlik (ya da kat) mı: işaretli rakam dizisi ve |değer| <= KIMLIK_EN_BUYUK."""
     s = str(d).strip()
     rakam = s[1:] if s.startswith("-") else s
-    return rakam.isdigit() and len(rakam) <= 10 and abs(int(s)) <= KIMLIK_EN_BUYUK
+    return metin.rakam_mi(rakam) and len(rakam) <= 10 and abs(int(s)) <= KIMLIK_EN_BUYUK
 
 
 def _tamsayilar(deger, ad: str) -> list[int]:

@@ -1,0 +1,56 @@
+{% extends "taban.html" %}
+{% block baslik %}Panelden yoklama · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Panelden yoklama (Aşama 5 §6.3). Bağlam: panel_yoklama.py SÖZLEŞME — tarihler, tarih, tarih_yazi, subeler, sube,
+   ders_saatleri, ders_no, ogretmenler, ogretmen_id, ogrenciler, yok (küme), baska_yoklama, adli_not.
+   Seçim GET ile (JS'siz çalışır), kayıt POST ile. Yalnız bugün ve son 7 gün. #}
+{% with bolum='gir', bas_baslik='Panelden yoklama',
+        bas_aciklama="Tahta çalışmıyorsa ya da öğretmen tahtadan alamadıysa kullanın. Kayıt \"panel\" kaynaklı görünür ve icmalde tahtadan alınanlarla birleşir." %}
+{% include "_yoklama_bas.html" %}
+{% endwith %}
+
+<form method="get" action="/yoklama/gir" class="kutu" aria-labelledby="secim-baslik" data-secim-formu="gir-formu">
+  <h2 id="secim-baslik">Ders</h2>
+  <div class="satir-form">
+    <div><label for="gir-tarih">Tarih</label>
+      <select id="gir-tarih" name="tarih">{% for t in tarihler %}<option value="{{ t.iso }}" {% if t.iso == tarih %}selected{% endif %}>{{ t.yazi }}</option>{% endfor %}</select></div>
+    <div><label for="gir-sube">Şube</label>
+      <select id="gir-sube" name="sube" required><option value="">Seçin</option>{% for s in subeler %}<option {% if s == sube %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+    <div><label for="gir-ders">Ders saati</label>
+      <select id="gir-ders" name="ders_no"><option value="">Seçin</option>{% for d in ders_saatleri %}<option value="{{ d.ders_no }}" {% if d.ders_no == ders_no %}selected{% endif %}>{{ d.metin }}</option>{% endfor %}</select></div>
+    <div><label for="gir-ogretmen">Öğretmen (isteğe bağlı)</label>
+      <select id="gir-ogretmen" name="ogretmen_id" class="alan-oto"><option value="">— (panel)</option>{% for o in ogretmenler %}<option value="{{ o.id }}" {% if o.id == ogretmen_id %}selected{% endif %}>{{ o.etiket }}</option>{% endfor %}</select></div>
+    <div><button>Listeyi getir</button></div>
+  </div>
+  {% if not subeler %}<p class="bant uyari"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Öğrenci listesi yüklenmemiş. <a href="/ogrenciler">Öğrenci listesi</a> sekmesinden yükleyin.</p>{% endif %}
+  {% if sube and not ders_no %}<p class="ipucu">Ders saatlerini {{ sube }} şubesinin devresine göre görmek için şubeyi seçip "Listeyi getir" deyin, sonra ders saatini seçin.</p>{% endif %}
+</form>
+
+{% if sube and ogrenciler %}
+<form method="post" action="/yoklama/gir" class="kutu" id="gir-formu" aria-labelledby="liste-baslik">
+  <input type="hidden" name="tarih" value="{{ tarih }}"><input type="hidden" name="sube" value="{{ sube }}">
+  <input type="hidden" name="ders_no" value="{{ ders_no or '' }}"><input type="hidden" name="ogretmen_id" value="{{ ogretmen_id or '' }}">
+  <h2 id="liste-baslik">{{ sube }}{% if ders_no %} · {{ ders_no }}. ders{% endif %} · {{ tarih_yazi }}</h2>
+  {% if baska_yoklama %}<p class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Bu ders saatinde başka bir yoklama da var (tahtadan ya da başka öğretmenden); icmalde birleştirilir.</p>{% endif %}
+  {% if yok %}<p class="ipucu">Bu ders saatinin önceki panel kaydındaki işaretler hazır geldi; kaydedince güncellenir.</p>{% endif %}
+  <p class="ipucu">Yalnız derste olmayanları işaretleyin; işaretsizler "var" sayılır.</p>
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="liste-baslik">
+  <table class="yoklama-tablo">
+    <thead><tr><th scope="col">No</th><th scope="col">Ad Soyad</th><th scope="col">Durum</th></tr></thead>
+    <tbody>
+    {% for o in ogrenciler %}
+    <tr><td data-etiket="No" class="kod">{{ o.okul_no }}</td><td data-etiket="Ad Soyad">{{ o.ad_soyad }}</td>
+      <td data-etiket="Durum"><label class="gelmedi-kutu"><input type="checkbox" name="yok" value="{{ o.id }}" {% if o.id in yok %}checked{% endif %}><span>Yok</span><span class="gizli"> ({{ o.ad_soyad }})</span></label></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="dugme-satiri"><button class="ana" {% if not ders_no %}disabled aria-describedby="ders-gerek"{% endif %}><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Kaydet{% if ders_no %} ({{ sube }} · {{ ders_no }}. ders){% endif %}</button>
+    <span class="not" data-sayac-yok aria-live="polite"></span></p>
+  <p class="bant uyari" data-secim-uyari hidden role="alert"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Yukarıdaki seçim değişti. Kaydetmeden önce "Listeyi getir"e basın; yoksa kayıt bu listedeki şube ve ders saatine yazılır.</p>
+  {% if not ders_no %}<p class="not" id="ders-gerek">Kaydetmek için yukarıdan ders saatini seçip "Listeyi getir" deyin.</p>{% endif %}
+</form>
+{% elif sube %}
+<p class="bos-not">{{ sube }} şubesinin öğrenci listesi yüklenmemiş.</p>
+{% endif %}
+{% endblock %}

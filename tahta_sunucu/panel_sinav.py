@@ -18,14 +18,14 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.datastructures import UploadFile
 
 from . import acil, ayar, guvenlik, metin, sinav, vt
-from .panel_program import govde_uzunlugu
+from .panel_program import bellekte_form, govde_uzunlugu
 
 gunluk = logging.getLogger("tahta-sunucu")
 
 
 def _tamsayi(deger, varsayilan=None):
     s = str(deger if deger is not None else "").strip()
-    return int(s) if s.isdigit() and len(s) <= 6 else varsayilan
+    return int(s) if metin.rakam_mi(s) and len(s) <= 6 else varsayilan
 
 
 def rapor_kunyesi(s) -> dict:
@@ -220,7 +220,7 @@ def kaydet(uygulama, y) -> None:
         if uzunluk > sinav.DOSYA_SINIRI + 64 * 1024:
             return y.yonlendir(donus, f"Dosya en çok {sinav.DOSYA_SINIRI // (1024 * 1024)} MB olabilir.", hata=True)
         try:
-            form = await istek.form(max_files=1, max_fields=3)
+            form = await bellekte_form(istek, sinav.DOSYA_SINIRI + 64 * 1024)
         except Exception:
             return y.yonlendir(donus, "Dosya okunamadı.", hata=True)
         try:

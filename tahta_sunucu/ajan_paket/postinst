@@ -4,6 +4,10 @@
 set -e
 # Onceki surumun derlenmis onbellegi yeni kodu golgelemesin.
 rm -rf /opt/tahta-kontrol/tahta_ajan/__pycache__
+# "Yoklama Al" kisayolu menude hemen gorunsun (arac yoksa sorun degil).
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q /usr/share/applications || true
+fi
 if [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
     systemctl enable tahta-ajan.service >/dev/null 2>&1 || true

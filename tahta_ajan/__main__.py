@@ -1,4 +1,4 @@
-"""Komut satırı: tahta-ajan servis | ekran | kaydol KOD | tani | durum"""
+"""Komut satırı: tahta-ajan servis | ekran | kaydol KOD | tani | durum | yoklama"""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ KULLANIM = """Tahta Kontrol ajanı {surum}
   tahta-ajan kaydol KOD    Tahtayı sunucuya kaydeder (kurulum betiği çağırır).
   tahta-ajan tani          Saha tanılamasını çalıştırıp ekrana yazar (sunucu gerekmez).
   tahta-ajan durum         Yapılandırmayı ve sunucu erişimini gösterir.
+  tahta-ajan yoklama       Ders yoklaması ekranını açar ("Yoklama Al" kısayolu bunu çağırır).
 """
 
 
@@ -79,6 +80,22 @@ def durum() -> int:
     return 0
 
 
+def yoklama() -> int:
+    """Servise yerel soketle "yoklama aç" der ve hemen kapanır (A5).
+
+    İlk ileti `arayuz: komut` ile kendini tanıtır: servis bu bağlantıya durum yayını (ekrandaki
+    liste dahil) göndermez ve onu ekran yardımcısı saymaz. Ekran yardımcı penceresinde açılır.
+    """
+    try:
+        with socket.create_connection(("127.0.0.1", ayar.YEREL_PORT), timeout=5) as soket:
+            for mesaj in ({"tur": "merhaba", "arayuz": "komut", "surum": __version__}, {"tur": "yoklama_ac"}):
+                soket.sendall((json.dumps(mesaj) + "\n").encode("utf-8"))
+    except OSError as hata:
+        print(f"Tahta Kontrol servisine ulaşılamadı: {hata}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     komut = argv[0] if argv else ""
@@ -106,6 +123,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if komut == "durum":
         return durum()
+    if komut == "yoklama":
+        return yoklama()
     if komut in ("--surum", "--version"):
         print(__version__)
         return 0

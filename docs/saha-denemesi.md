@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.5.0)
+# Saha denemesi kılavuzu (0.6.0)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -25,6 +25,10 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Program kilidinin süre dolunca sunucusuz açılması, kodla açma, yeniden başlatmada geri yüklenmemesi | Birim testleri (kapta süre beklenmedi) | Geçti |
 | Sınav kipi (0.5.0): uydurma R5 çizelgesinin içe aktarılması ve derslik adından eşleşme; giriş ekranında 34 ve 64 kişilik maskeli liste (64'te ilk 60 + "ve 4 kişi daha"); yanlış ve doğru gözetmen kodu; sınav başlamadan "Yoklama al"ın pasif olması ve başlayınca açılması; koltuk ızgarasında işaretleme ve kaydetme ("Yoklama kaydedildi: 3 öğrenci gelmedi"); 60'tan kalabalık salonda "Bu salonun yoklaması panelden alınır"; süre uzatmanın birkaç saniyede sayaca yansıması; sınav ekranının üstünde duyuru; sunucu kapalıyken 90 sn sonra "Kilidi aç" düğmesi ve düğmeyle sınav ekranının kalkması, sunucu dönünce geri gelmesi; panelden kip kaldırma; kilit ve kapatma ekranlarının bozulmadığı | Debian 12 kabı + sanal ekran (1920×1080), gerçek paket; dokunma `xdotool` ile | Çalıştı |
 | Sınavlar, sınav sayfası (canlı durum), salon yoklaması, gözetmen fişleri, icmal, onay pencereleri, panoda "Sınav sürüyor" rozeti ve sınavdaki tahtaya kilit açma ek onayı | Chromium (geliştirme bilgisayarı) | Çalıştı |
+| Ders yoklaması (0.6.0): gerçek paketle kurulan tahtada "Yoklama Al" kısayolunun (`tahta-ajan yoklama`) PIN sayfasını açması; PIN sonrası şube ve ders saati seçimi (zil saati yokken 1–12); 24 kişilik listede işaretleme ("Burak K. / YOK", "Yok: 3 · Mevcut: 21/24"), onay ve "Kaydedildi: 3 öğrenci yok"; kaydın panel ızgarasında "3 yok" görünmesi; kilit ekranında "Yoklama al" düğmesi; kilitli tahtada hatalı PIN iletisi; yoklama açıkken gelen duyurunun yoklamanın altında beklemesi, yoklama kapanınca görünmesi; `durum.json`'da liste ve belirteç olmaması; mevcut kilit, duyuru ve kapatma ekranlarının bozulmadığı | Debian 12 kabı + sanal ekran (1920×1080), gerçek paket; dokunmalar yerel iletiyle benzetildi (kapta `xdotool` yok) | Çalıştı |
+| Yoklama günlük görünüm (e-Okul kutusunun kendiliğinden kaydı), kayıt ayrıntısı ve silme onayı (gerekçesiz açılmaz), panelden yoklama, icmal ("Metni kopyala" pano izni yokken metni seçer), öğretmenler, öğrenci listesi, önizleme | Chromium (geliştirme bilgisayarı) | Çalıştı |
+| Gerçek e-Okul OOG01001R020 `.XLS` dosyası | — | Denenmedi |
+| İcmalin A4 kâğıda yazdırılması (şube başına sayfa) | — | Denenmedi |
 | Gerçek Kelebek çizelgesi (okulun Kelebek sürümüyle indirilen R5) | — | Denenmedi |
 | **Gerçek ETAP tahtası** | — | **Denenmedi** |
 | Kurulum dosyasının başka bir bilgisayara kurulması | — | Denenmedi |
@@ -160,6 +164,31 @@ olsun. Künyede saati 15–20 dk sonraya alın.
 | S16 | Tahtada `/var/lib/tahta-kontrol/durum.json` ve servis günlüğü (`journalctl -u tahta-ajan`) | Ad, maske, okul no, gözetmen kodu ya da belirteç yok | |
 | S17 | Kişisel veriyi şimdi sil | Sınav sayfasında yalnız sayılar kalır; icmalde "yalnız sayılar gösterilir" | |
 
+### 3.4 Ders yoklaması (0.6.0)
+
+Hazırlık: Ayarlar › Ders yoklaması etkin; Yoklama › Öğrenci listesi'ne e-Okul dosyası
+(dosya `saha/` klasöründe kalır, depoya girmez); Öğretmenler ve PIN'de bir deneme öğretmeni
+ve PIN pusulası; tahta sayfasında "Şube(ler)" alanı dolu.
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| Y1 | Okulun güncel `OOG01001R020.XLS` dosyasını yükle | Önizlemede şube ve öğrenci sayıları e-Okul dipnotlarıyla aynı; atlanan satır yok; T.C. sütunu varsa "okunmadı" uyarısı | |
+| Y2 | e-Okul'da raporun yeri (Öğrenci İşlemleri › Raporlar › OOG01001R020) | Güncel e-Okul'da aynı yerde; Excel çıktısı `.XLS` | |
+| Y3 | ETAP dokunmatik ekranda tuş takımı ve öğrenci düğmeleri | Tek dokunuşla doğru düğme; yanlış dokunma yok | |
+| Y4 | 40 öğrencilik şubede liste | Kaydırmasız ya da rahat kaydırma; etiketler arka sıradan okunur | |
+| Y5 | "Yoklama Al" kısayolu `ogretmen` hesabının menüsünde | Görünür ve açar; masaüstüne simge konabiliyor mu? | |
+| Y6 | Kilitli tahtada "Yoklama al" | Klavye kilidi sürer; yoklama sonrası kilit geri gelir | |
+| Y7 | Yoklama sırasında panelden duyuru | Yoklama üstte kalır; yoklama kapanınca duyuru kalan süresiyle görünür | |
+| Y8 | Yoklama açıkken ağ kablosunu çek, Onayla | "Kaydedilemedi; yeniden deneyin."; kablo takılınca yeniden Onayla başarılı | |
+| Y9 | Listede 3 dk dokunmadan bekle | Ekran sessizce kapanır, liste silinir | |
+| Y10 | İcmal metnini kopyalayıp e-Okul girişinde kullan | Girişi hızlandırıyor mu; biçim yeterli mi | |
+| Y11 | İcmali A4 yazdır | Şube başına bir sayfa; taşma yok; menü ve düğmeler basılmaz | |
+| Y12 | Aynı ders saatinde iki öğretmen (bölünmüş ders) | İcmal birleşimi doğru; ızgarada "×2" | |
+| Y13 | Aynı öğretmen kodu ile 10 hatalı PIN (farklı tahtalardan da) | Öğretmen kilitlenir ("PIN'iniz kilitlendi"); Öğretmenler sayfasında "PIN kilitli", Kilidi aç ile düzelir | |
+| Y14 | Sunucu kapalıyken "Yoklama Al" | "Sunucuya ulaşılamıyor. Bu dersin yoklamasını e-Okul'a doğrudan girin." 5 sn sonra kapanır | |
+| Y15 | Fiziksel klavyeden PIN | Rakamlar, Geri silme ve Enter tuş takımı gibi çalışır | |
+| Y16 | Tahtada `durum.json` ve `journalctl -u tahta-ajan` | Öğrenci adı, PIN, belirteç yok | |
+
 ## 4. Otomatik giriş denemesi (elle)
 
 Yazılım otomatik girişi ayarlamaz. Tanılama raporundaki "Giriş ekranı ve
@@ -212,7 +241,23 @@ ve güncellemeden sonra duruyor mu.
   - Sınav ekranının ETAP'ın pencere yöneticisinde EBA içeriği ya da tam ekran videonun
     üstüne çıkması (Debian 12 + openbox'ta çıktı).
   - Dayanaklar: KVKK md. 12 ve sınav kurallarındaki "ilk ve son 10 dakika" kuralı
-    doğrulanacaklar listesindedir (`docs/tasarim.md` §16); arayüzde atıf yoktur.
+    doğrulanacaklar listesindedir (`docs/tasarim.md` §17); arayüzde atıf yoktur.
+- Ders yoklaması (0.6.0):
+  - e-Okul OOG01001R020 `.XLS` çıktısının blok yapısı ve başlık biçimi ("10. Sınıf / A Şubesi",
+    "Öğrenci No", dipnotlar) yalnız komşu projenin kodundan ve uydurma matristen çıkarıldı;
+    gerçek dosyayla ve `xlrd` ile denenmedi. Menü yolu da doğrulanmadı.
+  - Windows kurucusunda `xlrd`'nin pakete girdiği (build.ps1 çalıştırılmadı).
+  - Öğrenci düğmeleri (260×96 px, 26 px yazı, 1920 genişlikte 6 sütun) ve tuş takımı (150×96 px)
+    ETAP dokunmatiğinde rahat; 40 kişide liste kaydırılır.
+  - Fiziksel klavye olayları kilitsiz tahtada da tam ekran pencereye gider (ETAP pencere yöneticisi).
+  - "Yoklama Al" kısayolu (`/usr/share/applications`) ETAP menüsünde Eğitim altında görünür;
+    `update-desktop-database` yoksa menü bir sonraki oturumda yenilenir.
+  - PIN'in sınıf önünde girilmesinin gözetlenme riski kabul edilebilir düzeydedir (kısa oturum ve
+    deneme sınırı tek önlemdir).
+  - Yerel soket (`127.0.0.1`) tahtadaki diğer yerel süreçlere açıktır; yoklama açıkken ekrandaki
+    etiketleri okuyabilirler (belirteç ve PIN girmez).
+  - Dayanaklar: yoklamaya ilişkin yönetmelik fıkrası, ders saatinden güne çevirme kuralı ve
+    KVKK md. 12 doğrulanacaklar listesindedir (`docs/tasarim.md` §17); arayüzde atıf yoktur.
 
 ## 6. Sorun olursa
 
