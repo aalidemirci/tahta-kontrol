@@ -22,7 +22,7 @@ import secrets
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from . import acil, maske, metin, vt, xlsx
+from . import acil, maske, metin, saklama, vt, xlsx
 from . import duyuru as duyuru_mod
 
 ISTANBUL = ZoneInfo("Europe/Istanbul")
@@ -30,7 +30,6 @@ ISTANBUL = ZoneInfo("Europe/Istanbul")
 SINAV_YETENEGI = "sinav"
 GIRIS_ONCESI_SN = 600
 PROGRAM_ONCESI_SN = 600  # program işi pencereden önceki 10 dk'da yeni program kilidi vermez (§0-7)
-SAKLAMA_GUN = 30
 GOZETMEN_OTURUM_SN = 900
 KOD_DENEME = 5
 KOD_PENCERE_SN = 600
@@ -787,25 +786,31 @@ def sinav_sil(b, sinav_id: int, kullanici: str, an: int, ip: str = "") -> None:
     vt.kayit_dus(b, kullanici, "Sınav silindi", sinav["ad"] or f"Sınav #{sinav_id}", ip)
 
 
+def _sinav_gunu(sinav) -> datetime | None:
+    dayanak = sinav["baslangic"] or sinav["olusturma"]
+    return datetime.fromtimestamp(int(dayanak), ISTANBUL) if dayanak else None
+
+
 def saklama_temizligi(b, an: int) -> list[int]:
-    """Saklama süresi (SAKLAMA_GUN) dolan sınavların kişisel verisini siler; silinen sınavlar."""
-    sinir = an - SAKLAMA_GUN * 86400
+    """Öğretim yılı bitiş tarihi geçtiyse o tarihte ve öncesinde yapılan sınavların kişisel verisini siler
+    (K3, `saklama.py`); silinen sınavlar. Tarih girilmemişse hiçbir şey silinmez."""
+    sinir = saklama.imha_siniri(b, datetime.fromtimestamp(an, ISTANBUL).date())
+    if not sinir:
+        return []
     idler = [
         s["id"]
-        for s in b.execute(
-            "SELECT id FROM sinav WHERE kisisel_silinme IS NULL AND (CASE WHEN baslangic > 0 THEN baslangic ELSE olusturma END) < ?",
-            (sinir,),
-        )
+        for s in b.execute("SELECT * FROM sinav WHERE kisisel_silinme IS NULL")
+        if (gun := _sinav_gunu(s)) is not None and gun.date() <= sinir
     ]
     for sinav_id in idler:
-        kisisel_veri_sil(b, sinav_id, "sistem", "Sınav kişisel verisi saklama süresi dolduğu için silindi", an)
+        kisisel_veri_sil(b, sinav_id, "sistem", "Sınav kişisel verisi öğretim yılı sonunda silindi", an)
     return idler
 
 
-def silinme_tarihi(sinav) -> str:
-    """Kişisel verinin kendiliğinden silineceği tarih (gg.aa.yyyy)."""
-    dayanak = sinav["baslangic"] or sinav["olusturma"]
-    return tarih_metni(int(dayanak) + SAKLAMA_GUN * 86400 + 1) if dayanak else ""
+def silinme_tarihi(b, sinav) -> str:
+    """Kişisel verinin ne zaman silineceği (arayüz cümlesinin devamı)."""
+    gun = _sinav_gunu(sinav)
+    return saklama.silinme_metni(b, gun.date() if gun else None)
 
 
 # ---- şube duyurusu --------------------------------------------------------------------------
@@ -818,7 +823,9 @@ def sube_duyurusu_suresi(sinav, sure_dk: int, an: int) -> int:
 
 
 def sube_duyurusu(b, sinav, sure_dk: int, kullanici: str, an: int, ip: str = "") -> tuple[int, int, list[int]]:
-    """Her şubeye (tahta.subeler'inde şubeyi taşıyan onaylı tahtalara) bir duyuru.
+    """Her şubeye (tahta.subeler'inde şubeyi taşıyan onaylı tahtalara) bir duyuru. Şube hiçbir tahtanın
+    `subeler` alanında yoksa derslik programında o şubenin en çok dersinin olduğu tahta(lar) kullanılır
+    (ikili eğitimde aynı tahtada sabah ve öğle şubeleri programla ayrılır).
 
     duyuru.metin'e özet ("Sınav oturma listesi · 11/A"), komut verisine maskeli liste yazılır.
     Süre sınav başlangıcına kırpılır (sube_duyurusu_suresi); çağıran ≤0 durumunu önceden reddeder.
@@ -829,10 +836,21 @@ def sube_duyurusu(b, sinav, sure_dk: int, kullanici: str, an: int, ip: str = "")
     for s in b.execute("SELECT * FROM sinav_ogrenci WHERE sinav_id = ?", (sinav["id"],)):
         subeler.setdefault(s["sube"], []).append(s)
     tahtalar = b.execute("SELECT id, subeler FROM tahta WHERE durum = 'onayli'").fetchall()
+    onayli = {t["id"] for t in tahtalar}
+    tahta_subeleri = {t["id"]: {metin.sube_duzelt(x) for x in (t["subeler"] or "").split(",") if x.strip()} for t in tahtalar}
+    programdaki: dict[str, dict[int, int]] = {}
+    for s in b.execute("SELECT tahta_id, sube, COUNT(*) AS n FROM tahta_ders WHERE sube != '' GROUP BY tahta_id, sube"):
+        kanonik = metin.sube_duzelt(s["sube"])
+        if kanonik and s["tahta_id"] in onayli:
+            programdaki.setdefault(kanonik, {})[s["tahta_id"]] = programdaki.get(kanonik, {}).get(s["tahta_id"], 0) + s["n"]
     gonderilen, tahtasiz, uyandir = 0, 0, set()
     baslik = f"{sinav['ad']} · {tarih_metni(sinav['baslangic'])} {saat_metni(sinav['baslangic'])}".strip(" ·")
     for sube in sorted(subeler, key=sirala_anahtari):
-        hedefler = [t["id"] for t in tahtalar if sube in [x.strip() for x in (t["subeler"] or "").split(",")]]
+        kanonik = metin.sube_duzelt(sube) or sube
+        hedefler = [t for t, kume in tahta_subeleri.items() if kanonik in kume]
+        if not hedefler and programdaki.get(kanonik):
+            en_cok = max(programdaki[kanonik].values())
+            hedefler = sorted(t for t, n in programdaki[kanonik].items() if n == en_cok)
         if not hedefler:
             tahtasiz += 1
             continue

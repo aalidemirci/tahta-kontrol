@@ -154,7 +154,8 @@ def test_ajan_cevrimdisiyken_yoklama_acilmaz_ileti_verir(servis):
     servis.son_temas = time.time() - 1000
     servis.ekran_mesaji(1, {"tur": "yoklama_ac"})
     y = servis.gorunum()["yoklama"]
-    assert y["asama"] == "ileti" and "e-Okul'a doğrudan girin" in y["ileti"]
+    # K5: tahtadaki yoklama yardımcı kayıttır; sunucu yoksa öğretmen kâğıda yönlendirilir (e-Okul'a değil).
+    assert y["asama"] == "ileti" and "kâğıda alın" in y["ileti"] and "e-Okul" not in y["ileti"]
     assert servis.istemci.istekler == [] and servis.durum_ozeti()["yoklama_acik"] is False
     servis.yoklama["ileti_bitis"] = time.monotonic() - 1
     servis._yoklama_denetle()

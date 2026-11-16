@@ -92,6 +92,9 @@ class Sunucu:
             self.zamanlayici_turu()
             time.sleep(20)
 
+    def calisiyor_mu(self) -> bool:
+        return bool(self.is_parcalari) and all(p.is_alive() for p in self.is_parcalari)
+
     def durdur(self) -> None:
         for sunucu in self.sunucular:
             sunucu.should_exit = True

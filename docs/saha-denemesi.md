@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.7.1)
+# Saha denemesi kılavuzu (0.8.0)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -31,6 +31,12 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Ekran ölçeği (0.7.1): tahta ekranının bütün ölçülerinin (yazı, tuş takımı, düğmeler, boşluklar) monitör boyutuna orantılı olması; gerçek paketle kurulan üç tahtada (1280×800, 1366×768, 1920×1080) kilit, duyuru, kapatma geri sayımı, acil yayın, ders yoklaması PIN'i, şube/ders seçimi ve öğrenci listesi, sınav giriş ekranı ve gözetmen kodu sayfasında pencerenin ekrana eşit olması (`xwininfo`), kesik yazı ve taşma olmaması; `scripts/ekran_olcum.py` ile 17 senaryonun 1024×768, 1280×800, 1366×768, 1920×1080, 3840×2160 ve portre 1080×1920'de ölçülmesi (taşan yok; yalnız 32–40 kişilik yoklama listesi dikey kaydırılır) | Debian 12 kabı + sanal ekran, gerçek paket; PIN fiziksel klavyeyle (`xdotool`), Gözetmen düğmesi dokunmayla | Çalıştı |
 | Yedekler (parola, elle yedek, indirme, yanlış/doğru parolayla geri yükleme denetimi, önizleme, vazgeç), Envanter (sıralama, CSV), Arızalar ve arıza ayrıntısı, tahta sayfasında envanter/arıza/bağlantı kartları, panoda "Arıza" ve "Donanım değişti" rozetleri, Ayarlar › Sunucu adresleri | Chromium (geliştirme bilgisayarı) | Çalıştı |
 | Onaylanan geri yüklemenin program yeniden açılınca uygulanması | Geliştirme bilgisayarı (deneme veri klasörü) | Çalıştı |
+| 16.11.2026 kararları (0.8.0): iki devreli uydurma okulda (sabah 07:30–12:20, öğle 13:00–17:50) program kilidi, devre geçişinde "Öğle arası", boş ders uyarısının doğru devreye bakması, yoklama önerisinin saate göre doğru şube ve dersi seçmesi, ızgara ve icmalde devre adı, duyuru devre süzgecinin programdan türetilmesi, sınav şube duyurusunun programdaki tahtaya gitmesi | Birim ve uçtan uca testler (`tests/test_ikili_egitim.py`) | Geçti |
+| Ayarlar › Kişisel veri saklama (tarih yokken uyarı, geçmiş tarihte onay ve silinecek sayılar, Okul Zili önerisi), boş ders raporu (tarih aralığı, tahta ve ders saati süzgeci, yazdırma), kullanıcılar sayfasında acil yetkisi sütununun kalkması, idarecinin acil yayın formunu görmesi | Geliştirme bilgisayarında ayrı veri klasörüyle deneme sunucusu, tarayıcı | Çalıştı |
+| Oturum temizliği (K7, 0.8.0): gerçek paketin kurulum betiğiyle kurulduğu kapta `ogretmen` hesabı, sahte Firefox ve Chromium profili, sahte tarayıcı süreçleri ve açık bir GTK penceresi; panelden "Şimdi temizle": 60 sn uyarı ve Vazgeç ekranı, pencerenin kibar kapanması, tarayıcı süreçlerinin sonlandırılması, yalnız çerez/oturum dosyalarının silinmesi (geçmiş, parola, form, yerel depolama, İndirilenler/Masaüstü/Belgeler kaldı; sembolik bağ ve hedefi kaldı), ad içermeyen sonucun komut geçmişine ve işlem kaydına düşmesi. İlk denemede zombi süreç "kapanmadı" sayıldı ve Firefox verisi atlandı; düzeltildi, ikinci denemede çalıştı | Debian 12 kabı + Xvfb + openbox, sahte `loginctl` | Çalıştı (Vazgeç ve benzetim testlerle) |
+| Windows hizmeti (K8, 0.8.0): veri dizini kuralı, eski veriyi taşıma (WAL'daki son kayıt, sertifikanın bayt bayt aynı kalması, kaynağa dokunulmaması, birden çok eski klasörde seçim, belirsizlikte ve yarıda kalan kopyada hizmetin bekletilmesi), hizmet gövdesi (aç, durdur, çökme, açılmama), durum penceresi kipleri, kurucu betiğinin metin denetimi | Birim testleri (`tests/test_hizmet.py`) | Geçti |
+| Hizmet kipinin uçbirimde çalışması (`hizmet --konsol`, ayrı veri klasörü, 8797/8798): `/yerel/durum` `hizmet: true`, `gunluk\sunucu.log`; `tasi` ile taşınan klasörde aynı parmak izi; `TASIMA-BEKLIYOR.txt` varken açılmaması; hizmet yöneticisi dışından `hizmet`in 2 koduyla çıkması | Geliştirme bilgisayarı (hizmet kurulmadan) | Çalıştı |
+| **Gerçek Windows hizmeti** (kurucuyla kayıt, açılışta başlama, Yerel Hizmet hesabı, izinler, 0.7.x'ten yükseltme, kaldırma) | — | **Denenmedi** (§3.7) |
 | Gerçek e-Okul OOG01001R020 `.XLS` dosyası | — | Denenmedi |
 | İcmalin A4 kâğıda yazdırılması (şube başına sayfa) | — | Denenmedi |
 | Gerçek Kelebek çizelgesi (okulun Kelebek sürümüyle indirilen R5) | — | Denenmedi |
@@ -40,10 +46,12 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 
 ## 1. Sunucuyu kurun
 
-1. `dist\cikti\tahta-kontrol-0.7.1-windows-kurulum.exe` dosyasını sunucu olacak
-   idari bilgisayara kurun (yönetici izni ister; güvenlik duvarında 8788 kapısını açar).
-2. Açılan pencerede **Paneli aç** deyin; ilk kurulumda okul adını ve yönetici
-   hesabını oluşturun.
+1. `dist\cikti\tahta-kontrol-0.8.0-windows-kurulum.exe` dosyasını sunucu olacak
+   idari bilgisayara kurun (yönetici izni ister). Kurucu sunucuyu **Windows hizmeti** olarak
+   kaydedip başlatır (bilgisayar açılınca, oturum açılmadan çalışır), güvenlik duvarında 8788
+   kapısını açar. Bitiş sayfasındaki metni okuyun (eski verinin taşınıp taşınmadığı orada yazar).
+2. Açılan durum penceresinde **Paneli aç** deyin; ilk kurulumda okul adını ve yönetici
+   hesabını oluşturun. Pencereyi kapatmak sunucuyu durdurmaz.
 3. **Ayarlar** sayfasında bu bilgisayarın adresine bakın. Tahtaların bu adrese
    ulaşabildiğini bir tahtanın tarayıcısından `https://ADRES:8788/saglik`
    açarak sınayın (sertifika uyarısı beklenir).
@@ -51,8 +59,52 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 5. Ayarlar > **Okul kimliği**: okulun rengini seçip **Renkleri kaydet**, logoyu
    (PNG ya da JPEG, en çok 256 KB) **Logoyu yükle** deyin. Kontrast raporuna bakın.
 
-Not: sunucu şimdilik oturum açıkken çalışır; bilgisayar kapanır ya da oturum
-kapanırsa tahtalar çevrimdışı kalır (kilitleri tahtadan açılabilir).
+Not: 0.8.0'dan itibaren sunucu oturum kapalıyken de çalışır. Bilgisayar kapanır, uykuya ya
+da hazırda beklemeye geçerse tahtalar çevrimdışı kalır (kilitleri 90 sn sonra tahtadan
+açılabilir); güç ayarlarında uykuyu kapatın.
+
+### 1.1 0.1.x–0.7.x'ten yükseltirken ne olur
+
+Önceki sürümler sunucuyu oturum açan kullanıcının programı olarak çalıştırır, verisini
+(veritabanı, **sunucu sertifikası**, yedekler) o kullanıcının `%LOCALAPPDATA%\TahtaKontrol`
+klasöründe tutardı. Tahtalar bu sertifikanın parmak izine bağlıdır; sertifika değişirse bütün
+tahtalara ajan yeniden kurulur. Kurucu bu yüzden şunu yapar:
+
+1. Açık Tahta Kontrol pencerelerini (her oturumda) kapatır; varsa hizmeti durdurur.
+2. Eski "Windows açılınca başlat" kısayolunu siler.
+3. `C:\ProgramData\TahtaKontrol` klasörünü açar; yalnız SYSTEM, Yöneticiler ve hizmet hesabı
+   (Yerel Hizmet) erişebilir.
+4. Eski veriyi **kopyalar** (taşımaz): kurucuyu çalıştıran hesabın ve bilgisayardaki diğer
+   hesapların `AppData\Local\TahtaKontrol` klasörlerine bakar. Birden çok varsa tahtaların en
+   son bağlandığı klasörü seçer. Kopyaların özetini karşılaştırır, veritabanını denetler. Eski
+   klasör silinmez; içine `TASINDI.txt` bırakılır.
+5. Hizmeti kaydeder ve başlatır. Tahtalar aynı adres ve aynı sertifikayla bağlanmayı sürdürür.
+
+Kurucuyu, **sunucuyu her gün kullanan hesapla oturum açıp** (yönetici parolası istenince
+girerek) çalıştırmanız önerilir. Kurucu hangi klasörü seçeceğini anlayamazsa ya da kopyalama
+başarısız olursa hizmeti **başlatmaz** (yeni sertifika üretip tahtaları koparmasın) ve bitişte
+kırmızı uyarı verir. O durumda:
+
+1. Not Defteri'ni yönetici olarak açıp `C:\ProgramData\TahtaKontrol\TASIMA-BEKLIYOR.txt`
+   dosyasını okuyun: bulunan eski klasörler, tahta sayıları ve son bağlantı zamanları oradadır.
+2. Yönetici komut isteminde doğru klasörü verin:
+   `"C:\Program Files\Tahta Kontrol\TahtaKontrol.exe" tasi --hedef "C:\ProgramData\TahtaKontrol" --kaynak "C:\Users\<hesap>\AppData\Local\TahtaKontrol"`
+   (sonuç `C:\ProgramData\TahtaKontrol\gunluk\tasima.log` dosyasına yazılır), sonra
+   `net start TahtaKontrol`. Ya da doğru klasördeki dosyaları elle kopyalayıp
+   `TASIMA-BEKLIYOR.txt`'yi silin ve hizmeti başlatın.
+3. Eski veri gerçekten istenmiyorsa yalnız `TASIMA-BEKLIYOR.txt`'yi silip hizmeti başlatın
+   (yeni sertifika üretilir; bütün tahtalara ajan yeniden kurulur).
+
+Kurucu taşıma sırasında kesilirse (elektrik, Görev Yöneticisi) kurucuyu yeniden çalıştırın:
+yarım kopya geçici klasörde kalır ya da `yarim-tasima-…` klasörüne kaldırılır (silinmez) ve
+taşıma baştan yapılır; `TASIMA-SURUYOR.txt` durdukça hizmet açılmaz.
+
+Geri dönmek gerekirse: programı kaldırın (ProgramData'daki veri silinmez), eski sürümü kurun;
+eski sürüm eski klasördeki veriyle açılır (taşımadan sonraki değişiklikler orada yoktur).
+Sonra yeniden 0.8'e geçerken kurucu, eski klasörün taşımadan sonra kullanıldığını görür ve
+hizmeti **başlatmaz**: hangi verinin doğru olduğunu (eski klasör mü, ProgramData mı)
+`TASIMA-BEKLIYOR.txt`'deki adımlarla siz seçersiniz. Geri dönüş döneminde eklenen tahtalar ve
+alınan yoklamalar yalnız eski klasördedir.
 
 ## 2. Tahtaya ajanı kurun
 
@@ -189,7 +241,7 @@ ve PIN pusulası; tahta sayfasında "Şube(ler)" alanı dolu.
 | Y11 | İcmali A4 yazdır | Şube başına bir sayfa; taşma yok; menü ve düğmeler basılmaz | |
 | Y12 | Aynı ders saatinde iki öğretmen (bölünmüş ders) | İcmal birleşimi doğru; ızgarada "×2" | |
 | Y13 | Aynı öğretmen kodu ile 10 hatalı PIN (farklı tahtalardan da) | Öğretmen kilitlenir ("PIN'iniz kilitlendi"); Öğretmenler sayfasında "PIN kilitli", Kilidi aç ile düzelir | |
-| Y14 | Sunucu kapalıyken "Yoklama Al" | "Sunucuya ulaşılamıyor. Bu dersin yoklamasını e-Okul'a doğrudan girin." 5 sn sonra kapanır | |
+| Y14 | Sunucu kapalıyken "Yoklama Al" | "Sunucuya ulaşılamıyor. Bu dersin yoklamasını kâğıda alın." 5 sn sonra kapanır | |
 | Y15 | Fiziksel klavyeden PIN | Rakamlar, Geri silme ve Enter tuş takımı gibi çalışır | |
 | Y16 | Tahtada `durum.json` ve `journalctl -u tahta-ajan` | Öğrenci adı, PIN, belirteç yok | |
 
@@ -202,8 +254,8 @@ adresleri'ne sunucunun adresini (ve okul DNS'inde bir ad varsa onu) yazın.
 |---|---|---|---|
 | A1 | Yedek parolası belirle; 5 dk bekle | Yedekler'de "Günlük" yedek; panodaki kırmızı şerit kalkar | |
 | A2 | İkinci kopya klasörü olarak USB disk; sonra USB'yi çıkar | Takılıyken kopya yazılır; çıkarılınca ana yedek alınır, panoda "ikinci kopya yazılamadı" | |
-| A3 | Ağ paylaşımı (`\\sunucu\pay`) ikinci kopya olarak | Oturum programında yazılabilir; 6B'de hizmet hesabıyla yazılamayacağı not edilir | |
-| A4 | Yedeği başka bir Windows bilgisayara kurulan programın ilk kurulum sayfasından geri yükle | Önizlemede okul adı, tahta sayısı; "sertifika farklı" uyarısı; programı kapatıp açınca eski kullanıcılarla giriş | |
+| A3 | Ağ paylaşımı (`\\sunucu\pay`) ikinci kopya olarak | 0.8.0 hizmeti (Yerel Hizmet) ağ paylaşımına yazamaz: ayar kaydedilmez; yerel disk/USB çalışır | |
+| A4 | Yedeği başka bir Windows bilgisayara kurulan programın ilk kurulum sayfasından geri yükle | Önizlemede okul adı, tahta sayısı; "sertifika farklı" uyarısı; "Geri yükle ve yeniden başlat" sonrası hizmet kendiliğinden yeniden başlar, yarım dakika sonra eski kullanıcılarla giriş | |
 | A5 | A4'teki bilgisayara eski IP verildiğinde tahtalar | Yeniden kurulum olmadan bağlanır | |
 | A6 | Adres listesine ikinci bir adres ekle; Ayarlar'da "n/n tahta güncel adres listesini aldı" | Bütün çevrimiçi tahtalar bir iki dakikada listeyi alır | |
 | A7 | Sunucunun IP'sini değiştir (listede yeni adres önceden varken) | Tahtalar yaklaşık 1 dk içinde yeni adrese geçer; tahta sayfasında "Bağlandığı adres" yeni adres | |
@@ -215,6 +267,66 @@ adresleri'ne sunucunun adresini (ve okul DNS'inde bir ad varsa onu) yazın.
 | A13 | Ağ kablosu çıkarılmışken arıza bildir; kabloyu tak | "Kayıt tahtada bekletiliyor…"; kablo takılınca kayıt panelde görünür | |
 | A14 | Bir saatte 4 arıza bildir | Dördüncüsü "son bir saatte çok bildirim" iletisiyle reddedilir | |
 | A15 | Tahtada `durum.json` | `ariza_kuyrugu` iletilince boşalır; hesap adı yok | |
+
+### 3.6 16.11.2026 kararları (0.8.0)
+
+Hazırlık: okulun gerçek ikili eğitim zil çizelgesi Okul Zili'nden ya da elle iki devre olarak
+(ör. "Sabah" ve "Öğleden sonra") girilir; bir dersliğe sabah ve öğle şubesi programlanır.
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| K1 | Program › Zil saatleri; pano şeridi sabah ve öğle dersinde | İki devre ayrı tablo; şerit "Sabah · 3. ders …", "Öğleden sonra · 2. ders …" | |
+| K2 | Sabah ve öğle şubesi olan tahtada sabah teneffüsü, devre geçişi ve öğle teneffüsü | Kilit ekranında "Teneffüs · Tahta 08:20'de açılır.", geçişte "Öğle arası · … 13:00'te açılır." | |
+| K3 | Okul Zili dosyasında ikili eğitim oturum adları | Devre adları doğru okunur (`session_id` ve oturum adı); ders numaraları devre başına 1'den başlar | |
+| K4 | Öğle dersinde tahta kapalı | Boş ders uyarısı "Öğleden sonra · 1. ders · 11/C"; sabah programlı tahtada öğlede uyarı yok | |
+| K5 | Tahtada "Yoklama Al" sabah dersinde, teneffüste (ders başlamadan 5 dk önce) ve öğle dersinde | Şube ve ders saati devreye göre önerilir; öğle şubesi seçilince öğle saatleri gelir | |
+| K6 | Yoklama › Günlük görünüm ve icmal | Şubenin yanında devre adı; sabah ve öğle 3. dersleri ayrı | |
+| K7 | Duyuru › Kime › Devre: Sabahçılar | "Devre" alanı boş tahtalarda programa göre seçilir; sabah ve öğle şubeli tahta ikisine de girer | |
+| K8 | Ayarlar › Kişisel veri saklama: tarih boşken, gelecek tarih, geçmiş tarih | Boşken üstte uyarı; geçmiş tarih onay ister ve silinecek sayıları söyler | |
+| K9 | Program › Uyarılar: bir aylık aralık, bir tahta, bir ders saati | Tarih sütunlu liste, tahta ve ders saatine göre sayılar; kişi adı yok; Yazdır A4'te okunur | |
+| K10 | İdareci hesabıyla Acil durum sayfası | Yayın formu görünür; parola ve onay kutusu olmadan başlamaz | |
+
+#### 3.6.1 Oturum temizliği (K7)
+
+Hazırlık: **önce benzetimle** deneyin. Tahtada `etapadmin` ile
+`sudo systemctl edit tahta-ajan` → `[Service]` altına `Environment=TAHTA_AJAN_BENZETIM=1`, sonra
+`sudo systemctl restart tahta-ajan` (benzetim kapatma komutunu da uygulamaz; denemeden sonra satırı
+silip yeniden başlatın). `ogretmen` hesabıyla oturum açın; tarayıcıda deneme amaçlı bir siteye giriş
+yapın, birkaç sekme ve bir metin belgesi (kaydedilmemiş) açık bırakın. Denemeden önce ve sonra
+`etapadmin` ile `sudo find /home/ogretmen/.mozilla /home/ogretmen/.config -maxdepth 4 | sort` çıktısını
+saklayın (gerçek kullanıcı dosyası adlarını depoya koymayın; `saha/` gitignore'dadır).
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| T1 | Tahta sayfası › Oturum temizliği › Şimdi temizle… (benzetim) | Tahtada 60 sn sayaçlı "Açık pencereler kapatılacak" ve Vazgeç; süre sonunda hiçbir şey kapanmaz; sonuç "… kapatma istenecek … silinecek … BENZETİM" | |
+| T2 | Aynı deneme, sayaç sırasında Vazgeç | Sonuç "Vazgeçildi …"; hiçbir şey kapanmaz | |
+| T3 | Benzetim kapalı, Şimdi temizle | Pencerelere kapatma isteği; kaydedilmemiş belge "kaydedilsin mi?" sorar ve açık kalır; tarayıcı kapanır; yeniden açınca siteden çıkılmış, geçmiş ve yer imleri yerinde, kayıtlı parola duruyor; İndirilenler/Masaüstü aynı | |
+| T4 | Kilitli tahtada Şimdi temizle | Uyarısız temizlik; kilit ekranı kalır | |
+| T5 | `etapadmin` ve kişisel hesapla oturumda Şimdi temizle | Sonuç "Atlandı: oturum ortak hesap değil"; hiçbir şeye dokunulmaz | |
+| T6 | Ayarlar › Oturum temizliği açık, "Otomatik kapatmadan 5 dakika önce" | Kapatma saatinden 5 dk önce uyarı, sonra temizlik; ardından otomatik kapatma uyarısı | |
+| T7 | Ekran klavyesi, ETAP kenar çubuğu/paneli açıkken temizlik | Klavye ve panel kapanmaz (yalnız görev çubuğundaki pencereler) | |
+| T8 | İşlem kaydı ve tahta sayfası | "Oturum temizliği sonucu" yalnız sayılar içerir (kullanıcı, dosya, profil adı yok) | |
+
+### 3.7 Windows hizmeti (K8, 0.8.0)
+
+Hazırlık: bu denemeler yönetici yetkisi ister ve **önce deneme bilgisayarında** yapılmalıdır.
+0.7.x kurulu bir bilgisayarda yükseltme denenecekse önce Yedekler'den şifreli bir yedek alın ve
+`%LOCALAPPDATA%\TahtaKontrol` klasörünü başka bir yere kopyalayın.
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| H1 | Boş bilgisayara kurulum | Bitiş sayfası "Sunucu Windows hizmeti olarak çalışıyor"; `sc query TahtaKontrol` → RUNNING; `sc qc TahtaKontrol` → `SERVICE_START_NAME: NT AUTHORITY\LocalService`, `START_TYPE: AUTO_START` | |
+| H2 | 0.7.x kurulu bilgisayarda (tahtalar bağlıyken) yükseltme | Bitişte "verisi ve sunucu sertifikası … kopyalandı"; tahtalar ajan yeniden kurulmadan bir iki dakikada çevrimiçi; eski kullanıcılarla giriş; eski klasörde `TASINDI.txt` | |
+| H3 | H2'den sonra `shell:common startup` klasörü | "Tahta Kontrol" kısayolu yok | |
+| H4 | Bilgisayarı yeniden başlat, **oturum açma**; bir tahtadan panel/kilit | Tahta çevrimiçi; panel başka bilgisayardan açılır | |
+| H5 | Sıradan (yönetici olmayan) bir hesapla `C:\ProgramData\TahtaKontrol` aç | Erişim engellendi | |
+| H6 | Görev Yöneticisi › Ayrıntılar'dan hizmetin `TahtaKontrol.exe` sürecini sonlandır | 5 sn sonra yeniden açılır; tahtalar kopmaz | |
+| H7 | Durum penceresi: hizmet çalışırken / `net stop TahtaKontrol` sonrası / "Hizmeti başlat" | Bilgi ve adresler / "Sunucu hizmeti çalışmıyor" / UAC sorar, birkaç saniyede bilgiye döner | |
+| H8 | Yedekler › geri yükle › "Geri yükle ve yeniden başlat" | Hizmet kendiliğinden yeniden başlar; yarım dakika sonra yedekteki kullanıcılarla giriş | |
+| H9 | Aynı sürümü yeniden kur (onarım) ve bir sonraki sürüme yükselt | Bitişte "mevcut veriyle çalışıyor"; veri ve sertifika aynı | |
+| H10 | Programı kaldır | Hizmet listede yok; güvenlik duvarı kuralı yok; `C:\ProgramData\TahtaKontrol` duruyor; kaldırıcı bunu söyler | |
+| H11 | İki hesapta eski veri (ör. ikinci hesapla da program açılmış) varken yükseltme | Tahtaların en son bağlandığı klasör seçilir; diğerine dokunulmaz | |
+| H12 | Okulun antivirüs yazılımı | Hizmeti ve 8788 kuralını engellemiyor | |
 
 ## 4. Otomatik giriş denemesi (elle)
 
@@ -292,6 +404,16 @@ ve güncellemeden sonra duruyor mu.
     fiziksel boyda çıkar. ETAP'ın hangisini kullandığı ve çok monitörlü (yansıtma/genişletme) kurulumda
     pencerenin birincil monitörde açıldığı gerçek tahtada denenmedi.
 
+- 16.11.2026 kararları (0.8.0):
+  - Okul Zili'nin ikili eğitim dosyasında oturum kimlikleri ve adları (`day_schedules[].sessions`)
+    yalnız uydurma örnekle ve şartnameden bilinir; gerçek dosyada devre adları "sabah"/"öğle" diye
+    tanınmazsa iki devreli okulda erken başlayan devre sabah sayılır (duyuru devre süzgeci için).
+  - Okulda sabah ve öğle devrelerinin dersleri zamanda çakışmıyor (çakışırsa o aralıkta teneffüs
+    kilidi verilmez) ve bir şubenin aynı gün iki devrede dersi yok (varsa yoklamada ders saati serbest
+    seçilir).
+  - Öğretim yılı bitiş tarihinin geçmesiyle silme: saatlik imha kapalı sunucuda çalışmaz; tarih
+    geçtiğinde sunucu kapalıysa silme ilk açılışta yapılır.
+
 - Altyapı (0.7.0):
   - ETAP'ta `/sys/class/dmi/id/product_serial` ve `board_serial` dolu (üretici seri no yazıyor);
     boşsa donanım kimliği değişimi uyarısı çalışmaz (yalnız dolu→farklı dolu uyarır).
@@ -309,6 +431,30 @@ ve güncellemeden sonra duruyor mu.
     200 MB'a yakın yedek ve büyük veritabanı bellekte işlenebilir.
   - Windows'ta ikinci kopya klasörüne yazma izni: Yedekler sayfasındaki `icacls` komutu 6A'da programı
     çalıştıran hesaba (`ALAN\kullanıcı`) izin verir; okulun etki alanı/yerel hesap düzeninde denenmedi.
+  - Oturum temizliği (K7, 0.8.0; yalnız Debian 12 kabında Xvfb + openbox, sahte profil ve sahte
+    tarayıcı süreciyle denendi):
+    - ETAP'taki tarayıcılar ve profil yolları: Firefox ESR `~/.mozilla/firefox/<profil>/`, Chromium
+      `~/.config/chromium/Default`; ETAP'a özgü ya da yerli bir tarayıcı varsa adı ve profil yolu
+      listede yoktur (`tahta_ajan/temizlik.py::TARAYICI_PROFILLERI`, `TARAYICI_SURECLERI`) ve eklenmelidir.
+    - Süreç adları (`/proc/<pid>/status` Name: firefox-esr, chromium, chrome …) ETAP paketlerinde aynı.
+    - ETAP'ın pencere yöneticisi `_NET_CLIENT_LIST`, `_NET_CLOSE_WINDOW` ve `_NET_WM_PID`'i destekliyor;
+      ekran klavyesi ve kenar çubuğu NORMAL dışı tür ya da `SKIP_TASKBAR` taşıyor (taşımıyorsa kapanır).
+    - Firefox'un "birden çok sekmeyi kapat?" sorusu kibar kapatmayı durdursa da SIGTERM'le kapanır
+      (sekmeler oturum dosyası silindiği için geri gelmez).
+    - Bilgisini yalnız yerel depolamada (Local Storage/IndexedDB) tutan okul sistemi ya da site
+      temizlikten sonra oturumu açık tutabilir; bunlar bilerek silinmez.
+    - Servisin `subprocess(user=…)` ile yetki düşürmesi ETAP'ın Python sürümünde (3.9+) çalışır.
+  - Windows hizmeti (K8, 0.8.0; gerçek hizmet kurulmadı, §3.7):
+    - PyInstaller paketinde pywin32'nin hizmet barındırması (`servicemanager`) Yerel Hizmet hesabıyla
+      çalışır; derleme duman testi yalnız "hizmet yöneticisi dışından 2 koduyla çıkar"ı sınar.
+    - `sc create … obj= "NT AUTHORITY\LocalService"` Türkçe Windows'ta kabul edilir (hesap adı
+      yerelleştirilmiş görünse de hizmet yöneticisi bu yazımı tanır).
+    - `icacls` SID'leriyle verilen izinler okulun etki alanı ilkeleriyle ezilmez; antivirüs hizmeti ya
+      da 8788 kuralını engellemez.
+    - Kurucunun `taskkill` ile başka oturumlardaki eski programı kapatabildiği ve kapanan programın
+      son yazılarının `-wal` dosyasıyla taşındığı (birim testinde WAL'lı veritabanıyla denendi).
+    - Kurucu hesabının `{localappdata}`'sı, yönetici parolasını başka hesap girdiğinde o hesabın
+      klasörüdür; bu yüzden bütün profiller taranır (`ProfileList`).
   - Dayanaklar: KVKK md. 12 ve "yeterli önlemler" kararı doğrulanacaklar listesindedir
     (`docs/tasarim.md` §18); arayüzde atıf yoktur.
 
@@ -316,7 +462,11 @@ ve güncellemeden sonra duruyor mu.
 
 - Tahtada: `tahta-ajan durum`, `tahta-ajan tani`, `journalctl -u tahta-ajan -n 50`.
 - Ajanı kaldırmak: `sudo apt remove tahta-ajan` (ya da `sudo dpkg -r tahta-ajan`).
-- Kilit takılı kalırsa: sunucu programını kapatın; 90 sn sonra tahtada "Kilidi aç"
-  düğmesi çıkar. Klavye bağlıysa Ctrl+Alt+F3 ile metin uçbirimine geçip
+- Kilit takılı kalırsa: sunucu hizmetini durdurun (yönetici komut isteminde
+  `net stop TahtaKontrol`); 90 sn sonra tahtada "Kilidi aç" düğmesi çıkar. Klavye bağlıysa Ctrl+Alt+F3 ile metin uçbirimine geçip
   `sudo systemctl stop tahta-ajan` da kilidi kaldırır.
-- Sunucu kayıtları: `%LOCALAPPDATA%\TahtaKontrol\sunucu.log`.
+- Sunucu kayıtları (0.8.0, hizmet; yönetici olarak açın): `C:\ProgramData\TahtaKontrol\gunluk\sunucu.log`,
+  ayrıca Olay Görüntüleyicisi > Windows Günlükleri > Uygulama (kaynak: TahtaKontrol). Taşıma sonucu:
+  `C:\ProgramData\TahtaKontrol\gunluk\tasima.log`. Durum penceresinin kaydı:
+  `%LOCALAPPDATA%\TahtaKontrol\pencere.log`. 0.8 öncesi: `%LOCALAPPDATA%\TahtaKontrol\sunucu.log`.
+- Hizmet: `sc query TahtaKontrol`, `net stop TahtaKontrol`, `net start TahtaKontrol` (yönetici).

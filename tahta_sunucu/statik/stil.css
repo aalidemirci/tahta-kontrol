@@ -836,6 +836,9 @@
 @layer bilesen {
   .arac-cubugu .tarih-sec { flex-wrap: nowrap; }
   .arac-cubugu .tarih-sec :is(select, input) { inline-size: auto; min-inline-size: 0; }
+  /* Boş ders raporu süzgeci (0.8.0): çok alanlı; dar ekranda alt satıra geçer. */
+  .arac-cubugu.rapor-suzgec .tarih-sec { flex-wrap: wrap; margin-inline-start: 0; }
+  .arac-cubugu.rapor-suzgec .tarih-sec select { max-inline-size: 100%; }
 }
 @layer bilesen {
   /* Yarım genişlikte kısa listeler (öğrenci listesi sekmesi): dar kutuda da tablo kalır, dikey kayar. */

@@ -25,6 +25,14 @@ SABLON_EN_COK = 10
 TURLER = {"acil": "Acil durum", "tatbikat": "Tatbikat"}
 BITIS_NEDENI = {"panel": "Panelden", "sure": "Süre doldu", "yenisi": "Yeni yayın"}
 YEDEK_ONEK = {"acil": "ACİL DURUM — ", "tatbikat": "TATBİKAT — "}
+# 16.11.2026 kararı K4: yayını bütün yöneticiler ve idareciler başlatıp bitirebilir (parola + onay kutusu
+# yine istenir). `kullanici.acil_yetki` sütunu eski sürüme dönüş için durur ama okunmaz.
+YETKILI_ROLLER = ("yonetici", "idareci")
+
+
+def yetkili(kullanici) -> bool:
+    """Acil/tatbikat yayınını başlatıp bitirebilir mi? (etkin oturumu olan yönetici ya da idareci)"""
+    return bool(kullanici) and kullanici["rol"] in YETKILI_ROLLER
 
 # İlk kurulumda kullanılan ÖRNEK şablonlar: mevzuat metni değildir; okulun acil durum
 # planına göre Ayarlar'dan düzenlenmelidir.

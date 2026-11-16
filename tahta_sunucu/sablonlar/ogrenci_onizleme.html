@@ -29,7 +29,7 @@
     <tfoot><tr><th scope="row">Toplam</th><td class="sayi-hucre">{{ plan.toplam.dosyada }}</td><td class="sayi-hucre">{{ plan.toplam.eklenecek }}</td><td class="sayi-hucre">{{ plan.toplam.sube_degisecek }}</td><td class="sayi-hucre">{{ plan.toplam.guncellenecek }}</td><td class="sayi-hucre">{{ plan.toplam.pasiflesecek }}</td></tr></tfoot>
   </table>
   </div>
-  {% if plan.toplam.pasiflesecek %}<p class="not">"Listeden çıkacak": dosyadaki şubede olup dosyada bulunmayan öğrenciler. Yoklama kayıtları silinmez; imha süresi dolunca kendiliğinden gider.</p>{% endif %}
+  {% if plan.toplam.pasiflesecek %}<p class="not">"Listeden çıkacak": dosyadaki şubede olup dosyada bulunmayan öğrenciler. Yoklama kayıtları silinmez; öğretim yılı sonunda kendiliğinden gider.</p>{% endif %}
   <details class="onizleme-liste">
     <summary>Ad listeleri (eklenecek, şubesi değişecek, listeden çıkacak)</summary>
     {% for s in plan.subeler %}{% if s.eklenecek or s.sube_degisecek or s.pasiflesecek %}

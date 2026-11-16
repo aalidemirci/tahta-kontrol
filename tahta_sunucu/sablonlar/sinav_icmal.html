@@ -48,7 +48,7 @@
 
 <h2 id="gelmeyenler">Gelmeyenler</h2>
 {% if icmal.silindi %}
-<p class="bos-not">Kişisel veri saklama süresi dolduğu için silindi ({{ icmal.silinme }}); yalnız sayılar gösterilir.</p>
+<p class="bos-not">Kişisel veri silindi ({{ icmal.silinme }}); yalnız sayılar gösterilir.</p>
 {% elif icmal.gelmeyenler %}
 <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="gelmeyenler">
 <table class="icmal-tablo">
@@ -68,7 +68,7 @@
 
 <p class="icmal-not">Ortak sınavlara katılmayan öğrencilerin bilgileri sınav bitiminde e-Okul'a işlenir.
   Mazeret, sınav tarihinden itibaren en geç 5 iş günü içinde veli tarafından yazılı bildirilir.
-  Bu icmal Tahta Kontrol kayıtlarından üretilmiştir; salon evrakındaki (Kelebek R1) imzalı yoklama esastır.</p>
+  Bu icmal Tahta Kontrol kayıtlarından üretilmiştir; tahtadan alınan yoklama kâğıdın yanında yardımcı kayıttır, salon evrakındaki (Kelebek R1) imzalı yoklama esastır.</p>
 
 <div class="imza-alani">
   {% for rol in ('Düzenleyen', 'Onaylayan') %}

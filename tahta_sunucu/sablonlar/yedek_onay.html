@@ -22,7 +22,7 @@
   <p class="bant hata" role="status" data-sertifika-farkli><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>Bu yedekteki sertifika şimdikinden farklı. Geri yüklenince bu sunucuya kayıtlı tahtalar bağlanamaz, yedekteki sunucuya kayıtlı tahtalar bağlanır.</span></p>
   {% endif %}
   {% if onizleme.onaylandi %}
-  <p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg><span>Geri yükleme onaylandı. Tahta Kontrol programını kapatıp yeniden açın; yedek açılışta yerleştirilir.</span></p>
+  <p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg><span>{% if hizmet %}Geri yükleme onaylandı. Sunucu hizmeti yeniden başlıyor; yedek açılışta yerleştirilir. Yarım dakika sonra sayfayı yenileyin.{% else %}Geri yükleme onaylandı. Tahta Kontrol programını kapatıp yeniden açın; yedek açılışta yerleştirilir.{% endif %}</span></p>
   {% else %}
   <p class="not">Geri yüklenince bugünkü veritabanı ve sertifika ayrı bir klasöre (<span class="kod">geri-yukleme-oncesi</span>) taşınır;
     bütün oturumlar kapanır ve yedekteki kullanıcılarla giriş yapılır.</p>

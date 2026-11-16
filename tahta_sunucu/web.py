@@ -38,6 +38,7 @@ from . import (
     panel_program,
     panel_yoklama,
     program_is,
+    saklama,
     sinav,
     tema,
     vt,
@@ -48,6 +49,7 @@ from . import (
 from . import ariza as ariza_mod
 from . import envanter as envanter_mod
 from . import program as program_mod
+from . import temizlik as temizlik_mod
 from . import yoklama as yoklama_mod
 from .komut import KOMUT_ADI, KOMUT_DURUMU, KOMUT_OMRU, komut_ekle  # noqa: F401  (KOMUT_OMRU burada da anılır)
 
@@ -249,7 +251,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             menu=menu_gorunumu(k, istek.url.path, menu_sayilari) if k else [],
             menu_acil={**MENU_ACIL, "secili": _secili(MENU_ACIL, istek.url.path)},
             aktif_acil=aktif_acil,
-            acil_yetkili=bool(k and k["acil_yetki"]),
+            acil_yetkili=acil.yetkili(k),
             istek_yolu=istek.url.path,
             kullanici=k,
             okul_adi=okul_adi,
@@ -615,6 +617,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         if tur not in KOMUT_ADI:
             return yonlendir("/", "Bilinmeyen işlem.", hata=True)
         donus = str(form.get("donus", "/")) if str(form.get("donus", "/")).startswith("/") else "/"
+        if tur == "temizlik":  # K7: yalnız tahta sayfasındaki onaylı uçtan (yetenek denetimiyle) verilir
+            return yonlendir(donus, "Oturum temizliği tahta sayfasından başlatılır.", hata=True)
         veri: dict = {}
         if tur == "duyuru":
             # Panodaki hemen gönderim: tek yayın yolundan, hedef seçili tahtalar.
@@ -709,6 +713,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             altyapi = altyapi_verisi(b)
             tahta_arizalari = ariza_mod.listele(b, "", tahta_id)
             adres_listesi = adresler.al(b)
+            temizlik_ozeti = temizlik_mod.tahta_ozeti(b, satir)
         tani = json.loads(satir["tani_json"]) if satir["tani_json"] else None
         durum = json.loads(satir["durum_json"] or "{}")
         t_gorunum = tahta_gorunumu(satir, None, uyelik, None, sinavlar, altyapi)
@@ -741,7 +746,36 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             binalar=binalar,
             program=program_baglami,
             gun_adlari=program_mod.GUN_ADLARI,
+            temizlik=temizlik_ozeti,
+            temizlik_zamanlari=temizlik_mod.ZAMANLAR,
         )
+
+    @uygulama.post("/tahta/{tahta_id}/temizlik")
+    async def tahta_temizlik(istek: Request, tahta_id: int):
+        """K7: "Şimdi temizle" (panelde onay dialoglu). Yalnız onaylı, çevrimiçi ve `temizlik` yeteneği
+        bildiren tahtaya; ayar kapalı olsa da elle verilebilir. Tahtada kullanan kişi 60 sn içinde vazgeçebilir."""
+        k = kullanici(istek)
+        if not k:
+            return yonlendir("/giris")
+        if not acil.yetkili(k):
+            return yetkisiz_reddet(istek, k, "Oturum temizliği")
+        donus = f"/tahta/{tahta_id}?yer=temizlik#ileti"  # ileti temizlik bölümünde çizilir
+        form = await istek.form()
+        if form.get("eylem") != "temizle":
+            return yonlendir(donus, "Bilinmeyen işlem.", hata=True)
+        with vt.islem() as b:
+            t = b.execute("SELECT * FROM tahta WHERE id = ? AND durum = 'onayli'", (tahta_id,)).fetchone()
+            if not t:
+                return yonlendir("/", "Tahta bulunamadı.", hata=True)
+            if not temizlik_mod.yetenekli(t):
+                return yonlendir(donus, "Bu tahtanın ajanı oturum temizliğini bilmiyor; önce ajanı güncelleyin.", hata=True)
+            if not t["son_gorulme"] or vt.simdi() - t["son_gorulme"] >= ayar.CEVRIMICI_ESIK_SN:
+                return yonlendir(donus, "Tahta çevrimdışı; temizlik verilmedi (kaçan temizlik sonradan yapılmaz).", hata=True)
+            temizlik_mod.temizlik_komutu(b, t["id"], k["ad"])
+            vt.kayit_dus(b, k["ad"], "Oturum temizliği", f"elle: {t['ad']}", istemci_ip(istek))
+        uyandir(tahta_id)
+        return yonlendir(donus, "Oturum temizliği tahtaya gönderildi. Tahta kullanılıyorsa 60 saniyelik uyarı çıkar; "
+                                "sonuç birkaç dakika içinde bu bölümde görünür.")
 
     def mevcut_binalar(b) -> list[str]:
         """Kayıtlı tahtalarda geçen bina adları (datalist önerisi; büyük/küçük harf duyarsız tekil)."""
@@ -951,8 +985,10 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                     return yonlendir("/kullanicilar", "Kullanıcı adı en az 3, parola en az 8 karakter olmalı.", hata=True)
                 if b.execute("SELECT 1 FROM kullanici WHERE ad = ?", (ad,)).fetchone():
                     return yonlendir("/kullanicilar", "Bu kullanıcı adı zaten var.", hata=True)
+                # acil_yetki 0.8.0'dan beri okunmaz (K4: bütün kullanıcılar yetkili); eski sürüme dönülürse
+                # aynı davranış sürsün diye 1 yazılır.
                 b.execute(
-                    "INSERT INTO kullanici (ad, gorunen_ad, parola_ozet, rol, olusturma) VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO kullanici (ad, gorunen_ad, parola_ozet, rol, olusturma, acil_yetki) VALUES (?, ?, ?, ?, ?, 1)",
                     (ad, str(form.get("gorunen_ad", "")).strip() or ad, guvenlik.parola_ozetle(parola), rol, vt.simdi()),
                 )
                 vt.kayit_dus(b, k["ad"], "Kullanıcı eklendi", f"{ad} ({ROLLER[rol]})", istemci_ip(istek))
@@ -979,17 +1015,11 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                     b.execute("DELETE FROM oturum WHERE kullanici_id = ?", (hedef["id"],))
                 vt.kayit_dus(b, k["ad"], "Parola değiştirildi", hedef["ad"], istemci_ip(istek))
             elif eylem == "acil_yetki":
-                ver = not hedef["acil_yetki"]
-                if not ver and hedef["id"] == k["id"]:
-                    vt.kayit_dus(b, k["ad"], "Acil yetkisi değişikliği reddedildi", "Kendi yetkisini kaldırma denemesi", istemci_ip(istek))
-                    return yonlendir("/kullanicilar", "Kendi acil yetkinizi kaldıramazsınız.", hata=True)
-                b.execute("UPDATE kullanici SET acil_yetki = ? WHERE id = ?", (int(ver), hedef["id"]))
-                vt.kayit_dus(
-                    b, k["ad"], "Acil yetkisi verildi" if ver else "Acil yetkisi alındı", hedef["ad"], istemci_ip(istek)
-                )
-                return yonlendir(
-                    "/kullanicilar", f"{hedef['ad']}: acil yayın yetkisi {'verildi' if ver else 'kaldırıldı'}."
-                )
+                # 0.8.0 (K4): ayrı acil yetkisi yoktur; eski bir sekmeden gelen istek reddedilir ve kayda düşer.
+                vt.kayit_dus(b, k["ad"], "Acil yetkisi değişikliği reddedildi", f"{hedef['ad']}: ayrı yetki kaldırıldı",
+                             istemci_ip(istek))  # fmt: skip
+                return yonlendir("/kullanicilar", "Acil yayın yetkisi artık ayrı verilmez: bütün yönetici ve idareciler "
+                                 "parola ve onayla başlatabilir.", hata=True)  # fmt: skip
             else:
                 return yonlendir("/kullanicilar", "Bilinmeyen işlem.", hata=True)
         return yonlendir("/kullanicilar", "Kaydedildi.")
@@ -1035,6 +1065,12 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             sinav_kurallari = sinav.kurallar(b)
             sinav_kurallari_ozel = isinstance(vt.ayar_al(b, "sinav_kurallari"), str)
             yoklama_baglami = panel_yoklama.ayar_baglami(b)
+            saklama_durumu = saklama.durum(b, datetime.fromtimestamp(vt.simdi(), ISTANBUL).date())
+            temizlik_ayari = temizlik_mod.ayar_al(b)
+            temizlik_zamani = temizlik_mod.zaman_ozeti(b, datetime.fromtimestamp(vt.simdi(), ISTANBUL).date())
+            temizlik_eski = sum(
+                1 for t in b.execute("SELECT * FROM tahta WHERE durum = 'onayli'") if not temizlik_mod.yetenekli(t)
+            )
         uretilen = tema.uret(ana, vurgu)
         logo_bilgi = None
         if logo:
@@ -1086,6 +1122,11 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             sinav_kurallari_varsayilan=sinav.SINAV_KURALLARI_VARSAYILAN,
             sinav_kurallari_en_uzun=sinav.KURALLAR_EN_UZUN,
             **yoklama_baglami,
+            saklama_durumu=saklama_durumu,
+            temizlik_ayari=temizlik_ayari,
+            temizlik_zamani=temizlik_zamani,
+            temizlik_zamanlari=temizlik_mod.ZAMANLAR,
+            temizlik_eski=temizlik_eski,
         )
 
     def acil_sablonlarini_kaydet(istek: Request, k, form, ip: str):
@@ -1172,13 +1213,75 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             vt.kayit_dus(
                 b, k["ad"], "Yoklama ayarları kaydedildi",
                 f"{'etkin' if yeni['etkin'] else 'kapalı'} · {yeni['maske']} · oturum {yeni['oturum_dk']} dk · "
-                f"boşta {yeni['bosta_dk']} dk · saklama {yeni['saklama_gun']} gün", ip,
+                f"boşta {yeni['bosta_dk']} dk", ip,
             )  # fmt: skip
         if onceki["etkin"] != yeni["etkin"]:
             onayli_tahtalari_uyandir()  # yoklama_etkin tahtalara hemen insin
         mesaj = "Yoklama ayarları kaydedildi."
         if yeni["etkin"] and ogrenci_yok:
             mesaj += " Uyarı: öğrenci listesi henüz yüklenmedi; tahtada liste boş görünür."
+        return yonlendir(adres, mesaj)
+
+    def saklama_kaydet(k, form, ip: str):
+        """Ayarlar › Kişisel veri saklama (bolum=saklama): `ogretim_yili_bitis` (K3, `saklama.py`).
+
+        Geçmiş tarih (bugünden önce) o tarihe kadarki kayıtları bir sonraki imha turunda siler; bu yüzden
+        `sk_onay` ister ve silinecek kayıt sayılarını iletide gösterir. Boş tarih silmeyi durdurur.
+        """
+        adres = "/ayarlar?yer=saklama#ileti"
+        bugun = datetime.fromtimestamp(vt.simdi(), ISTANBUL).date()
+        try:
+            yeni = saklama.bitis_coz(form.get("oneri_kullan") or form.get("ogretim_yili_bitis"), bugun)
+        except ValueError as hata:
+            return yonlendir(adres, str(hata), hata=True)
+        with vt.islem() as b:
+            onceki = saklama.bitis_al(b)
+            if yeni == onceki:
+                return yonlendir(adres, "Öğretim yılı bitiş tarihi değişmedi.")
+            if yeni and yeni < bugun and form.get("sk_onay") != "1":
+                sinir = yeni.isoformat()
+                yoklama_ = b.execute("SELECT COUNT(*) FROM yoklama WHERE tarih <= ?", (sinir,)).fetchone()[0]
+                uyari_ = b.execute("SELECT COUNT(*) FROM bos_ders_uyari WHERE tarih <= ?", (sinir,)).fetchone()[0]
+                sinav_ = sum(
+                    1 for s in b.execute("SELECT * FROM sinav WHERE kisisel_silinme IS NULL")
+                    if (g := sinav._sinav_gunu(s)) is not None and g.date() <= yeni
+                )  # fmt: skip
+                vt.kayit_dus(b, k["ad"], "Saklama tarihi reddedildi", f"geçmiş tarih {saklama.tarih_metni(yeni)}, onay yok", ip)
+                return yonlendir(
+                    adres,
+                    f"{saklama.tarih_metni(yeni)} geçmiş bir tarih: {yoklama_} yoklama, {sinav_} sınavın öğrenci listesi ve "
+                    f"{uyari_} boş ders uyarısı bir saat içinde kalıcı silinir. Eminseniz onay kutusunu işaretleyip yeniden kaydedin.",
+                    hata=True,
+                )
+            vt.ayar_yaz(b, saklama.AYAR_ANAHTARI, yeni.isoformat() if yeni else None)
+            vt.kayit_dus(
+                b, k["ad"], "Öğretim yılı bitiş tarihi kaydedildi",
+                f"{saklama.tarih_metni(onceki) or 'yok'} → {saklama.tarih_metni(yeni) or 'yok (silme yapılmaz)'}", ip,
+            )  # fmt: skip
+        if not yeni:
+            return yonlendir(adres, "Öğretim yılı bitiş tarihi kaldırıldı; kayıtlar kendiliğinden silinmeyecek.")
+        mesaj = f"Öğretim yılı bitiş tarihi kaydedildi: {saklama.tarih_metni(yeni)}."
+        if onceki and onceki >= bugun and yeni > onceki:
+            mesaj += (f" Dikkat: önceki tarih ({saklama.tarih_metni(onceki)}) henüz geçmemişti; o yılın kayıtları da "
+                      "yeni tarihe kadar saklanacak.")  # fmt: skip
+        return yonlendir(adres, mesaj)
+
+    def temizlik_ayarini_kaydet(k, form, ip: str):
+        """Ayarlar › Oturum temizliği (bolum=temizlik, K7): yalnız `oturum_temizligi` anahtarı yazılır."""
+        adres = "/ayarlar?yer=temizlik#ileti"
+        try:
+            yeni = temizlik_mod.ayar_coz(form)
+        except ValueError as hata:
+            return yonlendir(adres, str(hata), hata=True)
+        with vt.islem() as b:
+            vt.ayar_yaz(b, temizlik_mod.AYAR_ANAHTARI, yeni)
+            zaman = temizlik_mod.ZAMANLAR[yeni["zaman"]] + (f" ({yeni['saat']})" if yeni["zaman"] == "saat" else "")
+            vt.kayit_dus(b, k["ad"], "Oturum temizliği ayarı kaydedildi",
+                         f"{'açık' if yeni['etkin'] else 'kapalı'} · {zaman}", ip)  # fmt: skip
+            ozet = temizlik_mod.zaman_ozeti(b, datetime.fromtimestamp(vt.simdi(), ISTANBUL).date())
+        mesaj = "Oturum temizliği ayarı kaydedildi." if yeni["etkin"] else "Oturum temizliği kapatıldı."
+        if ozet["uyari"]:
+            mesaj += " Uyarı: " + ozet["uyari"]
         return yonlendir(adres, mesaj)
 
     def adresleri_kaydet(istek: Request, k, form, ip: str):
@@ -1216,6 +1319,10 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             return yoklama_ayarlarini_kaydet(k, form, istemci_ip(istek))
         if bolum == "adresler":
             return adresleri_kaydet(istek, k, form, istemci_ip(istek))
+        if bolum == "saklama":
+            return saklama_kaydet(k, form, istemci_ip(istek))
+        if bolum == "temizlik":
+            return temizlik_ayarini_kaydet(k, form, istemci_ip(istek))
         if bolum != "genel":
             return yonlendir("/ayarlar", "Bilinmeyen ayar bölümü.", hata=True)
         with vt.islem() as b:
@@ -1526,6 +1633,10 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                         basarili, cikti = False, str(hata)
                     except ValueError:
                         basarili, cikti = False, "Envanter okunamadı."
+                if komut["tur"] == "temizlik":
+                    # K7: ajanın raporu yalnız sayı ve adım sonucu içerir (ad, dosya, ev dizini yok).
+                    cikti = cikti[:600]
+                    vt.kayit_dus(b, f"tahta:{tahta['ad']}", "Oturum temizliği sonucu", cikti, ip)
                 if komut["tur"] == "duyuru" and basarili:
                     acil_id = acil.yedek_teslim_acil_id(json.loads(komut["veri_json"] or "{}"))
                     if acil_id:  # eski ajana yedek yolla giden acil yayın gösterildi
@@ -1709,11 +1820,20 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         uyandir_hepsi(idler)
         return idler
 
+    # ---- oturum temizliği (K7, 0.8.0) ---------------------------------------------------------------
+    def temizlik_zamanlayici(simdi: datetime | None = None) -> list[int]:
+        """Zamanı gelen gün sonu temizliğini çevrimiçi, yetenekli tahtalara verir (sınavdakiler hariç)."""
+        simdi = simdi or datetime.fromtimestamp(vt.simdi(), ISTANBUL)
+        with vt.islem() as b:
+            idler = temizlik_mod.zamanlayici(b, simdi, sinav.pencere_tahtalari)
+        uyandir_hepsi(idler)
+        return idler
+
     # ---- sınav (Aşama 4) ---------------------------------------------------------------------------
     sinav_isleyici = sinav.SinavZamanlayici()
 
     def sinav_zamanlayici(simdi: datetime | None = None) -> list[int]:
-        """Saklama temizliği (30 gün) ve evre geçişinde eşli tahtaları uyandırma; uyandırılanlar."""
+        """Saklama temizliği (öğretim yılı sonu, saklama.py) ve evre geçişinde eşli tahtaları uyandırma; uyandırılanlar."""
         an = int(simdi.timestamp()) if simdi else vt.simdi()
         with vt.islem() as b:
             idler, silindi = sinav_isleyici.calistir(b, an)
@@ -1726,7 +1846,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
     yoklama_isleyici = yoklama_mod.YoklamaZamanlayici()
 
     def yoklama_zamanlayici(simdi: datetime | None = None) -> bool:
-        """Saatte en çok bir kez imha (saklama süresi, referanssız pasif öğrenci, eski oturumlar)."""
+        """Saatte en çok bir kez imha (öğretim yılı sonu, referanssız pasif öğrenci, eski oturumlar)."""
         an = int(simdi.timestamp()) if simdi else vt.simdi()
         with vt.islem() as b:
             silindi = yoklama_isleyici.calistir(b, an)
@@ -1803,6 +1923,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
 
     uygulama.state.zamanlayici = zamanlayici
     uygulama.state.program_zamanlayici = program_zamanlayici
+    uygulama.state.temizlik_zamanlayici = temizlik_zamanlayici
     # Sonraki aşamalar (A4 sınav penceresi) buraya kanca(b, tahta_id, an_epoch) -> bool ekler.
     uygulama.state.program_askida_kancalari = program_isleyici.askida_kancalari
     # A4 (§0-7): sınav penceresindeki eşli tahta program işinde askıdadır (program kilidi verilmez, boş ders
@@ -1822,6 +1943,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         ("otomatik_kapatma", zamanlayici),
         ("duyuru_planlari", duyuru_zamanlayici),
         ("program", program_zamanlayici),
+        ("oturum_temizligi", temizlik_zamanlayici),
         ("sinav_saklama", sinav_zamanlayici),
         ("yoklama_imha", yoklama_zamanlayici),
         ("yedek", yedek_zamanlayici),

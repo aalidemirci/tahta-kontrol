@@ -16,7 +16,7 @@ import json
 import logging
 from datetime import date, datetime
 
-from . import acil, ayar, program, vt
+from . import acil, ayar, program, saklama, vt
 from .komut import komut_ekle
 
 gunluk = logging.getLogger("tahta-sunucu")
@@ -280,9 +280,9 @@ class ProgramZamanlayici:
             if bos.get("etkin") and not askida and an - ders_bas >= esik \
                     and self.bos_baslangic[t["id"]] <= ders_bas + program.BOS_DERS_SUREKLILIK_SN:  # fmt: skip
                 b.execute(
-                    "INSERT OR IGNORE INTO bos_ders_uyari (tahta_id, tarih, devre, ders_no, ders_bas, neden, olusturma) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (t["id"], tarih, ders[0], ders[2], ders_bas, neden, an),
+                    "INSERT OR IGNORE INTO bos_ders_uyari (tahta_id, tarih, devre, ders_no, ders_bas, neden, olusturma, sube) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (t["id"], tarih, ders[0], ders[2], ders_bas, neden, an, satirlar.get((ders[0], ders[2])) or ""),
                 )
         # 9: işlem kaydı — tek tur, tek satır
         parcalar = [f"{len(idler)} tahta · {ad}" for ad, idler in sorted(kilitlenen.items())]
@@ -315,19 +315,24 @@ class ProgramZamanlayici:
 
     @staticmethod
     def bakim(b, simdi: datetime) -> bool:
-        """Günde bir kez (03:00 sonrası ilk tur) eski işaret, uyarı ve istisnaları siler."""
+        """Boş ders uyarılarını öğretim yılı bitiş tarihi geçince (o tarihe kadar oluşanları) siler (K3,
+        `saklama.py`; her tur, yalnız silinecek varsa yazar); günde bir kez (03:00 sonrası ilk tur) eski
+        işaret ve istisnaları siler. Uyarı silindiyse True (çağıran WAL'ı budar)."""
+        silinen = 0
+        sinir = saklama.imha_siniri(b, simdi.date())
+        if sinir and b.execute("SELECT 1 FROM bos_ders_uyari WHERE tarih <= ? LIMIT 1", (sinir.isoformat(),)).fetchone():
+            b.execute("PRAGMA secure_delete = ON")  # uyarılar personel verisi gibi korunur (§8.1)
+            silinen = b.execute("DELETE FROM bos_ders_uyari WHERE tarih <= ?", (sinir.isoformat(),)).rowcount
+            vt.kayit_dus(b, "sistem", "Boş ders uyarısı imhası",
+                         f"{silinen} uyarı (öğretim yılı bitişi {saklama.tarih_metni(sinir)})")  # fmt: skip
         if simdi.hour < 3:
-            return False
+            return bool(silinen)
         son = vt.ayar_al(b, "program_bakim_son_tur")
         if isinstance(son, (int, float)) and datetime.fromtimestamp(son, ISTANBUL).date() >= simdi.date():
-            return False
+            return bool(silinen)
         an = _ts(simdi)
         vt.ayar_yaz(b, "program_bakim_son_tur", an)
-        b.execute("PRAGMA secure_delete = ON")  # uyarılar personel verisi gibi korunur (§8.1)
         b.execute("DELETE FROM program_isaret WHERE zaman < ?", (an - program.ISARET_SAKLAMA_GUN * 86400,))
-        silinen = b.execute(
-            "DELETE FROM bos_ders_uyari WHERE olusturma < ?", (an - program.UYARI_SAKLAMA_GUN * 86400,)
-        ).rowcount
         b.execute(
             "DELETE FROM program_istisna WHERE COALESCE(iptal, bit) < ?", (an - program.ISTISNA_SAKLAMA_GUN * 86400,)
         )
@@ -405,6 +410,101 @@ def bos_ders_metinleri(b, simdi: datetime) -> dict[int, str]:
         if (s["devre"], s["ders_no"]) in simdiki:
             sonuc[s["tahta_id"]] = f"{s['ders_no']}. ders ({program.BOS_NEDENLERI.get(s['neden'], s['neden']).lower()})"
     return sonuc
+
+
+RAPOR_EN_UZUN_GUN = 400
+
+
+def bos_ders_raporu(
+    b, bas: date, bit: date, tahta_id: int | None = None, ders_no: int | None = None, devre: str | None = None
+) -> dict:
+    """Boş ders uyarısı geçmişi ve raporu (K6). KİŞİ ADI İÇERMEZ: öğretmen tutulmaz; "görüldü" yalnız saattir.
+
+    Döndürür: {"satirlar": [{id, tarih, tarih_metni, saat, tahta_id, tahta, derslik, ders, ders_no, durum, neden,
+    sonuc, goruldu, goruldu_metni}], "toplam", "nedenler": [(ad, sayı)], "tahtalar": [{tahta_id, tahta, derslik, sayi,
+    kapali, kilitli, oturumsuz, cozulen}], "dersler": [(ders metni, sayı)], "gun_sayisi"}.
+    Satırlar tarih ve saat sırasıyla; ikili eğitimde ders numarası devre adıyla yazılır ("Sabah · 3. ders").
+    `devre` verilirse ders süzgeci yalnız o devrenin dersidir (ikili eğitimde sabah ve öğlenin 3. dersi karışmaz).
+    Şube, uyarının oluştuğu anda saklanan değerdir; 0.8.0 öncesi satırda (NULL) o günün programından bulunur ve
+    "(güncel programa göre)" notu düşülür.
+    """
+    kosul, arg = ["u.tarih BETWEEN ? AND ?"], [bas.isoformat(), bit.isoformat()]
+    if tahta_id:
+        kosul.append("u.tahta_id = ?")
+        arg.append(tahta_id)
+    if ders_no:
+        kosul.append("u.ders_no = ?")
+        arg.append(ders_no)
+    if devre:
+        kosul.append("u.devre = ?")
+        arg.append(devre)
+    satirlar = b.execute(
+        "SELECT u.*, t.ad AS tahta_ad, t.derslik AS derslik, "
+        "(SELECT devre_adi FROM ders_saati s WHERE s.devre = u.devre LIMIT 1) AS devre_adi "
+        f"FROM bos_ders_uyari u JOIN tahta t ON t.id = u.tahta_id WHERE {' AND '.join(kosul)} "
+        "ORDER BY u.tarih, u.ders_bas, t.ad",
+        arg,
+    ).fetchall()
+    cok_devre = b.execute("SELECT COUNT(DISTINCT devre) FROM ders_saati").fetchone()[0] > 1
+    subeler: dict[tuple, str] | None = None
+    program_gunleri: dict[str, int] = {}
+    liste, nedenler, tahtalar, dersler = [], {}, {}, {}
+    for s in satirlar:
+        gun = date.fromisoformat(s["tarih"])
+        ders_adi = f"{s['ders_no']}. ders"
+        if cok_devre and s["devre_adi"]:
+            ders_adi = f"{s['devre_adi']} · {ders_adi}"
+        sube = s["sube"] or ""
+        if s["sube"] is None:  # 0.8.0 öncesi uyarı: şube saklanmamış, bugünkü programdan bulunur
+            if subeler is None:
+                subeler = {
+                    (r["tahta_id"], r["gun"], r["devre"], r["ders_no"]): r["sube"]
+                    for r in b.execute("SELECT tahta_id, gun, devre, ders_no, sube FROM tahta_ders WHERE sube != ''")
+                }
+            if s["tarih"] not in program_gunleri:
+                program_gunleri[s["tarih"]] = program.gun_plani(b, gun)["program_gunu"]
+            sube = subeler.get((s["tahta_id"], program_gunleri[s["tarih"]], s["devre"], s["ders_no"]), "")
+            if sube:
+                sube = f"{sube} (güncel programa göre)"
+        durum_ = program.BOS_NEDENLERI.get(s["neden"], s["neden"])
+        liste.append({
+            "id": s["id"],
+            "tarih": s["tarih"],
+            "tarih_metni": f"{gun:%d.%m.%Y}",
+            "saat": datetime.fromtimestamp(s["ders_bas"], ISTANBUL).strftime("%H:%M"),
+            "tahta_id": s["tahta_id"],
+            "tahta": s["tahta_ad"],
+            "derslik": s["derslik"],
+            "ders": f"{ders_adi} · {sube}" if sube else ders_adi,
+            "ders_no": s["ders_no"],
+            "durum": durum_,
+            "neden": s["neden"],
+            "sonuc": (
+                f"{program.saat_eki(datetime.fromtimestamp(s['cozulme'], ISTANBUL).strftime('%H:%M'))} kullanılmaya başlandı"
+                if s["cozulme"] else "Ders boyunca boş"
+            ),
+            "goruldu": s["goruldu_zaman"] is not None,
+            "goruldu_metni": (
+                datetime.fromtimestamp(s["goruldu_zaman"], ISTANBUL).strftime("%d.%m.%Y %H:%M") if s["goruldu_zaman"] else ""
+            ),
+        })  # fmt: skip
+        nedenler[durum_] = nedenler.get(durum_, 0) + 1
+        dersler[ders_adi] = dersler.get(ders_adi, 0) + 1
+        t = tahtalar.setdefault(s["tahta_id"], {"tahta_id": s["tahta_id"], "tahta": s["tahta_ad"], "derslik": s["derslik"],
+                                                "sayi": 0, "kapali": 0, "kilitli": 0, "oturumsuz": 0, "cozulen": 0})  # fmt: skip
+        t["sayi"] += 1
+        if s["neden"] in ("kapali", "kilitli", "oturumsuz"):
+            t[s["neden"]] += 1
+        if s["cozulme"]:
+            t["cozulen"] += 1
+    return {
+        "satirlar": liste,
+        "toplam": len(liste),
+        "nedenler": sorted(nedenler.items(), key=lambda x: -x[1]),
+        "tahtalar": sorted(tahtalar.values(), key=lambda x: (-x["sayi"], x["tahta"])),
+        "dersler": sorted(dersler.items(), key=lambda x: -x[1]),
+        "gun_sayisi": (bit - bas).days + 1,
+    }
 
 
 def tahta_program(tahta, bos_ders: str | None = None) -> dict:

@@ -28,7 +28,6 @@ ISTANBUL = ZoneInfo("Europe/Istanbul")
 PROGRAM_YETENEGI = "program_kilidi"  # sürüm karşılaştırması yapılmaz (ortak sözlük §5.2)
 EN_KISA_KILIT_SN = 180
 KILIT_KOMUT_OMRU_SN = 120
-UYARI_SAKLAMA_GUN = 30
 ISARET_SAKLAMA_GUN = 2
 ISTISNA_SAKLAMA_GUN = 400
 ISTISNA_EN_UZUN_GUN = 400
@@ -53,7 +52,8 @@ NEDEN_DERS_YOK = "Bu saatte bu derslikte ders yok"
 BOS_NEDENLERI = {"kapali": "Kapalı", "kilitli": "Kilitli", "oturumsuz": "Oturum yok", "bosta": "Dokunulmadı"}
 
 VARSAYILAN_KILIT = {"etkin": False, "gecikme_dk": 2, "bos_saatte_kilitle": True}
-VARSAYILAN_BOS_DERS = {"etkin": False, "esik_dk": 10, "dokunma_yoksa": False}
+# Boş ders uyarısı varsayılan açıktır ve geçmişiyle saklanır (16.11.2026 kararı K6; saklama K3, `saklama.py`).
+VARSAYILAN_BOS_DERS = {"etkin": True, "esik_dk": 10, "dokunma_yoksa": False}
 
 # Okul Zili `holidays.py::FIXED_HOLIDAYS` listesinin kopyası; ikisi birlikte güncellenir
 # (test_resmi_tatiller_okul_zili_ile_ayni). (ay, gün, ad)
@@ -857,6 +857,47 @@ def ornek_csv(saatler: list[tuple]) -> bytes:
             ders = f"{nolar[0]}-{nolar[min(3, len(nolar) - 1)]}" if len(nolar) > 1 else str(nolar[0])
         satirlar.append([derslik, GUN_ADLARI[gun], ders, devre if len(devreler) > 1 else "", sube])
     return metin.csv_yaz(["derslik", "gun", "ders", "devre", "sube"], satirlar)
+
+
+# ---- ikili eğitim: devre türleri ------------------------------------------------------------------
+def devre_turleri(saatler: list[tuple]) -> dict[str, str]:
+    """İkili eğitimde ders saati devrelerinin sabah/öğle karşılığı: {devre: "sabah"|"ogle"}; tek devrede {}.
+
+    Önce kimlik ya da ad okunur ("sabah…", "öğle…"); iki devreli okulda adlar bunu söylemiyorsa günün
+    erken başlayan devresi sabah, geç başlayanı öğle sayılır. Üç ve daha çok devrede yalnız adı tanınanlar döner.
+    """
+    ilk: dict[str, int] = {}
+    adlar: dict[str, str] = {}
+    for _gun, devre, devre_adi, _no, bas, _bit in saatler:
+        ilk[devre] = min(ilk.get(devre, 24 * 60), dk(bas))
+        adlar.setdefault(devre, devre_adi)
+    if len(ilk) < 2:
+        return {}
+    sonuc: dict[str, str] = {}
+    for devre in ilk:
+        for aday in (devre_kimligi(devre), devre_kimligi(adlar.get(devre) or "")):
+            if aday in ("sabah", "ogle"):
+                sonuc[devre] = aday
+                break
+    if len(ilk) == 2 and set(sonuc.values()) != {"sabah", "ogle"}:
+        erken, gec = sorted(ilk, key=lambda d: (ilk[d], d))
+        sonuc = {erken: "sabah", gec: "ogle"}
+    return sonuc
+
+
+def tahta_devreleri(b) -> dict[int, str]:
+    """Derslik programından tahtanın devresi: {tahta_id: "sabah"|"ogle"|"her_ikisi"} (ikili eğitimde).
+
+    Duyuru hedefindeki "Sabahçılar/Öğlenciler" süzgeci, tahtanın "devre" alanı boşsa bunu kullanır.
+    """
+    turler = devre_turleri(ders_saatleri_oku(b))
+    if not turler:
+        return {}
+    kume: dict[int, set[str]] = {}
+    for s in b.execute("SELECT DISTINCT tahta_id, devre FROM tahta_ders"):
+        if s["devre"] in turler:
+            kume.setdefault(s["tahta_id"], set()).add(turler[s["devre"]])
+    return {t: ("her_ikisi" if len(v) > 1 else next(iter(v))) for t, v in kume.items()}
 
 
 # ---- veritabanı okuyan yardımcılar (Aşama 5 de kullanır) --------------------------------------

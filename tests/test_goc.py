@@ -38,7 +38,7 @@ def test_goc_eski_veritabanini_yukseltir(tmp_path, monkeypatch):
         sutunlar = {s["name"] for s in b.execute("PRAGMA table_info(tahta)")}
         assert {"bina", "kat", "duzeyler", "devre", "subeler"} <= sutunlar
         yetki = {s["ad"]: s["acil_yetki"] for s in b.execute("SELECT ad, acil_yetki FROM kullanici")}
-        assert yetki == {"yonetici": 1, "idareci": 0}
+        assert yetki == {"yonetici": 1, "idareci": 1}  # 0.8.0 göçü (K4): herkes yetkili
         duyuru = b.execute("SELECT * FROM duyuru").fetchone()
         assert (duyuru["an"], duyuru["bitis"], duyuru["durum"]) == (1000, 1300, "gonderildi")
         for tablo in ("tahta_grubu", "tahta_grubu_uye", "duyuru_plani", "acil_yayin", "acil_teslim"):

@@ -1,46 +1,94 @@
 {% extends "taban.html" %}
 {% block baslik %}Boş ders uyarıları · Tahta Kontrol{% endblock %}
 {% block icerik %}
-{# Bağlam: uyarilar[{id,saat,tahta_id,tahta,derslik,ders,durum,neden,sonuc,goruldu}], serit, bolum,
-   tarih (YYYY-AA-GG), tarih_metni (gg.aa.yyyy), en_eski, bugun.
-   Dışa aktarma ve yazdırma görünümü bilerek yoktur (uyarılar personel verisi gibi korunur). #}
+{# Bağlam: rapor (program_is.bos_ders_raporu), uyarilar (= rapor.satirlar), serit, bolum, tek_gun, bas, bit, tarih,
+   tarih_metni, bugun, tahtalar[{id,ad,derslik}], tahta_id, ders_nolari[{deger,ad}], ders_no, secili_ders, saklama_metni.
+   Kişi adı yoktur (öğretmen tutulmaz, "görüldü" yalnız saattir). Dışa aktarma bilerek yoktur; sayfa yazdırılabilir. #}
 {% set NEDEN_RENGI = {'kapali': 'cevrimdisi', 'kilitli': 'kilitli', 'oturumsuz': 'bilgi', 'bosta': 'bilgi'} %}
 {% set NEDEN_SIMGESI = {'kapali': 's-kapali', 'kilitli': 's-kilit', 'oturumsuz': 's-bilgi', 'bosta': 's-bilgi'} %}
 {% include "_program_bas.html" %}
 
-<p class="bant kvkk-not"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Bu uyarı tahtanın kullanılıp kullanılmadığını gösterir; öğretmen adı tutulmaz ve uyarılar 30 gün sonra silinir. Tahtanın kapalı olması dersin işlenmediği anlamına gelmez. Bu kayıtlar personel değerlendirmesinde kanıt olarak kullanılmak üzere tasarlanmamıştır.</p>
+<p class="bant kvkk-not"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Bu uyarı tahtanın kullanılıp kullanılmadığını gösterir; dersin işlenip işlenmediğini değil. Öğretmen adı tutulmaz. Uyarılar {{ saklama_metni }}. Tahtanın kapalı olması dersin işlenmediği anlamına gelmez; bu kayıtlar personel değerlendirmesinde kanıt olarak kullanılmak üzere tasarlanmamıştır.</p>
 
-<div class="arac-cubugu">
+<form method="get" action="/program/uyarilar" class="arac-cubugu rapor-suzgec" aria-labelledby="uyari-baslik">
   <h2 id="uyari-baslik" class="arac-baslik">Boş ders uyarıları · {{ tarih_metni }}</h2>
-  <form method="get" action="/program/uyarilar" class="tarih-sec">
-    <label for="u-tarih" class="gizli">Tarih</label>
-    <input id="u-tarih" type="date" name="tarih" value="{{ tarih }}" min="{{ en_eski }}" max="{{ bugun }}" required>
+  <div class="tarih-sec">
+    <label for="u-bas">Başlangıç</label>
+    <input id="u-bas" type="date" name="bas" value="{{ bas }}" max="{{ bugun }}" required>
+    <label for="u-bit">Bitiş</label>
+    <input id="u-bit" type="date" name="bit" value="{{ bit }}" max="{{ bugun }}" required>
+    <label for="u-tahta">Tahta</label>
+    <select id="u-tahta" name="tahta">
+      <option value="">Tüm tahtalar</option>
+      {% for t in tahtalar %}<option value="{{ t.id }}" {% if t.id == tahta_id %}selected{% endif %}>{{ t.ad }}{% if t.derslik %} · {{ t.derslik }}{% endif %}</option>{% endfor %}
+    </select>
+    <label for="u-ders">Ders saati</label>
+    <select id="u-ders" name="ders">
+      <option value="">Tümü</option>
+      {% for n in ders_nolari %}<option value="{{ n.deger }}" {% if n.deger == secili_ders %}selected{% endif %}>{{ n.ad }}</option>{% endfor %}
+    </select>
     <button>Göster</button>
-    {% if tarih != bugun %}<a class="dugme" href="/program/uyarilar">Bugün</a>{% endif %}
-  </form>
+    {% if not (tek_gun and bas == bugun and not tahta_id and not ders_no) %}<a class="dugme" href="/program/uyarilar">Bugün</a>{% endif %}
+    <button type="button" data-yazdir>Yazdır</button>
+  </div>
+</form>
+{% if not serit.bos_ders_etkin %}<p class="not">Boş ders uyarısı şu an kapalı; Kurallar bölümünden açılır. Eski uyarılar saklama süresince görünür.</p>{% endif %}
+
+{% if not tek_gun and rapor.toplam %}
+<ul class="sayi-kutulari" aria-label="Rapor özeti">
+  <li class="sayi-kutusu"><span class="deger">{{ rapor.toplam }}</span><span class="etiket">Uyarı ({{ rapor.gun_sayisi }} gün)</span></li>
+  {% for ad, sayi in rapor.nedenler %}<li class="sayi-kutusu"><span class="deger">{{ sayi }}</span><span class="etiket">{{ ad }}</span></li>{% endfor %}
+</ul>
+<div class="iki-sutun">
+<section class="kutu" aria-labelledby="tahta-ozet-baslik">
+  <h3 id="tahta-ozet-baslik">Tahta ve dersliğe göre</h3>
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="tahta-ozet-baslik">
+  <table>
+    <thead><tr><th scope="col">Tahta</th><th scope="col">Derslik</th><th scope="col" class="sayi-hucre">Uyarı</th><th scope="col" class="sayi-hucre">Kapalı</th><th scope="col" class="sayi-hucre">Kilitli</th><th scope="col" class="sayi-hucre">Oturum yok</th><th scope="col" class="sayi-hucre">Sonradan kullanıldı</th></tr></thead>
+    <tbody>
+    {% for t in rapor.tahtalar %}
+    <tr><td data-etiket="Tahta"><a href="/program/uyarilar?bas={{ bas }}&amp;bit={{ bit }}&amp;tahta={{ t.tahta_id }}">{{ t.tahta }}</a></td><td data-etiket="Derslik">{{ t.derslik or '—' }}</td>
+      <td data-etiket="Uyarı" class="sayi-hucre">{{ t.sayi }}</td><td data-etiket="Kapalı" class="sayi-hucre">{{ t.kapali }}</td><td data-etiket="Kilitli" class="sayi-hucre">{{ t.kilitli }}</td>
+      <td data-etiket="Oturum yok" class="sayi-hucre">{{ t.oturumsuz }}</td><td data-etiket="Sonradan kullanıldı" class="sayi-hucre">{{ t.cozulen }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+<section class="kutu" aria-labelledby="ders-ozet-baslik">
+  <h3 id="ders-ozet-baslik">Ders saatine göre</h3>
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="ders-ozet-baslik">
+  <table>
+    <thead><tr><th scope="col">Ders saati</th><th scope="col" class="sayi-hucre">Uyarı</th></tr></thead>
+    <tbody>{% for ad, sayi in rapor.dersler %}<tr><td data-etiket="Ders saati">{{ ad }}</td><td data-etiket="Uyarı" class="sayi-hucre">{{ sayi }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+</section>
 </div>
-{% if not serit.bos_ders_etkin %}<p class="not">Boş ders uyarısı şu an kapalı; Kurallar bölümünden açılır. Eski uyarılar 30 gün görünür.</p>{% endif %}
+{% endif %}
 
 {% if uyarilar %}
-<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="uyari-baslik">
+<div class="tablo-kap" role="region" tabindex="0" aria-label="Uyarı listesi">
 <table>
-  <thead><tr><th scope="col">Saat</th><th scope="col">Tahta</th><th scope="col">Derslik</th><th scope="col">Ders</th><th scope="col">Durum</th><th scope="col">Sonuç</th><th scope="col">Görüldü</th></tr></thead>
+  <thead><tr>{% if not tek_gun %}<th scope="col">Tarih</th>{% endif %}<th scope="col">Saat</th><th scope="col">Tahta</th><th scope="col">Derslik</th><th scope="col">Ders</th><th scope="col">Durum</th><th scope="col">Sonuç</th><th scope="col">Görüldü</th></tr></thead>
   <tbody>
   {% for u in uyarilar %}
   <tr>
+    {% if not tek_gun %}<td data-etiket="Tarih">{{ u.tarih_metni }}</td>{% endif %}
     <td data-etiket="Saat">{{ u.saat }}</td>
     <td data-etiket="Tahta"><a href="/tahta/{{ u.tahta_id }}">{{ u.tahta }}</a></td>
     <td data-etiket="Derslik">{{ u.derslik or '—' }}</td>
     <td data-etiket="Ders">{{ u.ders }}</td>
     <td data-etiket="Durum"><span class="rozet" data-durum="{{ NEDEN_RENGI.get(u.neden, 'bilgi') }}"><svg class="simge" aria-hidden="true"><use href="#{{ NEDEN_SIMGESI.get(u.neden, 's-bilgi') }}"/></svg>{{ u.durum }}</span></td>
     <td data-etiket="Sonuç">{{ u.sonuc }}</td>
-    <td data-etiket="Görüldü">{% if u.goruldu %}<span class="not"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg> {{ u.goruldu }}</span>{% else %}<form method="post" action="/program/uyarilar/{{ u.id }}/goruldu" class="satir-ici"><button>Görüldü</button></form>{% endif %}</td>
+    <td data-etiket="Görüldü">{% if u.goruldu %}<span class="not"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg> {{ u.goruldu_metni }}</span>{% else %}<form method="post" action="/program/uyarilar/{{ u.id }}/goruldu" class="satir-ici"><button>Görüldü</button></form>{% endif %}</td>
   </tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
 {% else %}
-<p class="bos-not">Bu tarihte boş ders uyarısı yok.</p>
+<p class="bos-not">{{ 'Bu tarihte' if tek_gun else 'Bu aralıkta' }} boş ders uyarısı yok.</p>
 {% endif %}
+<p class="not">Öğretmenlerin bu uyarıdan önceden bilgilendirilmesi okul idaresinin sorumluluğundadır.</p>
 {% endblock %}

@@ -3,7 +3,7 @@
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.7.1, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
+> **Durum: 0.8.0, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
 > gerçek bir Pardus ETAP tahtasında henüz denenmedi. Okul genelinde kullanmadan
 > önce tek tahtada deneyin (`docs/saha-denemesi.md`).
 
@@ -50,9 +50,9 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
   saatlerde tahta kilitlenir, derse girilecek saatte sunucu kapalı olsa bile
   kendiliğinden açılır; ekranda yalnız neden ve açılış saati yazar. Tahta bazında
   muafiyet, tarih aralıklı istisna ve "1 saat / bugün durdur" vardır.
-- **Boş ders uyarısı** (varsayılan kapalı): programında ders olan tahta ders
+- **Boş ders uyarısı** (0.8.0'dan beri varsayılan açık): programında ders olan tahta ders
   başladıktan sonra kapalı ya da kilitli kalırsa panelde uyarı; uyarılar dışa
-  aktarılmaz ve 30 gün sonra silinir.
+  aktarılmaz, öğretim yılı sonunda silinir.
 
 0.5.0 ile:
 
@@ -68,7 +68,7 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
 - **Şube duyurusu:** sınavdan önce şube dersliklerinde "kim hangi salonda, hangi koltukta"
   listesi maskeli olarak gösterilir.
 - Öğrencinin adı sunucuda saklanmaz (yalnız maske); tahtaya tam okul numarası gitmez;
-  öğrenci listesi 30 gün sonra kendiliğinden silinir.
+  öğrenci listesi öğretim yılı sonunda kendiliğinden silinir.
 
 0.6.0 ile:
 
@@ -83,8 +83,8 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
   (gerekçeyle), tahta bozukken panelden yoklama, öğretmen kodları ve yazdırılabilir PIN pusulası,
   e-Okul girişine yardımcı icmal (yazdırma, kopyalanabilir metin, CSV) ve "e-Okul'a işlendi"
   işareti. e-Okul'a giriş idarece elle yapılır; Tahta Kontrol e-Okul'a bağlanmaz.
-- Yoklama kayıtları ayarlanan süre (varsayılan 30 gün) sonunda kendiliğinden silinir; öğretim
-  yılı sonunda bütün öğrenci ve yoklama verisi tek işlemle silinebilir.
+- Tahtadan alınan yoklama kâğıt yoklamanın yanında yardımcı kayıttır. Yoklama kayıtları öğretim
+  yılı sonunda kendiliğinden silinir; bütün öğrenci ve yoklama verisi tek işlemle de silinebilir.
 
 0.7.0 ile:
 
@@ -103,8 +103,27 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
   açıklama yazar; sunucuya ulaşılamıyorsa kayıt tahtada bekler. İdare kaydı panelden de açar,
   "İnceleniyor / Çözüldü" diye izler; her değişiklik geçmişe düşer, kayıt silinmez.
 
-Planlananlar: sunucunun Windows hizmeti olarak (oturum açılmadan) çalışması ve ajan paketi
-imzası (`docs/tasarim.md`, yol haritası).
+0.8.0 ile:
+
+- **İkili eğitim:** sabahçı ve öğlenci devrenin ayrı zil çizelgeleri; aynı tahtada sabah bir şube,
+  öğle başka şube. Program kilidi, boş ders uyarısı, yoklama önerisi ve icmal devreyi gözetir
+  (sabahın 3. dersi ile öğlenin 3. dersi karışmaz); duyuruda "Sabahçılar/Öğlenciler" süzgeci
+  derslik programından da çalışır.
+- **Öğretim yılı sonuna kadar saklama:** ders yoklaması, sınav listesi ve boş ders uyarıları,
+  Ayarlar'da girilen öğretim yılı bitiş tarihi geçince silinir; tarih girilmemişse silinmez ve
+  Ayarlar uyarır. Şifreli yedekler bu veriyi yedek saklama süresi kadar daha taşır.
+- **Acil durum yayını** bütün idare kullanıcılarınca başlatılabilir (parola ve açık onayla).
+- **Boş ders raporu:** tarih aralığı, tahta/derslik ve ders saatine göre; kişi adı içermez.
+- **Gün sonu oturum temizliği** (varsayılan kapalı): ortak öğretmen/öğrenci hesabında açık
+  pencerelere kapatma isteği gider, tarayıcılar kapatılır, yalnız çerez ve oturum dosyaları
+  silinir; dosyalara, geçmişe ve kayıtlı parolalara dokunulmaz. Kullanılan tahtada 60 saniyelik
+  uyarı ve "Vazgeç" çıkar. Yalnız Debian 12 kabında denendi.
+- **Sunucu Windows hizmeti olarak çalışır:** bilgisayar açılınca, kimse oturum açmadan başlar;
+  çökerse kendiliğinden yeniden başlar. Hizmet en az yetkili Yerel Hizmet hesabıyla çalışır;
+  veri `C:\ProgramData\TahtaKontrol` klasöründedir ve sıradan kullanıcılar okuyamaz. Masaüstü
+  kısayolu yalnız durum penceresini açar. Önceki sürümden yükseltirken veri ve sunucu
+  sertifikası kurulumda kopyalanır; tahtalara ajan yeniden kurulmaz (`docs/saha-denemesi.md`
+  §1.1). Gerçek hizmet kurulumu henüz yönetici yetkili bir denemede doğrulanmadı.
 
 ## Çalıştırma (geliştirme)
 
@@ -117,7 +136,8 @@ uv run pytest -q
 ```
 
 Panel `http://127.0.0.1:8787` adresinde açılır. Windows kurulum dosyası
-`packaging\windows\build.ps1` ile derlenir (PyInstaller ve Inno Setup 6).
+`packaging\windows\build.ps1` ile derlenir (PyInstaller ve Inno Setup 6). Kurucu sunucuyu
+Windows hizmeti olarak kaydeder (pywin32; ayrı bir hizmet aracı kullanılmaz).
 
 ## Güvenlik ve gizlilik
 
@@ -128,10 +148,10 @@ Panel `http://127.0.0.1:8787` adresinde açılır. Windows kurulum dosyası
 - Sunucu arızası dersi engellemez: sunucuya ulaşılamazsa kilit (ve sınav ekranı) tahtadan
   açılabilir.
 - Sınav listesinde ad soyad saklanmaz; tahtada yalnız maskeli ad, numaranın son iki hanesi,
-  şube ve koltuk görünür. Liste tahtada diske yazılmaz ve 30 gün sonra sunucudan silinir.
+  şube ve koltuk görünür. Liste tahtada diske yazılmaz ve öğretim yılı sonunda sunucudan silinir.
 - Ders yoklamasında tahtada öğrenci yalnız maskeli adla görünür; liste tahtada diske yazılmaz.
   Öğretmen PIN'i sunucuda yalnız geri çevrilemez özet olarak durur ve tahtaya gitmez. Yoklama
-  kayıtları saklama süresi sonunda silinir; öğrenci listesi dışa verilmez.
+  kayıtları öğretim yılı sonunda silinir; öğrenci listesi dışa verilmez.
 - Panel dış kaynak (font, CDN, analitik) yüklemez; satır içi betik ve stil
   içermez, içerik güvenliği politikası (CSP) bunu zorlar. Logo yalnız PNG ya da
   JPEG olarak kabul edilir.
@@ -140,6 +160,9 @@ Panel `http://127.0.0.1:8787` adresinde açılır. Windows kurulum dosyası
 - Envanter yalnız cihaz bilgisidir (hesap adı, dosya adı, makine adı girmez). Tahtadan gelen arıza
   kaydında kişi kimliği yoktur, yalnız hesap türü (öğretmen/öğrenci); tahtada hiçbir arıza metni
   gösterilmez.
+- Sunucu hizmeti en az yetkili hesapla (Yerel Hizmet) çalışır; veritabanı, sertifika anahtarı ve
+  yedekler yalnız yöneticilerin ve hizmetin erişebildiği klasördedir. Program kaldırılınca bu
+  klasör silinmez.
 - Ajan paketi henüz imzalı değildir; sunucu bilgisayarını yetkisiz erişime karşı koruyun.
 - Güvenlik açığı bildirimi için herkese açık kayıt açmak yerine depo sahibine
   GitHub üzerinden özel olarak ulaşın.

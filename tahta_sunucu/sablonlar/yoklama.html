@@ -4,7 +4,7 @@
 {# Günlük görünüm (Aşama 5 §6.1). Bağlam: panel_yoklama.py SÖZLEŞME — g (yoklama.gunluk_gorunum), yoklama_etkin,
    eksik_tahtalar, ogrenci_var, bugun_iso, adli_not. Sayfa kendini yenilemez; "Yenile" bağlantısı yeterlidir. #}
 {% with bolum='gunluk', bas_baslik='Yoklama · ' ~ g.tarih_yazi,
-        bas_aciklama='Ders saati bazında tahtadan alınan yoklamalar. Hücreye dokununca kayıt açılır; e-Okul girişi idarece elle yapılır.' %}
+        bas_aciklama='Ders saati bazında tahtadan alınan yoklamalar: sınıftaki kâğıt yoklamanın yanında tutulan yardımcı kayıttır, onun yerine geçmez. Hücreye dokununca kayıt açılır; e-Okul girişi idarece elle yapılır.' %}
 {% include "_yoklama_bas.html" %}
 {% endwith %}
 {% if not yoklama_etkin %}
@@ -45,7 +45,7 @@
   <tbody>
   {% for s in g.satirlar %}
   <tr{% if s.islendi %} class="islendi"{% endif %}>
-    <th scope="row">{{ s.sube }}</th>
+    <th scope="row">{{ s.sube }}{% if s.devre_adi %} <span class="not">{{ s.devre_adi }}</span>{% endif %}</th>
     {% for h in s.hucreler %}
     <td class="yk-hucre" {% if h.baslik %}title="{{ h.baslik }}"{% endif %}>
       {%- if h.durum == 'alindi' -%}

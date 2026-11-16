@@ -23,6 +23,8 @@ KOMUT_OMRU = {
     "tani": 86400,
     "guncelle": 86400,
     "envanter": 86400,
+    # K7: gün sonu temizliği kısa ömürlüdür; sonradan açılan tahta eski temizlik komutunu almaz.
+    "temizlik": 120,
 }
 KOMUT_ADI = {
     "kilitle": "Kilitle",
@@ -35,6 +37,7 @@ KOMUT_ADI = {
     "guncelle": "Ajanı güncelle",
     "envanter": "Envanteri yenile",
     "uyandir": "Uzaktan aç",
+    "temizlik": "Oturum temizliği",
 }
 KOMUT_DURUMU = {
     "bekliyor": "Tahta bekleniyor",

@@ -1,6 +1,6 @@
 [project]
 name = "tahta-kontrol"
-version = "0.7.1"
+version = "0.8.0"
 description = "Okul ağında etkileşimli tahta kontrol ve duyuru sistemi"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -11,6 +11,7 @@ dependencies = [
     "cryptography>=43",
     "tzdata>=2024.1",
     "xlrd==2.0.1",
+    "pywin32>=308 ; sys_platform == 'win32'",
 ]
 
 [dependency-groups]

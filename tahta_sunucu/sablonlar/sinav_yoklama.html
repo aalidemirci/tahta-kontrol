@@ -13,7 +13,7 @@
 <div class="bant{% if not salon.yoklama_metni %} uyari{% endif %}" role="note">
   <svg class="simge" aria-hidden="true"><use href="#{{ 's-tamam' if salon.yoklama_metni else 's-bilgi' }}"/></svg>
   {%- if salon.yoklama_metni %}Son yoklama: {{ salon.yoklama_metni }}.{% else %}Bu salonda henüz yoklama alınmadı.{% endif %}
-  <span class="not">Bu sayfa okul numaraları içerir; ekranı öğrencilere açık bırakmayın.</span>
+  <span class="not">Bu sayfa okul numaraları içerir; ekranı öğrencilere açık bırakmayın. Bu yoklama salon evrakındaki imzalı yoklamanın yanında yardımcı kayıttır.</span>
 </div>
 <form method="post" action="/sinav/{{ s.id }}/salon/{{ salon.id }}/yoklama" id="yoklama-formu">
 <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="koltuk-baslik">

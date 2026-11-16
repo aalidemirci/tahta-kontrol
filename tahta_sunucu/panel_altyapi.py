@@ -23,8 +23,9 @@ ISTANBUL = yedek.ISTANBUL
 GERI_YUKLEME_HATA_SINIRI = (5, 600)  # K-B5: 5 başarısız deneme / 10 dk (IP başına)
 YEDEK_PAROLA_SINIRI = (5, 600)
 KVKK_YEDEK_NOTU = (
-    "Şifreli yedekler; sınav, yoklama ve boş ders uyarısı gibi süreli silinen kişisel verinin kopyasını, "
-    "silindikten sonra da yedek saklama süresi kadar (günlük yedek sayısı kadar gün) taşır. Elle alınan "
+    "Şifreli yedekler; öğretim yılı sonunda silinen ders yoklaması, sınav listesi ve boş ders uyarısı gibi "
+    "kişisel verinin kopyasını, silindikten sonra da yedek saklama süresi kadar (günlük yedek sayısı kadar gün) "
+    "taşır. Elle alınan "
     "yedekler de bu süreden eskiyince silinir. Geri yüklemede bir önceki veritabanı en çok bu süre kadar "
     "saklanır; onaylanmamış geri yükleme dosyaları bir gün sonra silinir. Bilgisayarınıza indirdiğiniz "
     "yedekleri siz silmelisiniz."
@@ -316,7 +317,17 @@ def kaydet(uygulama, y) -> None:
                 f"yedek tarihi {datetime.fromtimestamp(int(bekleyen['yedek_olusturma']), ISTANBUL):%d.%m.%Y %H:%M}; "
                 "program yeniden açılınca uygulanır", ip(istek),
             )  # fmt: skip
-        # 6A: oturum programı kendini yeniden başlatmaz (hizmet kipi 6B'de 75 koduyla çıkar).
+        if ayar.HIZMET:
+            # Hizmet kipi: süreç 2 sn sonra 75 koduyla çıkar, hizmet yöneticisi yeniden başlatır.
+            from . import hizmet
+
+            hizmet.yeniden_baslat_planla()
+            return y.yonlendir(
+                "/yedekler/geri-yukle/onay",
+                "Geri yükleme onaylandı. Sunucu hizmeti birkaç saniye içinde yeniden başlıyor; "
+                "yedek açılışta yerleştirilir. Yarım dakika sonra sayfayı yenileyip yeniden giriş yapın.",
+            )
+        # Oturum programı (geliştirme) kendini yeniden başlatmaz.
         return y.yonlendir(
             "/yedekler/geri-yukle/onay",
             "Geri yükleme onaylandı. Tahta Kontrol programını kapatıp yeniden açın; yedek açılışta yerleştirilir.",

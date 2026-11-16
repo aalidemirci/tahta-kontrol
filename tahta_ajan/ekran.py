@@ -21,8 +21,12 @@ belirteci bu yardımcıya hiç gelmez; kod servise iletilir ve sunucuda doğrula
 Ders yoklaması (Aşama 5): PIN sayfası (öğretmen kodu + PIN, tuş takımı), sınıf listesi (maskeli
 etiketli düğmeler; yalnız "yok" olanlara dokunulur), onay ve ileti sayfaları. Liste yalnız servisten
 gelen durum iletisinde ve düğmelerde durur; yoklama kapanınca düğmeler yok edilir. Yoklama belirteci
-bu yardımcıya hiç gelmez; PIN servise iletilir, burada saklanmaz. Öncelik: acil > kapatma > gözetmen >
-yoklama > duyuru > sınav > kilit. Klavye kilidi yalnız tahta kilitliyse alınır.
+bu yardımcıya hiç gelmez; PIN servise iletilir, burada saklanmaz. Öncelik: acil > kapatma > temizlik >
+gözetmen > yoklama > duyuru > sınav > kilit. Klavye kilidi yalnız tahta kilitliyse alınır.
+
+Oturum temizliği (K7, 0.8.0): kapatma uyarısı sayfası 60 sn geri sayımlı temizlik uyarısı olarak da
+kullanılır; servisin "pencereleri_kapat" isteğinde pencere kapatma ayrı süreçte yapılır
+(sistem.pencereleri_kapat) ve yalnız sayılar servise döner.
 """
 
 from __future__ import annotations
@@ -37,7 +41,14 @@ import sys
 import threading
 import time
 
-from . import __version__, ayar
+from . import __version__, ayar, sistem
+
+# Oturum temizliği uyarısı (K7): neyin yapılıp neye dokunulmadığı açıkça yazılır.
+TEMIZLIK_UYARI_METNI = (
+    "Gün sonu oturum temizliği: açık pencereler kapanır, tarayıcı oturumları ve çerezler silinir.\n"
+    "Dosyalarınıza, tarayıcı geçmişine ve kayıtlı parolalara dokunulmaz.\n"
+    "Tahtayı kullanıyorsanız Vazgeç düğmesine dokunun."
+)
 
 # ---- ekran ölçeği (saf; test edilir) -----------------------------------------------------------
 # Bütün piksel ölçüleri (yazı boyları, boşluklar, tuş takımı, düğmeler) 1920x1080 yatay ekran için
@@ -1034,15 +1045,23 @@ def calistir() -> int:
         def _kapatma_sayfasi(self):
             kutu = self._kutu(Gtk.Orientation.VERTICAL, 18)
             self._kenar(kutu, 80, 80)
-            baslik = self._etiket("kapatma-baslik", "Bu tahta kapatılacak")
+            # Aynı sayfa oturum temizliği uyarısında da kullanılır (K7): başlık ve Vazgeç'in gönderdiği
+            # ileti `kapatma_kipi`ne göre değişir.
+            self.kapatma_kipi = "kapatma"
+            self.kapatma_baslik = self._etiket("kapatma-baslik", "Bu tahta kapatılacak")
             self.kapatma_sayac = self._etiket("kapatma-sayac")
             self.kapatma_neden = self._etiket("kapatma-neden")
             vazgec = Gtk.Button(label="Vazgeç — tahtayı kullanıyorum")
             vazgec.set_name("ana-dugme")
             vazgec.set_halign(Gtk.Align.CENTER)
             vazgec.set_can_focus(False)
-            vazgec.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "kapatma_iptal"}))
-            for parca in (baslik, self.kapatma_sayac, self.kapatma_neden, vazgec):
+            vazgec.connect(
+                "clicked",
+                lambda *_: self.baglanti.gonder(
+                    {"tur": "temizlik_iptal" if self.kapatma_kipi == "temizlik" else "kapatma_iptal"}
+                ),
+            )
+            for parca in (self.kapatma_baslik, self.kapatma_sayac, self.kapatma_neden, vazgec):
                 kutu.pack_start(parca, False, False, 0)
             return self._sayfa(kutu)
 
@@ -1836,6 +1855,20 @@ def calistir() -> int:
         def _mesaj(self, mesaj):
             if mesaj.get("tur") == "yeniden_baslat":
                 os.execv(sys.executable, [sys.executable, "-m", "tahta_ajan", "ekran"])
+            if mesaj.get("tur") == "pencereleri_kapat":
+                # Oturum temizliği (K7): pencere kapatma ayrı süreçte çalışır; sonuç yalnız sayılardır.
+                kuru = bool(mesaj.get("kuru"))
+                hedef_uid = mesaj.get("uid")
+
+                def _kapat():
+                    # İkinci güvence: istek başka oturumun kullanıcısı içinse hiçbir pencereye dokunulmaz.
+                    if not isinstance(hedef_uid, int) or not hasattr(os, "getuid") or os.getuid() != hedef_uid:
+                        sonuc = {"hata": "başka oturumun ekran yardımcısı"}
+                    else:
+                        sonuc = sistem.pencereleri_kapat(os.getpid(), kuru)
+                    self.baglanti.gonder(dict(sonuc, tur="pencere_sonucu"))
+
+                threading.Thread(target=_kapat, daemon=True).start()
             if mesaj.get("tur") == "marka":
                 self._marka(mesaj)
                 if self.durum:
@@ -1919,6 +1952,9 @@ def calistir() -> int:
             if self.durum and self.durum.get("kapatma"):
                 self.durum["kapatma"]["kalan"] = max(0, self.durum["kapatma"]["kalan"] - 1)
                 self.kapatma_sayac.set_text(str(self.durum["kapatma"]["kalan"]))
+            elif self.durum and isinstance(self.durum.get("temizlik"), dict):
+                self.durum["temizlik"]["kalan"] = max(0, int(self.durum["temizlik"].get("kalan") or 0) - 1)
+                self.kapatma_sayac.set_text(str(self.durum["temizlik"]["kalan"]))
             if self.durum and self.durum.get("acil"):
                 self.durum["acil"]["kalan"] -= 1
                 if self.durum["acil"]["kalan"] <= 0:
@@ -1979,6 +2015,8 @@ def calistir() -> int:
             durum = self.durum or {}
             duyuru = durum.get("duyuru")
             kapatma = durum.get("kapatma")
+            # Eski servis "temizlik" alanını göndermez: uyarı yok sayılır.
+            temizlik = durum.get("temizlik") if isinstance(durum.get("temizlik"), dict) else None
             acil = durum.get("acil")
             # Eski servis "sinav" alanını göndermez: sınav yok sayılır (eski davranış sürer).
             sinav = durum.get("sinav") if isinstance(durum.get("sinav"), dict) else None
@@ -1995,7 +2033,7 @@ def calistir() -> int:
             if not yoklama and self.yk_oturum is not None:
                 self._yoklama_temizle()
             self._bantlari_ciz(durum)
-            # Öncelik (ortak sözlük §5.5): acil > kapatma > gozetmen-* > yoklama-* > duyuru > sinav-giris/sinav > kilit > gizli.
+            # Öncelik (ortak sözlük §5.5; K7 temizlik uyarısı kapatmanın hemen altında): acil > kapatma > temizlik > gozetmen-* > yoklama-* > duyuru > sinav-giris/sinav > kilit > gizli.
             if acil:
                 tatbikat = acil.get("tur") == "tatbikat"
                 self.acil_bant.set_text(ACIL_BANT["tatbikat" if tatbikat else "acil"])
@@ -2018,11 +2056,21 @@ def calistir() -> int:
                 return
             self._pencere_sinifi(None)
             if kapatma:
+                self.kapatma_kipi = "kapatma"
+                self.kapatma_baslik.set_text("Bu tahta kapatılacak")
                 self.kapatma_sayac.set_text(str(kapatma.get("kalan", 0)))
                 self.kapatma_neden.set_text(
                     (kapatma.get("neden") or "Otomatik kapatma")
                     + "\nTahtayı kullanıyorsanız Vazgeç düğmesine dokunun; yoksa süre sonunda kapanır."
                 )
+                self.yigin.set_visible_child_name("kapatma")
+                self._goster(kilit=False)
+            elif temizlik:
+                # Oturum temizliği uyarısı (K7): kapatma uyarısıyla aynı sayfa ve dil.
+                self.kapatma_kipi = "temizlik"
+                self.kapatma_baslik.set_text("Açık pencereler kapatılacak")
+                self.kapatma_sayac.set_text(str(temizlik.get("kalan", 0)))
+                self.kapatma_neden.set_text(TEMIZLIK_UYARI_METNI)
                 self.yigin.set_visible_child_name("kapatma")
                 self._goster(kilit=False)
             elif gozetmen_sayfasi:

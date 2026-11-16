@@ -1,9 +1,10 @@
 {% extends "taban.html" %}
 {% block baslik %}Ayarlar · Tahta Kontrol{% endblock %}
 {# Okul kimliği işlemlerinin iletisi sayfa başında değil, #kimlik bölümünde çizilir (yönlendirme oraya kayar). #}
-{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in ('kimlik', 'acil', 'sinav', 'adresler') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
+{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in ('kimlik', 'acil', 'sinav', 'adresler', 'saklama', 'temizlik') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}
 <div class="sayfa-bas"><h1>Ayarlar</h1></div>
+{% if saklama_durumu.uyari %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ saklama_durumu.uyari }} <a href="#saklama">Kişisel veri saklama</a></p>{% endif %}
 <form method="post" action="/ayarlar">
 <input type="hidden" name="bolum" value="genel">
 <div class="iki-sutun">
@@ -141,7 +142,8 @@
 <h2 id="ders-yoklamasi">Ders yoklaması</h2>
 <section class="kutu" aria-labelledby="ders-yoklamasi">
   {% if mesaj and ileti_yeri == 'yoklama' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
-  <p class="ipucu">Öğretmen tahtada öğretmen kodu ve PIN ile girer, yalnız derste olmayanlara dokunur. Öğrenci listesi, öğretmenler ve
+  <p class="ipucu">Öğretmen tahtada öğretmen kodu ve PIN ile girer, yalnız derste olmayanlara dokunur. Tahtadan alınan yoklama
+    sınıftaki kâğıt yoklamanın yanında tutulan yardımcı kayıttır; onun yerine geçmez. Öğrenci listesi, öğretmenler ve
     PIN'ler <a href="/yoklama">Yoklama</a> sayfasının sekmelerinden yönetilir.</p>
   <form method="post" action="/ayarlar">
     <input type="hidden" name="bolum" value="yoklama">
@@ -159,11 +161,61 @@
       <div><label for="yk_bosta_dk">Dokunulmazsa kapanma (dk)</label>
         <input id="yk_bosta_dk" name="yk_bosta_dk" type="number" required class="alan-sayi" min="{{ yoklama_sinirlari.bosta_dk[0] }}" max="{{ yoklama_sinirlari.bosta_dk[1] }}" value="{{ yoklama_ayari.bosta_dk }}">
         <p class="not">{{ yoklama_sinirlari.bosta_dk[0] }}–{{ yoklama_sinirlari.bosta_dk[1] }} dk.</p></div>
-      <div><label for="yk_saklama_gun">Saklama süresi (gün)</label>
-        <input id="yk_saklama_gun" name="yk_saklama_gun" type="number" required class="alan-sayi" min="{{ yoklama_sinirlari.saklama_gun[0] }}" max="{{ yoklama_sinirlari.saklama_gun[1] }}" value="{{ yoklama_ayari.saklama_gun }}" aria-describedby="yk-saklama-not">
-        <p class="not" id="yk-saklama-not">{{ yoklama_sinirlari.saklama_gun[0] }}–{{ yoklama_sinirlari.saklama_gun[1] }} gün. Süresi dolan yoklamalar kendiliğinden silinir; e-Okul'a işlendikten sonra saklama gerekçesi azalır.</p></div>
     </div>
+    <p class="not">Yoklamalar öğretim yılı sonuna kadar saklanır (<a href="#saklama">Kişisel veri saklama</a>).</p>
     <p class="dugme-satiri"><button class="ana">Yoklama ayarlarını kaydet</button></p>
+  </form>
+</section>
+
+{# Kişisel veri saklama (0.8.0, K3): ayrı form (bolum=saklama); yalnız `ogretim_yili_bitis` anahtarını yazar. #}
+<h2 id="saklama">Kişisel veri saklama</h2>
+<section class="kutu" aria-labelledby="saklama">
+  {% if mesaj and ileti_yeri == 'saklama' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <p class="ipucu" id="saklama-ipucu">Ders yoklaması, sınav listeleri ve sınav yoklaması, boş ders uyarıları öğretim yılı sonuna kadar saklanır.
+    Bitiş tarihi geçince (ertesi gün) o tarihe kadar oluşan kayıtlar kalıcı olarak silinir; tarihten sonra oluşanlar bir sonraki
+    yılın bitişine kadar kalır. Tarih boşsa hiçbir kayıt kendiliğinden silinmez. Tarih geçtikten sonra yeni öğretim yılının
+    bitiş tarihini girin. Öğrenci listesi bu silmeye girmez; yıl sonunda <a href="/ogrenciler">Öğrenci listesi</a> sekmesinden silinir
+    ya da yeni yılın listesiyle değiştirilir.</p>
+  <p class="not">Şifreli yedekler bu verinin kopyasını, kayıt silindikten sonra da yedek saklama süresi kadar
+    (<a href="/yedekler">Yedekler</a> sayfasındaki günlük yedek sayısı kadar gün) taşır.</p>
+  <form method="post" action="/ayarlar" class="form-dar">
+    <input type="hidden" name="bolum" value="saklama">
+    <label for="ogretim_yili_bitis">Öğretim yılı bitiş tarihi</label>
+    <input type="date" id="ogretim_yili_bitis" name="ogretim_yili_bitis" value="{{ saklama_durumu.bitis }}" max="{{ saklama_durumu.en_gec }}" aria-describedby="saklama-ipucu" class="alan-oto">
+    {% if saklama_durumu.oneri %}<p class="not">Okul Zili takviminde öğretimin bitişi: {{ saklama_durumu.oneri_metni }}.
+      <button name="oneri_kullan" value="{{ saklama_durumu.oneri }}" formnovalidate>Bu tarihi kullan</button></p>{% endif %}
+    <div class="onay-alani"><label class="satir"><input type="checkbox" name="sk_onay" value="1"> Geçmiş bir tarih giriyorsam o tarihe kadarki kayıtların bir saat içinde kalıcı olarak silineceğini biliyorum</label></div>
+    <p class="dugme-satiri"><button class="ana">Saklama tarihini kaydet</button></p>
+  </form>
+</section>
+
+{# Oturum temizliği (K7, 0.8.0): ayrı form (bolum=temizlik); yalnız `oturum_temizligi` anahtarını yazar. Varsayılan kapalı. #}
+<h2 id="oturum-temizligi">Oturum temizliği</h2>
+<section class="kutu" aria-labelledby="oturum-temizligi">
+  {% if mesaj and ileti_yeri == 'temizlik' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <p class="ipucu" id="temizlik-ipucu">Gün sonunda öğretmen ve öğrenci ortak hesabının oturumu hafifçe temizlenir: açık pencerelere kapatma
+    isteği gider (kaydedilmemiş belge için uygulama soru sorar, zorla kapatılmaz), tarayıcılar kapatılır ve tarayıcı profillerinde
+    yalnız çerez ve oturum dosyaları silinir; böylece tahtada açık kalmış e-posta ya da okul sistemi oturumları kapanır.
+    Dosyalara (İndirilenler, Masaüstü, Belgeler), tarayıcı geçmişine, yer imlerine ve kayıtlı parolalara dokunulmaz.
+    Yönetici (etapadmin) ve kişisel hesaplarda hiçbir zaman yapılmaz.</p>
+  {% if temizlik_ayari.etkin and temizlik_zamani.uyari %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ temizlik_zamani.uyari }}</p>{% endif %}
+  <form method="post" action="/ayarlar" class="form-dar">
+    <input type="hidden" name="bolum" value="temizlik">
+    <div class="onay-alani"><label class="satir"><input type="checkbox" name="tm_etkin" value="1" {% if temizlik_ayari.etkin %}checked{% endif %} aria-describedby="temizlik-ipucu"> Gün sonunda ortak hesapta oturum temizliği yap</label></div>
+    <fieldset class="olcut">
+      <legend>Ne zaman (yalnız hafta içi)</legend>
+      {% for kod, ad in temizlik_zamanlari.items() %}
+      <label class="satir"><input type="radio" name="tm_zaman" value="{{ kod }}" {% if temizlik_ayari.zaman == kod %}checked{% endif %}> {{ ad }}</label>
+      {% endfor %}
+      <label for="tm_saat">Belirli saat (SS:DD)</label>
+      <input type="text" id="tm_saat" name="tm_saat" value="{{ temizlik_ayari.saat }}" maxlength="5" inputmode="numeric" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" class="alan-sayi" placeholder="17:30">
+    </fieldset>
+    <p class="not">Kullanılan tahtada önce 60 saniyelik uyarı çıkar ve tahtadaki kişi “Vazgeç” diyebilir; kilitli ya da oturumsuz tahtada
+      uyarısız yapılır. Yalnız o anda açık olan tahtalara verilir; sunucu o saatte çalışmıyorsa ya da tahta kapalıysa o günün temizliği
+      sonradan yapılmaz. Acil yayın sürerken ve sınavdaki tahtada yapılmaz.{% if temizlik_ayari.etkin and temizlik_zamani.bugun %} Bugün: {{ temizlik_zamani.bugun }}.{% endif %}
+      {% if temizlik_eski %}{{ temizlik_eski }} tahtada ajan güncellenmeli (eski ajan temizlik yapmaz).{% endif %}
+      Tek bir tahtada denemek için tahta sayfasındaki “Şimdi temizle” düğmesini kullanın.</p>
+    <p class="dugme-satiri"><button class="ana">Temizlik ayarını kaydet</button></p>
   </form>
 </section>
 

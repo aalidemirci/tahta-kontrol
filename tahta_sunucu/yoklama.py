@@ -20,14 +20,15 @@ import time
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import guvenlik, maske, metin, vt
+from . import guvenlik, maske, metin, saklama, vt
 from . import program as program_mod
 
 ISTANBUL = ZoneInfo("Europe/Istanbul")
 YOKLAMA_YETENEGI = "yoklama"
 
-VARSAYILAN_AYAR = {"etkin": False, "maske": maske.VARSAYILAN_SINIF_BICIMI, "oturum_dk": 8, "bosta_dk": 3, "saklama_gun": 30}
-SINIRLAR = {"oturum_dk": (3, 15), "bosta_dk": (1, 5), "saklama_gun": (7, 365)}
+# Saklama süresi 0.8.0'dan beri ayar değildir: kayıtlar öğretim yılı sonuna kadar durur (`saklama.py`).
+VARSAYILAN_AYAR = {"etkin": False, "maske": maske.VARSAYILAN_SINIF_BICIMI, "oturum_dk": 8, "bosta_dk": 3}
+SINIRLAR = {"oturum_dk": (3, 15), "bosta_dk": (1, 5)}
 
 DERS_NO_EN_COK = 12            # zil saatleri bilinmiyorsa seçilebilen en büyük ders saati
 GELECEK_PAYI_SN = 300          # başlangıcı şimdi + 5 dk'dan sonra olan ders saati seçilemez
@@ -82,13 +83,13 @@ def ayar_al(b) -> dict:
 
 
 def ayar_coz(form) -> dict:
-    """Ayarlar › Ders yoklaması formu (alanlar: yk_etkin, yk_maske, yk_oturum_dk, yk_bosta_dk,
-    yk_saklama_gun). Geçersizde kullanıcıya gösterilecek iletiyle ValueError."""
+    """Ayarlar › Ders yoklaması formu (alanlar: yk_etkin, yk_maske, yk_oturum_dk, yk_bosta_dk).
+    Geçersizde kullanıcıya gösterilecek iletiyle ValueError."""
     bicim = str(form.get("yk_maske", maske.VARSAYILAN_SINIF_BICIMI))
     if bicim not in maske.SINIF_BICIMLERI:
         raise ValueError("Tahtadaki ad görünümü geçersiz.")
     sonuc = {"etkin": form.get("yk_etkin") == "1", "maske": bicim}
-    adlar = {"oturum_dk": "Yoklama oturumu", "bosta_dk": "Dokunulmazsa kapanma", "saklama_gun": "Saklama süresi"}
+    adlar = {"oturum_dk": "Yoklama oturumu", "bosta_dk": "Dokunulmazsa kapanma"}
     for anahtar, (en_az, en_cok) in SINIRLAR.items():
         ham = str(form.get(f"yk_{anahtar}", VARSAYILAN_AYAR[anahtar])).strip()
         if not metin.rakam_mi(ham) or not en_az <= int(ham) <= en_cok:
@@ -209,6 +210,15 @@ def program_ders_saatleri(b, tarih: date, sube: str | None, plan: dict | None = 
     return [sonuc[n] for n in sorted(sonuc)]
 
 
+def sube_devre_adi(b, plan: dict, sube: str) -> str:
+    """İkili eğitimde şubenin o günkü devresinin adı ("Sabah"); tek devrede ya da belirlenemezse ""."""
+    tum = {d[0]: d[1] for d in plan.get("dersler") or []}
+    if len(tum) < 2:
+        return ""
+    devreler = _sube_devreleri(b, plan, sube) & set(tum)
+    return tum[next(iter(devreler))] if len(devreler) == 1 else ""
+
+
 def program_gunluk(b, tarih: date, sube: str, plan: dict | None = None) -> list[dict]:
     """Şubenin o günkü programdaki dersleri: [{"ders_no","ders_adi":"","ogretmen_id":None,"bit"}] (bit epoch|None).
 
@@ -252,23 +262,68 @@ def tahta_subeleri_(tahta) -> list[str]:
     return [s for s in (metin.sube_duzelt(x) for x in str(tahta["subeler"] or "").split(",")) if s]
 
 
+def _tahtanin_dersleri(b, tahta, plan: dict) -> list[tuple]:
+    """Tahtanın o günkü programlı dersleri: [(devre, devre_adi, no, bas_dt, bit_dt, sube)] (saat sırasıyla)."""
+    satirlar = {
+        (s["devre"], s["ders_no"]): s["sube"]
+        for s in b.execute(
+            "SELECT devre, ders_no, sube FROM tahta_ders WHERE tahta_id = ? AND gun = ?", (tahta["id"], plan["program_gunu"])
+        )
+    }
+    return [(*d, satirlar[(d[0], d[2])]) for d in plan.get("dersler") or [] if (d[0], d[2]) in satirlar]
+
+
+def _yakin_ders(b, tahta, plan: dict, an: int) -> dict | None:
+    """Şu an ders yoksa: 5 dk içinde başlayacak ders (öğretmen erken geldi), yoksa 15 dk içinde bitmiş ders
+    (yoklamayı teneffüste giriyor). {"sube", "ders_no"} ya da None. İkili eğitimde doğru devrenin dersini
+    bulur: tahtanın programı devreyle birlikte tutulur."""
+    dersler = _tahtanin_dersleri(b, tahta, plan)
+    sonraki = [d for d in dersler if an < d[3].timestamp() <= an + GELECEK_PAYI_SN]
+    onceki = [d for d in dersler if d[4].timestamp() <= an < d[4].timestamp() + ALINMADI_PAYI_SN]
+    d = sonraki[0] if sonraki else (onceki[-1] if onceki else None)
+    if not d:
+        return None
+    return {"sube": metin.sube_duzelt(d[5] or "") or None, "ders_no": d[2]}
+
+
+def _devresi_suren_subeler(b, gun: date, subeler: list[str], an: int, plan: dict) -> list[str]:
+    """İkili eğitimde tahtanın birden çok şubesinden, devresi şu an süren(ler) (ilk dersten 5 dk önce ile son
+    dersten 15 dk sonrası arası). Devresi bilinmeyen şube elenmez."""
+    sonuc = []
+    for sube in subeler:
+        saatler = program_ders_saatleri(b, gun, sube, plan)
+        if not saatler or saatler[0]["bas"] - GELECEK_PAYI_SN <= an < saatler[-1]["bit"] + ALINMADI_PAYI_SN:
+            sonuc.append(sube)
+    return sonuc
+
+
 def oneri(b, tahta, an: int, sube_istegi: str | None = None) -> dict:
     """/ajan/yoklama/oneri yanıtı (öğrenci verisi İÇERMEZ).
 
-    Şube önerisi: programdaki şu anki ders (`tahta_ders.sube`) → `tahta.subeler` tek şubeyse o → None.
+    Şube ve ders saati önerisi sırası: programdaki şu anki ders (`tahta_ders.sube`) → tahtada 5 dk içinde
+    başlayacak ya da 15 dk içinde bitmiş ders → `tahta.subeler` tek şubeyse o (ikili eğitimde birden çok
+    şube varsa devresi şu an süren tek şube) → None. Ders numarası şubenin kendi devresinin numarasıdır
+    (sabahçının 3. dersi ile öğlencinin 3. dersi karışmaz).
     `sube_istegi` verilirse ders saatleri o şubenin devresine göre döner (öğretmen şubeyi değiştirdi).
     Ders saatlerinde `secilebilir`: başlangıcı şimdi + 5 dk'dan önce (tahtanın saatine güvenilmez).
     """
     gun = bugun(an)
     plan = _plan(b, gun)
     su_an = program_su_an(b, tahta, an)
+    if not su_an:
+        try:
+            su_an = _yakin_ders(b, tahta, plan, an)
+        except Exception:  # öneri yardımcıdır; bozuk program yoklamayı durdurmasın
+            su_an = None
     tahta_subeleri = tahta_subeleri_(tahta)
+    if len(tahta_subeleri) > 1:
+        tahta_subeleri = _devresi_suren_subeler(b, gun, tahta_subeleri, an, plan)
     sube = (su_an or {}).get("sube") or (tahta_subeleri[0] if len(tahta_subeleri) == 1 else None)
     hedef_sube = metin.sube_duzelt(sube_istegi) if sube_istegi else sube
     saatler = program_ders_saatleri(b, gun, hedef_sube, plan)
-    ders_no = (su_an or {}).get("ders_no")
-    if ders_no is None and sube:
-        ders_no = next((s["ders_no"] for s in program_ders_saatleri(b, gun, sube, plan) if s["bas"] <= an < s["bit"]), None)
+    ders_no = (su_an or {}).get("ders_no") if hedef_sube == sube else None
+    if ders_no is None and hedef_sube:
+        ders_no = next((s["ders_no"] for s in saatler if s["bas"] <= an < s["bit"]), None)
     return {
         "etkin": True,
         "tarih": gun.isoformat(),
@@ -649,6 +704,7 @@ def gunluk_gorunum(b, gun: date, an: int) -> dict:
                 hucreler.append({"ders_no": n, "durum": "bos", "yok": None, "kayit_id": None, "kayit_sayisi": 0, "baslik": aralik})
         satirlar.append({
             "sube": s,
+            "devre_adi": sube_devre_adi(b, plan, s),
             "hucreler": hucreler,
             "islendi": s in islenen,
             "islendi_metni": f"{islenen[s]['kullanici']}, {an_yazi(islenen[s]['zaman'])}" if s in islenen else "",
@@ -743,7 +799,7 @@ def icmal(b, gun: date, sube: str | None = None) -> dict:
         mevcut = b.execute("SELECT COUNT(*) FROM ogrenci WHERE sube = ? AND aktif = 1", (s,)).fetchone()[0]
         mevcut = mevcut or max([y["mevcut"] for y in ks] + [0])
         sonuc.append({
-            "sube": s, "mevcut": mevcut, "sutunlar": list(range(1, sutun + 1)), "alinan": alinan,
+            "sube": s, "devre_adi": sube_devre_adi(b, plan, s), "mevcut": mevcut, "sutunlar": list(range(1, sutun + 1)), "alinan": alinan,
             "alinan_metni": aralik_yaz(alinan) if alinan else "yok", "alinmayan": alinmayan,
             "alinan_sayisi": len(alinan), "sutun_sayisi": sutun, "ogrenciler": ogrenciler, "alanlar": alanlar,
             "program_bilinir": program_bilinir,
@@ -755,7 +811,7 @@ def icmal_metni(veri: dict) -> str:
     """Kopyalanabilir düz metin (sekmeyle ayrılmış; şube başlıklı)."""
     satirlar = [f"{veri['tarih_yazi']} — ders yoklaması icmali"]
     for s in veri["subeler"]:
-        bas = f"{s['sube']} (yoklama alınan: {s['alinan_metni']}"
+        bas = f"{s['sube']}{' · ' + s['devre_adi'] if s.get('devre_adi') else ''} (yoklama alınan: {s['alinan_metni']}"
         if s["alinmayan"] and s["alinan"]:
             bas += f"; alınmayan: {aralik_yaz(s['alinmayan'])}"
             if not s.get("program_bilinir", True):
@@ -1006,15 +1062,17 @@ def hepsini_sil(b) -> tuple[int, int]:
 
 # ---- imha ----------------------------------------------------------------------------------------
 def imha(b, an: int) -> dict:
-    """Saklama süresi dolan yoklamalar (+ iz, yok satırları, e-Okul işaretleri), referanssız pasif öğrenciler,
-    süresi dolan oturumlar; 24 saati geçen hatalı deneme sayaçları sıfırlanır (kilit kalkmaz).
+    """Öğretim yılı bitiş tarihi geçtiyse o tarihe kadarki yoklamalar (+ iz, yok satırları, e-Okul işaretleri),
+    referanssız pasif öğrenciler, süresi dolan oturumlar; 24 saati geçen hatalı deneme sayaçları sıfırlanır
+    (kilit kalkmaz). Bitiş tarihi girilmemişse yoklama silinmez (K3, `saklama.py`).
 
     Silinen > 0 ise işlem kaydı (yalnız sayılar). Çağıran işlemden sonra `vt.wal_buda()`.
     """
-    ayar = ayar_al(b)
-    sinir = (bugun(an) - timedelta(days=ayar["saklama_gun"])).isoformat()
-    kayit = b.execute("DELETE FROM yoklama WHERE tarih < ?", (sinir,)).rowcount
-    b.execute("DELETE FROM eokul_islendi WHERE tarih < ?", (sinir,))
+    sinir = saklama.imha_siniri(b, bugun(an))
+    kayit = 0
+    if sinir:
+        kayit = b.execute("DELETE FROM yoklama WHERE tarih <= ?", (sinir.isoformat(),)).rowcount
+        b.execute("DELETE FROM eokul_islendi WHERE tarih <= ?", (sinir.isoformat(),))
     ogrenci = b.execute(
         "DELETE FROM ogrenci WHERE aktif = 0 AND NOT EXISTS (SELECT 1 FROM yoklama_yok yy WHERE yy.ogrenci_id = ogrenci.id)"
     ).rowcount
@@ -1024,7 +1082,10 @@ def imha(b, an: int) -> dict:
         (an - OGRETMEN_PENCERE_SN,),
     )
     if kayit or ogrenci:
-        vt.kayit_dus(b, "sistem", "Yoklama imhası", f"{kayit} kayıt, {ogrenci} öğrenci")
+        ayrinti = f"{kayit} kayıt, {ogrenci} öğrenci"
+        if kayit:
+            ayrinti += f" (öğretim yılı bitişi {saklama.tarih_metni(sinir)})"
+        vt.kayit_dus(b, "sistem", "Yoklama imhası", ayrinti)
     return {"kayit": kayit, "ogrenci": ogrenci}
 
 

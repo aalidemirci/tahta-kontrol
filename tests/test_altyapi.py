@@ -366,6 +366,22 @@ def test_geri_yukleme_yalniz_yerelden_ve_yoneticiyle(kurulu, uygulama):
     assert "kapatıp yeniden açın" in ileti(kurulu.post("/yedekler/geri-yukle/uygula", data={"eylem": "uygula"}))
 
 
+def test_hizmet_kipinde_geri_yukleme_sureci_yeniden_baslatir(kurulu, monkeypatch):
+    from tahta_sunucu import ayar, hizmet, yedek
+
+    planlanan = []
+    monkeypatch.setattr(hizmet, "yeniden_baslat_planla", lambda gecikme=2.0: planlanan.append(gecikme))
+    monkeypatch.setattr(ayar, "HIZMET", True)
+    parola_belirle(kurulu)
+    kurulu.post("/yedekler/al")
+    ad, veri = yedek_dosyasi()
+    kurulu.post("/yedekler/geri-yukle", files={"dosya": (ad, veri)}, data={"parola": YEDEK_PAROLASI})
+    assert "Geri yükle ve yeniden başlat" in kurulu.get("/yedekler/geri-yukle/onay").text
+    yanit = kurulu.post("/yedekler/geri-yukle/uygula", data={"eylem": "uygula"})
+    assert "hizmeti birkaç saniye içinde yeniden başlıyor" in ileti(yanit)
+    assert planlanan == [2.0] and yedek.bekleyen_oku()["onaylandi"] is True
+
+
 def test_kurulumda_yedekten_geri_yukleme_oturumsuz_yerelde_calisir(kurulu, tmp_path, monkeypatch):
     from tahta_sunucu import ayar, guvenlik, web, yedek
 

@@ -543,6 +543,12 @@ def test_saklama_suresi_dolunca_kisisel_veri_silinir_ozet_kalir(ortam, tmp_path)
     s = salonlar(sinav_id)
     panel.post(f"/sinav/{sinav_id}/salon/{s['10/B Dersliği']['id']}/yoklama", data={"gelmedi": "2"})
     ortam["saat"].ayarla(an(18, 10, 1, ay=12))
+    panel.app.state.sinav_zamanlayici()  # K3: öğretim yılı bitiş tarihi girilmedi, 30 gün geçse de silinmez
+    assert sorgu("SELECT COUNT(*) AS n FROM sinav_ogrenci")[0]["n"] > 0
+    from tahta_sunucu import vt
+
+    with vt.islem() as b:
+        vt.ayar_yaz(b, "ogretim_yili_bitis", "2026-11-30")
     panel.app.state.sinav_zamanlayici()
     gir(panel, "yonetici")  # panel oturumu 12 saatte biter
     assert sorgu("SELECT COUNT(*) AS n FROM sinav_ogrenci")[0]["n"] == 0

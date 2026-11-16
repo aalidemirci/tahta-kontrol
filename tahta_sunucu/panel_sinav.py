@@ -17,7 +17,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.datastructures import UploadFile
 
-from . import acil, ayar, guvenlik, metin, sinav, vt
+from . import acil, ayar, guvenlik, metin, saklama, sinav, vt
 from .panel_program import bellekte_form, govde_uzunlugu
 
 gunluk = logging.getLogger("tahta-sunucu")
@@ -128,7 +128,8 @@ def sinav_gorunumu(b, s, an: int) -> dict:
         "duzenlenebilir": duzenlenebilir,
         "eslesme_duzenlenebilir": duzenlenebilir,
         "silindi": silindi,
-        "silinme_tarihi": sinav.tarih_metni(s["kisisel_silinme"]) if silindi else sinav.silinme_tarihi(s),
+        "silinme_tarihi": sinav.tarih_metni(s["kisisel_silinme"]) if silindi else "",
+        "silinme_metni": "" if silindi else sinav.silinme_tarihi(b, s),
         "bitis_saat": sinav.saat_metni(z["bitis"]),
         "bitirildi": bool(s["bitirme"]),
         "ogrenci_sayisi": sum(x["ogrenci"] for x in salonlar),
@@ -189,6 +190,7 @@ def kaydet(uygulama, y) -> None:
     def liste_sayfasi(istek: Request, k, durum_kodu: int = 200, **ek) -> HTMLResponse:
         with vt.islem() as b:
             yaklasan, gecmis = sinav.liste_ozeti(b, vt.simdi())
+            saklama_metni = saklama.silinme_metni(b)
         return y.sayfa(
             istek,
             "sinavlar.html",
@@ -197,7 +199,7 @@ def kaydet(uygulama, y) -> None:
             yaklasan=yaklasan,
             gecmis=gecmis,
             dosya_siniri_mb=sinav.DOSYA_SINIRI // (1024 * 1024),
-            saklama_gun=sinav.SAKLAMA_GUN,
+            saklama_metni=saklama_metni,
             **ek,
         )
 
@@ -275,7 +277,6 @@ def kaydet(uygulama, y) -> None:
             sure_araligi=sinav.SURE_ARALIGI,
             duyuru_sure_araligi=sinav.DUYURU_SURE_ARALIGI,
             duyuru_varsayilan_dk=sinav.DUYURU_VARSAYILAN_DK,
-            saklama_gun=sinav.SAKLAMA_GUN,
         )
 
     @uygulama.get("/api/sinav/{sinav_id}")
@@ -791,7 +792,7 @@ def kaydet(uygulama, y) -> None:
 #   dosya_siniri_mb; hata durumunda (400) hatalar[] (≤ 20 metin, okul no içerebilir), hata_toplam.
 #   Form: POST /sinavlar/ice-aktar multipart, <input type=file name=dosya accept=".xlsx">.
 # sinav.html: s (sinav_gorunumu), tahtalar[{id,ad,derslik}], uzatma_secenekleri, sure_araligi,
-#   duyuru_sure_araligi, duyuru_varsayilan_dk, saklama_gun. Canlı: s.canli ise /api/sinav/{id} (4 sn).
+#   duyuru_sure_araligi, duyuru_varsayilan_dk. Canlı: s.canli ise /api/sinav/{id} (4 sn).
 # sinav_yoklama.html: s{id,ad,tarih,saat}, salon{id,ad,gozetmen_adi,yoklama_metni},
 #   ogrenciler[{koltuk,okul_no,maske,sube,ders,gelmedi}], yazilabilir. Form: gelmedi=<koltuk> (çoklu).
 # sinav_kodlar.html: s{id,ad,tarih,saat}, fisler[{salon,kod,gozetmen_adi,tahta_var}], okul_adi (taban).

@@ -5,17 +5,13 @@
 <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="kullanici-baslik">
 <table class="kullanicilar-tablo">
   <caption class="gizli">Panel kullanıcıları</caption>
-  <thead><tr><th scope="col">Kullanıcı adı</th><th scope="col">Ad soyad</th><th scope="col">Yetki</th><th scope="col">Acil yayın</th><th scope="col">Durum</th><th scope="col">İşlem</th></tr></thead>
+  <thead><tr><th scope="col">Kullanıcı adı</th><th scope="col">Ad soyad</th><th scope="col">Yetki</th><th scope="col">Durum</th><th scope="col">İşlem</th></tr></thead>
   <tbody>
   {% for u in kullanicilar %}
   <tr>
     <td data-etiket="Kullanıcı adı">{{ u.ad }}</td>
     <td data-etiket="Ad soyad">{{ u.gorunen_ad }}</td>
     <td data-etiket="Yetki">{{ roller[u.rol] }}</td>
-    <td data-etiket="Acil yayın">{% if u.acil_yetki %}<span class="rozet" data-durum="tamam">Var</span>{% else %}<span class="rozet" data-durum="bilgi">Yok</span>{% endif %}
-      {% if not (u.acil_yetki and u.id == kullanici.id) %}
-      <form method="post" action="/kullanicilar" class="satir-ici"><input type="hidden" name="id" value="{{ u.id }}"><button name="eylem" value="acil_yetki">{{ 'Acil yetkisini al' if u.acil_yetki else 'Acil yetkisi ver' }}</button></form>
-      {% endif %}</td>
     <td data-etiket="Durum">{% if u.aktif %}<span class="rozet" data-durum="acik"><svg class="simge" aria-hidden="true"><use href="#s-acik"/></svg>Açık</span>{% else %}<span class="rozet" data-durum="cevrimdisi"><svg class="simge" aria-hidden="true"><use href="#s-kapali"/></svg>Kapalı</span>{% endif %}</td>
     <td data-etiket="İşlem">
       <form method="post" action="/kullanicilar" class="satir-ici">
@@ -32,6 +28,7 @@
   </tbody>
 </table>
 </div>
+<p class="not">Acil durum ve tatbikat yayınını bütün yönetici ve idareciler başlatabilir; yayın parolanızı ve açık onayı ister.</p>
 
 <div class="kutu">
   <h2>Kullanıcı ekle</h2>

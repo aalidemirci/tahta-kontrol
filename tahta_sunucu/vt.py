@@ -325,6 +325,18 @@ GOCLER = [
         not_metni TEXT NOT NULL DEFAULT '');
     CREATE INDEX ariza_hareket_ariza ON ariza_hareket (ariza_id);
     """,
+    # 0.8.0 — 16.11.2026 kararları. K4: acil yayını bütün yönetici ve idareciler başlatır (sütun yalnız eski
+    # sürüme dönüş için durur, okunmaz). K3: yoklamanın gün sayılı saklama ayarı kalkar; öğrenci verisi
+    # içeren kayıtlar öğretim yılı bitiş tarihine kadar durur (`ayar.ogretim_yili_bitis`, saklama.py).
+    # K6: boş ders uyarısı raporu tarih aralığıyla sorgulanır; uyarı oluştuğu andaki şubeyi saklar (rapor yıl
+    # boyunca tutulur, sonradan değişen program eski uyarıyı başka şubeye yazmasın; eski satırda NULL).
+    """
+    UPDATE kullanici SET acil_yetki = 1;
+    UPDATE ayar SET deger = json_remove(deger, '$.saklama_gun')
+        WHERE anahtar = 'yoklama' AND json_valid(deger) AND json_type(deger) = 'object';
+    CREATE INDEX bos_ders_uyari_tarih ON bos_ders_uyari (tarih);
+    ALTER TABLE bos_ders_uyari ADD COLUMN sube TEXT;
+    """,
 ]
 GOC_ONCESI_KALAN = 3
 # Göç (ve göç öncesi kopya), yedek alma ve geri yükleme aynı anda çalışmaz (A6 K-B2).

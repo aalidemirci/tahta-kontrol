@@ -1,5 +1,7 @@
 {% extends "taban.html" %}
 {% block baslik %}{{ t.ad }} · Tahta Kontrol{% endblock %}
+{# Oturum temizliği iletisi sayfa başında değil, #temizlik bölümünde çizilir. #}
+{% block mesaj_yeri %}{% if mesaj and ileti_yeri != 'temizlik' %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}
 <p class="geri"><a href="/">← Pano</a></p>
 <div class="sayfa-bas">
@@ -182,6 +184,29 @@
     <button name="sure" value="1sa">Bu tahtada 1 saat durdur</button>
     <button name="sure" value="bugun">Bu tahtada bugün durdur</button>
   </form>
+</section>
+{% endif %}
+
+{# Oturum temizliği (K7): son sonuç (komut geçmişinden) ve elle "Şimdi temizle" (onay dialoglu). #}
+{% if t.durum == 'onayli' %}
+<section class="kutu" id="temizlik" aria-labelledby="temizlik-baslik">
+  <h2 id="temizlik-baslik">Oturum temizliği</h2>
+  {% if mesaj and ileti_yeri == 'temizlik' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <dl class="ozellikler">
+    <dt>Gün sonu temizliği</dt><dd>{% if temizlik.ayar.etkin %}Açık · {{ temizlik_zamanlari[temizlik.ayar.zaman] }}{% if temizlik.ayar.zaman == 'saat' %} ({{ temizlik.ayar.saat }}){% endif %}{% else %}Kapalı{% endif %}
+      {%- if kullanici.rol == 'yonetici' %} · <a href="/ayarlar#oturum-temizligi">Ayarlar</a>{% endif %}</dd>
+    <dt>Son temizlik</dt><dd>{% if temizlik.son %}{{ temizlik.son.zaman | zaman }} · {{ temizlik.son.sonuc }}{% if temizlik.son.olusturan != 'sistem' %} (elle: {{ temizlik.son.olusturan }}){% endif %}{% else %}Henüz yapılmadı.{% endif %}</dd>
+    {% if temizlik.bekleyen %}<dt>Şu an</dt><dd><span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Temizlik sürüyor ya da tahtada uyarı gösteriliyor</span></dd>{% endif %}
+    {% if not temizlik.yetenekli %}<dt>Ajan</dt><dd><span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Oturum temizliği için ajan güncellenmeli</span></dd>{% endif %}
+  </dl>
+  <p class="not">Yalnız öğretmen ve öğrenci ortak hesaplarında yapılır (yönetici ve kişisel hesaplarda hiçbir zaman): açık pencerelere
+    kapatma isteği gider (kaydedilmemiş belge sorulur), tarayıcılar kapatılır ve yalnız çerez ve oturum dosyaları silinir.
+    Dosyalara (İndirilenler, Masaüstü, Belgeler), tarayıcı geçmişine ve kayıtlı parolalara dokunulmaz.</p>
+  {% if temizlik.yetenekli %}
+  <form method="post" action="/tahta/{{ t.id }}/temizlik" id="tahta-temizlik" class="dugme-satiri">
+    <button type="button" class="tehlike" data-onay="temizlik" aria-haspopup="dialog"{% if not t.cevrimici %} disabled title="Tahta çevrimdışı"{% endif %}>Şimdi temizle…</button>
+  </form>
+  {% endif %}
 </section>
 {% endif %}
 

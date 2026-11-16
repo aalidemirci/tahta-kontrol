@@ -114,6 +114,7 @@
       <fieldset class="olcut">
         <legend>Devre</legend>
         <div class="secenekler">{% for v, ad in secenekler.devreler %}<label><input type="checkbox" name="devre" value="{{ v }}" {% if v in (h.devre or []) %}checked{% endif %}> {{ ad }}</label>{% else %}<span class="not">Tahtalara henüz devre atanmadı.</span>{% endfor %}</div>
+        {% if secenekler.devreler %}<p class="not">Devre alanı boş tahtalarda ikili eğitimin derslik programına bakılır; iki devrede dersi olan tahta ikisine de girer.</p>{% endif %}
       </fieldset>
       <fieldset class="olcut">
         <legend>Gruplar</legend>

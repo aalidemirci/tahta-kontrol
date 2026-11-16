@@ -1,36 +1,44 @@
 # CLAUDE.md — Tahta Kontrol
 
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgisayarda
-**sunucu** (Windows masaüstü programı), her tahtada **ajan** (Pardus ETAP, `.deb`).
+**sunucu** (Windows hizmeti + durum penceresi), her tahtada **ajan** (Pardus ETAP, `.deb`).
 İdare, paneli tarayıcıdan kullanıcı adıyla açar; diğer bilgisayarlara kurulum yoktur.
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.7.1, saha denemesi sürümü** (0.7.1: tahta ekranı ekran boyutuna orantılı). Pardus 25 (XFCE) masaüstünde denendi
+- Durum: **0.8.0, saha denemesi sürümü** (0.8.0: 16.11.2026 kararları — ikili eğitim, öğretim yılı sonuna
+  kadar saklama, acil yayını bütün idareciler başlatır, boş ders uyarısı varsayılan açık + rapor, gün sonu
+  oturum temizliği (K7, varsayılan kapalı; yalnız Debian 12 kabında denendi), sunucu Windows
+  hizmeti (K8; birim testleri ve uçbirimde hizmet kipi, gerçek hizmet kurulumu denenmedi); 0.7.1:
+  tahta ekranı ekran boyutuna orantılı). Pardus 25 (XFCE) masaüstünde denendi
   (0.1.1: kurulum, kilit, duyuru, kapatma, güncelleme çalıştı); 0.2.0'ın okul kimliği,
   0.3.0'ın duyuru planları, hedef grupları ve acil durum/tatbikat yayını, 0.4.0'ın ders
   programı/program kilidi, 0.5.0'ın sınav kipi/sınav yoklaması, 0.6.0'ın ders yoklaması ve
   0.7.0'ın altyapı çekirdeği (şifreli yedek, sunucu adres listesi, envanter, arıza bildirimi)
   yalnız Debian 12 kabında ve tarayıcıda denendi; gerçek bir ETAP tahtasında, gerçek Kelebek
-  çizelgesiyle ve gerçek e-Okul sınıf listesiyle henüz denenmedi. Windows hizmeti ve ajan paketi
-  imzası (Aşama 6B) yapılmadı.
+  çizelgesiyle ve gerçek e-Okul sınıf listesiyle henüz denenmedi. Ajan paketi imzası yapılmadı.
 - Ders programı ve program kilidi `docs/tasarim.md` §12; sınav kipi §13; ders yoklaması §14;
-  altyapı (yedek, adres listesi, envanter, arıza) §15; yol haritası §16; kullanıcıya sorulacaklar
-  §17 "Açık sorular"; doğrulanacak dayanaklar §18.
+  altyapı (yedek, adres listesi, envanter, arıza) §15, Windows hizmeti §15.6; yol haritası §16; okul idaresinin kesin
+  kararları (K1–K8, 16.11.2026) ve kullanıcıya sorulacaklar §17; doğrulanacak dayanaklar §18.
+  Kararlar yeniden tartışılmaz; bir kararla çelişen öneri yapılmaz.
 
 ## Komutlar (PowerShell 5.1; `&&` yok)
 
 ```powershell
 uv sync                                   # bağımlılıklar (.venv, Python 3.12)
 uv run python -m tahta_sunucu             # sunucu: http://127.0.0.1:8787 · https://<ip>:8788
-uv run python -m tahta_sunucu pencere     # denetim penceresiyle (kurulu programın yaptığı)
+uv run python -m tahta_sunucu pencere     # durum penceresi (hizmet yoksa sunucuyu pencerede çalıştırır)
 uv run python -m tahta_sunucu paket x.deb # ajan paketini dosyaya yaz
+uv run python -m tahta_sunucu hizmet --konsol   # hizmet kipini uçbirimde dene (Ctrl+C); hizmet KURMAZ
+uv run python -m tahta_sunucu tasi --hedef D --kaynak K   # eski veriyi kopyala (kurucunun yaptığı)
 uv run pytest -q                          # testler
 uv run ruff check .                       # biçim denetimi
 powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1   # Windows kurucusu
 ```
 
-Ortam değişkenleri: `TAHTA_VERI_DIZINI` (varsayılan `%LOCALAPPDATA%\TahtaKontrol`),
+Ortam değişkenleri: `TAHTA_VERI_DIZINI` (varsayılan: geliştirmede `%LOCALAPPDATA%\TahtaKontrol`,
+kurulu programda/hizmette `%PROGRAMDATA%\TahtaKontrol`; `ayar.veri_dizini_sec`), `TAHTA_HIZMET=1`
+(hizmet kipi; giriş noktası ayarlar),
 `TAHTA_HTTP_PORT` (8787, yalnız 127.0.0.1), `TAHTA_HTTPS_PORT` (8788, okul ağı).
 Ajan: `TAHTA_AJAN_DIZIN`, `TAHTA_AJAN_DURUM`, `TAHTA_AJAN_BENZETIM=1` (kapatma komutu uygulanmaz).
 
@@ -68,8 +76,14 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 gözetmen kapısı (bellekte), yoklama, şube duyurusu, icmal, saklama temizliği
   xlsx.py       yalnız standart kitaplıkla .xlsx okuyucu (zip/DOCTYPE sınırları; A5 de kullanır)
   maske.py      tek maskeleme tanımı: kalabalik("Ah*** Yı****"), no_son("47"), sinif_etiketi("Ayşe Y.")
-  program.py    zil saatleri, Okul Zili okuma, takvim (plan_hesapla/gun_plani), derslik CSV, kilit aralıkları (saf)
-  program_is.py program zamanlayıcısı (kilit, açma yedeği, boş ders uyarısı, bakım), istisnalar, özetler
+  program.py    zil saatleri, Okul Zili okuma, takvim (plan_hesapla/gun_plani), derslik CSV, kilit aralıkları (saf);
+                ikili eğitim: devre_turleri (sabah/öğle eşlemesi), tahta_devreleri (programdan devre)
+  temizlik.py   oturum temizliği (K7): ayar.oturum_temizligi (varsayılan kapalı), gün sonu anları
+                (kapatma öncesi / son devrenin sonu / saat), zamanlayıcı (okul geneli işaret program_isaret
+                tahta 0), tahta sayfası özeti; elle uç web.py /tahta/{id}/temizlik
+  saklama.py    öğretim yılı bitiş tarihi (ayar.ogretim_yili_bitis): imha_siniri, Ayarlar durumu, arayüz notu
+  program_is.py program zamanlayıcısı (kilit, açma yedeği, boş ders uyarısı, bakım), istisnalar, özetler,
+                bos_ders_raporu (Uyarılar sekmesi: tarih aralığı, tahta, ders saati; kişi adı yok)
   komut.py      KOMUT_OMRU, KOMUT_ADI, komut_ekle (duyuru komutu ömrü açıkça ister)
   duyuru.py     tek yayın yolu duyuru_yayimla, plan zamanlayıcısı, kaçırma kuralı, durdurma
   zamanlama.py  plan takvimi (saf işlevler; Europe/Istanbul)
@@ -83,7 +97,12 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   wol.py        uzaktan açma (Wake-on-LAN) sihirli paketi; birkaç yayın adresine gönderir ("deneysel")
   paket.py      ajan .deb paketini ve kurulum betiğini dış araç olmadan üretir
   sunucu.py     iki dinleyici: yerel HTTP + ağ için HTTPS; zamanlayıcı (state.zamanlayicilar, 20 sn)
-  pencere.py    masaüstü denetim penceresi (tkinter)
+  pencere.py    durum penceresi (tkinter): /yerel/durum + `sc query` ile kip seçer; kurulu programda
+                sunucu AÇMAZ (hizmetin durumunu gösterir, "Hizmeti başlat" UAC ister); geliştirmede eskisi gibi
+  hizmet.py     Windows hizmeti kabuğu: saf `govde()` + pywin32 sınıfı (yalnız hizmet çalışırken içe aktarılır),
+                gunluk\sunucu.log (5 MB × 3), geri yüklemede 75 koduyla çıkış (`yeniden_baslat_planla`)
+  tasima.py     0.8 öncesi veriyi (%LOCALAPPDATA%) %PROGRAMDATA%'ya KOPYALAR (kurucu çağırır; çıkış kodları
+                0/10/11/20/21); belirsizlik/hatada TASIMA-BEKLIYOR.txt → hizmet açılmaz
   statik/       stil.css (tek dosya, katmanlı), panel.js (tek dosya, kütüphanesiz), isaret.svg (nötr ürün işareti)
   ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh, tahta-yoklama.desktop,
                 tahta-ariza.desktop
@@ -107,9 +126,13 @@ scripts/ekran_olcum.py  Docker/Xvfb'de her tahta sayfasının ekrana sığıp s�
                 `tahta-ajan ariza` (pencere), `tahta-ajan sunucu ADRES` (parmak izi tutarsa yazar)
   ayar.py       yapılandırma, varsayılan tahta paleti, logonun servis tarafında saklanması, adres doğrulama/sırası
   baglanti.py   sunucu istemcisi (Istemci): HTTPS, sertifika zinciri yerine parmak izi denetimi (tutmazsa tek bayt gitmez)
-  sistem.py     işletim sistemine dokunan HER ŞEY (yeni platform = bu dosya)
+  sistem.py     işletim sistemine dokunan HER ŞEY (yeni platform = bu dosya); ortak_oturum, temizlik
+                sürecini oturum sahibinin kimliğiyle başlatma (tarayici_temizligi, pencereleri_kapat)
+  temizlik.py   oturum temizliğinin işletim sistemi işleri (ikinci dosya; ayrı süreçte çalışır,
+                `python3 -m tahta_ajan.temizlik tarayici|pencereler`): beyaz liste, yol/bağ koruması,
+                tarayıcı süreçleri, X11 _NET_CLOSE_WINDOW (ctypes libX11), ad içermeyen rapor
   tani.py       saha tanılaması (denetim listesi)
-packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
+packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, taşıma, icacls), build.ps1, giris.py
 ```
 
 ## Bağlayıcı kurallar
@@ -152,9 +175,11 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
    kilidini açmaz (`(True, "...; uygulanmadı.")`); idare kilidi program kilidini ezer. Program
    kilidi yeniden başlatmada **geri yüklenmez**. Tahta ekranında yalnız neden ve açılış saati
    yazar; şube, ders, öğretmen yazılmaz. Derslik programında öğretmen ve ders adı tutulmaz.
-13. **Boş ders uyarısı personel verisi gibi korunur:** işlem kaydına yazılmaz (yalnız `#id`),
-   dışa aktarılmaz, tahtada görünmez, 30 gün sonra `secure_delete` + WAL budamayla silinir.
-   Panel metni "dersin işlenmediği anlamına gelmez" notunu taşır; arayüzde mevzuat atfı yoktur.
+13. **Boş ders uyarısı personel verisi gibi korunur:** varsayılan açıktır ve geçmişiyle raporlanır
+   (K6) ama işlem kaydına içeriği yazılmaz (yalnız `#id`; rapor görüntülemesi yalnız tarih aralığı ve
+   süzgecin varlığıyla), dışa aktarılmaz (yalnız yazdırılır), raporda kişi adı yoktur, tahtada görünmez,
+   öğretim yılı sonunda `secure_delete` + WAL budamayla silinir (kural 24). Panel metni "dersin
+   işlenmediği anlamına gelmez" notunu taşır; arayüzde mevzuat atfı yoktur.
 14. **Sınav kipi durumdur, komut değil** (`ayar.sinav`, her `/ajan/bekle` yanıtında
    `sinav.tahta_sinavi` ile yeniden hesaplanır; pencere dışında `null`). Ajan kalan süreleri
    monotonik saatle sayar; sunucuya ulaşılamasa da sınav ekranı süresinde kalkar ve 90 sn sonra
@@ -166,8 +191,8 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
    günlüğe, tanılama raporuna girmez; liste sınav başlayınca bellekten de silinir. Gözetmen
    belirteci ekran yardımcısına gitmez; gözetmen kodu yalnız sunucuda doğrulanır.
 17. **Sınavda ad soyad saklanmaz** (yalnız `maske.kalabalik`); tahtaya tam okul no ve ders gitmez;
-   işlem kaydına ad, maske, okul no yazılmaz. Kişisel veri 30 gün sonra `secure_delete` + WAL
-   budamayla silinir. Okul no yalnız panelde salon yoklaması ve icmal sayfalarındadır.
+   işlem kaydına ad, maske, okul no yazılmaz. Kişisel veri öğretim yılı sonunda (kural 24)
+   `secure_delete` + WAL budamayla silinir. Okul no yalnız panelde salon yoklaması ve icmal sayfalarındadır.
 18. **Öğrenci listesi tahtada diske yazılmaz; yoklama belirteci ekran yardımcısına gitmez.**
    Liste, işaretler ve belirteç yalnız servisin belleğindedir (`durum.json`, günlük, tanılama
    raporu yok); kaydedilince ya da süre dolunca bellekten de atılır. Sunucuya giden durumda yalnız
@@ -197,11 +222,40 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
    deyince (ya da `envanter` komutunda) gider; hesap adı, ev dizini, makine adı, açık kalma süresi girmez.
    Tahtadan arıza yalnız hesap SINIFIYLA gelir; açıklama 300 karakter, T.C. no içeriyorsa sunucu metni
    kaydetmez. Arıza kuyruğu tahtada en çok 10 öğe / 7 gün, saatte 3 bildirim. Arıza kaydı silinmez.
+24. **Öğrenci verisi içeren kayıtlar öğretim yılı sonuna kadar saklanır** (K3; `saklama.py`). Ders
+   yoklaması, sınav listesi/yoklaması ve boş ders uyarısı, yöneticinin Ayarlar'da girdiği
+   `ogretim_yili_bitis` geçince (ertesi gün) o tarihe kadar oluşanlarıyla kalıcı silinir; tarih boşsa
+   hiçbir şey silinmez ve Ayarlar uyarır. Gün sayılı saklama sabiti ya da ayarı geri getirilmez; tarih
+   kendiliğinden (Okul Zili'nden ya da göçle) yazılmaz, yalnız önerilir. Tahtadan alınan ders ve sınav
+   yoklaması kâğıdın yanında yardımcı kayıttır (K5); arayüz resmî kayıt iddiasında bulunmaz.
+25. **İkili eğitim (K1):** ders saati, derslik programı, boş ders uyarısı ve yoklama önerisi devreyle
+   (`ders_saati.devre`) anahtarlanır; ders numarası devre başınadır (sabahın 3. dersi ≠ öğlenin 3.
+   dersi). Tek devreli okulda devre adı hiçbir yerde gösterilmez ve davranış değişmez.
+26. **Acil yayını bütün yönetici ve idareciler başlatır** (K4; `acil.yetkili`, rolden). `kullanici.acil_yetki`
+   okunmaz; yalnız eski sürüme dönüş için 1 yazılır. Parola ve onay kutusu kaldırılmaz.
+27. **Oturum temizliği hafiftir ve yalnız ortak hesaptadır** (K7; `docs/tasarim.md` §12.1). Yalnız
+   `ogretmen`/`ogrenci` (`temizlik.TEMIZLENEBILIR_HESAPLAR`; sunucu daraltır, genişletemez); `etapadmin`
+   ve kişisel hesap ASLA. Silinen yalnız beyaz listedeki çerez ve oturum dosyalarıdır; geçmiş, yer
+   imleri, kayıtlı parola, form verisi, Local Storage/IndexedDB ve ev dizinindeki dosyalar listeye
+   EKLENMEZ. Tarayıcı adımı root'ta değil, oturum sahibinin kimliğiyle ayrı süreçte çalışır; yol her
+   adımda `lstat` ile izlenir, sembolik bağ izlenmez. Rapor yalnız sayıdır (ad, yol, başlık yok).
+   Kullanılan tahtada 60 sn uyarı + Vazgeç; komut ömrü 2 dk, kaçan temizlik sonradan yapılmaz.
+   Ajan komutun sonucunu ertelenmiş verir (`komut_uygula` → None; sonuç `sonuclar`a sonra eklenir).
+
+28. **Sunucu Windows hizmetidir; veri ProgramData'dadır** (K8; `docs/tasarim.md` §15.6). Hesap Yerel
+   Hizmet (SYSTEM'e çevrilmez). Kurulu pencere sunucu açmaz; başlangıç kısayolu geri getirilmez. Eski
+   veri yalnız KOPYALANIR (kaynak silinmez); hedefte veri varsa taşınmaz; seçim belirsizse ya da kopya
+   bozuksa `TASIMA-BEKLIYOR.txt` yazılır ve hizmet açılmaz — bu korumayı "kolaylık" için kaldırma
+   (yeni sertifika = bütün tahtalar kopar, kural 4). Taşıma kodları `.iss` ile `tasima.py`'de aynıdır
+   (`test_kurucu_tasima_kodlari_python_ile_ayni`). `hizmet.py` modül düzeyinde pywin32 içe aktarmaz.
 
 ## Bilinen tuzaklar
 
 - **GtkButton.set_label etiketi yeniden kurar:** ortalama (`set_justify`) ve kısaltma kaybolur;
   yoklama düğmesinin metni değişince `ekran._ogrenci_etiketi` ile yeniden verilir (16.11.2026, Docker).
+- **Zombi süreç /proc'ta yaşar görünür:** `/proc/<pid>/status` hâlâ Name ve Uid verir; tarayıcı
+  süreci sayılırken `State: Z` atlanmazsa kapanmış tarayıcı "kapanmadı" sayılır ve verisi temizlenmez
+  (16.11.2026, Docker oturum temizliği denemesi).
 - **Kapta `pkill -f "tahta-ajan ekran"`, aynı metni taşıyan `sh -c` komutunu da öldürür;**
   deneme betiklerini dosyaya yazıp `sh dosya` ile çalıştırın (16.11.2026).
 
@@ -278,6 +332,11 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
   çalıştırır (`tests/test_ajan_altyapi.py`); `_dongu` yalnız bekleme ekler.
 - **Şablon makro bağımsız değişkeninin adı `on…` ile başlamaz** (`onek=` gibi): CSP testi
   ` on[a-z]+=` desenini satır içi olay işleyicisi sayar (16.11.2026).
+- **Bu geliştirme bilgisayarında hizmet KURULMAZ:** `hizmet --konsol` hizmet yöneticisi olmadan aynı
+  gövdeyi çalıştırır (ayrı `TAHTA_VERI_DIZINI`, 8797/8798). `python -m tahta_sunucu hizmet` elle
+  çalıştırılınca 2 koduyla çıkar (1063); bu beklenen davranıştır.
+- **`pencere` geliştirmede 8787'de sunucu açar:** kurulu sunucu bu bilgisayarda çalışıyorsa önce
+  ona bağlanır; denemede `TAHTA_HTTP_PORT`/`TAHTA_HTTPS_PORT`'u değiştirmeden çalıştırma.
 - **Deneme betiklerinde saat:** Git Bash'te `TZ=Europe/Istanbul date` UTC verir; saati Python ile hesapla.
 - **İlk kurulum yalnız 127.0.0.1'den yapılır;** ağdaki biri yönetici hesabını kapamasın.
 - **Docker'da deneme:** `debian:12` + `python3-gi gir1.2-gtk-3.0 xvfb openbox imagemagick`;

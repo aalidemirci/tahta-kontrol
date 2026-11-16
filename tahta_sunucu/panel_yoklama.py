@@ -698,7 +698,7 @@ def kaydet(uygulama, y) -> None:
 # ogrenci_onizleme.html: plan{subeler[{sube,dosyada,eklenecek[metin],sube_degisecek[metin],pasiflesecek[metin],guncellenecek}],
 #   toplam{dosyada,eklenecek,sube_degisecek,pasiflesecek,guncellenecek}}, ayristirma{bicim,bicim_adi,notlar[],uyarilar[],
 #   atlanan[{satir,neden}]}, onizleme (belirteç), omur_dk. Onay: POST /ogrenciler/aktar {onizleme}.
-# ayarlar.html (bolum=yoklama): yoklama_ayari{etkin,maske,oturum_dk,bosta_dk,saklama_gun}, yoklama_maskeleri{kod:ad},
-#   yoklama_sinirlari{alan:(en_az,en_cok)}, yoklama_ogrenci_sayisi. Alanlar: yk_etkin=1, yk_maske, yk_oturum_dk, yk_bosta_dk,
-#   yk_saklama_gun.
+# ayarlar.html (bolum=yoklama): yoklama_ayari{etkin,maske,oturum_dk,bosta_dk}, yoklama_maskeleri{kod:ad},
+#   yoklama_sinirlari{alan:(en_az,en_cok)}, yoklama_ogrenci_sayisi. Alanlar: yk_etkin=1, yk_maske, yk_oturum_dk, yk_bosta_dk.
+#   Saklama 0.8.0'dan beri ayrı bölümdür (bolum=saklama, `saklama.py`).
 # =================================================================================================

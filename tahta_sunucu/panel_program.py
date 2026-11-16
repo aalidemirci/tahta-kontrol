@@ -21,7 +21,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, Response
 from starlette.datastructures import UploadFile
 
-from . import guvenlik, hedef, metin, program, program_is, vt, zamanlama
+from . import guvenlik, hedef, metin, program, program_is, saklama, vt, zamanlama
 
 gunluk = logging.getLogger("tahta-sunucu")
 ISTANBUL = program.ISTANBUL
@@ -792,66 +792,88 @@ def kaydet(uygulama, y) -> None:
     # ---- boş ders uyarıları --------------------------------------------------------------------
     @uygulama.get("/program/uyarilar", response_class=HTMLResponse)
     async def uyarilar(istek: Request):
+        """Boş ders uyarıları: tek gün (varsayılan bugün) ya da tarih aralığı raporu (K6).
+
+        Sorgu: tarih (tek gün, eski bağlantılar) | bas & bit (aralık, en çok 400 gün), tahta (kimlik), ders (no).
+        Kişi adı gösterilmez. Birden çok günlük ya da süzgeçli görüntüleme işlem kaydına düşer (yalnız tarih aralığı
+        ve süzgecin varlığı; tahta, ders ve uyarı sayısı yazılmaz)."""
         k = y.kullanici(istek)
         if not k:
             return y.yonlendir("/giris")
+        q = istek.query_params
         bugun = simdi_dt().date()
-        try:
-            gun = zamanlama.tarih_coz(istek.query_params.get("tarih") or bugun.isoformat())
-        except ValueError:
-            gun = bugun
-        if not bugun - timedelta(days=program.UYARI_SAKLAMA_GUN) <= gun <= bugun:
-            gun = bugun
+
+        def tarih_al(ad: str, varsayilan: date) -> date:
+            try:
+                return zamanlama.tarih_coz(q.get(ad) or varsayilan.isoformat())
+            except ValueError:
+                return varsayilan
+
+        tek = tarih_al("tarih", bugun)
+        bas = tarih_al("bas", tek)
+        bit = tarih_al("bit", tek if not q.get("bas") else bugun)
+        bit = min(bit, bugun)
+        if bas > bit:
+            bas, bit = bit, bas
+        if (bit - bas).days >= program_is.RAPOR_EN_UZUN_GUN:
+            bas = bit - timedelta(days=program_is.RAPOR_EN_UZUN_GUN - 1)
+        tahta_id = int(q["tahta"]) if hedef.kimlik_mi(q.get("tahta", "")) else None
+        # ders: "3" (bütün devrelerin 3. dersi) ya da "sabah-3" (ikili eğitimde yalnız o devrenin 3. dersi).
+        ders_ham = str(q.get("ders", ""))
+        devre_s, _, no_s = ders_ham.rpartition("-")
+        ders_no = int(no_s) if no_s.isdigit() and 1 <= int(no_s) <= 20 else None
+        devre_s = devre_s if ders_no and len(devre_s) <= 40 else ""
         with vt.islem() as b:
-            satirlar = b.execute(
-                "SELECT u.*, t.ad AS tahta_ad, t.derslik AS derslik, "
-                "(SELECT sube FROM tahta_ders d WHERE d.tahta_id = u.tahta_id AND d.devre = u.devre AND d.ders_no = u.ders_no "
-                " AND d.gun = ?) AS sube, "
-                "(SELECT devre_adi FROM ders_saati s WHERE s.devre = u.devre LIMIT 1) AS devre_adi "
-                "FROM bos_ders_uyari u JOIN tahta t ON t.id = u.tahta_id WHERE u.tarih = ? ORDER BY u.ders_bas, t.ad",
-                (gun.weekday(), gun.isoformat()),
-            ).fetchall()
-            cok_devre = b.execute("SELECT COUNT(DISTINCT devre) FROM ders_saati").fetchone()[0] > 1
+            devreler = {s["devre"]: s["devre_adi"]
+                        for s in b.execute("SELECT devre, MIN(devre_adi) AS devre_adi, MIN(baslangic) AS ilk "
+                                           "FROM ders_saati GROUP BY devre ORDER BY ilk")}  # fmt: skip
+            if devre_s not in devreler:
+                devre_s = ""
+            rapor = program_is.bos_ders_raporu(b, bas, bit, tahta_id, ders_no, devre_s or None)
             serit = program_is.program_ozeti(b, simdi_dt())
-        liste = []
-        for s in satirlar:
-            ders = f"{s['ders_no']}. ders"
-            if cok_devre and s["devre_adi"]:
-                ders = f"{s['devre_adi']} · {ders}"
-            if s["sube"]:
-                ders += f" · {s['sube']}"
-            liste.append(
-                {
-                    "id": s["id"],
-                    "saat": datetime.fromtimestamp(s["ders_bas"], ISTANBUL).strftime("%H:%M"),
-                    "tahta_id": s["tahta_id"],
-                    "tahta": s["tahta_ad"],
-                    "derslik": s["derslik"],
-                    "ders": ders,
-                    "durum": program.BOS_NEDENLERI.get(s["neden"], s["neden"]),
-                    "neden": s["neden"],
-                    "sonuc": (
-                        f"{program.saat_eki(datetime.fromtimestamp(s['cozulme'], ISTANBUL).strftime('%H:%M'))}"
-                        " kullanılmaya başlandı"
-                        if s["cozulme"] else "Ders boyunca boş"
-                    ),
-                    "goruldu": (
-                        f"{s['goruldu_kullanici']} · {datetime.fromtimestamp(s['goruldu_zaman'], ISTANBUL):%H:%M}"
-                        if s["goruldu_zaman"] else None
-                    ),
-                }
-            )  # fmt: skip
+            tahtalar = [{"id": t["id"], "ad": t["ad"], "derslik": t["derslik"]}
+                        for t in b.execute("SELECT id, ad, derslik FROM tahta WHERE durum != 'iptal'")]  # fmt: skip
+            if len(devreler) > 1:
+                ilk = {d: i for i, d in enumerate(devreler)}
+                nolar = [
+                    {"deger": f"{s['devre']}-{s['ders_no']}", "ad": f"{devreler[s['devre']]} · {s['ders_no']}. ders"}
+                    for s in sorted(b.execute("SELECT DISTINCT devre, ders_no FROM ders_saati").fetchall(),
+                                    key=lambda s: (ilk.get(s["devre"], 99), s["ders_no"]))
+                ]  # fmt: skip
+            else:
+                nolar = [{"deger": str(n), "ad": f"{n}. ders"}
+                         for n in sorted({s["ders_no"] for s in b.execute("SELECT DISTINCT ders_no FROM ders_saati")})]  # fmt: skip
+            secili_ders = f"{devre_s}-{ders_no}" if devre_s and ders_no else (str(ders_no) if ders_no else "")
+            saklama_metni = saklama.silinme_metni(b)
+            if bas != bit or tahta_id or ders_no:
+                # Kayda uyarının içeriği (tahta, ders, sayı) yazılmaz: kayıt silinmez, uyarı yıl sonunda silinir.
+                suzgec = [a for a, v in (("tahta süzgeci", tahta_id), ("ders saati süzgeci", ders_no)) if v]
+                vt.kayit_dus(
+                    b, k["ad"], "Boş ders raporu görüntülendi",
+                    f"{zamanlama.tarih_yaz(bas)}–{zamanlama.tarih_yaz(bit)}" + (f" · {', '.join(suzgec)}" if suzgec else ""),
+                    y.istemci_ip(istek),
+                )  # fmt: skip
+        tahtalar.sort(key=lambda t: metin.tr_sirala_anahtari(t["ad"]))
         return y.sayfa(
             istek,
             "uyarilar.html",
             k,
-            uyarilar=liste,
+            rapor=rapor,
+            uyarilar=rapor["satirlar"],
             serit=serit,
             bolum="uyarilar",
-            tarih=gun.isoformat(),
-            tarih_metni=zamanlama.tarih_yaz(gun),
-            en_eski=(bugun - timedelta(days=program.UYARI_SAKLAMA_GUN)).isoformat(),
+            tek_gun=bas == bit,
+            bas=bas.isoformat(),
+            bit=bit.isoformat(),
+            tarih=bas.isoformat(),
+            tarih_metni=zamanlama.tarih_yaz(bas) if bas == bit else f"{zamanlama.tarih_yaz(bas)} – {zamanlama.tarih_yaz(bit)}",
             bugun=bugun.isoformat(),
+            tahtalar=tahtalar,
+            tahta_id=tahta_id,
+            ders_nolari=nolar,
+            ders_no=ders_no,
+            secili_ders=secili_ders,
+            saklama_metni=saklama_metni,
         )
 
     @uygulama.post("/program/uyarilar/{uyari_id}/goruldu")
@@ -868,7 +890,7 @@ def kaydet(uygulama, y) -> None:
                     "UPDATE bos_ders_uyari SET goruldu_kullanici = ?, goruldu_zaman = ? WHERE id = ?",
                     (k["ad"], vt.simdi(), uyari_id),
                 )
-                # Tahta ve ders bilgisi kayda yazılmaz (uyarılar 30 gün sonra silinir; kayıt kalır).
+                # Tahta ve ders bilgisi kayda yazılmaz (uyarılar öğretim yılı sonunda silinir; kayıt kalır).
                 vt.kayit_dus(b, k["ad"], "Boş ders uyarısı görüldü", f"#{uyari_id}", y.istemci_ip(istek))
         tarih = date.fromisoformat(satir["tarih"]).strftime("%d.%m.%Y")
         return y.yonlendir(f"/program/uyarilar?tarih={tarih}", "Görüldü olarak işaretlendi.")

@@ -34,7 +34,10 @@ RAKAMLAR = "0123456789"  # str.isdigit() "²" gibi karakterleri de kabul eder
 KOD_BEKLEME_SN = 60
 LOGO_YENIDEN_DENEME_SN = 60
 # Sunucunun bu ajana uygulayabileceği yetenekler (sürüm karşılaştırması yerine).
-YETENEKLER = ["acil", "duyuru_id", "program_kilidi", "sinav", "yoklama", "adres_listesi", "envanter", "ariza"]
+YETENEKLER = ["acil", "duyuru_id", "program_kilidi", "sinav", "yoklama", "adres_listesi", "envanter", "ariza", "temizlik"]
+# Oturum temizliği (K7, 0.8.0): kullanılan tahtada uyarı süresi ve ekran yardımcısının pencere yanıtı.
+TEMIZLIK_UYARI_SN = 60
+TEMIZLIK_PENCERE_BEKLEME_SN = 15
 ACIL_TURLERI = {"acil": "acil durum", "tatbikat": "tatbikat"}
 ACIL_EN_UZUN_SN = 7200  # sunucu ne derse desin acil yayın tahtada en çok 2 saat kalır (kural 3)
 # Program kilidi (teneffüs / boş ders saati) tahtada SÜRELİ tutulur ve süresi tahtanın kendi
@@ -59,7 +62,8 @@ YOKLAMA_KAYDEDILDI_SN = 3
 YOKLAMA_ISTEK_SN = 10  # ağ isteklerinin zaman aşımı (uzun bekleme döngüsünü durdurmaz)
 YOKLAMA_LISTE_SINIRI = 300
 YOKLAMA_DERS_NO_EN_COK = 20
-ILETI_YOKLAMA_SUNUCU_YOK = "Sunucuya ulaşılamıyor. Bu dersin yoklamasını e-Okul'a doğrudan girin."
+# K5: tahtadaki yoklama kâğıdın yanında yardımcı kayıttır; sunucu yoksa asıl dayanak kâğıt yoklamadır.
+ILETI_YOKLAMA_SUNUCU_YOK = "Sunucuya ulaşılamıyor. Bu dersin yoklamasını kâğıda alın."
 ILETI_YOKLAMA_SINAV = "Sınav sürüyor; ders yoklaması açılamaz."
 ILETI_YOKLAMA_ACIL = "Acil yayın sürüyor; ders yoklaması açılamaz."
 ILETI_YOKLAMA_KAPALI = "Ders yoklaması bu okulda etkin değil."
@@ -106,6 +110,12 @@ class Servis:
                 self.kilit_kaynak = "idare"
         self.duyuru = None  # {"id","baslik","metin","bitis","kapatilabilir"}; id = sunucudaki duyuru_id ya da None
         self.kapatma = None  # {"bitis","neden"}: uyarılı kapatma geri sayımı
+        # Oturum temizliği (K7): geri sayım {"komut_id","bitis"}; sürerken True; ekran yardımcısının
+        # pencere yanıtı için olay. Komutun sonucu temizlik bitince (ertelenmiş) sonuçlara eklenir.
+        self.temizlik = None
+        self._temizlik_suruyor = False
+        self._pencere_olayi = None
+        self._pencere_sonucu = None
         # Acil yayın: sunucunun her yanıtta verdiği DURUM (ayar.acil). Yalnız bellekte tutulur;
         # ajan yeniden başlarsa ilk turda sunucudan yeniden alır. Sır değildir.
         self.acil = None  # {"id","tur","baslik","metin","bitis"}
@@ -932,6 +942,10 @@ class Servis:
                     if self.kapatma
                     else None
                 ),
+                # Oturum temizliği geri sayımı (K7): yalnız kalan süre; hesap ve dosya bilgisi yok.
+                "temizlik": (
+                    {"kalan": max(0, int(self.temizlik["bitis"] - time.time()))} if self.temizlik else None
+                ),
                 # Acil yayın yalnız gösterilecek metni taşır; tahtadan yalnız sunucuya
                 # ulaşılamıyorken kapatılabilir (kural 3).
                 "acil": (
@@ -1009,6 +1023,7 @@ class Servis:
             "kilit_neden": neden,  # bilgi: "Teneffüs" | "Öğle arası" | "Bu saatte bu derslikte ders yok" | ""
             "duyuru_var": self.duyuru is not None,
             "kapatma_bekliyor": self.kapatma is not None,
+            "temizlik_bekliyor": self.temizlik is not None or self._temizlik_suruyor,
             "yetenekler": list(YETENEKLER),
             "acil_id": acil_id,
             "sinav": self._sinav_durumu(),  # {kimlik, evre, yerel_kapali} | None — ad ve liste yok
@@ -1067,8 +1082,37 @@ class Servis:
                 self.kapatma = None
                 if iptal:
                     self.olaylar.append("Otomatik kapatma tahtadan iptal edildi (tahta kullanılıyor).")
+                # Kapatma uyarısı bekleyen temizliğin geri sayımını örtüyordu: "tahta kullanılıyor" kararı onu da
+                # kapsar (temizlik uyarısı hiç görülmeden çalışmasın).
+                bekleyen, self.temizlik = self.temizlik, None
+                if bekleyen:
+                    self.sonuclar.append({
+                        "komut_id": bekleyen["komut_id"], "basarili": True,
+                        "cikti": "Vazgeçildi: tahtayı kullanan kişi kapatma uyarısında Vazgeç'e dokundu (tahta kullanılıyor).",
+                    })  # fmt: skip
             self.yayinla()
             self.bildir()
+        elif tur == "temizlik_iptal":
+            with self.kilit:
+                bekleyen, self.temizlik = self.temizlik, None
+                if bekleyen:
+                    self.sonuclar.append({
+                        "komut_id": bekleyen["komut_id"], "basarili": True,
+                        "cikti": "Vazgeçildi: tahtayı kullanan kişi temizliği iptal etti (tahta kullanılıyor).",
+                    })  # fmt: skip
+            self.yayinla()
+            self.bildir()
+        elif tur == "pencere_sonucu":
+            # Ekran yardımcısının pencere kapatma yanıtı (yalnız sayılar); bekleyen temizlik yoksa yok sayılır.
+            with self.kilit:
+                olay = self._pencere_olayi
+                if olay is not None:
+                    self._pencere_sonucu = {
+                        k: (str(mesaj[k])[:80] if k == "hata" else _sayi(mesaj[k]))
+                        for k in ("istenen", "atlanan", "hata") if k in mesaj
+                    }  # fmt: skip
+            if olay is not None:
+                olay.set()
         elif tur == "duyuru_kapat":
             with self.kilit:
                 if self.duyuru and self.duyuru["kapatilabilir"]:
@@ -1261,7 +1305,8 @@ class Servis:
         self.bildir()
 
     # ---- komutlar ----------------------------------------------------------
-    def komut_uygula(self, komut: dict) -> tuple[bool, str]:
+    def komut_uygula(self, komut: dict) -> tuple[bool, str] | None:
+        """Komutu uygular: (başarılı, çıktı). None: sonuç sonra gelecek (oturum temizliği)."""
         tur = komut.get("tur")
         veri = komut.get("veri") or {}
         if tur == "kilitle":
@@ -1328,6 +1373,8 @@ class Servis:
             self._envanter_gonderilen = envanter.ozet(env)
             self._envanter_gonderim_zamani = time.monotonic()
             return True, json.dumps(env, ensure_ascii=False)
+        if tur == "temizlik":
+            return self._temizlik_baslat(komut.get("id"), veri)
         if tur == "kapat" and int(veri.get("uyari_sn", 0) or 0) > 0:
             # Uyarılı (otomatik) kapatma acil yayın sürerken uygulanmaz: bilinçli atlama,
             # hata değildir. Panelden verilen uyarısız kapatma ise her durumda uygulanır.
@@ -1380,6 +1427,112 @@ class Servis:
             self._kaydet()
         self.yayinla()
         return True, self._ekran_notu(f"Program kilidi: {neden}, {sure // 60} dk.")
+
+    # ---- oturum temizliği (K7) ---------------------------------------------------------------
+    def _temizlik_baslat(self, komut_id, veri: dict) -> tuple[bool, str] | None:
+        """Temizliği başlatır. Hemen sonuçlanan durumlarda (atlama) sonuç döner; temizlik başladıysa None
+        döner ve sonuç temizlik bitince (ya da vazgeçilince) `sonuclar`a eklenir (komut "iletildi" kalır).
+
+        Yalnız ORTAK hesapta (ogretmen/ogrenci) çalışır; etapadmin ve kişisel hesapta asla. Kullanılan
+        tahtada (ekran var, kilitli değil) önce 60 sn geri sayım ve Vazgeç gösterilir; kilitli ya da
+        ekransız tahtada uyarısız çalışır (kapatma uyarısıyla aynı kural).
+        """
+        if self.acil is not None and self.acil["bitis"] > time.time():
+            return True, "Atlandı: acil yayın sürüyor."
+        if self.sinav_ekrani_acik():
+            return True, "Atlandı: sınav sürüyor."
+        if self.yoklama_acik():
+            return True, "Atlandı: ders yoklaması açık (tahta kullanılıyor)."
+        hesaplar = veri.get("hesaplar")
+        izinli = [str(h) for h in hesaplar] if isinstance(hesaplar, list) else None
+        if sistem.ortak_oturum(izinli) is None:
+            return True, "Atlandı: oturum ortak hesap değil (yalnız öğretmen/öğrenci hesabı temizlenir)."
+        with self.kilit:
+            if self.temizlik is not None or self._temizlik_suruyor:
+                return True, "Atlandı: temizlik zaten sürüyor."
+            gorunur = any(e["bilgi"].get("arayuz") not in GORUNMEZ_ARAYUZ for e in self.ekranlar.values())
+            if gorunur and not self.kilitli:
+                self.temizlik = {"komut_id": komut_id, "bitis": time.time() + TEMIZLIK_UYARI_SN, "izinli": izinli}
+                uyarili = True
+            else:
+                self._temizlik_suruyor = True
+                uyarili = False
+        if uyarili:
+            self.yayinla()
+            self.bildir()
+        else:
+            self.arka_plan(lambda: self._temizlik_yap(komut_id, izinli))
+        return None
+
+    def _temizlik_suresi_denetle(self) -> bool:
+        """Geri sayımı biten temizliği başlatır (bekçi çağırır); başlattıysa True."""
+        with self.kilit:
+            if self.temizlik is not None and self.kapatma is not None:
+                # Kapatma uyarısı ekrandayken temizlik geri sayımı görünmez: süre durur; kapatma kalkınca temizlik
+                # uyarısı baştan (60 sn) gösterilir.
+                self.temizlik["bitis"] = max(self.temizlik["bitis"], time.time() + TEMIZLIK_UYARI_SN)
+                return False
+            if self.temizlik is None or self.temizlik["bitis"] > time.time():
+                return False
+            bekleyen, self.temizlik = self.temizlik, None
+            self._temizlik_suruyor = True
+        self.yayinla()
+        self.arka_plan(lambda: self._temizlik_yap(bekleyen["komut_id"], bekleyen.get("izinli")))
+        return True
+
+    def _temizlik_yap(self, komut_id, izinli=None):
+        """Adımları sırayla yapar ve sonucu ekler. Hiçbir adımın hatası diğerini durdurmaz."""
+        try:
+            basarili, cikti = self._temizlik_adimlari(izinli)
+        except Exception as hata:  # rapor her durumda gider
+            gunluk.exception("Oturum temizliği başarısız")
+            basarili, cikti = False, f"Hata: {type(hata).__name__}"
+        with self.kilit:
+            self._temizlik_suruyor = False
+            self.sonuclar.append({"komut_id": komut_id, "basarili": basarili, "cikti": cikti[:600]})
+        self.bildir()
+
+    def _temizlik_adimlari(self, izinli=None) -> tuple[bool, str]:
+        from . import temizlik
+
+        kuru = os.environ.get("TAHTA_AJAN_BENZETIM") == "1"
+        # Oturum geri sayım sırasında değişmiş olabilir: yeniden denetlenir.
+        oturum = sistem.ortak_oturum(izinli)
+        if oturum is None:
+            return True, "Atlandı: oturum ortak hesap değil (yalnız öğretmen/öğrenci hesabı temizlenir)."
+        parcalar = []
+        if oturum.get("tur") != "x11":
+            parcalar.append("Pencereler: atlandı (yalnız X11 oturumunda yapılır)")
+        else:
+            parcalar.append(temizlik.pencere_ozeti(self._pencereleri_kapat(kuru, oturum.get("uid")), kuru))
+        sonuc = sistem.tarayici_temizligi(oturum, kuru)
+        parcalar.append(temizlik.tarayici_ozeti(sonuc))
+        if kuru:
+            parcalar.append("BENZETİM: hiçbir şey kapatılmadı ve silinmedi")
+        hatali = bool(sonuc.get("hata_metni")) or bool(sonuc.get("hata")) \
+            or bool((sonuc.get("surecler") or {}).get("kalan_aileler"))  # fmt: skip
+        return not hatali, ("Tamamlandı" if not hatali else "Kısmen yapıldı") + " · " + " · ".join(parcalar)
+
+    def _pencereleri_kapat(self, kuru: bool, uid=None) -> dict | None:
+        """Temizlenen oturumun (kullanıcı kimliği `uid`) görünür ekran yardımcısından pencere kapatmayı ister
+        ve yanıtını en çok 15 sn bekler. Kullanıcı değiştirmede arka planda açık kalan etapadmin ya da
+        kişisel oturumun yardımcısı da bağlı olabilir: kimliği eşleşmeyen yardımcıya istek GİTMEZ."""
+        if uid is None:
+            return {"hata": "oturumun kullanıcı kimliği bilinmiyor"}
+        with self.kilit:
+            hedef = next(
+                (e for e in self.ekranlar.values()
+                 if e["bilgi"].get("arayuz") not in GORUNMEZ_ARAYUZ and e.get("uid") == uid), None
+            )  # fmt: skip
+            if hedef is None:
+                return {"hata": "oturumun ekran yardımcısı bağlı değil"}
+            olay = self._pencere_olayi = threading.Event()
+            self._pencere_sonucu = None
+        hedef["gonder"]({"tur": "pencereleri_kapat", "kuru": kuru, "uid": uid})
+        olay.wait(TEMIZLIK_PENCERE_BEKLEME_SN)
+        with self.kilit:
+            sonuc, self._pencere_sonucu, self._pencere_olayi = self._pencere_sonucu, None, None
+        return sonuc
 
     def _ekran_notu(self, metin: str) -> str:
         if not self._gorunur_ekran_var():
@@ -1547,6 +1700,10 @@ class Servis:
             if self.kapatma is not None:
                 self.kapatma = None
                 self.olaylar.append("Kapatma geri sayımı acil yayın nedeniyle iptal edildi.")
+            if self.temizlik is not None:
+                self.sonuclar.append({"komut_id": self.temizlik["komut_id"], "basarili": True,
+                                      "cikti": "Atlandı: acil yayın başladı; temizlik geri sayımı iptal edildi."})  # fmt: skip
+                self.temizlik = None
             self.olaylar.append(f"Acil yayın alındı (#{yeni['id']}, {ACIL_TURLERI[yeni['tur']]}).")
             return True
 
@@ -1636,10 +1793,13 @@ class Servis:
             return 8
         for komut in yanit.get("komutlar") or []:
             try:
-                basarili, cikti = self.komut_uygula(komut)
+                sonuc = self.komut_uygula(komut)
             except Exception as hata:  # tek komutun hatası döngüyü düşürmez
                 gunluk.exception("Komut uygulanamadı")
-                basarili, cikti = False, f"{type(hata).__name__}: {hata}"
+                sonuc = (False, f"{type(hata).__name__}: {hata}")
+            if sonuc is None:
+                continue  # ertelenmiş sonuç (oturum temizliği): iş bitince sonuçlara eklenir
+            basarili, cikti = sonuc
             with self.kilit:
                 self.sonuclar.append({"komut_id": komut.get("id"), "basarili": basarili, "cikti": cikti})
         return 0
@@ -1669,6 +1829,7 @@ class Servis:
             if suresi_doldu:
                 gunluk.info("Uyarı süresi doldu, kapatılıyor: %s", sistem.kapat())
                 self.yayinla()
+            self._temizlik_suresi_denetle()
             self._program_suresi_denetle()
             with self.kilit:
                 # Acil yayın süresi dolunca (sunucuya ulaşılamasa da) tahta kendiliğinden bırakır.
@@ -1709,10 +1870,16 @@ class Servis:
                 except (OSError, ValueError):
                     ilk = None
                 komut = isinstance(ilk, dict) and ilk.get("tur") == "merhaba" and ilk.get("arayuz") == "komut"
+                # Bağlananın kullanıcı kimliği çekirdekten okunur (yardımcının kendi beyanına güvenilmez):
+                # oturum temizliği pencere adımını yalnız temizlenen oturumun yardımcısına yollar.
+                try:
+                    uid = sistem.yerel_baglanti_uid(self.client_address[1], ayar.YEREL_PORT)
+                except Exception:  # bulunamazsa pencere adımı atlanır; bağlantı yine kurulur
+                    uid = None
                 with servis.kilit:
                     servis._ekran_no += 1
                     no = servis._ekran_no
-                    servis.ekranlar[no] = {"gonder": gonder, "bilgi": {"arayuz": "komut"} if komut else {}}
+                    servis.ekranlar[no] = {"gonder": gonder, "bilgi": {"arayuz": "komut"} if komut else {}, "uid": uid}
                 try:
                     if not komut:
                         # Logo önce gider: yardımcı ilk durumu çizerken logoyu zaten tanır.

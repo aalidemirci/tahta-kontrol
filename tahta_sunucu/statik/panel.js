@@ -107,6 +107,12 @@
       metin: "Bu ders saatinin yoklaması, işaretleri ve değişiklik geçmişi silinir. Geri alınamaz.",
       baslik: function () { return "Bu yoklama silinsin mi?"; }
     },
+    /* Oturum temizliği (K7) */
+    temizlik: {
+      ad: "eylem", deger: "temizle", evet: "Temizle",
+      metin: "Tahta kullanılıyorsa 60 saniyelik uyarı çıkar ve kullanan kişi vazgeçebilir. Açık pencereler kapanır, tarayıcı oturumları ve çerezler silinir; dosyalara, geçmişe ve kayıtlı parolalara dokunulmaz.",
+      baslik: function () { return "Bu tahtada oturum temizliği yapılsın mı?"; }
+    },
     sinav_sil: {
       ad: "eylem", deger: "sil", evet: "Sınavı sil",
       metin: "Sınav, salonları ve öğrenci listesi tamamen silinir; icmal de üretilemez. Geri alınamaz.",

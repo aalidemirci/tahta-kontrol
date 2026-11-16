@@ -6,6 +6,7 @@ tahta) eklemek bu dosyadaki işlevlerin karşılığını yazmaktır.
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import shutil
@@ -74,20 +75,14 @@ def ag_bilgisi(sunucu_makine: str, sunucu_port: int) -> dict:
     return bilgi
 
 
-def etkin_oturum() -> dict:
-    """Ekrandaki oturum: tür (x11/wayland) ve hesap SINIFI.
-
-    Kişisel hesap adları öğretmenin kimliğini taşıyabildiği için sunucuya ad
-    gönderilmez; yalnız standart hesap adı ya da "kisisel" bildirilir.
-    """
-    sonuc = {"sinif": "yok", "tur": ""}
+def _etkin_oturum_ham() -> dict | None:
+    """Etkin grafik oturumun hesap adı ve türü: {"ad", "tur"} ya da None. Ad bu modülden ÇIKMAZ
+    (yalnız `ortak_oturum` standart ortak hesap adını kullanır)."""
     if not LINUX or not shutil.which("loginctl"):
-        if not LINUX:
-            sonuc["sinif"] = "windows"
-        return sonuc
+        return None
     kod, cikti = calistir(["loginctl", "list-sessions", "--no-legend"], 5)
     if kod != 0:
-        return sonuc
+        return None
     for satir in cikti.splitlines():
         parcalar = satir.split()
         if not parcalar:
@@ -100,11 +95,131 @@ def etkin_oturum() -> dict:
             continue
         alan = dict(s.split("=", 1) for s in ayrinti.splitlines() if "=" in s)
         if alan.get("Active") == "yes" and alan.get("Class") == "user" and alan.get("Type") in ("x11", "wayland"):
-            ad = alan.get("Name", "")
-            sonuc["sinif"] = ad if ad in STANDART_HESAPLAR else "kisisel"
-            sonuc["tur"] = alan.get("Type", "")
-            break
-    return sonuc
+            return {"ad": alan.get("Name", ""), "tur": alan.get("Type", "")}
+    return None
+
+
+def etkin_oturum() -> dict:
+    """Ekrandaki oturum: tür (x11/wayland) ve hesap SINIFI.
+
+    Kişisel hesap adları öğretmenin kimliğini taşıyabildiği için sunucuya ad
+    gönderilmez; yalnız standart hesap adı ya da "kisisel" bildirilir.
+    """
+    if not LINUX:
+        return {"sinif": "windows", "tur": ""}
+    ham = _etkin_oturum_ham()
+    if not ham:
+        return {"sinif": "yok", "tur": ""}
+    return {"sinif": ham["ad"] if ham["ad"] in STANDART_HESAPLAR else "kisisel", "tur": ham["tur"]}
+
+
+# ---- oturum temizliği (K7): ortak hesap ve kullanıcı kimliğiyle çalışan ayrı süreç ----------------
+TEMIZLIK_ZAMAN_ASIMI_SN = 60
+
+
+def ortak_oturum(izinli=None) -> dict | None:
+    """Etkin oturum temizlenebilir bir ORTAK hesapsa {"sinif","tur","uid","gid","ev"}; değilse None.
+
+    Yalnız `temizlik.TEMIZLENEBILIR_HESAPLAR` (ogretmen, ogrenci); `izinli` (sunucunun listesi) bunu
+    yalnız daraltır. etapadmin, kişisel hesap ve root hiçbir koşulda dönmez.
+    """
+    from .temizlik import TEMIZLENEBILIR_HESAPLAR
+
+    ham = _etkin_oturum_ham()
+    if not ham or ham["ad"] not in TEMIZLENEBILIR_HESAPLAR:
+        return None
+    if izinli is not None and ham["ad"] not in {str(h) for h in izinli}:
+        return None
+    try:
+        import pwd
+
+        kayit = pwd.getpwnam(ham["ad"])
+    except (ImportError, KeyError):
+        return None
+    if kayit.pw_uid == 0:
+        return None
+    return {"sinif": ham["ad"], "tur": ham["tur"], "uid": kayit.pw_uid, "gid": kayit.pw_gid, "ev": kayit.pw_dir}
+
+
+def _ajan_kok() -> str:
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def temizlik_sureci_komutu(adim: str, *arg: str) -> list[str]:
+    """`python3 -m tahta_ajan.temizlik ...`: -s kullanıcı site-packages'ını, -P (3.11+) çalışma dizinini
+    yükleme yolundan çıkarır; süreç kök dizinde başlatılır (ev dizinindeki bir dosya içe aktarılmasın)."""
+    bayraklar = ["-s", "-P"] if sys.version_info >= (3, 11) else ["-s"]
+    return [sys.executable, *bayraklar, "-m", "tahta_ajan.temizlik", adim, *arg]
+
+
+def tarayici_temizligi(oturum: dict, kuru: bool) -> dict:
+    """Tarayıcı adımını oturum sahibinin kimliğiyle ayrı süreçte çalıştırır (root yetkisi düşürülür)."""
+    if not LINUX:
+        return {"hata_metni": "bu platformda tanımlı değil"}
+    uid, gid, ev = int(oturum["uid"]), int(oturum["gid"]), str(oturum["ev"])
+    komut = temizlik_sureci_komutu("tarayici", "--ev", ev, *(["--kuru"] if kuru else []))
+    ortam = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "HOME": ev, "PYTHONPATH": _ajan_kok()}
+    ek: dict = {}
+    if os.geteuid() == 0:
+        ek = {"user": uid, "group": gid, "extra_groups": []}
+    elif os.geteuid() != uid:
+        return {"hata_metni": "yetki yok"}
+    try:
+        sonuc = subprocess.run(
+            komut, capture_output=True, text=True, timeout=TEMIZLIK_ZAMAN_ASIMI_SN, cwd="/", env=ortam,
+            errors="replace", **ek,
+        )  # fmt: skip
+    except (OSError, subprocess.SubprocessError) as hata:
+        return {"hata_metni": f"süreç başlatılamadı ({type(hata).__name__})"}
+    try:
+        veri = json.loads(sonuc.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return {"hata_metni": f"süreç yanıtı okunamadı (çıkış {sonuc.returncode})"}
+    return veri if isinstance(veri, dict) else {"hata_metni": "süreç yanıtı geçersiz"}
+
+
+def yerel_baglanti_uid(istemci_port: int, sunucu_port: int, proc: str = "/proc") -> int | None:
+    """127.0.0.1 üzerinden servise bağlanan sürecin kullanıcı kimliği (/proc/net/tcp{,6}: istemci tarafındaki
+    satırda yerel kapı = istemci kapısı, karşı kapı = servis kapısı; "uid" sütunu). Bulunamazsa None.
+
+    Ekran yardımcısı her oturumda (etapadmin ve kişisel hesaplar dahil) başlar; oturum temizliğinin pencere
+    adımı yalnız temizlenen oturumun yardımcısına gönderilsin diye bağlantının sahibi buradan öğrenilir."""
+    if not LINUX and proc == "/proc":
+        return None
+    for ad in ("tcp", "tcp6"):
+        try:
+            with open(os.path.join(proc, "net", ad), encoding="ascii", errors="replace") as dosya:
+                next(dosya, None)  # başlık
+                for satir in dosya:
+                    alan = satir.split()
+                    if len(alan) < 8 or ":" not in alan[1] or ":" not in alan[2]:
+                        continue
+                    try:
+                        yerel = int(alan[1].rsplit(":", 1)[1], 16)
+                        karsi = int(alan[2].rsplit(":", 1)[1], 16)
+                        if yerel == int(istemci_port) and karsi == int(sunucu_port):
+                            return int(alan[7])
+                    except ValueError:
+                        continue
+        except OSError:
+            continue
+    return None
+
+
+def pencereleri_kapat(haric_pid: int, kuru: bool) -> dict:
+    """Ekran yardımcısı (oturumun içinde) çağırır: pencere kapatma ayrı süreçte (Xlib hata işleyicisi
+    GTK'nınkini bozmasın). Döndürür: {"istenen","atlanan"} ya da {"hata"}."""
+    if not LINUX:
+        return {"hata": "bu platformda tanımlı değil"}
+    komut = temizlik_sureci_komutu("pencereler", "--haric", str(int(haric_pid)), *(["--kuru"] if kuru else []))
+    ortam = dict(os.environ)
+    ortam["PYTHONPATH"] = _ajan_kok()
+    try:
+        sonuc = subprocess.run(komut, capture_output=True, text=True, timeout=15, cwd="/", env=ortam, errors="replace")
+        veri = json.loads(sonuc.stdout.strip().splitlines()[-1])
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError) as hata:
+        return {"hata": f"pencere süreci çalışmadı ({type(hata).__name__})"}
+    return veri if isinstance(veri, dict) else {"hata": "yanıt geçersiz"}
 
 
 # ---- envanter (A6): donanım ve yazılım okumaları ------------------------------------

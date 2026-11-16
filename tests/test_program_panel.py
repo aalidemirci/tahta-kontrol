@@ -289,25 +289,33 @@ def test_bos_ders_sunucu_ders_ortasinda_baslarsa_uyari_yok(uygulama, panel, taht
 
 
 # 26
-def test_uyarilar_30_gun_sonra_silinir(uygulama, panel, tahta, saat):
+def test_uyarilar_ogretim_yili_sonunda_silinir(uygulama, panel, tahta, saat):
+    """K3: uyarılar 30 gün değil, öğretim yılı bitiş tarihi geçince (o tarihe kadar oluşanlar) silinir."""
     from tahta_sunucu import vt
 
     hazirla(panel, kilit=False, bos=True)
     t = kimlik(tahta_ekle(panel, tahta, "T-1", durum()))
     simdi = int(an(16, 3, 30).timestamp())
     with vt.islem() as b:
-        for gun, olusturma in ((1, simdi - 31 * 86400), (2, simdi - 29 * 86400)):
+        for tarih in ("2026-06-20", "2026-07-01", "2026-10-02"):
             b.execute(
                 "INSERT INTO bos_ders_uyari (tahta_id, tarih, devre, ders_no, ders_bas, neden, olusturma) "
                 "VALUES (?, ?, 'normal', 1, ?, 'kapali', ?)",
-                (t, f"2026-10-{gun:02d}", olusturma, olusturma),
+                (t, tarih, simdi - 90 * 86400, simdi - 90 * 86400),
             )
         b.execute("INSERT INTO program_isaret VALUES (?, 'eski', ?)", (t, simdi - 3 * 86400))
-    calistir(uygulama, saat, an(16, 2, 59))  # 03:00'ten önce bakım yok
-    assert len(sorgu("SELECT * FROM bos_ders_uyari")) == 2
-    calistir(uygulama, saat, an(16, 3, 30))
-    assert [u["tarih"] for u in sorgu("SELECT tarih FROM bos_ders_uyari")] == ["2026-10-02"]
+    calistir(uygulama, saat, an(16, 3, 30))  # tarih girilmedi: hiçbiri silinmez (eskiden 30 günde silinirdi)
+    assert len(sorgu("SELECT * FROM bos_ders_uyari")) == 3
     assert sorgu("SELECT * FROM program_isaret WHERE anahtar = 'eski'") == []
+    with vt.islem() as b:
+        vt.ayar_yaz(b, "ogretim_yili_bitis", "2026-06-26")
+    calistir(uygulama, saat, an(16, 9, 0))  # bakım saatini beklemez
+    assert [u["tarih"] for u in sorgu("SELECT tarih FROM bos_ders_uyari ORDER BY tarih")] == ["2026-07-01", "2026-10-02"]
+    assert sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Boş ders uyarısı imhası'")[0]["ayrinti"] == (
+        "1 uyarı (öğretim yılı bitişi 26.06.2026)"
+    )
+    calistir(uygulama, saat, an(16, 9, 1))
+    assert len(sorgu("SELECT * FROM kayit WHERE islem = 'Boş ders uyarısı imhası'")) == 1  # silinecek yoksa yazmaz
 
 
 # 28

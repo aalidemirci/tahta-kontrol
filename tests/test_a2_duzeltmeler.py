@@ -38,7 +38,8 @@ def test_idarecinin_acil_yetkisi_ve_ayar_denemesi_kayda_duser(okul, panel):
     gir(panel, "idareci1")
     yanit = panel.post("/kullanicilar", data={"eylem": "acil_yetki", "id": hedef})
     assert "yönetici yetkisi" in ileti(yanit)
-    assert sorgu("SELECT acil_yetki FROM kullanici WHERE id = ?", hedef)[0]["acil_yetki"] == 0
+    # 0.8.0 (K4): sütun okunmaz, yeni kullanıcıya eski sürüme dönüş için 1 yazılır; idareci değiştiremez.
+    assert sorgu("SELECT acil_yetki FROM kullanici WHERE id = ?", hedef)[0]["acil_yetki"] == 1
     yanit = panel.post("/ayarlar", data={"bolum": "acil_sablonlari", "s_ad": "X", "s_baslik": "X", "s_metin": "x"})
     assert "yönetici yetkisi" in ileti(yanit)
     assert sorted(reddedilenler()) == ["Ayarlar", "Kullanıcı işlemi"]

@@ -67,11 +67,40 @@ try {
     foreach ($dosya in 'tahta-kontrol.db', 'sunucu-sertifika.pem', 'sunucu-anahtar.pem') {
         if (-not (Test-Path (Join-Path $Gecici $dosya))) { throw "Veri dizininde $dosya oluşmadı." }
     }
+    $durum = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8797/yerel/durum' -TimeoutSec 5
+    if ($durum.Content -notmatch '"hizmet"') { throw '/yerel/durum beklenen içeriği vermedi.' }
     Write-Host 'Duman testi geçti.'
 } finally {
-    if (-not $Surec.HasExited) { Stop-Process -Id $Surec.Id -Force }
+    if (-not $Surec.HasExited) { Stop-Process -Id $Surec.Id -Force; $Surec.WaitForExit(10000) | Out-Null }
     Remove-Item Env:TAHTA_VERI_DIZINI, Env:TAHTA_HTTP_PORT, Env:TAHTA_HTTPS_PORT -ErrorAction SilentlyContinue
 }
+
+function Exe-Kodu([string[]]$Bagimsiz, [int]$Sn) {
+    # Pencereli exe: işlenmemiş hata iletişim kutusu açarsa bekleme süresi dolar ve derleme durur.
+    $s = Start-Process -FilePath $Exe -ArgumentList $Bagimsiz -PassThru -WindowStyle Hidden
+    if (-not $s.WaitForExit($Sn * 1000)) {
+        Stop-Process -Id $s.Id -Force
+        throw "TahtaKontrol.exe $($Bagimsiz -join ' ') $Sn saniyede bitmedi (hata penceresi açılmış olabilir)."
+    }
+    return $s.ExitCode
+}
+
+Adim 'duman testi: hizmet kabuğu ve veri taşıma (kurulu hizmete dokunmaz)'
+# Hizmet yöneticisi dışından başlatılan hizmet 2 koduyla çıkmalı (pywin32 pakete girmiş demektir).
+$kod = Exe-Kodu @('hizmet') 20
+if ($kod -ne 2) { throw "Hizmet kabuğu beklenmeyen kodla çıktı: $kod (beklenen 2)." }
+# Taşıma: duman testinin veri dizini geçici bir hedefe kopyalanır; ikinci çalıştırma "hedef dolu" (11) der.
+$TasimaHedef = Join-Path $Build 'duman-tasima'
+if (Test-Path $TasimaHedef) { Remove-Item -Recurse -Force $TasimaHedef }
+$kod = Exe-Kodu @('tasi', '--hedef', "`"$TasimaHedef`"", '--kaynak', "`"$Gecici`"") 60
+if ($kod -ne 0) { throw "Veri taşıma başarısız (kod $kod)." }
+foreach ($dosya in 'tahta-kontrol.db', 'sunucu-sertifika.pem', 'sunucu-anahtar.pem') {
+    if (-not (Test-Path (Join-Path $TasimaHedef $dosya))) { throw "Taşımada $dosya kopyalanmadı." }
+}
+if (-not (Test-Path (Join-Path $Gecici 'TASINDI.txt'))) { throw 'Taşıma kaynağa TASINDI.txt bırakmadı.' }
+$kod = Exe-Kodu @('tasi', '--hedef', "`"$TasimaHedef`"", '--kaynak', "`"$Gecici`"") 60
+if ($kod -ne 11) { throw "Dolu hedefe taşıma 11 yerine $kod döndü." }
+Write-Host 'Hizmet kabuğu ve taşıma duman testi geçti.'
 
 Adim 'Inno Setup'
 $Iscc = @(

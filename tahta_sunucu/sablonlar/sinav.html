@@ -3,7 +3,7 @@
 {% block baslik %}{{ s.gorunen_ad }} · Sınav · Tahta Kontrol{% endblock %}
 {% block icerik %}
 {# Bu sayfa okul no GÖSTERMEZ (okul no yalnız salon yoklaması ve icmalde). Bağlam: panel_sinav.sinav_gorunumu (s),
-   tahtalar, uzatma_secenekleri, sure_araligi, duyuru_sure_araligi, duyuru_varsayilan_dk, saklama_gun.
+   tahtalar, uzatma_secenekleri, sure_araligi, duyuru_sure_araligi, duyuru_varsayilan_dk.
    Canlı durum: s.canli ise panel.js /api/sinav/{id}'yi 4 sn'de bir çeker ve [data-alan="durum"] hücrelerini yazar.
    Salon durumu rozetleri panel.js'teki salonRozetleri() ile AYNI kurala göre çizilir. #}
 {% macro salon_durumu(sl) -%}
@@ -195,5 +195,6 @@
   {% endif %}
 </details>
 
-<p class="not">{% if s.silindi %}Kişisel veri {{ s.silinme_tarihi }} tarihinde silindi.{% else %}Kişisel veri (okul no, maskeli ad, yoklama işaretleri) {{ s.silinme_tarihi }} tarihinde kendiliğinden silinecek; salon başına sayılar kalır.{% endif %}</p>
+<p class="not">{% if s.silindi %}Kişisel veri {{ s.silinme_tarihi }} tarihinde silindi.{% else %}Kişisel veri (okul no, maskeli ad, yoklama işaretleri) {{ s.silinme_metni }}; salon başına sayılar kalır.{% endif %}
+  Tahtadan alınan sınav yoklaması salon evrakındaki imzalı yoklamanın yanında yardımcı kayıttır.</p>
 {% endblock %}

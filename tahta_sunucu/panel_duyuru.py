@@ -13,7 +13,7 @@ from datetime import datetime
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from . import duyuru, guvenlik, hedef, metin, vt, zamanlama
+from . import duyuru, guvenlik, hedef, metin, program, vt, zamanlama
 from .zamanlama import ISTANBUL
 
 GECMIS_EN_COK = 100
@@ -121,14 +121,15 @@ def secenekler(b) -> dict:
     tahtalar = b.execute("SELECT * FROM tahta WHERE durum = 'onayli'").fetchall()
     binalar: dict[str, str] = {}
     katlar, duzeyler, devreler = set(), set(), set()
+    turetilen = program.tahta_devreleri(b)  # ikili eğitimde "devre" alanı boş tahtalar için
     for t in tahtalar:
         if t["bina"]:
             binalar.setdefault(hedef.bina_anahtari(t["bina"]), t["bina"].strip())
         if t["kat"] is not None:
             katlar.add(t["kat"])
         duzeyler.update(hedef.kume(t["duzeyler"]))
-        if t["devre"]:
-            devreler.add(t["devre"])
+        if t["devre"] or turetilen.get(t["id"]):
+            devreler.add(t["devre"] or turetilen[t["id"]])
     if "her_ikisi" in devreler:
         devreler.update(("sabah", "ogle"))
     gruplar = b.execute(

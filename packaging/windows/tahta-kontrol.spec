@@ -19,7 +19,11 @@ a = Analysis(
     [str(KOK / "packaging" / "windows" / "giris.py")],
     pathex=[str(KOK)],
     datas=datas,
-    hiddenimports=collect_submodules("uvicorn") + ["python_multipart", "tahta_sunucu.pencere", "xlrd"],
+    hiddenimports=collect_submodules("uvicorn")
+    + ["python_multipart", "tahta_sunucu.pencere", "xlrd"]
+    # Windows hizmeti (pywin32): hizmet kabuğu ve kurucunun çağırdığı veri taşıma.
+    + ["tahta_sunucu.hizmet", "tahta_sunucu.tasima", "win32timezone", "win32service", "win32serviceutil",
+       "servicemanager", "pywintypes", "winreg"],
     excludes=["gi", "pytest", "httpx"],
     noarchive=False,
 )

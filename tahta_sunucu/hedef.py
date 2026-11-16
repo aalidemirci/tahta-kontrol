@@ -235,7 +235,7 @@ def formdan(form) -> dict:
     return ham
 
 
-def _suzgec_uyar(tahta, hedef: dict) -> bool:
+def _suzgec_uyar(tahta, hedef: dict, turetilen: dict[int, str] | None = None) -> bool:
     olcutler = [a for a in ("bina", "kat", "duzey", "devre") if hedef.get(a)]
     if not olcutler:
         return False
@@ -248,7 +248,8 @@ def _suzgec_uyar(tahta, hedef: dict) -> bool:
     if "duzey" in hedef and not set(kume(tahta["duzeyler"])) & set(hedef["duzey"]):
         return False
     if "devre" in hedef:
-        devre = tahta["devre"]
+        # Alan boşsa ikili eğitimde derslik programından türetilen devre (program.tahta_devreleri).
+        devre = tahta["devre"] or (turetilen or {}).get(tahta["id"], "")
         if not devre:
             return False
         if devre != "her_ikisi" and devre not in hedef["devre"]:
@@ -271,7 +272,12 @@ def coz(b, hedef: dict) -> list:
                     f"SELECT tahta_id FROM tahta_grubu_uye WHERE grup_id IN ({isaret})", hedef["gruplar"]
                 ).fetchall()
             }
-        secilen = [t for t in tahtalar if t["id"] in acik or _suzgec_uyar(t, hedef)]
+        turetilen = None
+        if hedef.get("devre"):
+            from . import program
+
+            turetilen = program.tahta_devreleri(b)
+        secilen = [t for t in tahtalar if t["id"] in acik or _suzgec_uyar(t, hedef, turetilen)]
     return sorted(secilen, key=lambda t: (metin.tr_sirala_anahtari(t["ad"]), t["id"]))
 
 

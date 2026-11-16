@@ -31,8 +31,7 @@ YOKLAMA_DURUMU = yeni_ajan_durumu(yetenekler=["acil", "duyuru_id", "yoklama"])
 
 
 def ayar_kaydet(panel, **alanlar):
-    form = {"bolum": "yoklama", "yk_etkin": "1", "yk_maske": "ad_soyadbas", "yk_oturum_dk": "8", "yk_bosta_dk": "3",
-            "yk_saklama_gun": "30"}  # fmt: skip
+    form = {"bolum": "yoklama", "yk_etkin": "1", "yk_maske": "ad_soyadbas", "yk_oturum_dk": "8", "yk_bosta_dk": "3"}
     form.update(alanlar)
     if form.get("yk_etkin") is None:
         form.pop("yk_etkin")
@@ -541,10 +540,20 @@ def test_imha_saklama_suresini_uygular(panel, tahta, hazir, saat, uygulama):
     gir(panel, "yonetici")  # panel oturumu 12 saatte biter
     yanit = panel.post("/yoklama/gir", data={"tarih": yk.bugun().isoformat(), "sube": "10/A", "ders_no": "1"})
     assert "t=hata" not in yanit.headers["location"], ileti(yanit)
+    # K3: öğretim yılı bitiş tarihi girilmedikçe 31 gün geçse de silinmez.
+    assert uygulama.state.yoklama_zamanlayici() is False
+    assert len(sorgu("SELECT tarih FROM yoklama")) == 2
+    from tahta_sunucu import vt
+
+    with vt.islem() as b:
+        vt.ayar_yaz(b, "ogretim_yili_bitis", "2026-11-20")
+        vt.ayar_yaz(b, "yoklama_imha_son_tur", 0)
     assert uygulama.state.yoklama_zamanlayici() is True
-    assert sorgu("SELECT tarih FROM yoklama") == [{"tarih": yk.bugun().isoformat()}]
+    assert sorgu("SELECT tarih FROM yoklama") == [{"tarih": yk.bugun().isoformat()}]  # bitişten sonraki kalır
     assert not sorgu("SELECT 1 FROM ogrenci WHERE okul_no = '1047'")
-    assert sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Yoklama imhası'")[0]["ayrinti"] == "1 kayıt, 1 öğrenci"
+    assert sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Yoklama imhası'")[0]["ayrinti"] == (
+        "1 kayıt, 1 öğrenci (öğretim yılı bitişi 20.11.2026)"
+    )
     assert uygulama.state.yoklama_zamanlayici() is False  # saatte bir
     assert ("yoklama_imha", uygulama.state.yoklama_zamanlayici) in uygulama.state.zamanlayicilar
 

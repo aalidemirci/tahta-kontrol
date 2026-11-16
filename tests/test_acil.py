@@ -34,20 +34,38 @@ def baslat(panel, **alanlar):
     return panel.post("/acil/baslat", data={k: v for k, v in form.items() if v is not None})
 
 
-def test_acil_yetkisi_olmayan_baslatamaz_ve_kayda_duser(okul, panel):
+def test_idareci_ayri_yetki_olmadan_baslatir_ve_bitirir_parola_ve_onay_ister(okul, panel):
+    """16.11.2026 kararı K4: bütün idareciler (ve yöneticiler) başlatır; parola ve onay kutusu yine istenir."""
     kullanici_ekle(panel, "idareci1")
+    from tahta_sunucu import vt
+
+    with vt.islem() as b:  # eski sürümde yetkisi alınmış idareci: sütun artık okunmaz
+        b.execute("UPDATE kullanici SET acil_yetki = 0 WHERE ad = 'idareci1'")
     gir(panel, "idareci1")
     sayfa = panel.get("/acil").text
-    assert "Acil yayın yetkiniz yok; yöneticiden isteyin." in sayfa and 'action="/acil/baslat"' not in sayfa
+    assert 'action="/acil/baslat"' in sayfa and "yetkiniz yok" not in sayfa
+    assert ileti(baslat(panel, parola="yanlis")) == "Parola hatalı; yayın başlatılmadı."
+    assert "Onay kutusunu" in ileti(baslat(panel, onay=None))
+    assert sorgu("SELECT * FROM acil_yayin") == []
     yanit = baslat(panel)
-    assert "yetkiniz yok" in ileti(yanit) and sorgu("SELECT * FROM acil_yayin") == []
+    assert yanit.headers["location"].startswith("/acil/")
+    acil_id = sorgu("SELECT id, baslatan FROM acil_yayin")[0]
+    assert acil_id["baslatan"] == "idareci1"
+    assert "bitirildi" in ileti(panel.post(f"/acil/{acil_id['id']}/bitir"))
+    assert sorgu("SELECT bitiren FROM acil_yayin")[0]["bitiren"] == "idareci1"
+
+
+def test_bilinmeyen_roldeki_kullanici_baslatamaz_ve_kayda_duser(okul, panel):
+    kullanici_ekle(panel, "gozlemci1")
+    from tahta_sunucu import vt
+
+    with vt.islem() as b:  # elle bozulmuş/ileride eklenecek bir rol: yetki rolden gelir
+        b.execute("UPDATE kullanici SET rol = 'gozlemci', acil_yetki = 1 WHERE ad = 'gozlemci1'")
+    gir(panel, "gozlemci1")
+    sayfa = panel.get("/acil").text
+    assert "Acil yayın yetkiniz yok." in sayfa and 'action="/acil/baslat"' not in sayfa
+    assert "yetkiniz yok" in ileti(baslat(panel)) and sorgu("SELECT * FROM acil_yayin") == []
     assert sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Acil yayın reddedildi'")[0]["ayrinti"] == "Acil yetkisi yok"
-    # Yönetici yetki verince başlatabilir (rolden bağımsız).
-    gir(panel, "yonetici")
-    hedef = sorgu("SELECT id FROM kullanici WHERE ad = 'idareci1'")[0]["id"]
-    assert "verildi" in ileti(panel.post("/kullanicilar", data={"eylem": "acil_yetki", "id": hedef}))
-    gir(panel, "idareci1")
-    assert baslat(panel).headers["location"].startswith("/acil/")
 
 
 def test_acil_parola_hatasi_reddedilir(okul, panel):
@@ -194,25 +212,22 @@ def test_acil_rapor_sayfasi_ve_panel_bandi(okul, panel, tahta, saat):
     assert "1/2" in acil_sayfasi and 'data-onay="acil_bitir"' in acil_sayfasi
     kullanici_ekle(panel, "idareci1")
     gir(panel, "idareci1")
-    sayfa = panel.get("/").text
-    assert "TATBİKAT YAYINI SÜRÜYOR" in sayfa and f'action="/acil/{acil_id}/bitir"' not in sayfa
-    assert "yetkiniz yok" in ileti(panel.post(f"/acil/{acil_id}/bitir"))
-    assert sorgu("SELECT bitis FROM acil_yayin")[0]["bitis"] is None
+    sayfa = panel.get("/").text  # K4: idareci de bantta "Yayını bitir"i görür
+    assert "TATBİKAT YAYINI SÜRÜYOR" in sayfa and f'action="/acil/{acil_id}/bitir"' in sayfa
 
 
-def test_yonetici_kendi_acil_yetkisini_kaldiramaz(okul, panel):
-    ben = sorgu("SELECT id FROM kullanici WHERE ad = 'yonetici'")[0]["id"]
-    yanit = panel.post("/kullanicilar", data={"eylem": "acil_yetki", "id": ben})
-    assert ileti(yanit) == "Kendi acil yetkinizi kaldıramazsınız."
-    assert sorgu("SELECT acil_yetki FROM kullanici WHERE id = ?", ben)[0]["acil_yetki"] == 1
+def test_ayri_acil_yetkisi_kaldirildi(okul, panel):
+    """K4: kullanıcılar sayfasında acil yetkisi sütunu ve düğmesi yok; eski sekmeden gelen istek reddedilip kayda düşer."""
+    sayfa = panel.get("/kullanicilar").text
+    assert "Acil yetkisi ver" not in sayfa and "Acil yetkisini al" not in sayfa
+    assert "bütün yönetici ve idareciler başlatabilir" in sayfa
     kullanici_ekle(panel, "yonetici2", "yonetici")
     diger = sorgu("SELECT id, acil_yetki FROM kullanici WHERE ad = 'yonetici2'")[0]
-    assert diger["acil_yetki"] == 0  # göç sonrası eklenen yöneticiye kendiliğinden verilmez
-    panel.post("/kullanicilar", data={"eylem": "acil_yetki", "id": diger["id"]})
-    panel.post("/kullanicilar", data={"eylem": "acil_yetki", "id": diger["id"]})
-    assert sorgu("SELECT acil_yetki FROM kullanici WHERE id = ?", diger["id"])[0]["acil_yetki"] == 0
+    assert diger["acil_yetki"] == 1  # eski sürüme dönülürse de yetkili kalsın
+    assert "artık ayrı verilmez" in ileti(panel.post("/kullanicilar", data={"eylem": "acil_yetki", "id": diger["id"]}))
+    assert sorgu("SELECT acil_yetki FROM kullanici WHERE id = ?", diger["id"])[0]["acil_yetki"] == 1
     islemler = [s["islem"] for s in sorgu("SELECT islem FROM kayit WHERE islem LIKE 'Acil yetkisi%' ORDER BY id")]
-    assert islemler == ["Acil yetkisi değişikliği reddedildi", "Acil yetkisi verildi", "Acil yetkisi alındı"]
+    assert islemler == ["Acil yetkisi değişikliği reddedildi"]
 
 
 def test_acil_sablonlari_ayri_bolumde_kaydedilir(okul, panel):

@@ -35,7 +35,7 @@
     <h2 id="icmal-{{ loop.index }}">DERS YOKLAMASI İCMALİ</h2>
     <p class="icmal-tarih">{{ icmal.tarih_yazi }}</p>
   </header>
-  <p class="icmal-meta"><span>Şube: <strong>{{ s.sube }}</strong></span> <span>Mevcut: <strong>{{ s.mevcut }}</strong></span>
+  <p class="icmal-meta"><span>Şube: <strong>{{ s.sube }}</strong>{% if s.devre_adi %} ({{ s.devre_adi }}){% endif %}</span> <span>Mevcut: <strong>{{ s.mevcut }}</strong></span>
     <span>Yoklaması alınan ders saati: <strong>{{ s.alinan_metni }}</strong> ({{ s.alinan_sayisi }} / {{ s.sutun_sayisi }}{% if not s.program_bilinir %}; ders programı yüklü değil, {{ s.sutun_sayisi }} saat varsayıldı{% endif %})</span></p>
   {% if not s.alinan_sayisi %}
   <p class="bos-not">Bu şubede bu gün hiç yoklama alınmadı.</p>
@@ -59,7 +59,7 @@
   <p class="not icmal-lejant">Y: yok · .: derste · -: yoklama alınmadı</p>
   <p class="not">Yoklamayı alan: {% for a in s.alanlar %}{{ a.ders_no }}. {{ a.metin }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</p>
   {% endif %}
-  <p class="icmal-not">Bu çizelge e-Okul girişine yardımcı çalışma belgesidir; resmî devamsızlık kaydı e-Okul'dadır.</p>
+  <p class="icmal-not">Bu çizelge e-Okul girişine yardımcı çalışma belgesidir: tahtadan alınan yoklama kâğıt yoklamanın yanında tutulan yardımcı kayıttır, onun yerine geçmez; resmî devamsızlık kaydı e-Okul'dadır.</p>
   <p class="imza-satiri">Düzenleyen: <span class="cizgi-alan"></span> İmza: <span class="cizgi-alan kisa"></span></p>
   <p class="not icmal-alt">Üretim: {{ uretim }} · Tahta Kontrol {{ surum }}</p>
 </article>

@@ -16,7 +16,7 @@ cihaz anahtarının yalnız özetinin saklanması ve internete muhtaç olmayan k
 
 | Bileşen | Nerede | Teknoloji |
 |---|---|---|
-| Sunucu | İdaredeki bir Windows bilgisayarı | Python 3.12, FastAPI, SQLite, Jinja2 |
+| Sunucu | İdaredeki bir Windows bilgisayarı; Windows hizmeti (0.8.0, §15.6) | Python 3.12, FastAPI, SQLite, Jinja2, pywin32 (yalnız hizmet kabuğu) |
 | Panel | Herhangi bir idari bilgisayarın tarayıcısı | Sunucunun sunduğu web sayfaları |
 | Ajan servisi | Her tahta, yönetici yetkisiyle | Python standart kitaplığı, systemd |
 | Ekran yardımcısı | Her tahta, oturumdaki kullanıcıyla | PyGObject / GTK3 |
@@ -52,7 +52,7 @@ Sunucu iki kapı açar: `127.0.0.1:8787` (şifresiz, yalnız sunucu bilgisayarı
 - **İlk kurulum** yalnız sunucu bilgisayarından (127.0.0.1) yapılabilir.
 - **Bilinen sınır:** ajan paketi imzalı değildir; güncellemenin güvenliği sunucu
   bilgisayarının güvenliğine eşittir. Paket imzası (sürüm anahtarı sunucuda değil, derleyenin
-  bilgisayarında; tahtada saf Python Ed25519 doğrulaması) Aşama 6B'ye bırakıldı (§15).
+  bilgisayarında; tahtada saf Python Ed25519 doğrulaması) sonraya bırakıldı; 0.8.0'da yoktur (K8, §15).
 - **Sunucu adres listesi** (§15.2) bu modeli değiştirmez: tahta listedeki her adreste aynı
   parmak izini arar; parmak izi tutmayan adrese tek bayt veri gitmez.
 
@@ -119,7 +119,11 @@ kavramı yoktur: iki benzer kavram kullanıcıyı şaşırtır.
 Hedef "tüm onaylı tahtalar" ya da şu birleşimdir: **tek tek seçilen tahtalar ∪
 grup üyeleri ∪ süzgeç**. Süzgeçte dolu satırların hepsi sağlanmalı (VE), bir satırın
 değerlerinden biri yeter (VEYA); "sabah ve öğle" devreli tahta sabaha da öğleye de
-uyar; niteliği boş tahta o ölçüte hiçbir zaman uymaz. Hedef plan kaydında değil
+uyar; niteliği boş tahta o ölçüte hiçbir zaman uymaz — bir istisnayla (0.8.0): ikili eğitimde
+"devre" alanı boş tahtanın devresi derslik programından türetilir (`program.tahta_devreleri`:
+sabah ve öğle devresinde dersi olan tahta ikisine de uyar; ders saati devreleri adlarından,
+adlar söylemiyorsa erken başlayan sabah sayılarak eşlenir). Elle girilen alan programdan önce
+gelir; tek devreli okulda türetme yapılmaz. Hedef plan kaydında değil
 **gösterim anında** çözülür: gruba sonradan eklenen tahta sonraki gösterimi alır.
 Formda kaç tahtaya ulaşılacağı canlı önizlenir; hemen gönderimde 0 tahta reddedilir,
 planda kaydedilir ve uyarılır.
@@ -136,9 +140,9 @@ numarası ya da kişisel bilgi yazmayın" notu vardır.
 
 ## 7. Acil durum ve tatbikat yayını
 
-Ayrı yetkiyle (`acil_yetki`, rolden bağımsız; ilk kurulumdaki ve göçteki yöneticiler
-alır, yalnız yönetici verir, kimse kendi yetkisini kaldıramaz), parolanın yeniden
-girilmesi ve türe göre değişen açık onayla başlatılır. Tür (gerçek acil durum /
+Bütün yönetici ve idareciler (16.11.2026 kararı; 0.8.0'a kadar ayrı `acil_yetki` vardı,
+göçle herkese verildi ve sütun artık okunmaz, yalnız eski sürüme dönüşte aynı davranış sürsün
+diye yazılır) parolanın yeniden girilmesi ve türe göre değişen açık onayla başlatır. Tür (gerçek acil durum /
 tatbikat) varsayılansızdır. Yayın bütün onaylı tahtalara gider, en çok 120 dakika
 sürer, panelden bitirilir (parola istenmez: bitirmek güvenli yöndür) ya da süresi
 dolunca kendiliğinden kalkar. Yeni yayın, süren yayını bitirir. Kayıtlar silinmez.
@@ -272,6 +276,14 @@ sayısı) durur; aynı şerit pano başında da görünür. Program sunucu saati
   satırlar listelenir, dosyada geçmeyen tahtaya dokunulmaz) ya da tahta sayfasındaki
   haftalık ızgarayla girilir. Şube isteğe bağlıdır, yalnız panelde görünür. Programı
   girilmemiş tahta yalnız teneffüste kilitlenir ve boş ders uyarısı üretmez.
+- **İkili eğitim** (16.11.2026 kararı). Sabahçı ve öğlenci devre ayrı zil çizelgesidir
+  (Okul Zili'nin oturumu ya da elle üretimde ayrı devre adı); aynı tahtada sabah bir şube, öğle
+  başka şube ders görebilir. Derslik programı ve boş ders uyarısı (gün, devre, ders no) anahtarıyla
+  tutulur; program kilidi her tahtanın kendi derslerinden aralık hesaplar (devre geçişindeki boşluk
+  20 dakikayı aşıyorsa "Öğle arası", aşmıyorsa "Teneffüs"). "Dersi olmayan saatte de kilitle"
+  kapalıyken bütün devrelerin dersleri dolu sayılır (yalnız teneffüs kilitlenir). Bilinen sınır:
+  iki devrenin dersleri zamanda çakışırsa çakışan aralıkta teneffüs kilidi verilmez (açık kalmak
+  yeğlenir); bir şubenin aynı gün iki devrede dersi varsa yoklamada ders saati serbest seçilir.
 - **Program kilidi** (varsayılan kapalı). Teneffüste, öğle arasında ve (istenirse)
   dersliğin boş olduğu ders saatlerinde ders bitiminden `gecikme` dakika sonra tahtaya
   bir kez kilit gider; aralığın bitimine 3 dakikadan az kaldıysa gitmez. Kilit **süreli**
@@ -296,19 +308,95 @@ sayısı) durur; aynı şerit pano başında da görünür. Program sunucu saati
 - **Açma yedeği.** Asıl açma tahtadaki süredir; sunucu, aralığı bittiği hâlde program
   kaynaklı kilitli görünen tahtaya en çok 5 dakikada bir açma komutu verir (saat kayması
   ve istisna için).
-- **Boş ders uyarısı** (varsayılan kapalı). Derslik programında dersi olan tahta, ders
+- **Boş ders uyarısı** (0.8.0'dan beri varsayılan açık; yöneticinin önceden kaydettiği ayar göçle
+  değişmez). Derslik programında dersi olan tahta, ders
   başladıktan sonra eşik süre (5–30 dk) boyunca kesintisiz kapalı, program kilidinde ya da
   oturumsuz kalırsa panelde uyarı çıkar; idarenin bilerek kilitlediği tahta uyarı vermez.
   Tahta sonra kullanılırsa uyarı silinmez, "10:14'te kullanılmaya başlandı" diye kapanır.
   Uyarı tahtanın kullanılıp kullanılmadığını gösterir, dersin işlenip işlenmediğini değil;
-  öğretmen adı tutulmaz, işlem kaydına yazılmaz, dışa aktarılmaz, tahtada görünmez ve 30
-  gün sonra silinir (silmede `secure_delete` ve WAL budama). Sunucu yeniden başlarsa o
+  öğretmen adı tutulmaz, işlem kaydına yazılmaz, dışa aktarılmaz (yazdırılabilir), tahtada
+  görünmez ve **geçmişiyle** öğretim yılı bitiş tarihine kadar saklanır (§14 "Saklama ve imha";
+  silmede `secure_delete` ve WAL budama). Uyarılar sekmesi rapordur: tarih aralığı (en çok 400
+  gün), tahta/derslik ve ders saati süzgeci, tahtaya ve ders saatine göre sayılar; kişi adı yoktur
+  ("görüldü" yalnız saattir, işaretleyen yalnız işlem kaydındadır). Birden çok günlük ya da süzgeçli
+  görüntüleme işlem kaydına yalnız tarih aralığı ve süzgecin varlığıyla düşer. Öğretmenlerin önceden
+  bilgilendirilmesi okul idaresinin sorumluluğundadır. Sunucu yeniden başlarsa o
   dersin uyarısı geç ya da hiç üretilmez (yanlış uyarı yerine eksik uyarı).
-- **Sonraya bırakılanlar** (göç gerektirmez): ortak hesapta oturum temizliği (açık
-  pencereleri kapatma, tarayıcı oturum verisini silme, indirilenleri karantinaya alma) ve
-  boş ders uyarısında "tahtaya dokunulmamışsa da uyar" ölçütü. Pencere yöneticisi, tarayıcı
-  profil yolları ve merkezi yönetimin tepkisi ETAP'ta doğrulanmadan güvenle yazılamaz;
-  geri dönüşsüz veri kaybı riski taşır.
+- **Sonraya bırakılanlar** (göç gerektirmez): boş ders uyarısında "tahtaya dokunulmamışsa da
+  uyar" ölçütü. Ortak hesapta oturum temizliği §12.1'dedir (K7, 0.8.0).
+
+### 12.1 Oturum temizliği (K7, 0.8.0)
+
+Ortak hesapla açılan tahtada bir öğretmenin tarayıcıda açık bıraktığı e-posta ya da okul sistemi
+oturumu, sonraki kullanıcıya açık kalmasın diye gün sonunda **hafif** bir temizlik yapılır.
+Silme değil, oturum kapatmadır: amaç sonraki kullanıcının önceki oturuma girememesidir.
+
+- **Ayar** (Ayarlar › Oturum temizliği, `ayar.oturum_temizligi`, yalnız yönetici): varsayılan
+  **kapalı**. Zaman: otomatik kapatma saatlerinin her birinden 5 dk önce (otomatik kapatma kapalıysa
+  temizlik yapılmaz ve Ayarlar uyarır), günün son dersi bittikten 10 dk sonra (ikili eğitimde son
+  devrenin sonu; tatil ve dersiz günde yok) ya da belirli bir saat. Yalnız hafta içi.
+- **Zamanlayıcı** (`temizlik.zamanlayici`, 20 sn'lik turda `oturum_temizligi`): zamanı gelen an için
+  okul genelinde bir kez (`program_isaret`, tahta 0), yalnız o an çevrimiçi ve `temizlik` yeteneği
+  bildiren tahtalara `temizlik` komutu verir. Acil yayın sürerken hiçbirine, sınav penceresindeki
+  tahtaya verilmez. **Kaçan iş sonradan çalışmaz:** zamanından sonraki 4 dk içinde sunucu
+  çalışmıyorsa o günün temizliği yapılmaz; komut ömrü 2 dk'dır (`KOMUT_OMRU["temizlik"]`), sonradan
+  açılan tahta eski temizliği almaz. Her tur işlem kaydına tek satır düşer (tahta sayısı, eski ajan
+  ve sınavdaki tahta sayısı).
+- **Elle:** tahta sayfasındaki "Şimdi temizle…" (onay dialoglu; yönetici ve idareci; ayar kapalı olsa
+  da). Panodaki toplu işlem ucu bu komutu kabul etmez (yetenek denetimi yalnız tahta ucunda).
+  Tahta sayfası son sonucu (komut geçmişinden) ve süren temizliği gösterir.
+- **Ajan:** yalnız **ortak hesap** sınıflarında (`ogretmen`, `ogrenci`; sabit
+  `temizlik.TEMIZLENEBILIR_HESAPLAR`; sunucunun listesi bunu daraltır, genişletemez). `etapadmin`,
+  kişisel hesap ve root **hiçbir koşulda** temizlenmez. Acil yayın, sınav ekranı ya da açık ders
+  yoklaması varsa atlanır. Kullanılan tahtada (ekran var, kilitli değil) önce kapatma uyarısı
+  sayfasının diliyle 60 sn geri sayımlı uyarı ve "Vazgeç" çıkar; kilitli ya da ekransız tahtada
+  uyarısızdır. Geri sayımda acil yayın gelirse temizlik iptal edilir. Kapatma uyarısı ekrandayken
+  (öncelik kapatma > temizlik) temizlik geri sayımı durur ve kapatma kalkınca 60 sn baştan gösterilir;
+  kapatma uyarısındaki "Vazgeç" bekleyen temizliği de iptal eder (temizlik görülmeden çalışmaz). Adımlar:
+  1. **Pencereler:** oturumdaki ekran yardımcısı ayrı bir süreçte (`python3 -m tahta_ajan.temizlik
+     pencereler`) görev çubuğunda görünen NORMAL/DIALOG pencerelere EWMH `_NET_CLOSE_WINDOW` gönderir
+     (libX11, ctypes; wmctrl/xdotool varsayılmaz). Kibar kapatmadır: kaydedilmemiş belgesi olan
+     uygulama soru sorar ve açık kalır. Masaüstü, panel, ekran klavyesi gibi görev çubuğu dışı
+     pencereler, pid'i bilinmeyen pencere ve ekran yardımcısının kendisi atlanır. Wayland'de yapılmaz.
+     Ekran yardımcısı her oturumda (etapadmin ve kişisel hesaplar dahil) başladığı için istek yalnız
+     **temizlenen oturumun kullanıcı kimliğine** ait yardımcıya gider: servis bağlantının sahibini
+     çekirdekten (`/proc/net/tcp`, uid sütunu) okur, yardımcının beyanına güvenmez; yardımcı da
+     kimlik kendisininkiyle eşleşmezse hiçbir pencereye dokunmaz. Eşleşen yardımcı yoksa adım atlanır.
+  2. **Tarayıcı süreçleri:** yalnız o hesabın ve yalnız tarayıcı adlı süreçler (`TARAYICI_SURECLERI`):
+     önce 5 sn kendiliğinden kapanması beklenir, sonra SIGTERM, 10 sn sonra SIGKILL. Kapanmayan
+     tarayıcının verisine dokunulmaz. Tarayıcı dışında hiçbir süreç sonlandırılmaz.
+  3. **Tarayıcı verisi:** Firefox, Chromium, Chrome, Yandex, Opera, Brave, Vivaldi, Edge profillerinde
+     (Flatpak yolları dahil) YALNIZ çerez ve oturum dosyaları: Firefox `cookies.sqlite*`,
+     `sessionstore.jsonlz4`, `sessionstore.js`, `sessionstore.bak`, `sessionstore-backups/` içindeki
+     dosyalar; Chromium ailesi (`Default`, `Profile N`) `Cookies`, `Cookies-journal`,
+     `Network/Cookies*`, `Current Session`, `Current Tabs`, `Last Session`, `Last Tabs`, `Sessions/` ve
+     `Session Storage/` içindeki dosyalar.
+- **Dokunulmayanlar:** geçmiş ve yer imleri (`places.sqlite`, `History`, `Bookmarks`), kayıtlı
+  parolalar (`logins.json`, `key4.db`, `Login Data`), form ve otomatik doldurma (`formhistory.sqlite`,
+  `Web Data`), site depolaması (`webappsstore.sqlite`, `storage/`, `Local Storage/`, `IndexedDB/`;
+  web tabanlı çizim uygulamaları çalışmayı burada tutabilir), uzantılar, ayarlar ve ev dizinindeki
+  bütün dosyalar (İndirilenler, Masaüstü, Belgeler). Bunun bedeli: bilgisini yerel depolamada tutan
+  bir site oturumu açık kalabilir (saha belgesinde doğrulanacak).
+- **Korumalar:** tarayıcı adımı servisin içinde değil, oturum sahibinin kimliğiyle (root yetkisi
+  düşürülerek, `subprocess` `user=`) kök dizinde başlatılan ayrı süreçte çalışır; bu süreç root
+  olarak çalıştırılırsa reddeder. Ev dizini mutlak, sembolik bağ içermeyen gerçek dizin olmalıdır;
+  her dizin `O_NOFOLLOW | O_DIRECTORY` ile dosya tanıtıcısı olarak açılır ve listeleme, denetim ve
+  silme o tanıtıcıya göre (`dir_fd`) yapılır: denetimden sonra bir dizini sembolik bağla değiştirmek
+  silmeyi başka yere (ör. Belgeler) yöneltemez; sembolik bağ dizin sayılmaz ve izlenmez; beyaz listedeki ad
+  sembolik bağsa silinmez (bağın kendisi de); dizinlerde alt dizine inilmez, dizinin kendisi kalır.
+  Her adımın hatası sessizce atlanır ve rapora sayı olarak girer.
+- **Rapor** (komutun sonucu, işlem kaydı "Oturum temizliği sonucu"): yalnız sayılar ve adım
+  sonuçları, ör. "Tamamlandı · Pencereler: 2 pencereye kapatma istendi · Tarayıcı: 1 tarayıcı süreci
+  kapatıldı, Firefox 1 profil, 5 çerez/oturum dosyası silindi". Kullanıcı adı, ev dizini, profil
+  adı, dosya adı ve pencere başlığı gönderilmez (kural 6). Sonuç komut "iletildi" durumundayken
+  temizlik bitince ertelenmiş olarak gider; tahta temizlik sırasında yeniden başlarsa komut
+  "Tahtaya iletildi"de kalır.
+- **Benzetim:** `TAHTA_AJAN_BENZETIM=1` iken hiçbir pencereye istek gitmez, süreç sonlandırılmaz,
+  dosya silinmez; rapor ne yapılacağını "kapatılacak/silinecek" diye sayar ve "BENZETİM" der.
+- **Geriye uyum:** eski ajan `temizlik` yeteneği bildirmediği için komut almaz (panelde "ajan
+  güncellenmeli"); eski sunucu yeni ajana bu komutu hiç vermez. Eski ekran yardımcısı uyarıyı
+  göstermez ama servis sürüm farkında yardımcıyı yeniden başlatır; pencere yanıtı 15 sn içinde
+  gelmezse o adım "atlandı" olur.
 
 ## 13. Sınav kipi ve sınav yoklaması
 
@@ -323,9 +411,10 @@ yüklenirse öğrenci listesini yeniler; süreler, eşleşmeler ve gözetmen kod
 (`maske.kalabalik`: "Ah*** Yı****") ve ad bellekte atılır. Sunucuda okul no, şube, salon,
 koltuk, ders ve maske durur. Tahtaya yalnız maske, okul numarasının son iki hanesi, şube ve
 koltuk gider; tam okul no ve ders gitmez. İşlem kaydına ad, maske, okul no yazılmaz (salon adı,
-koltuk numaraları ve sayılar yazılır). Kişisel veri sınav tarihinden **30 gün** sonra
-kendiliğinden silinir (`secure_delete` + WAL budama); salon başına "mevcut / gelmeyen" sayıları
-kalır. İdare daha önce de silebilir (yalnız sınav bittikten sonra).
+koltuk numaraları ve sayılar yazılır). Kişisel veri **öğretim yılı bitiş tarihi** geçince (o
+tarihte ve öncesinde yapılan sınavlarınki; §14 "Saklama ve imha") kendiliğinden silinir
+(`secure_delete` + WAL budama); salon başına "mevcut / gelmeyen" sayıları kalır. Tahtadan alınan
+sınav yoklaması salon evrakındaki imzalı yoklamanın yanında yardımcı kayıttır. İdare daha önce de silebilir (yalnız sınav bittikten sonra).
 
 **Bildirimsel `ayar.sinav`:** sınav kipi komut olarak bir kez inmez; her `/ajan/bekle`
 yanıtında sunucu, tahtanın o an sınav penceresinde olup olmadığını yeniden hesaplar
@@ -372,7 +461,8 @@ ve boş ders uyarısı verilmez; pencereden önceki 10 dakikada yeni program kil
 "Sınav sürüyor; otomatik kapatma uygulanmadı." diye atlar. Panoda sınavdaki tahtaya duyuru,
 kilit açma, kapatma ya da yeniden başlatma ek onay ister.
 
-**Şube duyurusu:** sınavdan önce şube dersliklerinde (tahta sayfasındaki "Şubeler" alanı)
+**Şube duyurusu:** sınavdan önce şube dersliklerinde (tahta sayfasındaki "Şubeler" alanı; şube
+hiçbir tahtanın alanında yoksa derslik programında o şubenin en çok dersinin olduğu tahta)
 "kim hangi salonda, hangi koltukta" listesi maskeli olarak, süreli ve öğretmence kapatılabilir
 bir duyuru olarak gösterilir. Duyuru kaydına liste değil özet yazılır; liste yalnız komut
 verisindedir ve saklama süresi dolunca o da boşaltılır. Duyurunun süresi sınav başlangıcına
@@ -397,7 +487,11 @@ ekranında öğretmen PIN'i.
 ## 14. Ders yoklaması
 
 Öğretmen derste tahtadan, ders saati bazında **yalnız gelmeyenleri** işaretler; idare gün sonu
-icmalini e-Okul'a **elle** işler. Tahta Kontrol e-Okul'a bağlanmaz, veri göndermez, ondan veri
+icmalini e-Okul'a **elle** işler (devamsızlık e-Okul'a ders saati bazında işlenir; icmal şube ve
+ders saati bazındadır). Tahtadan alınan yoklama sınıftaki **kâğıt yoklamanın yanında yardımcı
+kayıttır**, onun yerine geçmez; arayüz ve icmal bunu yazar. İkili eğitimde ders numarası şubenin
+kendi devresinindir (sabahçının 3. dersi ile öğlencinin 3. dersi ayrıdır); ızgara ve icmal şubenin
+yanında devre adını gösterir. Tahta Kontrol e-Okul'a bağlanmaz, veri göndermez, ondan veri
 çekmez; resmî devamsızlık kaydı e-Okul'dadır. Özür, rapor, izin nedeni tutulmaz (sağlık verisi
 olabilir); "geç geldi" ayrı işaret değildir; yarım gün/tam gün hesabı yapılmaz.
 
@@ -428,7 +522,9 @@ ekranı geri gelir.
 ömürlü istemci kendini `arayuz: komut` diye tanıtır, servis ona hiçbir durum yayını göndermez ve
 onu ekran yardımcısı saymaz. Servis sunucudan **öneri** alır (bugünün tarihi, şubenin ders
 saatleri ve hangilerinin başladığı, programdaki şu anki ders ya da tahtanın tek şubesi; öğrenci
-verisi yok). Öğretmen kodunu ve PIN'ini tuş takımıyla girer (fiziksel klavyeden de olur);
+verisi yok). Şu an ders yoksa tahtada 5 dakika içinde başlayacak, o da yoksa 15 dakika içinde
+bitmiş ders önerilir; tahtanın "Şubeler" alanında birden çok şube varsa (ikili eğitim) devresi şu
+an süren tek şube önerilir. Öğretmen kodunu ve PIN'ini tuş takımıyla girer (fiziksel klavyeden de olur);
 sunucu 3–15 dakikalık (varsayılan 8) bir **belirteç** verir. Belirteç yalnız yönetici yetkili
 serviste ve sunucuda (özetiyle) durur, ekran yardımcısına gitmez (kural 5). Şube ve ders saati
 biliniyorsa liste hemen gelir; değilse öğretmen şubeyi ve başlamış bir ders saatini seçer (zil
@@ -459,7 +555,7 @@ yoklama açılmaz (sunucu da reddeder); acil sürerken açılmaz. Yoklama açık
 da "kullanılıyor" sayılır: uyarılı otomatik kapatma önce geri sayım gösterir.
 
 **Kural 3:** sunucuya ulaşılamıyorsa yoklama açılmaz ("Sunucuya ulaşılamıyor. Bu dersin
-yoklamasını e-Okul'a doğrudan girin."); PIN tahtada doğrulanamaz, liste tahtaya kalıcı
+yoklamasını kâğıda alın."; K5: asıl dayanak kâğıt yoklamadır); PIN tahtada doğrulanamaz, liste tahtaya kalıcı
 yazılmaz. Kilit davranışı değişmez.
 
 **Panel:** üst menüde **Yoklama**; sayfa içi sekmeler Günlük görünüm · Panelden gir ·
@@ -479,10 +575,20 @@ başında "Bu sayfa öğrenci adları içerir" notu vardır. Öğrenci listesi d
 öğretmen ekleme/düzenleme/pasifleştirme, toplu PIN, öğrenci aktarma, yıl sonu silme ve ayarlar
 yalnız yöneticinin.
 
-**Saklama ve imha:** yoklama kayıtları ayarlanan süre (varsayılan 30 gün, 7–365) sonunda
-saatte bir çalışan imha işiyle silinir (`secure_delete` + WAL budama); hiçbir kaydın
-göstermediği pasif öğrenciler de silinir. Öğretim yılı sonunda "Tüm öğrenci ve yoklama
-verisini sil" (`SİL` onayı). Yedekler (varsa) bu mekanizmanın dışındadır.
+**Saklama ve imha (16.11.2026 kararı):** öğrenci verisi içeren kayıtlar — ders yoklaması (iz ve
+e-Okul işaretiyle), sınavın öğrenci listesi ve yoklaması, boş ders uyarısı — **öğretim yılı
+sonuna kadar** saklanır. Bitiş tarihini yönetici Ayarlar › Kişisel veri saklama'dan girer
+(`ayar.ogretim_yili_bitis`, `saklama.py`; Okul Zili takvimi varsa öğretimin bitişi tek tıkla
+önerilir, kendiliğinden yazılmaz). Tarih geçince (ertesi gün) o tarihte ve öncesinde oluşan
+kayıtlar kalıcı silinir (yoklama saatte bir, sınav ve uyarı 20 sn'lik turda; `secure_delete` +
+WAL budama, işlem kaydına yalnız sayılar); tarihten sonra oluşanlar bir sonraki yılın bitişine
+kadar kalır. Tarih boşsa hiçbir şey silinmez ve Ayarlar uyarır; tarih geçtikten sonra da yeni
+yılın tarihi girilene kadar uyarır. Geçmiş bir tarih girmek onay kutusu ister ve silinecek kayıt
+sayılarını gösterir. Gün sayılı saklama ayarı (0.6–0.7: 30 gün, 7–365) göçle kalktı. Hiçbir
+kaydın göstermediği pasif öğrenciler saatlik imhada silinir; sınıf listesinin kendisi yıl sonu
+silmesine girmez: "Tüm öğrenci ve yoklama verisini sil" (`SİL` onayı) ya da yeni yılın listesi.
+**Şifreli yedekler** bu veriyi silindikten sonra da yedek saklama süresi kadar (günlük yedek sayısı
+kadar gün, varsayılan 14) daha taşır; Ayarlar ve Yedekler sayfası bunu yazar.
 
 **Bilinen sınırlar:** sunucu kapalıyken yoklama alınamaz; yerel soket `127.0.0.1` TCP'dir ve o
 tahtadaki herhangi bir yerel süreç yoklama açıkken ekrandaki etiketleri alabilir (belirteç ve
@@ -495,9 +601,8 @@ Sonraya bırakılanlar (göç gerektirmez): e-Okul personel listesi (OOK01001R1)
 
 ## 15. Altyapı: şifreli yedek, sunucu adresleri, envanter, arıza (0.7.0)
 
-Aşama 6'nın çekirdeği (6A). Windows hizmeti ve ajan paketi imzası (6B) kurucu derlemesi,
-yönetici yetkili deneme ve kullanıcı kararı (sürüm anahtarını kim tutacak, hizmet hesabı)
-gerektirdiği için sonraya bırakıldı; göç gerektirmez, ayrı sürümle gelir. Göç: `tahta`'ya
+Aşama 6'nın çekirdeği (6A). Windows hizmeti 0.8.0'da geldi (K8, §15.6); ajan paketi imzası
+(sürüm anahtarını kim tutacak kararı gerekir) hâlâ sonraya bırakılmıştır. Göç: `tahta`'ya
 `envanter_json, envanter_ozet, envanter_zamani, donanim_kimligi, demirbas_no, envanter_notu`;
 yeni `ariza`, `ariza_hareket` tabloları (`user_version` 6).
 
@@ -534,8 +639,8 @@ yeni `ariza`, `ariza_hareket` tabloları (`user_version` 6).
   bekler; vazgeçilince ya da uygulanınca silinir, onaylanmadan 24 saat bekleyen kendiliğinden silinir.
   Parola ya da özel anahtar diske hiç yazılmaz. `geri-yukleme-oncesi/` altında yalnız en yeni klasör
   kalır, o da N günden eskiyince silinir (zamanlayıcının yedek işi budar; işlem kaydına düşer).
-- **KVKK:** şifreli yedekler, süreli silinen kişisel verinin (sınav, yoklama, boş ders uyarısı)
-  kopyasını yedek saklama süresi kadar daha taşır; Yedekler sayfası bunu yazar. Arayüzde mevzuat
+- **KVKK:** şifreli yedekler, öğretim yılı sonunda silinen kişisel verinin (sınav, yoklama, boş
+  ders uyarısı) kopyasını yedek saklama süresi kadar daha taşır; Yedekler ve Ayarlar sayfası bunu yazar. Arayüzde mevzuat
   atfı yoktur (KVKK md. 12 §18'de doğrulanacak).
 
 ### 15.2 Sunucu adres listesi
@@ -604,6 +709,128 @@ yeni `ariza`, `ariza_hareket` tabloları (`user_version` 6).
   arıza bildirimi için ajanı güncelleyin" der, "Envanteri yenile" o tahtayı atlar.
 - Yeni ajan + eski sunucu: liste, `envanter_iste`, `ariza_alindi` gelmez; liste değişmez, envanter
   gönderilmez, arıza kuyrukta 7 gün bekler.
+- Windows hizmeti (§15.6) tahta arayüzünü değiştirmez: aynı kapı, aynı sertifika (taşınır), aynı uçlar.
+  Ajanın yeniden kurulması gerekmez.
+
+### 15.6 Windows hizmeti (K8, 0.8.0)
+
+Sunucu bilgisayar açılınca, kimse oturum açmadan başlar. 0.8 öncesinde sunucu, oturum açan
+kullanıcının denetim penceresiydi ve `{commonstartup}` kısayoluyla **her oturum açan kullanıcıda**
+kendi verisiyle açılabiliyordu.
+
+**Seçim: pywin32 ile gerçek Windows hizmeti** (`pywin32>=308`, yalnız Windows; PSF lisansı).
+- Derleme anında PyPI'den gelen bir Python kitaplığıdır; kuruluma ayrı ikili araç (NSSM, WinSW)
+  girmez, kurulumda internet gerekmez. PyInstaller'la hizmet barındırma (`servicemanager`) olgun,
+  yaygın bir yoldur.
+- Reddedilen: **Görev Zamanlayıcı "sistem açılışında"** — düzgün durdurma (`net stop`), durum
+  sorgusu ve çökmede yeniden başlatma vermez; kurucunun görev kaydı yetki hatalarına açıktır.
+  **ctypes ile elle hizmet protokolü** — ek bağımlılık yok ama sahada hiç denenmemiş kendi
+  kodumuz olurdu. **NSSM/WinSW** — üçüncü taraf ikili.
+- `tahta_sunucu/hizmet.py` içe aktarılırken pywin32 istemez (Linux ve testler); pywin32 yalnız
+  `TahtaKontrol.exe hizmet` çalışırken yüklenir. Hizmetin işi saf Python `govde()`'dedir.
+
+**Hesap: Yerel Hizmet (`NT AUTHORITY\LocalService`)**, en az yetki. 8787 ve 8788 ayrıcalıksız
+kapılardır; sunucunun sistem ayarı değiştirmesi gerekmez. SYSTEM seçilmedi: panelde ya da bir
+kitaplıkta açık bulunursa bütün bilgisayar ele geçmesin. Bedeli: yedeğin ikinci kopyası ağ
+paylaşımına yazılamaz (Yerel Hizmet ağda anonim görünür); yerel disk/USB çalışır (açık soru 42).
+
+**Kayıt** (kurucu, `sc.exe`): `TahtaKontrol`, "Tahta Kontrol Sunucusu", `start= auto`,
+`binPath= "…\TahtaKontrol.exe" hizmet`; çökmede 5 sn, 5 sn, 30 sn sonra yeniden başlatma
+(`sc failure … reset= 86400`, `failureflag 1`). Hizmet zaten varsa `sc config` ile güncellenir.
+Hizmet yöneticisi dışından `TahtaKontrol.exe hizmet` çalıştırılırsa (1063) sessizce 2 koduyla çıkar.
+
+**Veri dizini** (`ayar.veri_dizini_sec`):
+1. `TAHTA_VERI_DIZINI` her şeyi ezer (deneme, derleme duman testi).
+2. Paketli Windows programı → `%PROGRAMDATA%\TahtaKontrol` (hizmet ve kurucu).
+3. Windows'ta geliştirme (`uv run`) → `%LOCALAPPDATA%\TahtaKontrol` (eskisi gibi).
+4. Diğer → XDG yolu.
+
+Hizmet günlüğü `gunluk\sunucu.log` (5 MB × 3); başlama/durma ve açılmama nedenleri ayrıca Olay
+Görüntüleyicisi > Windows Günlükleri > Uygulama'ya yazılır.
+
+**İzinler** (kurucu, SID'lerle; Türkçe Windows'ta grup adları yerelleştiği için ad kullanılmaz):
+`icacls "%ProgramData%\TahtaKontrol" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-19:(OI)(CI)M`.
+Yalnız SYSTEM, Administrators ve Yerel Hizmet erişir; sıradan kullanıcılar veritabanını, sertifika
+anahtarını ve yedekleri okuyamaz (ProgramData'nın varsayılanı Users'a okuma verir; devralma bu
+yüzden kesilir). Taşınan dosyalar `icacls … /reset /T` ile klasörün izinlerini devralır.
+
+**Eski veriyi taşıma** (`tahta_sunucu/tasima.py`). Kurucu yönetici yetkisiyle
+`TahtaKontrol.exe tasi --hedef "%ProgramData%\TahtaKontrol" --tercih "<kurucuyu çalıştıranın %LOCALAPPDATA%>\TahtaKontrol"`
+çağırır; hizmet hesabı kullanıcı profillerini okuyamadığı için taşıma hizmette değil kurucudadır.
+Sertifika değişirse bütün tahtalar koptuğu (kural 4) için kurallar sıkıdır:
+- **Hedefte veri varsa** (veritabanı ya da sertifika) hiçbir şey taşınmaz; hedef kazanır (kod 11).
+  0.8.0'dan sonraki her yükseltme bu yoldan geçer.
+- **Adaylar:** kurucuyu çalıştıran hesabın klasörü ve bilgisayardaki bütün profillerin
+  (`ProfileList` + Users klasörü; yalnız okunur) `AppData\Local\TahtaKontrol` klasörleri; içinde
+  veritabanı ya da sertifika olan ve `TASINDI.txt` taşımayanlar. Hiç yoksa ilk kurulum (kod 10).
+- **Seçim:** tek aday → o. Birden çoksa (başlangıç kısayolu her oturumda programı açtığı için
+  mümkündür) tahtaların **en son bağlandığı** (onaylı tahtaların en yeni `son_gorulme`'si)
+  veritabanı; hiçbirinde tahta yoksa kurucuyu çalıştıran hesabınki; o da yoksa **seçim yapılmaz**
+  (kod 20). Adayların veritabanı geçici bir kopyada okunur; kaynağa yazılmaz.
+- **Kopyalama:** bütün dosyalar (veritabanı ve `-wal` dosyası, sertifika ve anahtar, `yedekler\`,
+  `goc-oncesi\`, `marka\`, bekleyen geri yükleme…) kopyalanır; günlükler ve `-shm` kopyalanmaz,
+  sembolik bağ izlenmez. Her dosyanın SHA-256'sı karşılaştırılır, veritabanı `integrity_check`'ten
+  geçer, sertifikayla anahtar birlikte olmalıdır. Hata → bu taşımanın oluşturduğu dosyalar silinir
+  (kod 21). Başarı → kaynağa yalnız `TASINDI.txt` yazılır; **eski klasör silinmez** (geri dönüş:
+  eski sürüm yeniden kurulursa eski veri yerindedir; ama o günden sonraki değişiklikleri taşımaz).
+- **Belirsizlik ya da hata** → hedefe `TASIMA-BEKLIYOR.txt` (adaylar, tahta sayıları, son temas,
+  çözüm adımları) yazılır; hizmet bu dosya durdukça **açılmaz** (yeni sertifika üretmesin), kurucu
+  hizmeti başlatmaz ve bitişte kırmızı uyarı gösterir. Çözüm: doğru klasörü
+  `TahtaKontrol.exe tasi --hedef … --kaynak …` ile vermek ya da dosyaları elle kopyalayıp işareti
+  silmek; eski veri gerçekten istenmiyorsa yalnız işareti silmek. Taşıma programı hiç
+  çalışamadıysa kurucu işareti kendisi yazar.
+- **Kesinti** (süreç öldürülür, elektrik gider; istisna yolu çalışmaz): kopyalama ve doğrulama
+  hedefteki `.tasima-gecici` dizininde yapılır; hedef ancak her şey doğrulanınca dolar. Yerleştirme
+  `TASIMA-SURUYOR.txt` işaretiyle yapılır (önce sertifika çifti ve diğer dosyalar, en son
+  veritabanı; aynı birimde yeniden adlandırma). Sonraki çalıştırma geçiciyi siler; işaret kalmışsa
+  hedefteki yarım dosyaları `yarim-tasima-<zaman>` klasörüne **kaldırır** (silmez) ve baştan taşır.
+  İşaret durdukça hizmet açılmaz (yarım kopyayla boş veritabanı açılıp tahtalar reddedilmesin).
+- **Geri dönüşten sonra yeniden yükseltme:** hedef dolu olsa da, `TASINDI.txt` taşıyan bir eski
+  klasördeki veritabanı (ya da `-wal`) `TASINDI.txt`'den 2 dakikadan fazla sonra değişmişse eski
+  sürüm o klasörde kullanılmış demektir: kod 20, `TASIMA-BEKLIYOR.txt` iki kopyayı tahta sayısı ve
+  son temasla yazar; hizmet başlatılmaz. Seçenekler: (A) eski klasör doğruysa hedefteki veri
+  dosyaları kenara alınır, eski klasördeki `TASINDI.txt` silinir, `tasi --kaynak`; (B) hedef
+  doğruysa eski klasörün adı değiştirilir ya da silinir.
+- **Kurucu yükseltmede** hizmeti durdurmadan önce `start= demand` ve boş `sc failure` eylemleri
+  yazar: çökme döngüsündeki hizmeti hizmet yöneticisi dosya kopyalanırken yeniden açmasın; ikisi
+  de kayıt adımında geri yazılır.
+
+**Kurulum ve yükseltme akışı** (`tahta-kontrol.iss`):
+1. Hazırlık: hizmet varsa `net stop` (durana kadar bekler); sonra `taskkill /F /T /IM TahtaKontrol.exe`
+   — 0.8 öncesi oturum programı (her oturumda) ve durum pencereleri kapanır. SQLite işlenmiş
+   kayıtları diske yazmıştır; son yazılar `-wal`'daysa o da taşınır.
+2. Dosyalar; eski `{commonstartup}\Tahta Kontrol.lnk` silinir (hizmetle ikinci sunucu açmasın).
+3. Veri klasörü, izinler, taşıma, izinlerin devralınması, hizmet kaydı, güvenlik duvarı (8788,
+   eskisiyle aynı kural adı), taşıma güvenle bittiyse `net start`.
+4. Bitiş sayfası taşımanın sonucunu ve uyku notunu yazar; taşınamadıysa ayrıca kırmızı ileti.
+
+**Kaldırma:** `net stop`, açık pencereler kapatılır, `sc delete`, güvenlik duvarı kuralı silinir.
+`%ProgramData%\TahtaKontrol` **silinmez** (veritabanı, sertifika, yedekler); kaldırıcı bunu söyler.
+
+**Durum penceresi** (`pencere.py`; kısayollar açar, kullanıcı oturumunda çalışır, hizmetin
+verisine dokunmaz, günlüğü `%LOCALAPPDATA%\TahtaKontrol\pencere.log`). Açılışta
+`http://127.0.0.1:8787/yerel/durum` (2 sn) ve `sc query TahtaKontrol` ile kip seçer; hizmet
+yeni başlıyorsa 20 sn yanıt bekler:
+- **Çalışıyor:** sürüm, yerel ve ağ adresleri, uyarılar (yedek parolası yok, son yedek eski ya da
+  başarısız, uyku), "Paneli aç", "Kapat". Pencereyi kapatmak sunucuyu durdurmaz.
+- **Hizmet kurulu ama yanıt yok:** "Sunucu hizmeti çalışmıyor; kilitler 90 saniye sonra tahtadan
+  açılabilir", günlük yerleri, `TASIMA-BEKLIYOR.txt` olasılığı, "Hizmeti başlat" (UAC sorar),
+  "Yeniden dene".
+- **Paketli program ama hizmet yok:** "Kurucuyu yeniden çalıştırın". Pencere sunucu **açmaz**
+  (hizmetle çift çalışma olmasın).
+- **Geliştirme** (`uv run … pencere`, hizmet yok ve yanıt yok): eskisi gibi sunucuyu pencerede
+  çalıştırır. Yanıt veren bir sunucu varsa ikincisini açmaz.
+
+**Geri yükleme** (§15.1): hizmet kipinde onaydan 2 sn sonra süreç 75 koduyla çıkar; hizmet
+yöneticisi 5 sn sonra yeniden başlatır, yedek açılışta yerleştirilir. `/yerel/durum`'un `hizmet`
+alanı hizmet kipinde `true` döner.
+
+**Çift çalışmayı önleme:** başlangıç kısayolu silinir; paketli pencere sunucu açmaz; iki sunucu
+aynı kapıyı tutamaz (ikincisi "kullanımda" ile açılmaz).
+
+**Bilinen sınırlar:** bilgisayar uyku/hazırda beklemeye geçerse hizmet durmuş sayılır (pencere ve
+kurucu uyarır, güç ayarı değiştirilmez). Gerçek hizmet kurulumu ve PyInstaller paketinde pywin32'nin
+hizmet olarak çalışması henüz yönetici yetkili bir denemede doğrulanmadı (saha-denemesi.md §3.7).
 
 ## 16. Yol haritası
 
@@ -616,25 +843,57 @@ yeni `ariza`, `ariza_hareket` tabloları (`user_version` 6).
 | 4 | Kelebek sınav duyurusu ve sınav kipi (Kelebek Sınav verisinden, maskeli liste), sınav yoklaması | 0.5.0 — Debian 12 kabında denendi; ETAP'ta ve gerçek Kelebek çizelgesiyle denenecek. Tablo gösterimi, tahtadan sınav ekranını kapatma ve sayfalı ızgara sonraya (§13) |
 | 5 | Ders yoklaması (öğretmen kodu + PIN, e-Okul sınıf listesi, tahtadan ve panelden yoklama, icmal, imha) | 0.6.0 — Debian 12 kabında denendi; ETAP'ta ve gerçek e-Okul dosyasıyla denenecek. e-Okul personel listesi aktarımı sonraya (§14) |
 | 6A | Altyapı çekirdeği: şifreli yedek ve geri yükleme, sunucu adres listesi (`tahta-ajan sunucu`), tahta envanteri, arıza bildirimi (panel + tahtadaki "Arıza bildir" penceresi) | 0.7.0 — Debian 12 kabında ve tarayıcıda denendi; ETAP'ta denenecek (§15) |
-| 6B | Sunucunun Windows hizmeti olarak çalışması (oturum açılmadan başlar, veri ProgramData'ya taşınır), ajan paketi imzası (sürüm anahtarı + tahtada Ed25519) | Sonraya: kurucu derlemesi, yönetici yetkili deneme ve açık soru 41–42'nin yanıtı gerekir |
+| 6B | Sunucunun Windows hizmeti olarak çalışması (oturum açılmadan başlar, Yerel Hizmet hesabı, veri ProgramData'ya kurucuda kopyalanır, durum penceresi) | 0.8.0 (K8, §15.6) — birim testleriyle ve hizmet kipi uçbirimde denendi; gerçek hizmet kurulumu yönetici yetkili denemede doğrulanacak. Ajan paketi imzası sonraya |
+| K | 16.11.2026 kararları (§17): ikili eğitim denetimi ve düzeltmeleri (yoklama önerisi, devre süzgeci, sınav şube duyurusu, ızgara/icmalde devre adı), öğretim yılı sonuna kadar saklama, acil yayını bütün idarecilere açma, yardımcı kayıt metinleri, boş ders uyarısı varsayılan açık + rapor; gün sonu oturum temizliği (K7, §12.1) | 0.8.0 — testlerle ve tarayıcıda denendi; oturum temizliği Debian 12 kabında (Xvfb + openbox, sahte profil) denendi; ETAP'ta denenecek |
 
 Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" ve "Seçili
 tahtalara alan ata", plan formunda "sonraki 3 gösterim" canlı önizlemesi, çakışan
 plan uyarısı.
 
-## 17. Açık sorular
+## 17. Kararlar (16.11.2026) ve açık sorular
+
+### Kararlar (16.11.2026)
+
+Okul idaresinin (bir ortaöğretim kurumunun idarecisi) yanıtları; kesindir. Uygulandıkları yer
+parantezdedir. Bu kararlarla yanıtlanan açık sorular (1, 4, 12, 16, 22, 23, 27, 32, 41) aşağıdaki
+listeden çıkarıldı; kalan soruların numaraları değişmedi.
+
+- **K1. İkili eğitim.** Okulda sabahçı ve öğlenci devre vardır; zil çizelgeleri ayrıdır; aynı
+  derslikte/tahtada iki ayrı şube ders görebilir. "Devre" alanı bu anlamdadır (bina ayrı alandır).
+  (§6.1 devre süzgecinin programdan türetilmesi, §12 ikili eğitim, §14 öneri; 0.8.0)
+- **K2. Devamsızlık e-Okul'a ders saati bazında işlenir;** icmal şube ve ders saati bazında kalır,
+  yarım gün/tam gün hesabı yapılmaz. (§14)
+- **K3. Öğrenci verisi içeren kayıtlar** (ders yoklaması, sınav yoklaması ve listesi, boş ders
+  uyarısı) **öğretim yılı sonuna kadar** saklanır. Bitiş tarihini yönetici Ayarlar'da girer; boşsa
+  silme yapılmaz ve Ayarlar uyarır; tarih geçince kayıtlar kalıcı silinir, sonra yönetici yeni
+  yılın tarihini girer. Şifreli yedekler bu veriyi yedek saklama süresi kadar daha taşır.
+  (§13, §14 "Saklama ve imha", §15.1; 0.8.0 göçü gün sayılı ayarı kaldırır)
+- **K4. Acil durum yayınını bütün idareciler ve yöneticiler başlatabilir;** parola ve onay kutusu
+  yine istenir; ayrı acil yetkisi yoktur (göçle herkese verildi, sütun okunmaz). (§7)
+- **K5. Tahtadan alınan ders ve sınav yoklaması kâğıdın yanında yardımcı kayıttır;** arayüz ve
+  belge resmî kayıt iddiasında bulunmaz. (§13, §14)
+- **K6. Boş ders uyarısı açık ve geçmişiyle:** varsayılan açıktır; uyarılar K3 süresince saklanır
+  ve tarih aralığı, tahta/derslik ve ders saatine göre raporlanır (kişi adı yok; ikili eğitimde ders
+  süzgeci devreyle birlikte seçilir, ör. "Sabah · 3. ders"). Uyarı oluştuğu andaki şubeyi saklar
+  (sonradan değişen program eski uyarıyı başka şubeye yazmasın); 0.8.0 öncesi uyarıda şube güncel
+  programdan bulunur ve "(güncel programa göre)" diye işaretlenir. Öğretmenlerin
+  önceden bilgilendirilmesi okul idaresinin sorumluluğundadır. (§12)
+- **K7. Oturum temizliği: gün sonu, hafif.** Gün sonunda (otomatik kapatmadan önce ya da ayarlanan
+  saatte) ortak hesap oturumunda açık pencereler kapanır, tarayıcı oturumları ve çerezleri silinir;
+  dosyalara (İndirilenler, Masaüstü, belgeler), tarayıcı geçmişine ve kayıtlı parolalara
+  dokunulmaz. (§12.1; 0.8.0. Varsayılan kapalı.)
+- **K8. Sunucu Windows hizmeti olarak çalışır** (bilgisayar açılınca, oturum açılmadan başlar).
+  Ajan paketi imzası bu sürümde yoktur. (§15.6; 0.8.0. Yerel Hizmet hesabı, veri
+  `%ProgramData%\TahtaKontrol`, eski veri kurucuda kopyalanır.)
+
+### Açık sorular
 
 Yanıt gelene kadar bu belgedeki karar geçerlidir.
 
-1. **"Devre" ne demek?** İkili eğitimdeki sabah/öğle öğretimi olarak alındı; bina
-   ayrıca "bina" alanıyla karşılanır. Okulda başka anlamda (ana bina/ek bina gibi)
-   kullanılıyorsa alan adı ve değerleri değişir.
 2. **Acil yayın onayı yeterli mi?** Karar: tek kişi + parola + açık onay kutusu. İki
    kişinin onayı gerçek acil durumda gecikme yaratır; istenirse eklenir.
 3. **Acil yayın yalnız bütün okula mı?** Karar: evet. Yalnız bir binaya yayın
    gerekiyorsa bina seçimi eklenebilir.
-4. **Varsayılan acil yetkisi:** mevcut ve ilk kurulumdaki yöneticilere verildi,
-   idarecilere verilmedi. Uygun mu?
 5. **Acil şablon metinleri** okulun acil durum planındaki ifadelerle değiştirilmeli mi?
    Örnek metinler mevzuattan alınmadı; iş güvenliği/sivil savunma sorumlusunun
    görüşü önerilir.
@@ -654,9 +913,6 @@ Ders programı ve program kilidi (0.4.0):
     2 dakika uygun mu?
 11. **Dersi olmayan saatte kilit** varsayılan açık. Boş saatte tahtanın öğretmence bireysel
     çalışma için kullanılması okulda olağan mı? Olağansa varsayılan kapatılır.
-12. **Boş ders uyarısı** personel denetimi gibi algılanabilir. Açılmadan önce öğretmenler
-    kurulunda ya da yazılı bilgilendirmeyle duyurulmalı mı, okulun aydınlatma metnine
-    eklenmeli mi? 30 günlük saklama uygun mu? (Dayanak §18'de doğrulanacak.)
 13. **Derslik programı kaynağı:** okulda ders programı hangi programla hazırlanıyor
     (e-Okul, bir ders dağıtım programı, Excel)? Dışa aktardığı dosyanın uydurma verili bir
     örneği paylaşılırsa ikinci bir içe aktarma biçimi eklenebilir; şimdilik yalnız kendi
@@ -667,9 +923,6 @@ Ders programı ve program kilidi (0.4.0):
 15. **Kurum içi karar:** teneffüste tahtaların kilitlenmesine ilişkin öğretmenler kurulu ya
     da okul yönetimi kararı var mı/gerekli mi? Varsa arayüzde ona atıf yapılabilir;
     yazılım hiçbir mevzuat maddesine dayanak olarak atıf yapmıyor.
-16. **Oturum temizliği** (sonraya bırakıldı): `ogrenci` hesabı tahtada kullanılıyor mu;
-    tarayıcı geçmişi ve kayıtlı parolalar da silinsin mi (Firefox'ta geçmiş yer imleriyle
-    aynı dosyadadır)? ETAP'taki tarayıcılar ve profil yolları sahada görülmeden yazılmayacak.
 17. **Program kilidi süresi tahtada en çok 8 saat** sayılır. Gün boyu dersi olmayan
     dersliklerde bu, tahtanın öğleden sonra kendiliğinden açılması demektir; uygun mu?
 
@@ -684,9 +937,6 @@ Sınav kipi ve sınav yoklaması (0.5.0):
     kipi panelden kaldırılır. Gözetmenin tahtadan kapatabilmesi istenir mi?
 21. **Sınav kuralları** varsayılan metni okulun uygulamasına uyuyor mu? Özellikle "ilk ve son
     10 dakika salondan çıkılmaz" maddesi okul tercihi olarak yazıldı; dayanak gösterilmedi.
-22. **Saklama süresi** 30 gün. Mazeret sınavı takvimi uzun sürüyorsa süre uzatılmalı mı?
-23. **Tahtadan yoklama kâğıt yoklamanın yanında mı, yerine mi?** Karar: yanında; icmalde
-    "salon evrakındaki imzalı yoklama esastır" notu var.
 24. **Şube duyurusu** tahtada gösterilsin mi, yoksa kâğıt liste yeter mi? Gösterilecekse süre
     (varsayılan 10 dk) uygun mu?
 25. **Kelebek'e dışa aktarım:** Kelebek'e "Tahta Kontrol için dışa aktarım" (süre, gözetmen,
@@ -697,17 +947,12 @@ Sınav kipi ve sınav yoklaması (0.5.0):
 
 Ders yoklaması (0.6.0):
 
-27. **e-Okul'a giriş biçimi:** devamsızlık e-Okul'a ders saati bazında mı, yarım gün/tam gün
-    olarak mı işleniyor? Ders saatlerinden güne çevirme kuralı doğrulanırsa icmale gün sütunu
-    eklenir (dayanak §18'de doğrulanacak).
 28. **"Geç geldi"** ayrı işaret olarak gerekli mi? (Şimdi tek durum: yok.)
 29. **Kilitli tahtada doğru PIN kilidi de açsın mı?** Karar: açmaz; yoklama bitince kilit geri gelir.
 30. **PIN'i öğretmen kendisi değiştirebilsin mi?** Karar: hayır; idare yeni PIN üretir (sınıf
     önünde iki kez PIN yazdırmak gözetlenme riskini artırır).
 31. **Tahtadaki ad görünümü:** varsayılan "Ayşe Y." uygun mu? Seçenek: "1047 A. Y.". Ad soyadın
     açık gösterimi bilerek kaldırıldı.
-32. **Saklama süresi** 30 gün okulun kişisel veri saklama ve imha politikasıyla uyumlu mu?
-    Sunucu yedeklerinin (varsa) saklama süresi ne?
 33. **Aydınlatma:** okulun öğrenci/veli aydınlatma metni "ders yoklamasının etkileşimli tahtadan
     alınıp okul sunucusunda tutulmasını" kapsıyor mu?
 34. **Öğretmen listesi kaynağı:** öğretmenler elle ekleniyor; e-Okul personel listesi (OOK01001R1)
@@ -729,10 +974,9 @@ Ders yoklaması (0.6.0):
 
 Altyapı (0.7.0 ve 6B):
 
-41. **Sürüm anahtarını kim tutacak?** (6B, paket imzası) Öneri: kurucuyu derleyen kişi; anahtar depo
-    dışında parolalı dosyada, ikinci kopyası çevrimdışı (USB, kasada). Uygun mu?
-42. **Hizmet hesabı Yerel Hizmet (LocalService) olsun mu?** (6B) Sonucu: yedeğin ikinci kopyası ağ
-    paylaşımına yazılamaz, yalnız yerel disk/USB. Ağ paylaşımı gerekiyorsa daha geniş yetkili hesap gerekir.
+42. **Hizmet hesabı Yerel Hizmet (LocalService) olsun mu?** (Karar, 0.8.0: evet, en az yetki; §15.6.)
+    Sonucu: yedeğin ikinci kopyası ağ paylaşımına yazılamaz, yalnız yerel disk/USB. Ağ paylaşımı
+    gerekiyorsa daha geniş yetkili hesap gerekir.
 43. **Parola belirlenmeden yedek almamak** kabul mü? (Karar: hiç almamak + panoda sürekli kırmızı şerit.)
 44. **Saklama:** varsayılan 14 günlük yedek yeterli mi? Okulun imha politikası daha kısa süre
     istiyorsa ayardan 3 güne kadar indirilebilir.
@@ -762,20 +1006,21 @@ Arayüzde hiçbir mevzuat maddesine atıf yapılmaz. Belgeye dayanak olarak yaz�
 - Sınav kurallarındaki "ilk ve son 10 dakika salondan çıkılmaz" kuralının dayanağı (soru 21);
   okul tercihi olarak yazıldı.
 - Gözetmenin yoklama alma ve tutanak düzenleme görevine ilişkin hüküm; şimdilik yalnız
-  Kelebek'in salon evrakı (R1) uygulamasına dayanıldı (soru 23).
+  Kelebek'in salon evrakı (R1) uygulamasına dayanıldı (K5: tahtadan yoklama kâğıdın yanında yardımcı kayıttır).
 - Yazılımın acil durum yayınının acil durum planında "uyarı sistemi" sayılıp
   sayılamayacağı (soru 9).
 - Tatbikat verisinin MEBBİS İSG modülüne girilecek biçimi (soru 6).
-- Boş ders uyarısı için aydınlatma gerekip gerekmediği (KVKK md. 10) ve 30 günlük
-  saklamanın okulun kişisel veri saklama ve imha politikasıyla uyumu (soru 12).
+- Boş ders uyarısı için aydınlatma gerekip gerekmediği (KVKK md. 10) ve öğretim yılı sonuna kadar
+  saklamanın okulun kişisel veri saklama ve imha politikasıyla uyumu (K3, K6; öğretmenlerin
+  bilgilendirilmesi okul idaresinin sorumluluğundadır, belge mevzuat atfı yapmaz).
 - Etkileşimli tahtaların kullanımına ilişkin MEB/YEĞİTEK düzenlemesi (varsa). Teneffüs
   kilidi bir okul yönetimi tedbiridir; öğrencinin kendi bilişim aracıyla ilgili disiplin
   hükmü okulun tahtası için dayanak gösterilmez (soru 15).
 - Ders yoklaması: okulun devam takibi yükümlülüğüne ilişkin Ortaöğretim Kurumları
-  Yönetmeliği md. 36'nın yoklamaya ilişkin fıkrası ve ders saatinden yarım/tam güne çevirme
-  kuralı (soru 27) — depoda yalnız md. 36/7 (özür belgesi) metni var; fıkra numarası
-  yazılmadı. KVKK md. 12 (veri güvenliği) yoklama için de doğrulanacak. Aydınlatma metninin
-  kapsamı (KVKK md. 10, soru 33) ve 30 günlük saklamanın imha politikasıyla uyumu (soru 32).
+  Yönetmeliği md. 36'nın yoklamaya ilişkin fıkrası — depoda yalnız md. 36/7 (özür belgesi) metni
+  var; fıkra numarası yazılmadı (e-Okul'a ders saati bazında işlendiği K2 ile bilindi; yarım/tam güne
+  çevirme yapılmaz). KVKK md. 12 (veri güvenliği) yoklama için de doğrulanacak. Aydınlatma metninin
+  kapsamı (KVKK md. 10, soru 33) ve öğretim yılı sonuna kadar saklamanın imha politikasıyla uyumu (K3).
 - Şifreli yedek: KVKK md. 12 ve Kurul'un "yeterli önlemler" kararındaki kriptografik yöntem ve
   anahtarların ayrı tutulması önlemleri; metinleri yerelde usulünce yok, arayüz bunlara atıf yapmaz.
 - Demirbaş numarası biçimi için taşınır mal mevzuatındaki sicil/kod hükmü (soru 48).

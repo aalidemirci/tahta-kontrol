@@ -64,7 +64,7 @@ def kaydet(uygulama, y) -> None:
             girilen=girilen or {},
             **ek,
             aktif=aktif,
-            yetkili=bool(k["acil_yetki"]),
+            yetkili=acil.yetkili(k),
             sablonlar=sablonlar,
             onay_metni=ONAY_METNI,
             varsayilan_sure=acil.ACIL_VARSAYILAN_DK,
@@ -113,8 +113,8 @@ def kaydet(uygulama, y) -> None:
                 vt.kayit_dus(b, k["ad"], "Acil yayın reddedildi", kayit or ileti, ip)
             return ciz(istek, k, girilen, ileti)
 
-        if not k["acil_yetki"]:
-            return reddet("Acil yayın yetkiniz yok; yöneticiden isteyin.", "Acil yetkisi yok")
+        if not acil.yetkili(k):
+            return reddet("Acil yayın yetkiniz yok.", "Acil yetkisi yok")
         if not y.hiz_siniri(y.giris_denemeleri, ip, 10, 300):
             return reddet("Çok fazla deneme yapıldı. Birkaç dakika sonra yeniden deneyin.", "Hız sınırı")
         with vt.islem() as b:
@@ -170,9 +170,9 @@ def kaydet(uygulama, y) -> None:
         donus = donus if donus.startswith("/") and not donus.startswith("//") else f"/acil/{acil_id}"
         ip = y.istemci_ip(istek)
         with vt.islem() as b:
-            if not k["acil_yetki"]:
+            if not acil.yetkili(k):
                 vt.kayit_dus(b, k["ad"], "Acil yayın reddedildi", f"#{acil_id} bitirme: acil yetkisi yok", ip)
-                return y.yonlendir(donus, "Acil yayın yetkiniz yok; yöneticiden isteyin.", hata=True)
+                return y.yonlendir(donus, "Acil yayın yetkiniz yok.", hata=True)
             yayin = acil.aktif(b)
             if not yayin or yayin["id"] != acil_id:
                 return y.yonlendir(donus, "Bu yayın zaten bitmiş.", hata=True)
@@ -211,5 +211,5 @@ def kaydet(uygulama, y) -> None:
                 "acil_yol": sum(1 for s in teslim if s["yol"] == "Acil"),
                 "yedek_yol": sum(1 for s in teslim if s["yol"] == "Yedek duyuru"),
             },
-            yetkili=bool(k["acil_yetki"]),
+            yetkili=acil.yetkili(k),
         )
