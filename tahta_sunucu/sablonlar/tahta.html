@@ -75,12 +75,18 @@
       <dt>Ajan sürümü</dt><dd>{{ ham.surum or '—' }}{% if ham.surum and not t.guncel %} <span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Güncelleme var</span>{% endif %}</dd>
       <dt>Oturum</dt><dd>{{ t.oturum }}</dd>
       <dt>Ekran yardımcısı</dt><dd>{{ 'Bağlı' if t.ekran_bagli else 'Bağlı değil' }}</dd>
+      {% if t.sinav %}
+      {# A4: sunucunun hesabıyla sınav penceresi (ajan sürümünden bağımsız). #}
+      <dt>Sınav</dt><dd><a href="/sinav/{{ t.sinav.sinav_id }}">{{ t.sinav.sinav_adi }}</a> · {{ t.sinav.salon_adi }}
+        <span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>{{ 'Sınav: giriş' if t.sinav.evre == 'giris' else 'Sınav sürüyor' }}</span>
+        · bitiş {{ t.sinav.bitis_saat }}{% if not t.sinav_yetenegi %} <span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Ajan güncellenmeli: sınav ekranı açılmaz</span>{% endif %}</dd>
+      {% endif %}
     </dl>
   </div>
 </div>
 
 {% if t.durum == 'onayli' %}
-<form method="post" action="/islem" class="arac-cubugu" id="tahta-islem" role="toolbar" aria-label="Bu tahtaya komut">
+<form method="post" action="/islem" class="arac-cubugu" id="tahta-islem" role="toolbar" aria-label="Bu tahtaya komut"{% if t.sinav %} data-sinavdaki="1"{% endif %}>
   <input type="hidden" name="tahta" value="{{ t.id }}">
   <input type="hidden" name="donus" value="/tahta/{{ t.id }}">
   <button name="tur" value="kilitle">Kilitle</button>

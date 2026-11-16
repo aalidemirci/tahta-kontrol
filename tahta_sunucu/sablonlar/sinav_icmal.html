@@ -1,0 +1,85 @@
+{% extends "taban.html" %}
+{% block baslik %}Sınav yoklama icmali · {{ s.ad }} · Tahta Kontrol{% endblock %}
+{% block govde_sinifi %}rapor-sayfasi{% endblock %}
+{% block icerik %}
+{# Yazdırılabilir (A4 dikey, siyah-beyaz). Bağlam: s{id,ad,donem}, icmal (sinav.icmal_verisi), uretim, okul_adi ve surum (taban).
+   Görüntüleme işlem kaydına düşer. Madde atıfı yazılmaz (ortak sözlük §6: arayüzde maddeye atıf yapılmaz). #}
+<div class="yazdirma">
+  <p class="geri"><a href="/sinav/{{ s.id }}">← {{ s.ad }}</a></p>
+  <p class="dugme-satiri"><button type="button" class="ana" data-yazdir hidden>Yazdır</button></p>
+</div>
+<article class="icmal">
+<header class="icmal-bas">
+  <p class="icmal-okul">{{ okul_adi or 'Tahta Kontrol' }}</p>
+  <h1>SINAV YOKLAMA İCMALİ</h1>
+  <dl class="ozellikler">
+    <dt>Sınav</dt><dd>{{ s.ad }}</dd>
+    <dt>Tarih</dt><dd>{{ icmal.tarih or '—' }}</dd>
+    <dt>Saat</dt><dd>{{ icmal.baslangic_saat }}–{{ icmal.bitis_saat }}</dd>
+    {% if s.donem %}<dt>Dönem</dt><dd>{{ s.donem }}</dd>{% endif %}
+  </dl>
+</header>
+
+<h2 id="salon-ozeti">Salon özeti</h2>
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="salon-ozeti">
+<table class="icmal-tablo">
+  <thead><tr><th scope="col">Salon</th><th scope="col">Gözetmen</th><th scope="col" class="sayi-hucre">Mevcut</th><th scope="col" class="sayi-hucre">Gelen</th><th scope="col" class="sayi-hucre">Gelmeyen</th><th scope="col">Yoklama</th></tr></thead>
+  <tbody>
+  {% for sl in icmal.salonlar %}
+  <tr>
+    <th scope="row" data-etiket="Salon">{{ sl.ad }}</th>
+    <td data-etiket="Gözetmen">{{ sl.gozetmen or '—' }}</td>
+    <td data-etiket="Mevcut" class="sayi-hucre">{{ sl.mevcut }}</td>
+    <td data-etiket="Gelen" class="sayi-hucre">{{ sl.gelen if sl.gelen is not none else '—' }}</td>
+    <td data-etiket="Gelmeyen" class="sayi-hucre">{{ sl.gelmeyen if sl.gelmeyen is not none else '—' }}</td>
+    <td data-etiket="Yoklama">{% if sl.yoklama_alindi %}{{ sl.yoklama }}{% else %}<strong class="alinmadi">ALINMADI</strong>{% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6">Salon yok.</td></tr>
+  {% endfor %}
+  </tbody>
+  <tfoot>
+  <tr><th scope="row" colspan="2">Toplam</th><td data-etiket="Mevcut" class="sayi-hucre">{{ icmal.toplam.mevcut }}</td><td data-etiket="Gelen" class="sayi-hucre">{{ icmal.toplam.gelen }}</td><td data-etiket="Gelmeyen" class="sayi-hucre">{{ icmal.toplam.gelmeyen }}</td>
+    <td data-etiket="Yoklama">{% if icmal.alinmayan %}{{ icmal.alinmayan }} salonda yoklama alınmadı{% else %}Bütün salonlarda alındı{% endif %}</td></tr>
+  </tfoot>
+</table>
+</div>
+{% if icmal.alinmayan %}<p class="not">Yoklaması alınmayan salonların sayıları "Gelen" ve "Gelmeyen" toplamına katılmaz.</p>{% endif %}
+
+<h2 id="gelmeyenler">Gelmeyenler</h2>
+{% if icmal.silindi %}
+<p class="bos-not">Kişisel veri saklama süresi dolduğu için silindi ({{ icmal.silinme }}); yalnız sayılar gösterilir.</p>
+{% elif icmal.gelmeyenler %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="gelmeyenler">
+<table class="icmal-tablo">
+  <thead><tr><th scope="col">Şube</th><th scope="col">Okul No</th><th scope="col">Öğrenci</th><th scope="col">Ders</th><th scope="col">Salon</th><th scope="col" class="sayi-hucre">Koltuk</th></tr></thead>
+  <tbody>
+  {% for g in icmal.gelmeyenler %}
+  <tr><td data-etiket="Şube">{{ g.sube }}</td><td data-etiket="Okul No">{{ g.okul_no }}</td><td data-etiket="Öğrenci">{{ g.maske }}</td>
+    <td data-etiket="Ders">{{ g.ders }}</td><td data-etiket="Salon">{{ g.salon }}</td><td data-etiket="Koltuk" class="sayi-hucre">{{ g.koltuk }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="not">{{ icmal.gelmeyenler | length }} öğrenci; şube, sonra okul numarası sırasıyla.</p>
+{% else %}
+<p class="bos-not">Gelmeyen öğrenci kaydı yok.</p>
+{% endif %}
+
+<p class="icmal-not">Ortak sınavlara katılmayan öğrencilerin bilgileri sınav bitiminde e-Okul'a işlenir.
+  Mazeret, sınav tarihinden itibaren en geç 5 iş günü içinde veli tarafından yazılı bildirilir.
+  Bu icmal Tahta Kontrol kayıtlarından üretilmiştir; salon evrakındaki (Kelebek R1) imzalı yoklama esastır.</p>
+
+<div class="imza-alani">
+  {% for rol in ('Düzenleyen', 'Onaylayan') %}
+  <div class="imza">
+    <p class="imza-rol">{{ rol }}</p>
+    <p>Adı Soyadı: <span class="cizgi-alan"></span></p>
+    <p>Unvanı: <span class="cizgi-alan"></span></p>
+    <p>İmza: <span class="cizgi-alan"></span></p>
+  </div>
+  {% endfor %}
+</div>
+<p class="not icmal-alt">Üretim: {{ uretim }} · Tahta Kontrol {{ surum }}</p>
+</article>
+{% endblock %}

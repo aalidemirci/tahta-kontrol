@@ -1,0 +1,199 @@
+{% extends "taban.html" %}
+{% from "_sinav.html" import evre_rozeti %}
+{% block baslik %}{{ s.gorunen_ad }} · Sınav · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Bu sayfa okul no GÖSTERMEZ (okul no yalnız salon yoklaması ve icmalde). Bağlam: panel_sinav.sinav_gorunumu (s),
+   tahtalar, uzatma_secenekleri, sure_araligi, duyuru_sure_araligi, duyuru_varsayilan_dk, saklama_gun.
+   Canlı durum: s.canli ise panel.js /api/sinav/{id}'yi 4 sn'de bir çeker ve [data-alan="durum"] hücrelerini yazar.
+   Salon durumu rozetleri panel.js'teki salonRozetleri() ile AYNI kurala göre çizilir. #}
+{% macro salon_durumu(sl) -%}
+{%- if sl.tahta_id -%}
+<span class="rozet" data-durum="{{ 'acik' if sl.cevrimici else 'cevrimdisi' }}"><svg class="simge" aria-hidden="true"><use href="#{{ 's-acik' if sl.cevrimici else 's-kapali' }}"/></svg>{{ 'Çevrimiçi' if sl.cevrimici else 'Çevrimdışı' }}</span>
+{%- else -%}
+<span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Tahta yok</span>
+{%- endif %}
+{% if sl.evre == 'kaldirildi' -%}
+<span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-kapali"/></svg>Sınav kipi kaldırıldı</span>
+{%- elif sl.tahta_id and sl.evre in ('giris', 'suruyor') -%}
+{%- set ek = {'giris': ('uyari', 's-onay'), 'suruyor': ('kilitli', 's-kilit'), 'yoklama': ('duyuru', 's-onay')}.get(sl.ekran, ('sorun', 's-sorun')) -%}
+<span class="rozet" data-durum="{{ ek[0] }}"><svg class="simge" aria-hidden="true"><use href="#{{ ek[1] }}"/></svg>{{ sl.ekran_metni }}</span>
+{%- endif %}
+{% if sl.yoklama_alindi -%}
+<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Yoklama alındı ({{ sl.yoklama_metni }})</span>
+<span class="rozet" data-durum="{{ 'sorun' if sl.gelmeyen else 'tamam' }}">Gelmeyen: {{ sl.gelmeyen }}</span>
+{%- elif sl.evre in ('suruyor', 'bitti') -%}
+<span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Yoklama yok</span>
+{%- endif %}
+{% if sl.bitis_saat %}<span class="bitis">Bitiş {{ sl.bitis_saat }}{% if sl.uzatma_dk %} (+{{ sl.uzatma_dk }} dk){% endif %}</span>{% endif %}
+{%- endmacro %}
+
+<p class="geri"><a href="/sinavlar">← Sınavlar</a></p>
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>{{ s.gorunen_ad }} {{ evre_rozeti(s.evre, s.evre_adi) }}</h1>
+    <p>{{ s.tarih or 'Tarih yok' }} {{ s.saat }}{% if s.donem %} · {{ s.donem }}{% endif %} · {{ s.ogrenci_sayisi }} öğrenci · {{ s.salonlar | length }} salon{% if s.bitis_saat and not s.kunye_eksik %} · bitiş {{ s.bitis_saat }}{% endif %}</p>
+    {% if s.canli %}<span class="canli" id="sinav-canli" data-api="/api/sinav/{{ s.id }}" data-evre="{{ s.evre }}" data-durum="cevrimici"><svg class="simge" aria-hidden="true"><use href="#s-acik"/></svg><span>Canlı</span></span>{% endif %}
+  </div>
+  <p class="dugme-satiri sag">
+    {% if s.islemler.kodlar_yazdir %}<a class="dugme" href="/sinav/{{ s.id }}/kodlar">Gözetmen kodlarını yazdır</a>{% endif %}
+    {% if s.islemler.icmal %}<a class="dugme" href="/sinav/{{ s.id }}/icmal">Yoklama icmali</a>{% endif %}
+  </p>
+</div>
+
+<div class="bant uyari" id="sinav-yenile" role="status" hidden>Sınavın durumu değişti: <strong data-alan="evre"></strong>. Düğmeler güncellensin diye <a href="/sinav/{{ s.id }}">sayfayı yenileyin</a>.</div>
+
+{% if s.durum == 'taslak' and not s.silindi %}
+<div class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg><strong>Taslak:</strong> tahtalara hiçbir şey gitmez.
+  Künyeyi ve salon–tahta eşleşmelerini denetleyip <strong>Yayına al</strong> deyin; tahtalar başlangıçtan 10 dakika önce giriş ekranına geçer.</div>
+{% elif s.evre == 'yayinda' %}
+<div class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-takvim"/></svg>Yayında: salon tahtaları {{ s.tarih }} günü başlangıçtan 10 dakika önce giriş ekranına geçer.
+  Sınavdan önce şube duyurusunu gönderip gözetmen kodlarını yazdırabilirsiniz.</div>
+{% elif s.silindi %}
+<div class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Kişisel veri {{ s.silinme_tarihi }} tarihinde silindi; yalnız salon başına sayılar duruyor.</div>
+{% endif %}
+
+{# ---- İşlemler: koşula uymayan düğme gösterilmez ---- #}
+<div class="arac-cubugu sinav-islemleri" role="toolbar" aria-label="Sınav işlemleri">
+  {% if s.islemler.yayinla %}<form method="post" action="/sinav/{{ s.id }}/durum" class="satir-ici"><button class="ana" name="eylem" value="yayinla"><svg class="simge" aria-hidden="true"><use href="#s-acik"/></svg>Yayına al</button></form>{% endif %}
+  {% if s.islemler.taslaga_al %}<form method="post" action="/sinav/{{ s.id }}/durum" class="satir-ici"><button name="eylem" value="taslaga_al">Taslağa al</button></form>{% endif %}
+  {% if s.islemler.kodlar_yenile %}
+  <form method="post" action="/sinav/{{ s.id }}/kodlar" class="satir-ici" id="kodlar-yenile"><button type="button" data-onay="kodlar_yenile" aria-haspopup="dialog">Kodları yenile…</button></form>
+  {% endif %}
+  {% if s.islemler.uzat %}
+  {% if s.islemler.yayinla or s.islemler.taslaga_al or s.islemler.kodlar_yenile %}<span class="ayrac" aria-hidden="true"></span>{% endif %}
+  <form method="post" action="/sinav/{{ s.id }}/uzat" class="uzat-formu">
+    <select name="dk" class="alan-oto" aria-label="Uzatma süresi">{% for dk in uzatma_secenekleri %}<option value="{{ dk }}">+{{ dk }} dk</option>{% endfor %}</select>
+    <select name="salon" class="alan-oto" aria-label="Uzatılacak salon"><option value="hepsi">Bütün salonlar</option>{% for sl in s.salonlar if sl.evre == 'suruyor' %}<option value="{{ sl.id }}">{{ sl.ad }}</option>{% endfor %}</select>
+    <button>Süreyi uzat</button>
+  </form>
+  {% endif %}
+  {% if (s.islemler.bitir or s.islemler.kisisel_sil or s.islemler.sil) and (s.islemler.yayinla or s.islemler.taslaga_al or s.islemler.kodlar_yenile or s.islemler.uzat) %}<span class="ayrac" aria-hidden="true"></span>{% endif %}
+  {% if s.islemler.bitir %}
+  <form method="post" action="/sinav/{{ s.id }}/durum" class="satir-ici" id="sinav-bitir"><button type="button" class="tehlike" data-onay="sinav_bitir" aria-haspopup="dialog">Sınavı bitir…</button></form>
+  {% endif %}
+  {% if s.islemler.kisisel_sil %}
+  <form method="post" action="/sinav/{{ s.id }}/durum" class="satir-ici" id="kisisel-sil"><button type="button" class="tehlike" data-onay="kisisel_sil" aria-haspopup="dialog">Kişisel veriyi şimdi sil…</button></form>
+  {% endif %}
+  {% if s.islemler.sil %}
+  <form method="post" action="/sinav/{{ s.id }}/durum" class="satir-ici" id="sinav-sil"><button type="button" class="tehlike" data-onay="sinav_sil" aria-haspopup="dialog">Sınavı sil…</button></form>
+  {% endif %}
+</div>
+
+{# ---- Salonlar ve tahtalar ---- #}
+<section class="kutu" id="salonlar" aria-labelledby="salon-baslik">
+  <div class="kutu-bas">
+    <h2 id="salon-baslik">Salonlar ve tahtalar</h2>
+    {% if not s.eslesme_duzenlenebilir and not s.silindi %}<span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>Tahta eşleşmesi kilitli</span>{% endif %}
+  </div>
+  <form method="post" action="/sinav/{{ s.id }}/eslestir" id="eslestir-formu">
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="salon-baslik">
+  <table class="salon-tablo">
+    <thead><tr><th scope="col">Salon</th><th scope="col">Öğrenci</th><th scope="col">Tahta</th><th scope="col">Gözetmen adı</th><th scope="col">Durum</th><th scope="col">İşlem</th></tr></thead>
+    <tbody>
+    {% for sl in s.salonlar %}
+    <tr data-salon="{{ sl.id }}">
+      <th scope="row" data-etiket="Salon">{{ sl.ad }}</th>
+      <td data-etiket="Öğrenci">{{ sl.ogrenci }}{% if sl.kalabalik %} <span class="rozet" data-durum="uyari" title="Tahtada ilk 60 kişi görünür; yoklama panelden alınır.">60'tan fazla</span>{% endif %}</td>
+      <td data-etiket="Tahta">
+        <select name="{{ sl.alan_tahta }}" aria-label="{{ sl.ad }} tahtası" {% if not s.eslesme_duzenlenebilir %}disabled{% endif %}>
+          <option value="">— Tahta yok —</option>
+          {% if sl.tahta_kaldirilmis %}<option value="{{ sl.tahta_id }}" selected>{{ sl.tahta_ad }} (kaldırılmış tahta)</option>{% endif %}
+          {% for t in tahtalar %}<option value="{{ t.id }}" {% if t.id == sl.tahta_id %}selected{% endif %}>{{ t.ad }}{% if t.derslik %} ({{ t.derslik }}){% endif %}</option>{% endfor %}
+        </select>
+        {% if sl.ajan_guncellenmeli %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Ajan güncellenmeli</span>{% endif %}
+        {% if sl.tahta_kaldirilmis %}<span class="rozet" data-durum="sorun"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Kaldırılmış tahta</span>{% endif %}
+      </td>
+      <td data-etiket="Gözetmen adı"><input type="text" name="{{ sl.alan_gozetmen }}" value="{{ sl.gozetmen_adi }}" maxlength="60" aria-label="{{ sl.ad }} gözetmen adı" {% if s.silindi %}disabled{% endif %}></td>
+      <td data-etiket="Durum"><div class="rozetler" data-alan="durum">{{ salon_durumu(sl) }}</div></td>
+      <td data-etiket="İşlem"><div class="islemler">
+        {% if s.islemler.yoklama %}<a class="dugme" href="/sinav/{{ s.id }}/salon/{{ sl.id }}/yoklama">Yoklama</a>{% endif %}
+        {% if sl.kip_kaldirilabilir and sl.tahta_id %}<button type="button" class="tehlike" form="kip-kaldir-{{ sl.id }}" data-onay="kip_kaldir" data-onay-ad="{{ sl.ad }}" aria-haspopup="dialog">Sınav kipini kaldır…</button>{% endif %}
+      </div></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6">Bu sınavda salon yok.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if not s.silindi %}
+  <p class="not">Bir tahta yalnız bir salona seçilebilir. Önceki sınavlardaki eşleşmeler ve derslik adları yeni aktarımda kendiliğinden önerilir.
+    {% if not s.eslesme_duzenlenebilir %}Giriş penceresi başladığı için yalnız gözetmen adları değiştirilebilir; tahtayı değiştirmek için önce o salonda sınav kipini kaldırın.{% endif %}
+    Gözetmen adı isteğe bağlıdır; yalnız fişte ve icmalde görünür.</p>
+  <p class="dugme-satiri"><button class="ana">{{ 'Eşleştirmeyi kaydet' if s.eslesme_duzenlenebilir else 'Gözetmen adlarını kaydet' }}</button></p>
+  {% endif %}
+  </form>
+  {# Kip kaldırma formları tablonun (eşleştirme formunun) dışındadır; düğmeler form= ile bağlanır. #}
+  {% for sl in s.salonlar if sl.kip_kaldirilabilir and sl.tahta_id %}
+  <form method="post" action="/sinav/{{ s.id }}/salon/{{ sl.id }}/kip-kaldir" id="kip-kaldir-{{ sl.id }}" hidden></form>
+  {% endfor %}
+</section>
+
+{# ---- Künye ---- #}
+<section class="kutu" id="kunye" aria-labelledby="kunye-baslik">
+  <div class="kutu-bas">
+    <h2 id="kunye-baslik">Künye</h2>
+    {% if not s.islemler.kunye %}<span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>Salt okunur</span>{% endif %}
+  </div>
+  {% if s.kunye_eksik %}<p class="bant uyari"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Çizelgenin başlığı okunamadı; yayına almadan önce sınav adını, tarihini ve saatini girin.</p>{% endif %}
+  <form method="post" action="/sinav/{{ s.id }}/kunye">
+    <fieldset class="duz" {% if not s.islemler.kunye %}disabled{% endif %}>
+      <legend class="gizli">Sınav künyesi</legend>
+      <label for="k-ad">Sınav adı</label>
+      <input id="k-ad" type="text" name="ad" value="{{ s.ad }}" maxlength="200" required>
+      <div class="alan-cifti">
+        <div><label for="k-tarih">Tarih</label><input id="k-tarih" type="date" name="tarih" value="{{ s.tarih_iso }}" required></div>
+        <div><label for="k-saat">Başlangıç saati</label><input id="k-saat" type="time" name="saat" value="{{ s.saat }}" required></div>
+        <div><label for="k-sure">Varsayılan süre (dk)</label><input id="k-sure" type="number" name="sure_dk" value="{{ s.sure_dk }}" min="{{ sure_araligi[0] }}" max="{{ sure_araligi[1] }}" required></div>
+      </div>
+      <h3 id="ders-baslik">Dersler</h3>
+      <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="ders-baslik">
+      <table>
+        <thead><tr><th scope="col">Ders</th><th scope="col">Öğrenci</th><th scope="col">Süre (dk)</th></tr></thead>
+        <tbody>
+        {% for d in s.dersler %}
+        <tr><th scope="row" data-etiket="Ders">{{ d.ad }}</th><td data-etiket="Öğrenci">{{ d.ogrenci }}</td>
+          <td data-etiket="Süre (dk)"><input type="number" class="alan-sayi" name="{{ d.alan }}" value="{{ d.sure_dk }}" min="{{ sure_araligi[0] }}" max="{{ sure_araligi[1] }}" aria-label="{{ d.ad }} süresi (dakika)"></td></tr>
+        {% else %}
+        <tr><td colspan="3">Ders yok.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <p class="not">Kelebek'in çizelgesinde süre bulunmaz; Kelebek'te girdiğiniz süreyi yazın. Farklı süreli derslerin bir arada olduğu salonda sınav en uzun dersin bitişinde biter; tahtada ders başına bitiş saati görünür.</p>
+      {% if s.islemler.kunye %}<p class="dugme-satiri"><button class="ana">Künyeyi kaydet</button></p>{% endif %}
+    </fieldset>
+  </form>
+</section>
+
+{# ---- Şube dersliği tahtaları (salt okunur; şube→tahta eşlemesi tahta sayfasındaki "Şubeler" alanından) ---- #}
+<details class="kutu" id="subeler">
+  <summary>Şube dersliği tahtaları ve şube duyurusu</summary>
+  <div class="tablo-kap" role="region" tabindex="0" aria-label="Şube dersliği tahtaları">
+  <table>
+    <thead><tr><th scope="col">Şube</th><th scope="col">Öğrenci</th><th scope="col">Tahta(lar)</th></tr></thead>
+    <tbody>
+    {% for sb in s.subeler %}
+    <tr><th scope="row" data-etiket="Şube">{{ sb.sube }}</th><td data-etiket="Öğrenci">{{ sb.ogrenci }}</td>
+      <td data-etiket="Tahta(lar)">{% for t in sb.tahtalar %}<a href="/tahta/{{ t.id }}">{{ t.ad }}</a>{% if not loop.last %}, {% endif %}{% else %}<span class="rozet" data-durum="bilgi">Tahtası yok</span>{% endfor %}</td></tr>
+    {% else %}
+    <tr><td colspan="3">Şube yok.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="not">Şubenin dersliği, tahta sayfasındaki "Şubeler" alanından gelir; bir şubeyi bir tahtaya bağlamak için o tahtanın sayfasında düzenleyin.
+    Şube duyurusu, öğrencilerin hangi salonda ve koltukta oturacağını şube tahtasında maskeli adla (ör. <span class="kod">Ah*** Yı****</span> …47) gösterir; öğretmen kapatabilir.</p>
+  {% if s.islemler.duyuru %}
+  <form method="post" action="/sinav/{{ s.id }}/duyuru" class="satir-form">
+    <div><label for="d-sure">Ekranda kalma süresi (dk)</label>
+      <input id="d-sure" type="number" class="alan-sayi" name="sure_dk" value="{{ duyuru_varsayilan_dk }}" min="{{ duyuru_sure_araligi[0] }}" max="{{ duyuru_sure_araligi[1] }}"></div>
+    <button class="ana"><svg class="simge" aria-hidden="true"><use href="#s-duyuru"/></svg>Şube duyurusunu gönder</button>
+  </form>
+  {% elif s.durum == 'taslak' %}
+  <p class="not">Şube duyurusu sınav yayına alınınca gönderilebilir.</p>
+  {% endif %}
+</details>
+
+<p class="not">{% if s.silindi %}Kişisel veri {{ s.silinme_tarihi }} tarihinde silindi.{% else %}Kişisel veri (okul no, maskeli ad, yoklama işaretleri) {{ s.silinme_tarihi }} tarihinde kendiliğinden silinecek; salon başına sayılar kalır.{% endif %}</p>
+{% endblock %}

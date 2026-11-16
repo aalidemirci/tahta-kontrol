@@ -199,6 +199,9 @@ class ProgramZamanlayici:
     def __init__(self):
         self.bos_baslangic: dict[int, int] = {}
         self.askida_kancalari: list = []
+        # A4: True dönen tahtaya YENİ program kilidi verilmez (sınav penceresinden önceki 10 dk);
+        # açma yedeği ve boş ders uyarısı bundan etkilenmez.
+        self.kilit_engel_kancalari: list = []
         self.wal_budanacak = False
 
     def calistir(self, b, simdi: datetime) -> list[int]:
@@ -233,7 +236,8 @@ class ProgramZamanlayici:
             araliklar = program.kilit_araliklari(plan, [(_ts(d[3]), _ts(d[4])) for d in dersli]) if plan["dersler"] else []
             simdiki = next((a for a in araliklar if a["bas"] <= an < a["bit"]), None)
             uygun = bool(kural.get("etkin")) and yetenekli(t) and not askida and not t["program_muaf"]
-            if uygun and acik and not acil_suruyor and simdiki and an >= simdiki["bas"] + gecikme \
+            kilit_engeli = uygun and any(k(b, t["id"], an) for k in self.kilit_engel_kancalari)
+            if uygun and acik and not acil_suruyor and not kilit_engeli and simdiki and an >= simdiki["bas"] + gecikme \
                     and simdiki["bit"] - an >= program.EN_KISA_KILIT_SN:  # fmt: skip
                 bas_s = datetime.fromtimestamp(simdiki["bas"], ISTANBUL).strftime("%H:%M")
                 bit_s = datetime.fromtimestamp(simdiki["bit"], ISTANBUL).strftime("%H:%M")

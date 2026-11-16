@@ -6,13 +6,13 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.4.0, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
+- Durum: **0.5.0, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
   (0.1.1: kurulum, kilit, duyuru, kapatma, güncelleme çalıştı); 0.2.0'ın okul kimliği,
-  0.3.0'ın duyuru planları, hedef grupları ve acil durum/tatbikat yayını ve 0.4.0'ın ders
-  programı/program kilidi yalnız Debian 12 kabında ve tarayıcıda denendi; gerçek bir ETAP
-  tahtasında henüz denenmedi.
-- Ders programı ve program kilidi `docs/tasarim.md` §12; yol haritası §13; kullanıcıya
-  sorulacaklar §14 "Açık sorular"; doğrulanacak dayanaklar §15.
+  0.3.0'ın duyuru planları, hedef grupları ve acil durum/tatbikat yayını, 0.4.0'ın ders
+  programı/program kilidi ve 0.5.0'ın sınav kipi/sınav yoklaması yalnız Debian 12 kabında ve
+  tarayıcıda denendi; gerçek bir ETAP tahtasında ve gerçek Kelebek çizelgesiyle henüz denenmedi.
+- Ders programı ve program kilidi `docs/tasarim.md` §12; sınav kipi §13; yol haritası §14;
+  kullanıcıya sorulacaklar §15 "Açık sorular"; doğrulanacak dayanaklar §16.
 
 ## Komutlar (PowerShell 5.1; `&&` yok)
 
@@ -39,7 +39,14 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   panel_tahtalar.py gruplar, /tahtalar.csv ve CSV içe aktarma
   panel_acil.py     /acil: başlatma, bitirme, rapor
   panel_program.py  /program (sekmeler: zil, derslik, kurallar, istisnalar), /program/uyarilar, /tahta/{id}/program
-  sablonlar/    program.html, uyarilar.html ve ortak başları _program_bas.html (şerit + sekmeler)
+  panel_sinav.py    /sinavlar, /sinav/{id} (künye, eşleştirme, durum, uzatma, kip kaldırma, kodlar, şube
+                    duyurusu, salon yoklaması, icmal), /api/sinav/{id}, /ajan/sinav/{kod,yoklama}
+  sablonlar/    program.html, uyarilar.html ve ortak başları _program_bas.html (şerit + sekmeler);
+                sinavlar.html, sinav.html, sinav_yoklama.html, sinav_kodlar.html, sinav_icmal.html, _sinav.html
+  sinav.py      sınav iş mantığı: R5 ayrıştırma, içe aktarma, eşleşme önerisi, süreler/evreler, ayar.sinav,
+                gözetmen kapısı (bellekte), yoklama, şube duyurusu, icmal, saklama temizliği
+  xlsx.py       yalnız standart kitaplıkla .xlsx okuyucu (zip/DOCTYPE sınırları; A5 de kullanır)
+  maske.py      tek maskeleme tanımı: kalabalik("Ah*** Yı****"), no_son("47")
   program.py    zil saatleri, Okul Zili okuma, takvim (plan_hesapla/gun_plani), derslik CSV, kilit aralıkları (saf)
   program_is.py program zamanlayıcısı (kilit, açma yedeği, boş ders uyarısı, bakım), istisnalar, özetler
   komut.py      KOMUT_OMRU, KOMUT_ADI, komut_ekle (duyuru komutu ömrü açıkça ister)
@@ -58,9 +65,11 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   statik/       stil.css (tek dosya, katmanlı), panel.js (tek dosya, kütüphanesiz), isaret.svg (nötr ürün işareti)
   ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh
 tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
-  servis.py     yönetici yetkili sistem servisi: sunucu döngüsü, komutlar, acil durumu, süreli program kilidi, yerel soket
+  servis.py     yönetici yetkili sistem servisi: sunucu döngüsü, komutlar, acil durumu, süreli program kilidi,
+                sınav durumu (ayar.sinav, monotonik sayaç) ve gözetmen oturumu (belirteç yalnız burada), yerel soket
   ekran.py      oturumda çalışan kilit/duyuru/kapatma/acil penceresi (GTK3), üst bantta logo ve okul adı;
-                program kilidinde "Teneffüs · Tahta 10:40'ta açılır." satırı (saat_eki sunucudakiyle aynı)
+                program kilidinde "Teneffüs · Tahta 10:40'ta açılır." satırı (saat_eki sunucudakiyle aynı);
+                sınav sayfaları: sinav-giris, sinav, gozetmen-kod, gozetmen-menu, gozetmen-yoklama
   ayar.py       yapılandırma, varsayılan tahta paleti, logonun servis tarafında saklanması
   sistem.py     işletim sistemine dokunan HER ŞEY (yeni platform = bu dosya)
   tani.py       saha tanılaması (denetim listesi)
@@ -110,6 +119,19 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
 13. **Boş ders uyarısı personel verisi gibi korunur:** işlem kaydına yazılmaz (yalnız `#id`),
    dışa aktarılmaz, tahtada görünmez, 30 gün sonra `secure_delete` + WAL budamayla silinir.
    Panel metni "dersin işlenmediği anlamına gelmez" notunu taşır; arayüzde mevzuat atfı yoktur.
+14. **Sınav kipi durumdur, komut değil** (`ayar.sinav`, her `/ajan/bekle` yanıtında
+   `sinav.tahta_sinavi` ile yeniden hesaplanır; pencere dışında `null`). Ajan kalan süreleri
+   monotonik saatle sayar; sunucuya ulaşılamasa da sınav ekranı süresinde kalkar ve 90 sn sonra
+   `cevrimdisi_ac` onu da kapatır (kural 3; sunucu dönünce sınav sürüyorsa geri gelir).
+15. **Sınav ekranında ortak kilit kodu kabul edilmez** ve uyarılı `kapat` uygulanmaz
+   (`"Sınav sürüyor; otomatik kapatma uygulanmadı."`). Panelden kilit açma sınav ekranını
+   kaldırmaz; kip yalnız panelden ("Sınav kipini kaldır", "Sınavı bitir") ya da süreyle kalkar.
+16. **Sınav listesi ajanda diske yazılmaz:** liste, gözetmen belirteci ve kod `durum.json`'a,
+   günlüğe, tanılama raporuna girmez; liste sınav başlayınca bellekten de silinir. Gözetmen
+   belirteci ekran yardımcısına gitmez; gözetmen kodu yalnız sunucuda doğrulanır.
+17. **Sınavda ad soyad saklanmaz** (yalnız `maske.kalabalik`); tahtaya tam okul no ve ders gitmez;
+   işlem kaydına ad, maske, okul no yazılmaz. Kişisel veri 30 gün sonra `secure_delete` + WAL
+   budamayla silinir. Okul no yalnız panelde salon yoklaması ve icmal sayfalarındadır.
 
 ## Bilinen tuzaklar
 
@@ -160,6 +182,14 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
 - **`<details>` içindeki form alanları:** yeni tarayıcılarda içerik `::details-content` sözde
   öğesindedir ve `box-sizing` zincirini koparır; `stil.css` sıfırlama katmanında ayrıca
   `::details-content { box-sizing: inherit }` vardır. Yoksa açılır formlardaki alanlar kutudan taşar.
+- **Sınav ve gözetmen sayfaları da `yigin.show_all()`'dan önce eklenir;** sonradan içi doldurulan
+  liste ve koltuk ızgarasında yalnız o kapsayıcının `show_all()`'ı çağrılır (pencereninki değil).
+  Koltuk ızgarası gözetmen oturumu değişince (`oturum` numarası) yeniden kurulur; ara `durum`
+  iletileri işaretleri silmesin diye her çizimde yeniden kurulmaz (16.11.2026).
+- **Kip kaldırılan salonun tahtası çakışma sayılmaz** (`sinav.cakisan_sinav`); yoksa kipi kaldırılan
+  tahta aynı saatteki başka sınava eşlenemezdi (16.11.2026).
+- **Docker'da ekran yardımcısını yeniden başlatırken** eski süreç (`python3 -m tahta_ajan ekran`)
+  ayrıca öldürülür; iki yardımcı üst üste pencere açar, tıklamalar eskisine gider (16.11.2026).
 - **Sunucunun ajan paketi süreç başında bir kez üretilir:** ajan kodunu değiştirdikten sonra Docker
   denemesinde paketi yeniden indirmek için deneme sunucusu yeniden başlatılır.
 - **Deneme sunucusunda giriş hız sınırı** (adres başına 5 dk'da 10): betik her adımda yeniden giriş

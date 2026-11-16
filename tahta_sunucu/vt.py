@@ -164,6 +164,66 @@ GOCLER = [
         UNIQUE (tahta_id, tarih, devre, ders_no));
     ALTER TABLE tahta ADD COLUMN program_muaf INTEGER NOT NULL DEFAULT 0;
     """,
+    # 0.5.0 — Kelebek sınav duyurusu, sınav kipi, sınav yoklaması (ad soyad SAKLANMAZ; yalnız maske)
+    """
+    CREATE TABLE sinav (
+        id INTEGER PRIMARY KEY,
+        ad TEXT NOT NULL,
+        baslangic INTEGER NOT NULL,             -- UTC epoch; 0 = künye eksik (R5 başlığı okunamadı)
+        sure_dk INTEGER NOT NULL DEFAULT 40,
+        durum TEXT NOT NULL DEFAULT 'taslak',   -- taslak | yayinda
+        donem TEXT NOT NULL DEFAULT '',
+        kaynak_ozet TEXT NOT NULL DEFAULT '',   -- yüklenen dosyanın SHA-256'sı (dosya saklanmaz)
+        bitirme INTEGER,
+        kisisel_silinme INTEGER,
+        olusturan TEXT NOT NULL,
+        olusturma INTEGER NOT NULL,
+        guncelleme INTEGER NOT NULL);
+    CREATE TABLE sinav_ders (
+        id INTEGER PRIMARY KEY,
+        sinav_id INTEGER NOT NULL REFERENCES sinav(id) ON DELETE CASCADE,
+        ad TEXT NOT NULL,
+        sure_dk INTEGER NOT NULL,
+        UNIQUE (sinav_id, ad));
+    CREATE TABLE sinav_salon (
+        id INTEGER PRIMARY KEY,
+        sinav_id INTEGER NOT NULL REFERENCES sinav(id) ON DELETE CASCADE,
+        ad TEXT NOT NULL,
+        tahta_id INTEGER REFERENCES tahta(id),
+        gozetmen_kodu TEXT NOT NULL,
+        gozetmen_adi TEXT NOT NULL DEFAULT '',
+        uzatma_dk INTEGER NOT NULL DEFAULT 0,
+        kip_kapanma INTEGER,
+        kip_kapatan TEXT NOT NULL DEFAULT '',
+        yoklama_zamani INTEGER,
+        yoklama_kaynak TEXT NOT NULL DEFAULT '',
+        ozet_mevcut INTEGER,
+        ozet_gelmeyen INTEGER,
+        UNIQUE (sinav_id, ad));
+    CREATE INDEX sinav_salon_tahta ON sinav_salon (tahta_id);
+    CREATE TABLE sinav_ogrenci (
+        id INTEGER PRIMARY KEY,
+        sinav_id INTEGER NOT NULL REFERENCES sinav(id) ON DELETE CASCADE,
+        salon_id INTEGER NOT NULL REFERENCES sinav_salon(id) ON DELETE CASCADE,
+        ders_id INTEGER NOT NULL REFERENCES sinav_ders(id) ON DELETE CASCADE,
+        koltuk INTEGER NOT NULL,
+        okul_no TEXT NOT NULL,
+        sube TEXT NOT NULL,
+        maske TEXT NOT NULL,
+        gelmedi INTEGER NOT NULL DEFAULT 0,
+        isaretleyen TEXT NOT NULL DEFAULT '',
+        isaret_zamani INTEGER,
+        UNIQUE (salon_id, koltuk),
+        UNIQUE (sinav_id, okul_no));
+    CREATE INDEX sinav_ogrenci_salon ON sinav_ogrenci (salon_id, koltuk);
+    CREATE TABLE sinav_eslesme (
+        tur TEXT NOT NULL,                      -- yalnız 'salon' (şube→tahta: tahta.subeler)
+        ad TEXT NOT NULL,
+        tahta_id INTEGER NOT NULL REFERENCES tahta(id),
+        PRIMARY KEY (tur, ad));
+    ALTER TABLE duyuru ADD COLUMN sinav_id INTEGER;
+    CREATE INDEX duyuru_sinav ON duyuru (sinav_id);
+    """,
 ]
 GOC_ONCESI_KALAN = 3
 
@@ -178,7 +238,24 @@ def baglan() -> sqlite3.Connection:
     baglanti.execute("PRAGMA foreign_keys = ON")
     baglanti.execute("PRAGMA journal_mode = WAL")
     baglanti.execute("PRAGMA synchronous = FULL")
+    # Silinen kişisel veri (sınav listesi, A5 yoklama) dosyada eski sayfalarda kalmasın.
+    baglanti.execute("PRAGMA secure_delete = ON")
     return baglanti
+
+
+def wal_buda() -> None:
+    """Kişisel veri silen işten sonra WAL dosyasını budar (silinen satırın kopyası diskte kalmasın).
+
+    İşlem kapandıktan sonra ayrı bağlantıyla çağrılır; başarısızlık çağıranı düşürmez.
+    """
+    try:
+        baglanti = baglan()
+        try:
+            baglanti.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        finally:
+            baglanti.close()
+    except sqlite3.Error:
+        pass
 
 
 @contextmanager

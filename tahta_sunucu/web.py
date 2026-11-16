@@ -36,6 +36,7 @@ from . import (
     paket,
     panel_program,
     program_is,
+    sinav,
     tema,
     vt,
     wol,
@@ -57,6 +58,7 @@ MENU = [
     {"ad": "Pano", "yol": "/", "esler": ["/", "/tahta/"]},
     {"ad": "Duyurular", "yol": "/duyurular", "esler": ["/duyurular"]},
     {"ad": "Program", "yol": "/program", "esler": ["/program"]},
+    {"ad": "Sınavlar", "yol": "/sinavlar", "esler": ["/sinavlar", "/sinav"]},
     {
         "ad": "Tahtalar",
         "alt": [
@@ -275,13 +277,18 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             uyandir(tahta_id)
 
     def tahta_gorunumu(
-        satir, acil_gorenler: set[int] | None = None, gruplar: dict | None = None, bos_dersler: dict | None = None
+        satir,
+        acil_gorenler: set[int] | None = None,
+        gruplar: dict | None = None,
+        bos_dersler: dict | None = None,
+        sinavlar: dict | None = None,
     ) -> dict:
         """Pano kartı ve /api/durum için tahta özeti.
 
         acil_gorenler: süren acil yayını ekrana almış tahtaların kimlikleri (yoksa None).
         gruplar: tahta kimliği → grup kimlikleri (pano ilk verisi için; yoksa boş liste).
         bos_dersler: tahta kimliği → "3. ders (kapalı)" (program_is.bos_ders_metinleri).
+        sinavlar: tahta kimliği → sınav penceresi (sinav.pencere_haritasi); yoksa `sinav` None.
         """
         durum = json.loads(satir["durum_json"] or "{}")
         cevrimici = bool(satir["son_gorulme"]) and (vt.simdi() - satir["son_gorulme"]) < ayar.CEVRIMICI_ESIK_SN
@@ -314,7 +321,17 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             "guncel": satir["surum"] == paket.ajan_paketi().surum,
             "ip": satir["ip"],
             "program": program_is.tahta_program(satir, (bos_dersler or {}).get(satir["id"])),
+            # A4: sunucunun hesabıyla sınav penceresi {"sinav_id","salon_id","sinav_adi","salon_adi","evre","bitis_saat"}
+            # (ajan sürümünden bağımsız; pano rozeti ve ek onay buna bakar) ve ajanın bildirdiği ekran evresi.
+            "sinav": (sinavlar or {}).get(satir["id"]),
+            "sinav_ekran": sinav_ekran_evresi(durum) if cevrimici else None,
+            "sinav_yetenegi": sinav.SINAV_YETENEGI in yetenekler,
         }
+
+    def sinav_ekran_evresi(durum: dict) -> str | None:
+        bildirilen = durum.get("sinav") if isinstance(durum.get("sinav"), dict) else None
+        evre = bildirilen.get("evre") if bildirilen and not bildirilen.get("yerel_kapali") else None
+        return evre if evre in sinav.EKRAN_EVRE_ADI else None
 
     # ---- güvenlik katmanı ----------------------------------------------------
     @uygulama.middleware("http")
@@ -451,7 +468,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             simdi_dt = datetime.fromtimestamp(vt.simdi(), ISTANBUL)
             program_ozeti = program_is.program_ozeti(b, simdi_dt)
             bos_dersler = program_is.bos_ders_metinleri(b, simdi_dt)
-        tahtalar = [tahta_gorunumu(s, gorenler, uyelik, bos_dersler) for s in satirlar]
+            sinavlar = sinav.pencere_haritasi(b, vt.simdi())
+        tahtalar = [tahta_gorunumu(s, gorenler, uyelik, bos_dersler, sinavlar) for s in satirlar]
         return sayfa(
             istek,
             "pano.html",
@@ -488,11 +506,12 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             simdi_dt = datetime.fromtimestamp(vt.simdi(), ISTANBUL)
             program_ozeti = program_is.program_ozeti(b, simdi_dt)
             bos_dersler = program_is.bos_ders_metinleri(b, simdi_dt)
+            sinavlar = sinav.pencere_haritasi(b, vt.simdi())
         if ozet:
             ozet["teslim"] = len(gorenler or ())
             ozet["hedef"] = len(satirlar)
         return {
-            "tahtalar": [tahta_gorunumu(s, gorenler, None, bos_dersler) for s in satirlar],
+            "tahtalar": [tahta_gorunumu(s, gorenler, None, bos_dersler, sinavlar) for s in satirlar],
             "bekleyen": bekleyen,
             "acil": ozet,
             "program": program_ozeti,
@@ -593,13 +612,14 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             uyelik = grup_uyelikleri(b)
             binalar = mevcut_binalar(b)
             program_baglami = panel_program.tahta_program_baglami(b, satir)
+            sinavlar = sinav.pencere_haritasi(b, vt.simdi())
         tani = json.loads(satir["tani_json"]) if satir["tani_json"] else None
         durum = json.loads(satir["durum_json"] or "{}")
         return sayfa(
             istek,
             "tahta.html",
             k,
-            t=tahta_gorunumu(satir, None, uyelik),
+            t=tahta_gorunumu(satir, None, uyelik, None, sinavlar),
             ham=satir,
             komutlar=komutlar,
             tani=tani,
@@ -863,9 +883,12 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             return yonlendir("/", "Bu sayfa için yönetici yetkisi gerekir.", hata=True)
         return ayarlar_sayfasi(istek, k)
 
-    def ayarlar_sayfasi(istek: Request, k, sablon_formu: list | None = None, sablon_hata: str = "") -> HTMLResponse:
+    def ayarlar_sayfasi(
+        istek: Request, k, sablon_formu: list | None = None, sablon_hata: str = "", sinav_formu: str | None = None
+    ) -> HTMLResponse:
         """Ayarlar sayfası. sablon_formu/sablon_hata: acil şablonu doğrulama hatasında gönderilen
-        değerler aynı yanıtta (400) yeniden çizilir; düzenlemeler kaybolmaz."""
+        değerler aynı yanıtta (400) yeniden çizilir; düzenlemeler kaybolmaz. sinav_formu: sınav
+        kuralları reddedildiğinde gönderilen metin (ileti sablon_hata'da)."""
         with vt.islem() as b:
             kilit_kodu_var = bool(vt.ayar_al(b, "kilit_kodu"))
             kayitli_adres = vt.ayar_al(b, "sunucu_adresi", "")
@@ -874,6 +897,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             logo = marka.logo_oku(b)
             acil_sablonlar = acil.sablonlar(b)
             acil_sablon_ornek = not isinstance(vt.ayar_al(b, "acil_sablonlar"), list)
+            sinav_kurallari = sinav.kurallar(b)
+            sinav_kurallari_ozel = isinstance(vt.ayar_al(b, "sinav_kurallari"), str)
         uretilen = tema.uret(ana, vurgu)
         logo_bilgi = None
         if logo:
@@ -889,11 +914,14 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         if sablon_formu is not None:
             acil_sablonlar = sablon_formu
             ek = {"mesaj": sablon_hata, "mesaj_hata": True, "ileti_yeri": "acil"}
+        elif sinav_formu is not None:
+            sinav_kurallari = sinav_formu
+            ek = {"mesaj": sablon_hata, "mesaj_hata": True, "ileti_yeri": "sinav"}
         return sayfa(
             istek,
             "ayarlar.html",
             k,
-            durum_kodu=400 if sablon_formu is not None else 200,
+            durum_kodu=400 if sablon_formu is not None or sinav_formu is not None else 200,
             **ek,
             tema_ana=ana,
             tema_vurgu=vurgu,
@@ -911,6 +939,10 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             acil_sablonlar=acil_sablonlar,
             acil_sablon_ornek=acil_sablon_ornek,
             acil_sablon_en_cok=acil.SABLON_EN_COK,
+            sinav_kurallari=sinav_kurallari,
+            sinav_kurallari_ozel=sinav_kurallari_ozel,
+            sinav_kurallari_varsayilan=sinav.SINAV_KURALLARI_VARSAYILAN,
+            sinav_kurallari_en_uzun=sinav.KURALLAR_EN_UZUN,
         )
 
     def acil_sablonlarini_kaydet(istek: Request, k, form, ip: str):
@@ -957,6 +989,32 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             vt.kayit_dus(b, k["ad"], "Acil şablonları kaydedildi", f"{len(yeni)} şablon", ip)
         return yonlendir(adres, "Acil şablonları kaydedildi.")
 
+    def sinav_kurallarini_kaydet(istek: Request, k, form, ip: str):
+        """Ayarlar › Sınav ekranı (bolum=sinav): `sinav_kurallari` (≤ 1500 karakter, ≤ 8 satır); boş ya
+        da eylem=varsayilan ise varsayılan metin. T.C. kimlik numarasına benzeyen sayı reddedilir.
+        Hatada sayfa gönderilen metinle yeniden çizilir (yazılan kaybolmaz)."""
+        adres = "/ayarlar?yer=sinav#ileti"
+        metin_ = str(form.get("sinav_kurallari", "")).replace("\r\n", "\n").strip()
+        if form.get("eylem") == "varsayilan":
+            metin_ = ""
+        gonderilen = metin_[: sinav.KURALLAR_EN_UZUN * 2]
+        if len(metin_) > sinav.KURALLAR_EN_UZUN:
+            return ayarlar_sayfasi(istek, k, sinav_formu=gonderilen,
+                                   sablon_hata=f"Sınav kuralları en çok {sinav.KURALLAR_EN_UZUN} karakter olabilir.")  # fmt: skip
+        if len(metin_.split("\n")) > sinav.KURALLAR_EN_COK_SATIR:
+            return ayarlar_sayfasi(istek, k, sinav_formu=gonderilen,
+                                   sablon_hata=f"Sınav kuralları en çok {sinav.KURALLAR_EN_COK_SATIR} satır olabilir "
+                                   "(tahtada sayacın altına sığsın).")  # fmt: skip
+        if guvenlik.tc_kimlik_var(metin_):
+            with vt.islem() as b:
+                vt.kayit_dus(b, k["ad"], "Sınav kuralları reddedildi", "T.C. kimlik numarasına benzeyen sayı", ip)
+            return ayarlar_sayfasi(istek, k, sinav_formu=gonderilen, sablon_hata=guvenlik.TC_KIMLIK_ILETISI)
+        with vt.islem() as b:
+            vt.ayar_yaz(b, "sinav_kurallari", metin_ or None)
+            vt.kayit_dus(b, k["ad"], "Sınav kuralları kaydedildi", f"{len(metin_)} karakter" if metin_ else "varsayılan metin", ip)
+        onayli_tahtalari_uyandir()
+        return yonlendir(adres, "Sınav kuralları kaydedildi." if metin_ else "Sınav kuralları varsayılan metne döndürüldü.")
+
     @uygulama.post("/ayarlar")
     async def ayarlar_kaydet(istek: Request):
         k = kullanici(istek)
@@ -967,6 +1025,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         bolum = str(form.get("bolum", "genel")) or "genel"
         if bolum == "acil_sablonlari":
             return acil_sablonlarini_kaydet(istek, k, form, istemci_ip(istek))
+        if bolum == "sinav":
+            return sinav_kurallarini_kaydet(istek, k, form, istemci_ip(istek))
         if bolum != "genel":
             return yonlendir("/ayarlar", "Bilinmeyen ayar bölümü.", hata=True)
         with vt.islem() as b:
@@ -1159,6 +1219,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             "logo_sha256": marka.logo_ozeti(b),
             "tahta": {"ad": guncel["ad"], "derslik": guncel["derslik"]},
             "acil": acil.ajan_gorunumu(b),
+            # A4: durum tabanlı; pencere dışında None (ajan None görünce sınav ekranını kaldırır).
+            "sinav": sinav.tahta_sinavi(b, tahta["id"], vt.simdi()),
         }
 
     @uygulama.post("/ajan/kaydol")
@@ -1386,6 +1448,16 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                         hafta_sonu_son[t["id"]] = time.time()
                         hedefler.append(t)
                 neden = "Hafta sonu otomatik kapatma"
+            if hedefler:
+                # A4: sınav penceresindeki eşli tahtaya otomatik kapatma verilmez (eski ajana da).
+                sinavdaki = sinav.pencere_tahtalari(b, int(simdi.timestamp()))
+                atlanan = [t for t in hedefler if t["id"] in sinavdaki]
+                if atlanan:
+                    hedefler = [t for t in hedefler if t["id"] not in sinavdaki]
+                    vt.kayit_dus(
+                        b, "sistem", "Otomatik kapatma sınav nedeniyle atlandı",
+                        f"{len(atlanan)} tahta: " + ", ".join(t["ad"] for t in atlanan),
+                    )  # fmt: skip
             for t in hedefler:
                 komut_ekle(b, t["id"], "kapat", {"uyari_sn": 60, "neden": neden}, "sistem")
             if hedefler:
@@ -1422,6 +1494,19 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         uyandir_hepsi(idler)
         return idler
 
+    # ---- sınav (Aşama 4) ---------------------------------------------------------------------------
+    sinav_isleyici = sinav.SinavZamanlayici()
+
+    def sinav_zamanlayici(simdi: datetime | None = None) -> list[int]:
+        """Saklama temizliği (30 gün) ve evre geçişinde eşli tahtaları uyandırma; uyandırılanlar."""
+        an = int(simdi.timestamp()) if simdi else vt.simdi()
+        with vt.islem() as b:
+            idler, silindi = sinav_isleyici.calistir(b, an)
+        if silindi:
+            vt.wal_buda()
+        uyandir_hepsi(idler)
+        return idler
+
     def yayimla(b, **kw) -> tuple[int | None, list[int]]:
         """Sonraki aşamalar için tek yayın yolu (duyuru.duyuru_yayimla); uyandırmayı çağıran yapar."""
         return duyuru.duyuru_yayimla(b, **kw)
@@ -1441,18 +1526,27 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         grup_uyeligi_yaz=grup_uyeligi_yaz,
         mevcut_binalar=mevcut_binalar,
         acil_ozeti=acil_ozeti,
+        tahta_dogrula=tahta_dogrula,
     )
-    from . import panel_acil, panel_duyuru, panel_tahtalar
+    from . import panel_acil, panel_duyuru, panel_sinav, panel_tahtalar
 
     panel_duyuru.kaydet(uygulama, y)
     panel_tahtalar.kaydet(uygulama, y)
     panel_acil.kaydet(uygulama, y)
     panel_program.kaydet(uygulama, y)
+    panel_sinav.kaydet(uygulama, y)
 
     uygulama.state.zamanlayici = zamanlayici
     uygulama.state.program_zamanlayici = program_zamanlayici
     # Sonraki aşamalar (A4 sınav penceresi) buraya kanca(b, tahta_id, an_epoch) -> bool ekler.
     uygulama.state.program_askida_kancalari = program_isleyici.askida_kancalari
+    # A4 (§0-7): sınav penceresindeki eşli tahta program işinde askıdadır (program kilidi verilmez, boş ders
+    # uyarısı üretilmez); pencereden önceki 10 dk'da yeni program kilidi verilmez (süreli kilit pencereye taşmasın).
+    program_isleyici.askida_kancalari.append(lambda b, tahta_id, an: tahta_id in sinav.pencere_tahtalari(b, an))
+    program_isleyici.kilit_engel_kancalari.append(
+        lambda b, tahta_id, an: tahta_id in sinav.pencere_tahtalari(b, an, sinav.PROGRAM_ONCESI_SN)
+    )
+    uygulama.state.sinav_zamanlayici = sinav_zamanlayici
     uygulama.state.duyuru_zamanlayici = duyuru_zamanlayici
     uygulama.state.acil_denetim = acil_denetim
     uygulama.state.duyuru_yayimla = yayimla
@@ -1462,5 +1556,6 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         ("otomatik_kapatma", zamanlayici),
         ("duyuru_planlari", duyuru_zamanlayici),
         ("program", program_zamanlayici),
+        ("sinav_saklama", sinav_zamanlayici),
     ]
     return uygulama

@@ -1,7 +1,7 @@
 {% extends "taban.html" %}
 {% block baslik %}Ayarlar · Tahta Kontrol{% endblock %}
 {# Okul kimliği işlemlerinin iletisi sayfa başında değil, #kimlik bölümünde çizilir (yönlendirme oraya kayar). #}
-{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in ('kimlik', 'acil') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
+{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in ('kimlik', 'acil', 'sinav') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}
 <div class="sayfa-bas"><h1>Ayarlar</h1></div>
 <form method="post" action="/ayarlar">
@@ -95,6 +95,24 @@
     </div>
     <p class="dugme-satiri"><button name="eylem" value="kaydet" class="ana">Şablonları kaydet</button>
       {% if not acil_sablon_ornek %}<button type="button" class="tehlike" data-onay="sablon_varsayilan" aria-haspopup="dialog">Örnek şablonlara dön…</button>{% endif %}</p>
+  </form>
+</section>
+
+{# Sınav ekranı (A4): ayrı form (bolum=sinav). Boş bırakılırsa ya da eylem=varsayilan ise varsayılan metin. #}
+<h2 id="sinav-ekrani">Sınav ekranı</h2>
+<section class="kutu" aria-labelledby="sinav-ekrani">
+  {% if mesaj and ileti_yeri == 'sinav' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <form method="post" action="/ayarlar">
+    <input type="hidden" name="bolum" value="sinav">
+    <label for="sinav_kurallari">Sınav kuralları (tahtadaki sınav ekranında görünür)</label>
+    <p class="ipucu" id="sinav-kurallari-ipucu">Sınav süresince salon tahtasında sayacın altında görünür; her satır ayrı satırdır
+      (en çok 8 satır; tahtada sığmayan kısım kesilir, kısa tutun).
+      Metin okulun tercihidir; tahtada mevzuat dayanağı gösterilmez.</p>
+    <textarea id="sinav_kurallari" name="sinav_kurallari" rows="5" maxlength="{{ sinav_kurallari_en_uzun }}" aria-describedby="sinav-kurallari-ipucu sinav-kurallari-not">{{ sinav_kurallari }}</textarea>
+    <p class="not sayac" data-sayac="sinav_kurallari">En çok {{ sinav_kurallari_en_uzun }} karakter</p>
+    <p class="not" id="sinav-kurallari-not">Boş bırakılırsa varsayılan metin kullanılır. Öğrenci adı ya da kişisel bilgi yazmayın.</p>
+    <p class="dugme-satiri"><button class="ana">Sınav kurallarını kaydet</button>
+      {% if sinav_kurallari_ozel %}<button name="eylem" value="varsayilan">Varsayılan metne dön</button>{% endif %}</p>
   </form>
 </section>
 

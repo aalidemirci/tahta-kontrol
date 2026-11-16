@@ -484,7 +484,7 @@ def test_goc_mevcut_veritabanina_uygulanir(tmp_path, monkeypatch):
     b.close()
     vt.hazirla()
     with vt.islem() as b:
-        assert b.execute("PRAGMA user_version").fetchone()[0] == len(vt.GOCLER) == 3
+        assert b.execute("PRAGMA user_version").fetchone()[0] == len(vt.GOCLER) >= 3
         satir = b.execute("SELECT * FROM tahta").fetchone()
         assert satir["ad"] == "Eski tahta" and satir["program_muaf"] == 0
         for tablo in ("ders_saati", "tahta_ders", "program_istisna", "program_isaret", "bos_ders_uyari"):

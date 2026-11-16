@@ -39,8 +39,13 @@ def duyuru_yayimla(
     simdi: int | None = None,
     ip: str = "",
     kayit_ayrintisi: str = "",
+    komut_metni: str | None = None,
+    sinav_id: int | None = None,
 ) -> tuple[int | None, list[int]]:
     """Yayın satırını yazar, hedefi çözer, her tahtaya 'duyuru' komutu ekler.
+
+    komut_metni: tahtaya giden metin `duyuru.metin`'den farklıysa (A4 şube sınav duyurusu:
+    tabloya yalnız özet yazılır, maskeli liste yalnız komut verisindedir). sinav_id: A4.
 
     Döndürür: (duyuru_id, tahta_idleri). Planlı yayın aynı an için ikinci kez yazılmaz
     (benzersiz dizin); o durumda (None, []) döner. Komut çevrimdışı tahtalara da yazılır:
@@ -55,7 +60,7 @@ def duyuru_yayimla(
     imlec = b.execute(
         f"INSERT {'OR IGNORE ' if plan_id else ''}INTO duyuru "
         "(baslik, metin, sure_sn, kapatilabilir, hedef, olusturan, olusturma, plan_id, an, bitis, durum, "
-        "hedef_json, tahta_sayisi) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "hedef_json, tahta_sayisi, sinav_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             baslik,
             metin,
@@ -70,6 +75,7 @@ def duyuru_yayimla(
             "gonderildi" if tahtalar else "hedefsiz",
             json.dumps(hedef, ensure_ascii=False),
             len(tahtalar),
+            sinav_id,
         ),
     )
     if imlec.rowcount == 0:
@@ -78,7 +84,7 @@ def duyuru_yayimla(
     veri = {
         "duyuru_id": duyuru_id,
         "baslik": baslik,
-        "metin": metin,
+        "metin": metin if komut_metni is None else komut_metni,
         "sure_sn": int(sure_sn),
         "kapatilabilir": bool(kapatilabilir),
         "bitis_sunucu": bitis,

@@ -1,0 +1,40 @@
+{% extends "taban.html" %}
+{% block baslik %}Gözetmen kodları · {{ s.ad }} · Tahta Kontrol{% endblock %}
+{% block govde_sinifi %}rapor-sayfasi{% endblock %}
+{% block icerik %}
+{# Yazdırılabilir: A4 dikey, sayfaya 6 fiş (2 × 3), kesik çizgili kenar. @media print menüyü ve düğmeleri gizler.
+   Bağlam: s{id,ad,zaman,tarih,saat}, fisler[{salon,kod,gozetmen_adi,tahta_var}], okul_adi (taban). Görüntüleme kayda düşer. #}
+<div class="yazdirma">
+  <p class="geri"><a href="/sinav/{{ s.id }}">← {{ s.ad }}</a></p>
+  <div class="sayfa-bas">
+    <div class="bas-yazi">
+      <h1>Gözetmen kodları</h1>
+      <p>{{ s.ad }}{% if s.zaman %} · {{ s.zaman }}{% endif %} · {{ fisler | length }} salon</p>
+    </div>
+    <p class="dugme-satiri sag"><button type="button" class="ana" data-yazdir hidden>Yazdır</button></p>
+  </div>
+  <div class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>Fişleri kesik çizgilerden kesip zarfla gözetmenlere verin.
+    Kod yalnız bu sınavın penceresinde (başlangıçtan 10 dk önce – salon bitişi) ve yalnız o salonun tahtasında geçerlidir.
+    Fiş kaybolursa sınav başlamadan "Kodları yenile" deyin; eski fişler geçersiz olur.</div>
+</div>
+<div class="fisler">
+{% for f in fisler %}
+<section class="fis" aria-label="{{ f.salon }} gözetmen fişi">
+  <p class="fis-okul">{{ okul_adi or 'Tahta Kontrol' }}</p>
+  <p class="fis-sinav">{{ s.ad }}{% if s.zaman %} · {{ s.zaman }}{% endif %}</p>
+  <p class="fis-salon">Salon: <strong>{{ f.salon }}</strong></p>
+  <p class="fis-etiket">Gözetmen kodu</p>
+  <p class="buyuk-kod">{{ f.kod }}</p>
+  <p class="fis-gozetmen">Gözetmen: {% if f.gozetmen_adi %}{{ f.gozetmen_adi }}{% else %}<span class="cizgi-alan"></span>{% endif %}</p>
+  {% if f.tahta_var %}
+  <p class="not">Kod yalnız bu sınav süresince ve bu salonun tahtasında geçerlidir. Öğrencilere göstermeyin.
+    Tahtada "Gözetmen" düğmesine dokunup kodu girin; gelmeyen koltukları işaretleyip kaydedin.</p>
+  {% else %}
+  <p class="not"><strong>Bu salonda tahta yok;</strong> yoklamayı kâğıda alıp idareye iletin.</p>
+  {% endif %}
+</section>
+{% else %}
+<p class="bos-not">Bu sınavda salon yok.</p>
+{% endfor %}
+</div>
+{% endblock %}

@@ -3,7 +3,7 @@
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.4.0, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
+> **Durum: 0.5.0, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
 > gerçek bir Pardus ETAP tahtasında henüz denenmedi. Okul genelinde kullanmadan
 > önce tek tahtada deneyin (`docs/saha-denemesi.md`).
 
@@ -54,8 +54,23 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
   başladıktan sonra kapalı ya da kilitli kalırsa panelde uyarı; uyarılar dışa
   aktarılmaz ve 30 gün sonra silinir.
 
-Planlananlar: sınav duyurusu ve sınav yoklaması, ders yoklaması
-(`docs/tasarim.md`, yol haritası).
+0.5.0 ile:
+
+- **Sınav kipi:** Kelebek Sınav'ın Toplu Dağıtım Çizelgesi (Excel) yüklenir; salonlar
+  tahtalarla eşleştirilir (önceki eşleşmeler ve derslik adları kendiliğinden önerilir).
+  Salon tahtası başlangıçtan 10 dakika önce maskeli oturma listesini (ör. "Ah*** Yı**** …47"),
+  başlangıçta büyük bir geri sayımı ve okulun sınav kurallarını gösterir; süre bitince
+  kendiliğinden eski durumuna döner. Süre uzatma, erken bitirme ve salonda sınav kipini
+  kaldırma panelden yapılır.
+- **Sınav yoklaması:** gözetmen tahtada salon fişindeki 6 haneli kodu girip gelmeyen
+  koltukları işaretler; idare aynı işi panelden yapabilir. Gözetmen kodu fişleri ve
+  yazdırılabilir "Sınav Yoklama İcmali" panelden alınır.
+- **Şube duyurusu:** sınavdan önce şube dersliklerinde "kim hangi salonda, hangi koltukta"
+  listesi maskeli olarak gösterilir.
+- Öğrencinin adı sunucuda saklanmaz (yalnız maske); tahtaya tam okul numarası gitmez;
+  öğrenci listesi 30 gün sonra kendiliğinden silinir.
+
+Planlananlar: ders yoklaması (`docs/tasarim.md`, yol haritası).
 
 ## Çalıştırma (geliştirme)
 
@@ -76,7 +91,10 @@ Panel `http://127.0.0.1:8787` adresinde açılır. Windows kurulum dosyası
   kaydedilen sertifika parmak iziyle tanır.
 - Tahta sunucuya kullanıcı adı göndermez; tanılama raporu kişisel hesap adı,
   dosya adı ya da ev dizini içermez.
-- Sunucu arızası dersi engellemez: sunucuya ulaşılamazsa kilit tahtadan açılabilir.
+- Sunucu arızası dersi engellemez: sunucuya ulaşılamazsa kilit (ve sınav ekranı) tahtadan
+  açılabilir.
+- Sınav listesinde ad soyad saklanmaz; tahtada yalnız maskeli ad, numaranın son iki hanesi,
+  şube ve koltuk görünür. Liste tahtada diske yazılmaz ve 30 gün sonra sunucudan silinir.
 - Panel dış kaynak (font, CDN, analitik) yüklemez; satır içi betik ve stil
   içermez, içerik güvenliği politikası (CSP) bunu zorlar. Logo yalnız PNG ya da
   JPEG olarak kabul edilir.

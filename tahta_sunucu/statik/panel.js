@@ -3,7 +3,9 @@
    seçim, süzgeç, duyurucu, acil rozetleri), menu (açılır grupların kapanışı), sayac,
    duyuru formu (koşullu alanlar, hedef önizlemesi), acil (tür, şablon, teslim sayacı),
    yazdir, acil şablonları, ayarlar (renk önizlemesi, logo), kopyala, dogrulama,
-   program (pano şeridi ve kart rozetleri pano bölümünde; tahta ızgarasında "Tümünü işaretle").
+   program (pano şeridi ve kart rozetleri pano bölümünde; tahta ızgarasında "Tümünü işaretle"),
+   sinav (sınav sayfasının canlı salon durumu, sınavdaki tahtaya duyuru/kilit açma ek onayı,
+   salon yoklamasında gelmeyen sayısı).
    Her bölüm JS kapalıyken de çalışan sayfayı yalnız iyileştirir.
    Metin her zaman textContent ile yazılır; innerHTML kullanılmaz. */
 (function () {
@@ -26,7 +28,7 @@
     var e = document.createElement("span");
     e.className = "rozet";
     e.setAttribute("data-durum", durum);
-    e.appendChild(simge(simgeAdi));
+    if (simgeAdi) e.appendChild(simge(simgeAdi));
     e.appendChild(document.createTextNode(metin));
     return e;
   }
@@ -75,8 +77,49 @@
       ad: "eylem", deger: "sil", evet: "Zil saatlerini sil",
       metin: "Ders saatleri ve takvim silinir; program kilidi kapatılır ve program kaynaklı kilitli tahtalar açılır. Derslik programları kalır.",
       baslik: function () { return "Zil saatleri silinsin mi?"; }
+    },
+    /* Sınav (Aşama 4) */
+    sinav_bitir: {
+      ad: "eylem", deger: "bitir", evet: "Sınavı bitir",
+      metin: "Bütün salon tahtaları sınav kipinden hemen çıkar ve sayaç durur. Geri alınamaz.",
+      baslik: function () { return "Sınav şimdi bitirilsin mi?"; }
+    },
+    kip_kaldir: {
+      ad: "eylem", deger: "kaldir", evet: "Sınav kipini kaldır",
+      metin: "Bu salonun tahtası sınav ekranından hemen çıkar ve bu sınavda geri gelmez. Salonun yoklaması panelden alınır.",
+      baslik: function (n, ad) { return (ad ? ad + ": s" : "S") + "ınav kipi kaldırılsın mı?"; }
+    },
+    kodlar_yenile: {
+      ad: "eylem", deger: "yenile", evet: "Kodları yenile",
+      metin: "Bütün salonlara yeni gözetmen kodu üretilir; yazdırılmış eski fişler geçersiz olur.",
+      baslik: function () { return "Gözetmen kodları yenilensin mi?"; }
+    },
+    kisisel_sil: {
+      ad: "eylem", deger: "kisisel_sil", evet: "Kişisel veriyi sil",
+      metin: "Öğrenci listesi, okul numaraları, yoklama işaretleri, gözetmen kodları ve adları silinir; salon başına sayılar kalır. İcmali yazdırdıysanız devam edin. Geri alınamaz.",
+      baslik: function () { return "Kişisel veri şimdi silinsin mi?"; }
+    },
+    sinav_sil: {
+      ad: "eylem", deger: "sil", evet: "Sınavı sil",
+      metin: "Sınav, salonları ve öğrenci listesi tamamen silinir; icmal de üretilemez. Geri alınamaz.",
+      baslik: function () { return "Sınav silinsin mi?"; }
     }
   };
+  // Sınavdaki tahtaya duyuru / kilit açma: düz gönderim düğmeleridir; sınav sürüyorsa araya ek onay girer.
+  var SINAV_EK_ONAY = {
+    duyuru: {
+      evet: "Duyuruyu gönder",
+      metin: "Duyuru sınav ekranının üstünde görünür; süre dolunca ya da kapatılınca sınav ekranı geri gelir."
+    },
+    kilit_ac: {
+      evet: "Kilidi aç",
+      metin: "Kilidi açmak sınav ekranını kaldırmaz; sınav bitince tahta açık kalır. Sınav ekranını kaldırmak için sınav sayfasında “Sınav kipini kaldır” deyin."
+    }
+  };
+  function sinavCumlesi(n, panoFormu) {
+    if (!n) return "";
+    return panoFormu ? "Seçili tahtalardan " + n + " tanesinde sınav sürüyor." : "Bu tahtada sınav sürüyor.";
+  }
   var pano = null; // pano bölümü kurulunca doldurulur
 
   function onayKur() {
@@ -96,6 +139,41 @@
       bekleyen.forEach(function (f) { f(); });
     });
 
+    // Formdaki seçili tahtalardan kaçı sınav penceresinde (pano: /api/durum t.sinav; tahta sayfası: data-sinavdaki).
+    function sinavdaki(form) {
+      if (pano && form === pano.form) return pano.sinavdakiSayisi();
+      return parseInt(form.getAttribute("data-sinavdaki") || "0", 10) || 0;
+    }
+
+    function ac(form, baslik, metin, ad, deger, evetMetni) {
+      $("onay-baslik").textContent = baslik;
+      $("onay-metin").textContent = metin;
+      evet.setAttribute("form", form.id);
+      evet.name = ad;
+      evet.value = deger;
+      evet.textContent = evetMetni;
+      diyalog.showModal();
+    }
+
+    ["islem", "tahta-islem"].forEach(function (kimlik) {
+      var form = $(kimlik);
+      if (!form) return;
+      form.addEventListener("submit", function (olay) {
+        var gonderen = olay.submitter;
+        if (!gonderen || gonderen === evet || gonderen.name !== "tur") return;
+        var ek = SINAV_EK_ONAY[gonderen.value];
+        if (!ek) return;
+        var n = sinavdaki(form);
+        if (!n) return;
+        olay.preventDefault();
+        liste.textContent = "";
+        liste.hidden = true;
+        uyari.textContent = "";
+        uyari.hidden = true;
+        ac(form, sinavCumlesi(n, kimlik === "islem") + " Devam edilsin mi?", ek.metin, "tur", gonderen.value, ek.evet);
+      });
+    });
+
     Array.prototype.forEach.call(tetikler, function (tetik) {
       tetik.addEventListener("click", function () {
         var tanim = ONAY[tetik.getAttribute("data-onay")];
@@ -106,6 +184,11 @@
         liste.hidden = true;
         uyari.textContent = "";
         uyari.hidden = true;
+        var sinavUyarisi = tanim.ad === "tur" ? sinavCumlesi(sinavdaki(form), !!(pano && form === pano.form)) : "";
+        if (sinavUyarisi) {
+          uyari.textContent = sinavUyarisi;
+          uyari.hidden = false;
+        }
         if (pano && form === pano.form) {
           var secili = pano.seciliKartlar();
           if (!secili.length) {
@@ -125,18 +208,13 @@
           }
           liste.hidden = false;
           var cumleler = pano.etkiOzeti(secili);
+          if (sinavUyarisi) cumleler.unshift(sinavUyarisi);
           if (cumleler.length) {
             uyari.textContent = cumleler.join(" ");
             uyari.hidden = false;
           }
         }
-        $("onay-baslik").textContent = tanim.baslik(n);
-        $("onay-metin").textContent = tanim.metin;
-        evet.setAttribute("form", form.id);
-        evet.name = tanim.ad;
-        evet.value = tanim.deger;
-        evet.textContent = tanim.evet;
-        diyalog.showModal();
+        ac(form, tanim.baslik(n, tetik.getAttribute("data-onay-ad") || ""), tanim.metin, tanim.ad, tanim.deger, tanim.evet);
       });
     });
   }
@@ -162,9 +240,18 @@
 
   // Program kilidi rozeti: "Teneffüs kilidi · 10:40" (neden ve açılış /api/durum'daki tahta.program'dan).
   var PROGRAM_KILIT_ADI = { "Teneffüs": "Teneffüs kilidi", "Öğle arası": "Öğle arası kilidi" };
+  // Sınav penceresindeki tahta (sunucunun hesabı, /api/durum t.sinav): "Sınav: giriş" / "Sınav sürüyor".
+  function sinavRozeti(t) {
+    if (!t.sinav) return null;
+    var m = t.sinav.evre === "giris" ? "Sınav: giriş" : "Sınav sürüyor";
+    if (t.surum && t.sinav_yetenegi === false) m += " · ajan güncellenmeli";
+    return { d: "uyari", m: m, s: "s-onay" };
+  }
   function programRozetleri(t, programKilidiAcik) {
     var p = t.program || {};
     var ek = [];
+    var sr = sinavRozeti(t);
+    if (sr) ek.push(sr);
     // Kapalı (çevrimdışı) tahta boş dersin en sık nedenidir; rozet o durumda da çizilir.
     if (p.bos_ders) ek.push({ d: "sorun", m: "Boş ders: " + p.bos_ders, s: "s-sorun" });
     if (p.muaf) ek.push({ d: "bilgi", m: "Programdan muaf", s: "s-bilgi" });
@@ -499,6 +586,12 @@
       uyar: function (metin) {
         secimSayisi.textContent = metin;
         duyur(metin);
+      },
+      sinavdakiSayisi: function () {
+        return seciliKartlar().filter(function (kart) {
+          var t = sonVeri.get(String(kart.getAttribute("data-id")));
+          return !!(t && t.sinav);
+        }).length;
       },
       etkiOzeti: function (secili) {
         var oturumlu = 0;
@@ -898,7 +991,127 @@
     });
   }
 
+  /* ---- sınav: canlı salon durumu, salon yoklamasında gelmeyen sayısı ---------------- */
+  var EKRAN_ROZET = { giris: ["uyari", "s-onay"], suruyor: ["kilitli", "s-kilit"], yoklama: ["duyuru", "s-onay"] };
+  // sinav.html'deki salon_durumu makrosuyla AYNI kural.
+  function salonRozetleri(sl) {
+    var r = [];
+    if (sl.tahta_id) r.push(rozet(sl.cevrimici ? "acik" : "cevrimdisi", sl.cevrimici ? "Çevrimiçi" : "Çevrimdışı", sl.cevrimici ? "s-acik" : "s-kapali"));
+    else r.push(rozet("bilgi", "Tahta yok", "s-bilgi"));
+    if (sl.evre === "kaldirildi") r.push(rozet("uyari", "Sınav kipi kaldırıldı", "s-kapali"));
+    else if (sl.tahta_id && (sl.evre === "giris" || sl.evre === "suruyor")) {
+      var e = EKRAN_ROZET[sl.ekran] || ["sorun", "s-sorun"];
+      r.push(rozet(e[0], sl.ekran_metni || "", e[1]));
+    }
+    if (sl.yoklama_alindi) {
+      r.push(rozet("tamam", "Yoklama alındı (" + sl.yoklama_metni + ")", "s-tamam"));
+      r.push(rozet(sl.gelmeyen ? "sorun" : "tamam", "Gelmeyen: " + sl.gelmeyen, ""));
+    } else if (sl.evre === "suruyor" || sl.evre === "bitti") {
+      r.push(rozet("bilgi", "Yoklama yok", "s-bilgi"));
+    }
+    if (sl.bitis_saat) {
+      var b = document.createElement("span");
+      b.className = "bitis";
+      b.textContent = "Bitiş " + sl.bitis_saat + (sl.uzatma_dk ? " (+" + sl.uzatma_dk + " dk)" : "");
+      r.push(b);
+    }
+    return r;
+  }
+
+  function sinavKur() {
+    var gosterge = $("sinav-canli");
+    if (!gosterge) return;
+    var api = gosterge.getAttribute("data-api");
+    var ilkEvre = gosterge.getAttribute("data-evre");
+    var yenile = $("sinav-yenile");
+    var zaman = null;
+    var yoklaniyor = false;
+    var sonBasari = Date.now();
+    function iki(n) { return (n < 10 ? "0" : "") + n; }
+    function gostergeYaz(basarili) {
+      gosterge.textContent = "";
+      var span = document.createElement("span");
+      if (basarili) {
+        var s = new Date();
+        gosterge.setAttribute("data-durum", "cevrimici");
+        gosterge.appendChild(simge("s-acik"));
+        span.textContent = "Canlı · son güncelleme " + iki(s.getHours()) + ":" + iki(s.getMinutes()) + ":" + iki(s.getSeconds());
+      } else {
+        gosterge.setAttribute("data-durum", "sorun");
+        gosterge.appendChild(simge("s-sorun"));
+        span.textContent = "Bağlantı kesildi · son veri " + Math.round((Date.now() - sonBasari) / 1000) + " sn önce";
+      }
+      gosterge.appendChild(span);
+    }
+    function yaz(v) {
+      (v.salonlar || []).forEach(function (sl) {
+        var hucre = document.querySelector('tr[data-salon="' + sl.id + '"] [data-alan="durum"]');
+        if (!hucre) return;
+        var imza = JSON.stringify(sl);
+        if (hucre.getAttribute("data-imza") === imza) return;
+        hucre.setAttribute("data-imza", imza);
+        hucre.textContent = "";
+        salonRozetleri(sl).forEach(function (e) {
+          hucre.appendChild(e);
+          hucre.appendChild(document.createTextNode(" "));
+        });
+      });
+      // Evre değişince işlem düğmeleri eskir: kendiliğinden yenileme yok (yazılan form kaybolmasın), bant çıkar.
+      if (yenile && v.evre !== ilkEvre) {
+        // Önce görünür, sonra metin: role="status" bölgesindeki değişiklik ekran okuyucuya duyurulsun.
+        var alan = yenile.querySelector('[data-alan="evre"]');
+        var acildi = yenile.hidden;
+        yenile.hidden = false;
+        if (alan) {
+          if (acildi) alan.textContent = "";
+          setTimeout(function () { alan.textContent = v.evre_adi || v.evre; }, acildi ? 50 : 0);
+        }
+      }
+    }
+    function yokla() {
+      clearTimeout(zaman);
+      zaman = null;
+      if (document.visibilityState === "hidden" || yoklaniyor) return;
+      yoklaniyor = true;
+      var dur = false;
+      fetch(api, { credentials: "same-origin", cache: "no-store" }).then(function (y) {
+        if (y.status === 401) { location.href = "/giris"; dur = true; return null; }
+        if (y.status === 404) { dur = true; return null; }
+        if (!y.ok) throw new Error(String(y.status));
+        return y.json();
+      }).then(function (v) {
+        if (!v) return;
+        sonBasari = Date.now();
+        yaz(v);
+        gostergeYaz(true);
+      }).catch(function () {
+        gostergeYaz(false);
+      }).then(function () {
+        yoklaniyor = false;
+        if (!dur && document.visibilityState !== "hidden") zaman = setTimeout(yokla, 4000);
+      });
+    }
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "hidden") { clearTimeout(zaman); zaman = null; } else yokla();
+    });
+    zaman = setTimeout(yokla, 4000);
+  }
+
+  function yoklamaSayaciKur() {
+    var sayac = document.querySelector("[data-sayac-gelmedi]");
+    var form = $("yoklama-formu");
+    if (!sayac || !form) return;
+    function say() {
+      var n = form.querySelectorAll('input[name="gelmedi"]:checked').length;
+      sayac.textContent = "Gelmeyen: " + n;
+    }
+    form.addEventListener("change", say);
+    say();
+  }
+
   panoKur();
+  sinavKur();
+  yoklamaSayaciKur();
   izgaraKur();
   menuKur();
   sayacKur();

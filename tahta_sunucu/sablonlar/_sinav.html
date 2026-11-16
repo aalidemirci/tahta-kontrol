@@ -1,0 +1,14 @@
+{# Sınav sayfalarının ortak parçaları (Aşama 4). panel.js aynı eşlemeyi (SINAV_EVRE) canlı güncellemede kullanır. #}
+{% set SINAV_EVRE = {
+  'taslak': ('bilgi', 's-kapali'),
+  'yayinda': ('bilgi', 's-takvim'),
+  'giris': ('uyari', 's-onay'),
+  'suruyor': ('acik', 's-acik'),
+  'bitti': ('bilgi', 's-tamam'),
+  'kaldirildi': ('uyari', 's-kapali'),
+  'silindi': ('bilgi', 's-tamam'),
+} %}
+{% macro evre_rozeti(evre, ad) -%}
+{%- set e = SINAV_EVRE.get(evre, ('bilgi', 's-bilgi')) -%}
+<span class="rozet" data-durum="{{ e[0] }}" data-sinav-evre="{{ evre }}"><svg class="simge" aria-hidden="true"><use href="#{{ e[1] }}"/></svg>{{ ad }}</span>
+{%- endmacro %}

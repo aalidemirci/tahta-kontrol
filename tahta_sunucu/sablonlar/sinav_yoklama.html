@@ -1,0 +1,46 @@
+{% extends "taban.html" %}
+{% block baslik %}{{ salon.ad }} yoklaması · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Bağlam: s{id,ad,zaman,tarih,saat}, salon{id,ad,gozetmen_adi,yoklama_metni}, ogrenciler[{koltuk,okul_no,maske,sube,ders,gelmedi}],
+   yazilabilir. Form: gelmedi=<koltuk> (çoklu). Sayfa okul no içerir; görüntüleme işlem kaydına düşer. #}
+<p class="geri"><a href="/sinav/{{ s.id }}#salonlar">← {{ s.ad }}</a></p>
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>{{ salon.ad }} · sınav yoklaması</h1>
+    <p>{{ s.ad }}{% if s.zaman %} · {{ s.zaman }}{% endif %}{% if salon.gozetmen_adi %} · Gözetmen: {{ salon.gozetmen_adi }}{% endif %} · {{ ogrenciler | length }} öğrenci</p>
+  </div>
+</div>
+<div class="bant{% if not salon.yoklama_metni %} uyari{% endif %}" role="note">
+  <svg class="simge" aria-hidden="true"><use href="#{{ 's-tamam' if salon.yoklama_metni else 's-bilgi' }}"/></svg>
+  {%- if salon.yoklama_metni %}Son yoklama: {{ salon.yoklama_metni }}.{% else %}Bu salonda henüz yoklama alınmadı.{% endif %}
+  <span class="not">Bu sayfa okul numaraları içerir; ekranı öğrencilere açık bırakmayın.</span>
+</div>
+<form method="post" action="/sinav/{{ s.id }}/salon/{{ salon.id }}/yoklama" id="yoklama-formu">
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="koltuk-baslik">
+<table class="yoklama-tablo">
+  <caption id="koltuk-baslik">Koltuk listesi</caption>
+  <thead><tr><th scope="col">Koltuk</th><th scope="col">Okul No</th><th scope="col">Öğrenci</th><th scope="col">Şube</th><th scope="col">Ders</th><th scope="col">Gelmedi</th></tr></thead>
+  <tbody>
+  {% for o in ogrenciler %}
+  <tr>
+    <th scope="row" data-etiket="Koltuk">{{ o.koltuk }}</th>
+    <td data-etiket="Okul No">{{ o.okul_no }}</td>
+    <td data-etiket="Öğrenci">{{ o.maske }}</td>
+    <td data-etiket="Şube">{{ o.sube }}</td>
+    <td data-etiket="Ders">{{ o.ders }}</td>
+    <td data-etiket="Gelmedi"><label class="gelmedi-kutu"><input type="checkbox" name="gelmedi" value="{{ o.koltuk }}" {% if o.gelmedi %}checked{% endif %} {% if not yazilabilir %}disabled{% endif %}><span>Gelmedi</span><span class="gizli"> (koltuk {{ o.koltuk }})</span></label></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6">Bu salonda öğrenci yok.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="not">Kaydet, bu salonun yoklamasını bütünüyle yazar; tahtadan alınmış yoklamanın üzerine yazar. İşaretsiz öğrenci "geldi" sayılır.</p>
+{% if yazilabilir %}
+<p class="dugme-satiri"><button class="ana"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Yoklamayı kaydet</button> <span class="not" id="gelmeyen-sayisi" data-sayac-gelmedi aria-live="polite"></span></p>
+{% else %}
+<p class="bant uyari" role="note">Sınav henüz başlamadı; yoklama sınav başlayınca kaydedilebilir.</p>
+{% endif %}
+</form>
+{% endblock %}

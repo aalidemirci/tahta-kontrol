@@ -226,7 +226,8 @@ def _servis():
     return (TAMAM if kod == 0 and kod2 == 0 else UYARI), ayrinti
 
 
-def topla(sunucu_makine: str = "", sunucu_port: int = 0, sunucu_saat=None, ekranlar=None) -> dict:
+def topla(sunucu_makine: str = "", sunucu_port: int = 0, sunucu_saat=None, ekranlar=None, sinav_kipi=None) -> dict:
+    """sinav_kipi: servisin "yok" / "giris (kimlik)" / "suruyor (kimlik)" satırı (A4). Liste, ad, kod girmez."""
     ekranlar = ekranlar or []
     ag = sistem.ag_bilgisi(sunucu_makine, sunucu_port) if sunucu_makine else {}
     if not sistem.LINUX:
@@ -244,6 +245,7 @@ def topla(sunucu_makine: str = "", sunucu_port: int = 0, sunucu_saat=None, ekran
         ("Giriş ekranı ve otomatik giriş", _giris_ekrani),
         ("Hesaplar", _hesaplar),
         ("Ekran yardımcısı", lambda: _ekran(ekranlar)),
+        ("Sınav kipi", lambda: (BILGI, sinav_kipi or "yok")),
         ("Kapatma / yeniden başlatma yetkisi", _guc),
         ("Ağ", lambda: _ag(ag)),
         ("Uzaktan açma (Wake-on-LAN)", lambda: _wol(ag.get("arayuz"))),

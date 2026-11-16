@@ -1,0 +1,61 @@
+{% extends "taban.html" %}
+{% from "_sinav.html" import evre_rozeti %}
+{% block baslik %}Sınavlar · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Bağlam: yaklasan[], gecmis[] = {id, ad, tarih, saat, salon_sayisi, ogrenci_sayisi, evre, evre_adi};
+   dosya_siniri_mb; içe aktarma reddinde (400) hatalar[] (≤ 20, okul no içerebilir; adrese yazılmaz) ve hata_toplam. #}
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>Sınavlar</h1>
+    <p>Kelebek Sınav'ın dağıtım çizelgesinden salon giriş ekranı, sınav sayacı ve sınav yoklaması.</p>
+  </div>
+</div>
+
+<section class="kutu ice-aktar" aria-labelledby="ice-aktar-baslik">
+  <h2 id="ice-aktar-baslik">Kelebek'ten içe aktar</h2>
+  <form method="post" action="/sinavlar/ice-aktar" enctype="multipart/form-data" class="form-dar">
+    <label for="dosya">Toplu Dağıtım Çizelgesi (Excel, en çok {{ dosya_siniri_mb }} MB)</label>
+    <input type="file" id="dosya" name="dosya" accept=".xlsx" required aria-describedby="dosya-not">
+    <p class="not" id="dosya-not">Kelebek Sınav'da oturumun <strong>Toplu Dağıtım Çizelgesi (Excel)</strong> dosyasını yükleyin.
+      Dosya sunucuda saklanmaz; öğrenci adları kaydedilmez, tahtada yalnız baş harfleri görünür.
+      Kelebek'te onaylanmış oturumun dosyasını aktarmanız önerilir. Aynı sınavın yeni dosyası, sınav başlamadan
+      yüklenirse öğrenci listesini yeniler; süreler, eşleşmeler ve gözetmen kodları korunur.</p>
+    <p class="dugme-satiri"><button class="ana">Yükle ve aç</button></p>
+  </form>
+  {% if hatalar %}
+  <div class="bant hata hata-listesi" role="alert">
+    <svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><strong>Dosyada {{ hata_toplam }} hata var; hiçbir şey kaydedilmedi.</strong>
+    <ul>
+      {% for h in hatalar %}<li>{{ h }}</li>{% endfor %}
+    </ul>
+    {% if hata_toplam > hatalar | length %}<p class="not">ve {{ hata_toplam - hatalar | length }} hata daha. Kelebek'te düzeltip dosyayı yeniden indirin.</p>{% endif %}
+  </div>
+  {% endif %}
+</section>
+
+{% for baslik, liste, bos in (('Gelecek ve bugünkü sınavlar', yaklasan, 'Yaklaşan sınav yok. Kelebek çizelgesini yukarıdan yükleyin.'), ('Geçmiş sınavlar', gecmis, 'Geçmiş sınav yok.')) %}
+<h2 id="liste-{{ loop.index }}">{{ baslik }}</h2>
+{% if liste %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="liste-{{ loop.index }}">
+<table class="sinav-tablo">
+  <thead><tr><th scope="col">Sınav</th><th scope="col">Tarih</th><th scope="col">Saat</th><th scope="col">Salon</th><th scope="col">Öğrenci</th><th scope="col">Durum</th></tr></thead>
+  <tbody>
+  {% for s in liste %}
+  <tr>
+    <td data-etiket="Sınav"><a href="/sinav/{{ s.id }}">{{ s.ad }}</a></td>
+    <td data-etiket="Tarih" class="tarih-hucre">{{ s.tarih }}</td>
+    <td data-etiket="Saat">{{ s.saat }}</td>
+    <td data-etiket="Salon">{{ s.salon_sayisi }}</td>
+    <td data-etiket="Öğrenci">{{ s.ogrenci_sayisi }}</td>
+    <td data-etiket="Durum">{{ evre_rozeti(s.evre, s.evre_adi) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="bos-not">{{ bos }}</p>
+{% endif %}
+{% endfor %}
+<p class="not">Sınavın öğrenci listesi (okul no, maskeli ad, yoklama) sınav tarihinden {{ saklama_gun }} gün sonra kendiliğinden silinir; salon başına sayılar kalır.</p>
+{% endblock %}

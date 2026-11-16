@@ -1,6 +1,6 @@
 # Tahta Kontrol — tasarım
 
-Sürüm 0.4.0 · 16.11.2026
+Sürüm 0.5.0 · 16.11.2026
 
 ## 1. Amaç ve kapsam
 
@@ -307,7 +307,91 @@ sayısı) durur; aynı şerit pano başında da görünür. Program sunucu saati
   profil yolları ve merkezi yönetimin tepkisi ETAP'ta doğrulanmadan güvenle yazılamaz;
   geri dönüşsüz veri kaybı riski taşır.
 
-## 13. Yol haritası
+## 13. Sınav kipi ve sınav yoklaması
+
+Kaynak, Kelebek Sınav'ın **Toplu Dağıtım Çizelgesi** (R5, `.xlsx`) dosyasıdır; bir dosya bir
+sınav oturumudur. Sunucu dosyayı standart kitaplıkla okur (`xlsx.py`: zip üye sayısı ve açılmış
+boyut sınırı, `<!DOCTYPE` reddi; yeni bağımlılık yok), dosyayı diske yazmaz. Başlık satırı (A2)
+künyeyi verir; süre çizelgede olmadığı için idareci yazar (varsayılan 40 dk, ders başına
+değiştirilebilir). Aynı sınavın (ad + başlangıç) yeni dosyası, giriş penceresinden önce
+yüklenirse öğrenci listesini yeniler; süreler, eşleşmeler ve gözetmen kodları korunur.
+
+**Veri en aza:** ad soyad sunucuda **saklanmaz**; içe aktarma anında maske hesaplanır
+(`maske.kalabalik`: "Ah*** Yı****") ve ad bellekte atılır. Sunucuda okul no, şube, salon,
+koltuk, ders ve maske durur. Tahtaya yalnız maske, okul numarasının son iki hanesi, şube ve
+koltuk gider; tam okul no ve ders gitmez. İşlem kaydına ad, maske, okul no yazılmaz (salon adı,
+koltuk numaraları ve sayılar yazılır). Kişisel veri sınav tarihinden **30 gün** sonra
+kendiliğinden silinir (`secure_delete` + WAL budama); salon başına "mevcut / gelmeyen" sayıları
+kalır. İdare daha önce de silebilir (yalnız sınav bittikten sonra).
+
+**Bildirimsel `ayar.sinav`:** sınav kipi komut olarak bir kez inmez; her `/ajan/bekle`
+yanıtında sunucu, tahtanın o an sınav penceresinde olup olmadığını yeniden hesaplar
+(`sinav.tahta_sinavi`). Pencere [başlangıç − 10 dk, salon bitişi) aralığıdır; sınav yayında,
+salonda kip kaldırılmamış ve kişisel veri silinmemiş olmalıdır. Kalan süreler saniye olarak
+gelir ve ajan bunları kendi monotonik saatine çapalar: tahtanın saati yanlış olsa da sayaç
+doğrudur; ajan ya da tahta yeniden başlarsa, süre uzatılırsa durum kendiliğinden düzelir.
+Pencere dışında değer `null`'dur. Eski ajan anahtarı yok sayar; panel o tahtada "Ajan
+güncellenmeli" der (yetenek `sinav`). Eski sunucu anahtarı hiç göndermez; yeni ajan sınav
+durumuna dokunmaz.
+
+**Tahta ekranı:** başlangıçtan 10 dk önce **giriş ekranı** (sınav adı, salon, başlangıç saati,
+maskeli oturma listesi; ≤ 20 kişi tek, ≤ 40 iki, ≤ 60 üç sütun, fazlası "ve N kişi daha");
+başlangıçta **sınav ekranı** (büyük geri sayım, bitiş saati ya da karma salonda ders başına
+bitiş, okulun sınav kuralları; son 5 dakikada sayaç kehribar). Liste sınav başlayınca ekrandan
+**ve servisin belleğinden** silinir. İki ekranda da klavye ve fare pencereye bağlıdır ve ortak
+kilit kodu kabul edilmez (kod sınıfın önünde girildiği için öğrencilerce bilinebilir). Panelden
+"Kilidi aç" sınav ekranını kaldırmaz; sınav ekranı süre bitince, "Sınavı bitir" ya da salonda
+"Sınav kipini kaldır" ile kalkar ve alttaki kilit durumu görünür. Ekran önceliği:
+acil > kapatma uyarısı > gözetmen > duyuru > sınav > kilit. Liste ve gözetmen belirteci
+`durum.json`'a, günlüğe ve tanılama raporuna yazılmaz.
+
+**Kural 3 sınavda da geçerlidir:** sunucuya 90 sn ulaşılamazsa sınav ekranında "Kilidi aç"
+düğmesi çıkar; basılınca kilit açılır ve sınav ekranı o çevrimdışılık süresince kapanır. Sunucu
+dönünce sınav hâlâ sürüyorsa ekran geri gelir. Sunucuya hiç ulaşılamasa da sınav ekranı
+süresinde (en çok 8 saat) kalkar.
+
+**Gözetmen kodu modeli ("salon fişine sahip gözetmen"):** her salona 6 haneli rastgele kod
+üretilir ve panelden fiş olarak yazdırılır (sayfaya 6 fiş). Kod yalnız o salonun eşli tahtasında
+ve yalnız sınav penceresinde geçerlidir; **sunucuda doğrulanır** (tahtada özet tutulmaz, servis
+kodu saklamaz). Tahta başına 10 dakikada 5 hatalı deneme 5 dakika bekletir ve her deneme işlem
+kaydına düşer. Doğru kod 15 dakikalık, tahtaya ve salona bağlı bir belirteç verir; belirteç
+yalnız tahtadaki yönetici yetkili serviste ve sunucuda (özetiyle, bellekte) durur, ekran
+yardımcısına gitmez. Gözetmen menüsünden "Yoklama al" sınav başlayınca açılır; koltuk
+düğmelerine dokunup gelmeyenleri işaretler, kaydeder. Kayıt salonun yoklamasını bütünüyle
+yazar; işaretler kaydedilince ekrandan ve bellekten silinir. 60'tan kalabalık salonun yoklaması
+panelden alınır. Bilinen sınır: kod kişiye değil fişe bağlıdır; kişiye bağlı kimlik Aşama 5'in
+öğretmen PIN'idir. Panel yoklaması kullanıcı adıyla kaydedilir ve tahta yoklamasının üzerine
+yazabilir (idare son sözü söyler).
+
+**Zamanlayıcıyla ilişki:** sınav penceresindeki eşli tahtaya otomatik kapatma, program kilidi
+ve boş ders uyarısı verilmez; pencereden önceki 10 dakikada yeni program kilidi de verilmez
+(süreli kilit pencereye taşmasın). Ajan da sınav ekranı açıkken uyarılı kapatmayı
+"Sınav sürüyor; otomatik kapatma uygulanmadı." diye atlar. Panoda sınavdaki tahtaya duyuru,
+kilit açma, kapatma ya da yeniden başlatma ek onay ister.
+
+**Şube duyurusu:** sınavdan önce şube dersliklerinde (tahta sayfasındaki "Şubeler" alanı)
+"kim hangi salonda, hangi koltukta" listesi maskeli olarak, süreli ve öğretmence kapatılabilir
+bir duyuru olarak gösterilir. Duyuru kaydına liste değil özet yazılır; liste yalnız komut
+verisindedir ve saklama süresi dolunca o da boşaltılır. Duyurunun süresi sınav başlangıcına
+kırpılır (liste sınav sürerken görünmez); başlangıca bir dakikadan az kala gönderilemez.
+Tahtada 12 satırdan uzun duyuru 1–3 sütuna bölünür, yazı boyu satır sayısına göre küçülür;
+Kapat düğmesi her uzunlukta ekranda kalır.
+
+**Sınav kuralları metni** en çok 1500 karakter ve 8 satırdır; tahta da en çok 8 satır
+(satır başına en çok 2 sarılmış satır) gösterir. Ekranın alt satırı (saat, "Gözetmen",
+çevrimdışıyken "Kilidi aç") her metin uzunluğunda ekranda kalır.
+
+**İcmal:** "Sınav Yoklama İcmali" yazdırılabilir sayfadır (salon özeti, şube ve okul no
+sırasıyla gelmeyenler, imza alanları). Liste CSV/Excel olarak dışa verilmez. İcmal ve panel
+yoklama sayfası okul no içerir; görüntülenmeleri işlem kaydına düşer. Salon evrakındaki imzalı
+yoklama esastır; icmal bunu kolaylaştırır, yerine geçmez.
+
+Sonraya bırakılanlar (göç gerektirmez): şube duyurusunun tahtada tablo olarak gösterimi,
+gözetmen menüsünde "Sınav ekranını bu tahtada kapat" (açık soru 20; kip kaldırma panelden
+yapılır), 60'tan kalabalık salonda tahtada sayfalı yoklama ızgarası, Aşama 5'ten sonra gözetmen
+ekranında öğretmen PIN'i.
+
+## 14. Yol haritası
 
 | Aşama | İçerik | Durum |
 |---|---|---|
@@ -315,7 +399,7 @@ sayısı) durur; aynı şerit pano başında da görünür. Program sunucu saati
 | 1.5 | Görünüm ve okul kimliği: okul logosu ve renkleri, yeni panel ve tahta ekranı tasarımı | 0.2.0 — ETAP'ta denenecek |
 | 2 | Duyuru zamanlama ve hedef grupları (bina, kat, düzey, devre, gruplar, CSV), acil durum ve tatbikat yayını | 0.3.0 — Debian 12 kabında denendi; ETAP'ta denenecek |
 | 3 | Ders programı ve zil saatleri (Okul Zili'nden ya da elle), derslik programı, programa bağlı otomatik kilit/açma, istisnalar, boş geçen ders uyarısı | 0.4.0 — Debian 12 kabında denendi; ETAP'ta denenecek. Oturum temizliği sonraya (§12) |
-| 4 | Kelebek sınav duyurusu ve sınav kipi (Kelebek Sınav verisinden, maskeli liste), sınav yoklaması | — |
+| 4 | Kelebek sınav duyurusu ve sınav kipi (Kelebek Sınav verisinden, maskeli liste), sınav yoklaması | 0.5.0 — Debian 12 kabında denendi; ETAP'ta ve gerçek Kelebek çizelgesiyle denenecek. Tablo gösterimi, tahtadan sınav ekranını kapatma ve sayfalı ızgara sonraya (§13) |
 | 5 | Ders yoklaması (öğretmen PIN'i, e-Okul'a giriş için icmal) | — |
 
 Ayrıca bekleyenler: sunucunun Windows hizmeti olarak çalışması (şimdi oturum
@@ -326,7 +410,7 @@ Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" v
 tahtalara alan ata", plan formunda "sonraki 3 gösterim" canlı önizlemesi, çakışan
 plan uyarısı.
 
-## 14. Açık sorular
+## 15. Açık sorular
 
 Yanıt gelene kadar bu belgedeki karar geçerlidir.
 
@@ -360,13 +444,14 @@ Ders programı ve program kilidi (0.4.0):
     çalışma için kullanılması okulda olağan mı? Olağansa varsayılan kapatılır.
 12. **Boş ders uyarısı** personel denetimi gibi algılanabilir. Açılmadan önce öğretmenler
     kurulunda ya da yazılı bilgilendirmeyle duyurulmalı mı, okulun aydınlatma metnine
-    eklenmeli mi? 30 günlük saklama uygun mu? (Dayanak §15'te doğrulanacak.)
+    eklenmeli mi? 30 günlük saklama uygun mu? (Dayanak §16'da doğrulanacak.)
 13. **Derslik programı kaynağı:** okulda ders programı hangi programla hazırlanıyor
     (e-Okul, bir ders dağıtım programı, Excel)? Dışa aktardığı dosyanın uydurma verili bir
     örneği paylaşılırsa ikinci bir içe aktarma biçimi eklenebilir; şimdilik yalnız kendi
     CSV biçimimiz var.
 14. **Sınav pencereleri:** Okul Zili'nde planlanmış sınav sırasında program kilidi askıya
-    alınıyor. Sınav sırasında tahtaların kilitli kalması mı istenir? (Aşama 4 sınav kipi.)
+    alınıyor. Sınav sırasında tahtaların kilitli kalması mı istenir? (0.5.0'da Tahta Kontrol'ün
+    kendi sınav kipi bu soruyu karşıladı: sınav penceresindeki tahta sınav ekranında kilitlidir.)
 15. **Kurum içi karar:** teneffüste tahtaların kilitlenmesine ilişkin öğretmenler kurulu ya
     da okul yönetimi kararı var mı/gerekli mi? Varsa arayüzde ona atıf yapılabilir;
     yazılım hiçbir mevzuat maddesine dayanak olarak atıf yapmıyor.
@@ -376,12 +461,39 @@ Ders programı ve program kilidi (0.4.0):
 17. **Program kilidi süresi tahtada en çok 8 saat** sayılır. Gün boyu dersi olmayan
     dersliklerde bu, tahtanın öğleden sonra kendiliğinden açılması demektir; uygun mu?
 
-## 15. Doğrulanacak dayanaklar
+Sınav kipi ve sınav yoklaması (0.5.0):
+
+18. **Maske biçimi:** "Ah*** Yı****" (harf sayısı kadar yıldız) uygulandı. Sabit uzunluk
+    ("Ah* Yı*") daha az bilgi verir ama aynı baş harfli öğrencileri ayırmak zorlaşır. Hangisi?
+19. **Giriş penceresi** 10 dakika. Okulun teneffüs süresine göre uygun mu (önceki dersi
+    bölüyor mu)?
+20. **Gözetmen kodu tahtayı açabilsin mi?** Şimdilik gözetmen kodu yalnız yoklama açar; sınav
+    ekranını tahtada kapatma ("Sınav ekranını bu tahtada kapat") uygulanmadı, salonda sınav
+    kipi panelden kaldırılır. Gözetmenin tahtadan kapatabilmesi istenir mi?
+21. **Sınav kuralları** varsayılan metni okulun uygulamasına uyuyor mu? Özellikle "ilk ve son
+    10 dakika salondan çıkılmaz" maddesi okul tercihi olarak yazıldı; dayanak gösterilmedi.
+22. **Saklama süresi** 30 gün. Mazeret sınavı takvimi uzun sürüyorsa süre uzatılmalı mı?
+23. **Tahtadan yoklama kâğıt yoklamanın yanında mı, yerine mi?** Karar: yanında; icmalde
+    "salon evrakındaki imzalı yoklama esastır" notu var.
+24. **Şube duyurusu** tahtada gösterilsin mi, yoksa kâğıt liste yeter mi? Gösterilecekse süre
+    (varsayılan 10 dk) uygun mu?
+25. **Kelebek'e dışa aktarım:** Kelebek'e "Tahta Kontrol için dışa aktarım" (süre, gözetmen,
+    hazır maskeli liste) eklenirse R5'teki süre eksikliği ve açık adların taşınması ortadan
+    kalkar; komşu projede değişiklik ister. İstenir mi?
+26. **Gözetmen adı** fişte ve icmalde isteğe bağlı elle yazılıyor (Kelebek'in görevlendirme
+    çıktısı içe aktarılmıyor). Yeterli mi?
+
+## 16. Doğrulanacak dayanaklar
 
 Arayüzde hiçbir mevzuat maddesine atıf yapılmaz. Belgeye dayanak olarak yazılmadan
 önce metni yerelde doğrulanması gerekenler:
 
-- KVKK md. 12 (veri güvenliği yükümlülüğü) — metin yerelde yok.
+- KVKK md. 12 (veri güvenliği yükümlülüğü) — metin yerelde yok. Sınav listesinin saklama
+  ve silme tedbirleri (§13) için de dayanak olarak yazılmadı.
+- Sınav kurallarındaki "ilk ve son 10 dakika salondan çıkılmaz" kuralının dayanağı (soru 21);
+  okul tercihi olarak yazıldı.
+- Gözetmenin yoklama alma ve tutanak düzenleme görevine ilişkin hüküm; şimdilik yalnız
+  Kelebek'in salon evrakı (R1) uygulamasına dayanıldı (soru 23).
 - Yazılımın acil durum yayınının acil durum planında "uyarı sistemi" sayılıp
   sayılamayacağı (soru 9).
 - Tatbikat verisinin MEBBİS İSG modülüne girilecek biçimi (soru 6).

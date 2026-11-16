@@ -1,4 +1,4 @@
-"""Ekran yardımcısı: kilit, duyuru, kapatma uyarısı ve acil yayın penceresini çizer.
+"""Ekran yardımcısı: kilit, duyuru, kapatma uyarısı, acil yayın, sınav ve gözetmen ekranlarını çizer.
 
 Her masaüstü oturumunda (otomatik başlatma ile) kullanıcının yetkisiyle
 çalışır; ne göstereceğini ajan servisinden yerel soket üzerinden öğrenir.
@@ -12,6 +12,11 @@ servisten "marka" mesajıyla gelir; yüklenemezse ekran logosuz çalışır.
 
 Acil yayın sayfası okulun renginden bağımsız sabit renklerle (acil kırmızı, tatbikat
 kehribar) tam ekran çizilir; her şeyin üstündedir ve kilitli tahtada klavye kilidi sürer.
+
+Sınav kipi (Aşama 4): giriş ekranı (maskeli oturma listesi, yalnız başlangıçtan önceki 10 dk),
+sınav ekranı (büyük geri sayım, bitiş, kurallar) ve gözetmen sayfaları (kod, menü, yoklama
+ızgarası). Hepsinde klavye ve fare pencereye bağlıdır; ortak kilit kodu kabul edilmez. Gözetmen
+belirteci bu yardımcıya hiç gelmez; kod servise iletilir ve sunucuda doğrulanır.
 """
 
 from __future__ import annotations
@@ -40,6 +45,9 @@ STIL_OLCU = b"""
 #kod { font-size: 56px; letter-spacing: 12px; }
 #duyuru-baslik { font-size: 72px; font-weight: 700; }
 #duyuru-metin { font-size: 52px; }
+#duyuru-metin.uzun { font-size: 40px; }
+#duyuru-metin.cok-uzun { font-size: 32px; }
+#duyuru-ust { font-size: 34px; font-weight: 600; }
 #kapatma-baslik { font-size: 64px; font-weight: 700; }
 #kapatma-sayac { font-size: 170px; font-weight: 700; }
 #kapatma-neden { font-size: 30px; }
@@ -50,6 +58,22 @@ STIL_OLCU = b"""
 #acil-metin.cok-uzun { font-size: 32px; }
 #acil-alt { font-size: 28px; }
 #acil-kapat { border-width: 3px; }
+#sinav-adi { font-size: 56px; font-weight: 700; }
+#sinav-salon { font-size: 36px; font-weight: 600; }
+#sinav-bilgi { font-size: 32px; }
+#sinav-sayac { font-size: 220px; font-weight: 700; }
+#sinav-bitis { font-size: 36px; font-weight: 600; }
+#sinav-kurallar { font-size: 28px; }
+#sinav-durum { font-size: 28px; font-weight: 600; }
+#sinav-saat { font-size: 34px; font-weight: 600; }
+#sinav-fazla { font-size: 26px; }
+#sinav-cevrimdisi { font-size: 24px; }
+#gozetmen-baslik { font-size: 52px; font-weight: 700; }
+#gozetmen-bilgi { font-size: 28px; }
+#gozetmen-hata { font-size: 28px; font-weight: 600; }
+#koltuk { font-size: 22px; font-weight: 600; padding: 6px 8px; }
+.liste-no { font-weight: 700; }
+#ana-dugme:disabled, button:disabled { opacity: 0.45; }
 button { font-size: 34px; font-weight: 600; padding: 14px 26px; border-radius: 12px; background-image: none;
          border-width: 1px; border-style: solid; box-shadow: none; text-shadow: none; }
 """
@@ -71,6 +95,91 @@ ACIL_RENKLERI = (
 
 ACIL_BANT = {"acil": "ACİL DURUM", "tatbikat": "TATBİKAT — BU BİR TATBİKATTIR"}
 
+# Sınav ekranı renkleri: son 5 dakikada sayaç kehribar (#fbbf24, markadan bağımsız; koyu zeminde
+# 7:1'i aşar); gelmedi işaretli koltuk koyu kırmızı zemin + beyaz yazı; gözetmen hatası açık kırmızı.
+SINAV_RENKLERI = (
+    "#sinav-sayac.son { color: #fbbf24; }\n"
+    "#gozetmen-hata { color: #fca5a5; }\n"
+    "#koltuk:checked { background-color: #991b1b; border-color: #fca5a5; }\n"
+    "#koltuk:checked label { color: #ffffff; }\n"
+)
+SINAV_SON_DAKIKALAR_SN = 300
+GOZETMEN_KOD_ZAMAN_ASIMI_SN = 60  # gözetmen kodu sayfası dokunulmazsa kapanır (öğrenci önünde açık kalmasın)
+
+
+def sayac_metni(saniye: int) -> str:
+    """Geri sayım: bir saatten kısa "DD:ss", uzun "S:DD:ss"."""
+    saniye = max(0, int(saniye))
+    saat, kalan = divmod(saniye, 3600)
+    dakika, sn = divmod(kalan, 60)
+    return f"{saat}:{dakika:02d}:{sn:02d}" if saat else f"{dakika:02d}:{sn:02d}"
+
+
+def baslama_metni(baslangic_saat: str, kalan_sn: int) -> str:
+    """Giriş ekranı satırı: "Başlangıç 10:00 — 7 dk sonra"."""
+    dakika = (max(0, int(kalan_sn)) + 59) // 60
+    sonra = f"{dakika} dk sonra" if dakika > 1 else "1 dakika içinde"
+    return f"Başlangıç {baslangic_saat} — {sonra}" if baslangic_saat else f"Sınav {sonra} başlıyor"
+
+
+def bitis_metni(sinav: dict) -> str:
+    """Tek ders: "Bitiş 10:40"; karma salonda her ders için "Matematik — 9. Sınıf: 10:40"."""
+    dersler = [d for d in sinav.get("dersler") or [] if d.get("bitis_saat")]
+    if len(dersler) > 1 and len({d["bitis_saat"] for d in dersler}) > 1:
+        return "\n".join(f"{d.get('ad', '')}: {d['bitis_saat']}" for d in dersler[:6])
+    return f"Bitiş {sinav.get('bitis_saat', '')}".strip()
+
+
+def liste_sutun_sayisi(n: int) -> int:
+    """Giriş ekranındaki liste: ≤ 20 kişi tek sütun, ≤ 40 iki, fazlası üç sütun."""
+    return 1 if n <= 20 else 2 if n <= 40 else 3
+
+
+def liste_punto(satir_sayisi: int, ekran_boyu: int) -> int:
+    """Liste yazı boyu (px): ekran yüksekliğinden; 22–44 arası (arka sıradan okunabilsin)."""
+    kullanilir = (ekran_boyu or 1080) - 430  # bant, başlık satırları ve alt satır
+    return max(22, min(44, int(kullanilir / max(1, satir_sayisi) / 1.38)))
+
+
+def liste_hucreleri(oge: dict) -> tuple[str, str, str, str]:
+    """Bir liste satırının hücreleri: koltuk · maske · …no · şube (tam no ve ders yok)."""
+    no = str(oge.get("n") or "")
+    return str(oge.get("k", "")), str(oge.get("a") or ""), f"…{no}" if no else "", str(oge.get("s") or "")
+
+
+def izgara_sutun(n: int) -> int:
+    """Yoklama ızgarasının sütun sayısı: ceil(sqrt(n·16/9)) — düğmeler 16:9 ekrana yayılır."""
+    import math
+
+    return max(1, math.ceil(math.sqrt(max(1, n) * 16 / 9)))
+
+
+def koltuk_etiketi(oge: dict, gelmedi: bool) -> str:
+    koltuk, maske, no, _ = liste_hucreleri(oge)
+    ust = f"{koltuk} · GELMEDİ" if gelmedi else koltuk
+    return "\n".join(p for p in (ust, maske, no) if p)
+
+
+def gozetmen_kod_hatasi(gozetmen: dict) -> str:
+    """Kod sayfasındaki hata satırı. Bekleme sürerken servis hatayı silmiş olsa da (Vazgeç ile
+    çıkılıp yeniden girildiğinde) pasif tuş takımının nedeni yazılır."""
+    if gozetmen.get("durum") == "dogrulaniyor":
+        return "Doğrulanıyor…"
+    bekleme = int(gozetmen.get("bekleme") or 0)
+    if bekleme > 0:
+        dk = max(1, -(-bekleme // 60))
+        return f"Çok fazla hatalı deneme. {dk} dakika sonra yeniden deneyin."
+    return str(gozetmen.get("hata") or "")
+
+
+def yoklama_engeli(gozetmen: dict) -> str:
+    """"Yoklama al" düğmesi pasifse nedeni; değilse ""."""
+    if not gozetmen.get("tahtadan_yoklama"):
+        return "Bu salonun yoklaması panelden alınır."
+    if not gozetmen.get("basladi"):
+        return "Sınav başlayınca açılır."
+    return ""
+
 
 def acil_basligi(baslik, tatbikat: bool) -> str:
     """Acil sayfasındaki büyük başlık. Bant sözcüğünü tekrarlayan ya da boş başlık
@@ -82,6 +191,50 @@ def acil_basligi(baslik, tatbikat: bool) -> str:
 
     tekrar = {katla(s) for s in ("ACİL DURUM", "TATBİKAT", ACIL_BANT["tatbikat"])}
     return "" if katla(metin) in tekrar else metin
+
+
+DUYURU_SUTUN_ESIGI = 12  # bundan çok satırlı duyuru (ör. şube oturma listesi) sütunlara bölünür
+KURALLAR_EKRAN_SATIRI = 8  # sınav kuralları ekranda en çok bu kadar satır (alt satır ekranda kalsın)
+
+
+def kurallar_metni(metin: str) -> str:
+    """Sınav ekranındaki kurallar: en çok KURALLAR_EKRAN_SATIRI dolu satır; fazlası "…" ile kesilir.
+
+    Pango'nun satır sınırı paragraf başınadır; toplam satır sayısı burada sınırlanır (eski sunucu
+    ya da elle yazılmış uzun metin de alt satırı — Gözetmen, kural 3 "Kilidi aç" — ekrandan itmesin).
+    """
+    satirlar = [x.strip() for x in str(metin or "").splitlines() if x.strip()]
+    if len(satirlar) <= KURALLAR_EKRAN_SATIRI:
+        return "\n".join(satirlar)
+    return "\n".join(satirlar[: KURALLAR_EKRAN_SATIRI - 1] + [satirlar[KURALLAR_EKRAN_SATIRI - 1] + " …"])
+
+
+def duyuru_duzeni(metin: str, ekran_boyu: int) -> dict:
+    """Duyuru metninin ekran düzeni (saf; test edilir).
+
+    Kısa metin: {"ust": "", "sutunlar": [], "sinif": ""|"uzun"|"cok-uzun", "punto": 0} ve metin
+    tek etikette. Çok satırlı metin (şube oturma listesi gibi): baştaki ilk boş satıra kadarki
+    en çok 3 satır "ust" olur, kalanlar 1–3 sütuna bölünür, yazı boyu ekran yüksekliğinden
+    hesaplanır (20–40 px). Uzun liste sığmazsa sayfa kaydırılır; Kapat düğmesi hep ekrandadır.
+    """
+    satirlar = (metin or "").split("\n")
+    if len(satirlar) <= DUYURU_SUTUN_ESIGI:
+        uzunluk = len(metin or "")
+        sinif = "" if uzunluk <= 300 and len(satirlar) <= 6 else "uzun" if uzunluk <= 600 else "cok-uzun"
+        return {"ust": "", "sutunlar": [], "sinif": sinif, "punto": 0}
+    ust: list[str] = []
+    if "" in satirlar[:4]:
+        bos = satirlar.index("")
+        ust, satirlar = satirlar[:bos], satirlar[bos + 1 :]
+    while satirlar and not satirlar[0].strip():
+        satirlar = satirlar[1:]
+    n = max(1, len(satirlar))
+    sutun = 1 if n <= 16 else 2 if n <= 40 else 3
+    boy = -(-n // sutun)
+    kullanilir = (ekran_boyu or 1080) - 480  # bant, başlık, üst satır ve Kapat
+    punto = max(20, min(40, int(kullanilir / boy / 1.38)))
+    parcalar = [satirlar[i * boy : (i + 1) * boy] for i in range(sutun)]
+    return {"ust": "\n".join(ust), "sutunlar": ["\n".join(p) for p in parcalar if p], "sinif": "", "punto": punto}
 
 
 def acil_metin_sinifi(metin: str) -> str:
@@ -116,7 +269,13 @@ def renk_stili(palet: dict) -> str:
         f"button:active {{ background-color: {p['yuzey']}; }}\n"
         f"#ana-dugme {{ background-color: {p['ana']}; border-color: {p['ana']}; }}\n"
         f"#ana-dugme label {{ color: {p['ana_metin']}; }}\n"
+        f"#sinav-salon, #sinav-bilgi, #sinav-fazla, #sinav-cevrimdisi, #gozetmen-bilgi {{ color: {p['soluk']}; }}\n"
+        f"#sinav-durum {{ color: {p['bilgi']}; }}\n"
+        f".liste-no {{ color: {p['vurgu']}; }}\n"
+        + SINAV_RENKLERI
         + ACIL_RENKLERI
+        # Kaydırılabilir duyuru/sınav ortası pencere zeminini örtmesin.
+        + "scrolledwindow, viewport { background-color: transparent; border-width: 0; }\n"
     )
 
 
@@ -253,6 +412,16 @@ def calistir() -> int:
             self.bantlar = []  # her sayfanın üst bandı: (logo_kutu, logo_resmi, okul, sag)
             self.logo_pixbuf = None
             self.logo_sha = None
+            # Sınav / gözetmen (A4): kod sayfası yalnız bu yardımcıda açılır (servise kod gidene dek);
+            # yoklama işaretleri ızgara açıkken yalnız burada tutulur, sayfadan çıkınca silinir.
+            self.gozetmen_kod_acik = False
+            self.gozetmen_girilen = ""
+            self.gozetmen_dokunma = 0.0
+            self.izgara_oturum = None
+            self.izgara_isaret: set[int] = set()
+            self.izgara_dugmeleri: dict[int, tuple] = {}
+            self.liste_imza = None
+            self.sinav_altlari = []  # her sınav sayfasının alt satırı: (saat, bilgi, çevrimdışı düğmesi)
 
             # İki sağlayıcı: ölçüler bir kez yüklenir; renkler tema değişince yenilenir.
             ekran = Gdk.Screen.get_default()
@@ -265,6 +434,19 @@ def calistir() -> int:
             Gtk.StyleContext.add_provider_for_screen(
                 ekran, self.renk_saglayici, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
             )
+            # Giriş ekranı listesinin yazı boyu satır sayısına göre değişir (yalnız ölçü, ASCII).
+            self.liste_saglayici = Gtk.CssProvider()
+            self.liste_saglayici.load_from_data(b".liste-hucre { font-size: 32px; }")
+            Gtk.StyleContext.add_provider_for_screen(
+                ekran, self.liste_saglayici, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+            # Çok satırlı duyurunun (şube oturma listesi) sütun yazı boyu da satır sayısına göre değişir.
+            self.duyuru_saglayici = Gtk.CssProvider()
+            self.duyuru_saglayici.load_from_data(b".duyuru-sutun { font-size: 32px; }")
+            Gtk.StyleContext.add_provider_for_screen(
+                ekran, self.duyuru_saglayici, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+            self.duyuru_imza = None
             self.pencere = Gtk.Window(title="Tahta Kontrol")
             self.pencere.set_decorated(False)
             self.pencere.set_keep_above(True)
@@ -279,6 +461,12 @@ def calistir() -> int:
             self.yigin.add_named(self._duyuru_sayfasi(), "duyuru")
             self.yigin.add_named(self._kapatma_sayfasi(), "kapatma")
             self.yigin.add_named(self._acil_sayfasi(), "acil")
+            # Sınav ve gözetmen sayfaları da show_all()'dan ÖNCE eklenir (GtkStack tuzağı).
+            self.yigin.add_named(self._sinav_giris_sayfasi(), "sinav-giris")
+            self.yigin.add_named(self._sinav_sayfasi(), "sinav")
+            self.yigin.add_named(self._gozetmen_kod_sayfasi(), "gozetmen-kod")
+            self.yigin.add_named(self._gozetmen_menu_sayfasi(), "gozetmen-menu")
+            self.yigin.add_named(self._gozetmen_yoklama_sayfasi(), "gozetmen-yoklama")
             self.pencere_sinifi = None  # "acil" | "tatbikat" | None
             # Sayfalar pencere açılmadan görünür kılınır: GtkStack, görünür olmayan
             # bir sayfaya geçiş isteğini yok sayar ve ilk sayfada (kilit) kalır.
@@ -391,19 +579,68 @@ def calistir() -> int:
             return self._sayfa(govde)
 
         def _duyuru_sayfasi(self):
+            """Bant, ortada kaydırılabilir başlık + metin (çok satırlıysa sütunlar), altta Kapat.
+
+            Uzun metin ortayı büyütemez: Kapat düğmesi her metin uzunluğunda ekranda kalır.
+            """
             kutu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=30)
             kutu.set_margin_start(80)
             kutu.set_margin_end(80)
+            kutu.set_valign(Gtk.Align.CENTER)
+            kutu.set_halign(Gtk.Align.CENTER)
             self.duyuru_baslik = self._etiket("duyuru-baslik")
             self.duyuru_metin = self._etiket("duyuru-metin")
             self.duyuru_metin.set_max_width_chars(48)
+            self.duyuru_ust = self._etiket("duyuru-ust")
+            self.duyuru_sutunlar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=70)
+            self.duyuru_sutunlar.set_halign(Gtk.Align.CENTER)
+            for parca in (self.duyuru_baslik, self.duyuru_metin, self.duyuru_ust, self.duyuru_sutunlar):
+                kutu.pack_start(parca, False, False, 0)
+            kaydirma = Gtk.ScrolledWindow()
+            kaydirma.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            kaydirma.set_shadow_type(Gtk.ShadowType.NONE)
+            kaydirma.add(kutu)
             self.duyuru_kapat = Gtk.Button(label="Kapat")
             self.duyuru_kapat.set_halign(Gtk.Align.CENTER)
             self.duyuru_kapat.set_can_focus(False)
+            self.duyuru_kapat.set_margin_top(16)
+            self.duyuru_kapat.set_margin_bottom(32)
             self.duyuru_kapat.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "duyuru_kapat"}))
-            for parca in (self.duyuru_baslik, self.duyuru_metin, self.duyuru_kapat):
-                kutu.pack_start(parca, False, False, 0)
-            return self._sayfa(kutu)
+            sayfa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            sayfa.pack_start(self._ust_bant(), False, False, 0)
+            sayfa.pack_start(kaydirma, True, True, 0)
+            sayfa.pack_end(self.duyuru_kapat, False, False, 0)
+            return sayfa
+
+        def _duyuru_metni_yaz(self, metin):
+            if metin == self.duyuru_imza:
+                return
+            self.duyuru_imza = metin
+            duzen = duyuru_duzeni(metin, self._geometri()[1])
+            baglam = self.duyuru_metin.get_style_context()
+            for sinif in ("uzun", "cok-uzun"):
+                baglam.remove_class(sinif)
+            for cocuk in self.duyuru_sutunlar.get_children():
+                cocuk.destroy()
+            if not duzen["sutunlar"]:
+                if duzen["sinif"]:
+                    baglam.add_class(duzen["sinif"])
+                self.duyuru_metin.set_text(metin)
+                self.duyuru_metin.set_visible(bool(metin))
+                self.duyuru_ust.set_visible(False)
+                self.duyuru_sutunlar.set_visible(False)
+                return
+            self.duyuru_metin.set_visible(False)
+            self.duyuru_ust.set_text(duzen["ust"])
+            self.duyuru_ust.set_visible(bool(duzen["ust"]))
+            self.duyuru_saglayici.load_from_data(f".duyuru-sutun {{ font-size: {duzen['punto']}px; }}".encode("ascii"))
+            for parca in duzen["sutunlar"]:
+                etiket = Gtk.Label(label=parca)
+                etiket.get_style_context().add_class("duyuru-sutun")
+                etiket.set_xalign(0)
+                etiket.set_valign(Gtk.Align.START)
+                self.duyuru_sutunlar.pack_start(etiket, False, False, 0)
+            self.duyuru_sutunlar.show_all()  # yalnız sütun kutusu; yığın sayfaları değil
 
         def _kapatma_sayfasi(self):
             kutu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
@@ -464,6 +701,157 @@ def calistir() -> int:
             sayfa.pack_end(alt, False, False, 0)
             return sayfa
 
+        # ---- sınav ve gözetmen sayfaları (A4) ------------------------------------------
+        def _sayfa_dolu(self, govde):
+            """Bant + ekranı dolduran gövde (liste ve ızgara sayfaları için)."""
+            sayfa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            sayfa.pack_start(self._ust_bant(), False, False, 0)
+            govde.set_margin_start(60)
+            govde.set_margin_end(60)
+            govde.set_margin_top(24)
+            govde.set_margin_bottom(28)
+            sayfa.pack_start(govde, True, True, 0)
+            return sayfa
+
+        def _dugme(self, metin, islev, ana=False, en=0, boy=0):
+            dugme = Gtk.Button(label=metin)
+            dugme.set_can_focus(False)
+            if ana:
+                dugme.set_name("ana-dugme")
+            if en or boy:
+                dugme.set_size_request(en, boy)
+            dugme.connect("clicked", lambda *_: islev())
+            return dugme
+
+        def _sinav_alt(self):
+            """Sınav sayfalarının alt satırı: solda saat, ortada çevrimdışı bilgisi ve düğmesi
+            (kural 3), sağda "Gözetmen"."""
+            alt = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+            saat = Gtk.Label(label="")
+            saat.set_name("sinav-saat")
+            bilgi = Gtk.Label(label="Sunucuya ulaşılamıyor. Sınav ekranı süre bitince kendiliğinden kalkar.")
+            bilgi.set_name("sinav-cevrimdisi")
+            bilgi.set_line_wrap(True)
+            bilgi.set_max_width_chars(48)
+            cevrimdisi = self._dugme("Kilidi aç", lambda: self.baglanti.gonder({"tur": "cevrimdisi_ac"}), ana=True)
+            gozetmen = self._dugme("Gözetmen", self._gozetmen_ac)
+            alt.pack_start(saat, False, False, 0)
+            alt.pack_start(bilgi, True, True, 0)
+            alt.pack_start(cevrimdisi, False, False, 0)
+            alt.pack_end(gozetmen, False, False, 0)
+            self.sinav_altlari.append((saat, bilgi, cevrimdisi))
+            return alt
+
+        def _sinav_giris_sayfasi(self):
+            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            self.sg_ad = self._etiket("sinav-adi")
+            self.sg_ad.set_max_width_chars(60)
+            self.sg_salon = self._etiket("sinav-salon")
+            self.sg_bilgi = self._etiket("sinav-bilgi")
+            self.sg_liste = Gtk.Grid(column_spacing=22, row_spacing=2)
+            self.sg_liste.set_halign(Gtk.Align.CENTER)
+            self.sg_liste.set_valign(Gtk.Align.START)
+            self.sg_fazla = self._etiket("sinav-fazla")
+            for parca in (self.sg_ad, self.sg_salon, self.sg_bilgi):
+                govde.pack_start(parca, False, False, 0)
+            govde.pack_start(self.sg_liste, True, True, 12)
+            govde.pack_start(self.sg_fazla, False, False, 0)
+            govde.pack_end(self._sinav_alt(), False, False, 0)
+            return self._sayfa_dolu(govde)
+
+        def _sinav_sayfasi(self):
+            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            self.ss_ad = self._etiket("sinav-adi")
+            self.ss_ad.set_max_width_chars(60)
+            self.ss_salon = self._etiket("sinav-salon")
+            self.ss_sayac = self._etiket("sinav-sayac")
+            self.ss_bitis = self._etiket("sinav-bitis")
+            self.ss_kurallar = self._etiket("sinav-kurallar")
+            self.ss_kurallar.set_max_width_chars(80)
+            # Uzun kurallar alt satırı (Gözetmen, kural 3 "Kilidi aç") ekrandan itmesin: satır sınırı
+            # ve kaydırılabilir orta; alt satır her metin uzunluğunda ekranda kalır.
+            self.ss_kurallar.set_lines(2)  # paragraf (kural) başına en çok 2 satır
+            self.ss_kurallar.set_ellipsize(Pango.EllipsizeMode.END)
+            self.ss_durum = self._etiket("sinav-durum")
+            orta = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            orta.set_valign(Gtk.Align.CENTER)
+            for parca in (self.ss_ad, self.ss_salon, self.ss_sayac, self.ss_bitis, self.ss_kurallar, self.ss_durum):
+                orta.pack_start(parca, False, False, 0)
+            kaydirma = Gtk.ScrolledWindow()
+            kaydirma.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            kaydirma.set_shadow_type(Gtk.ShadowType.NONE)
+            kaydirma.add(orta)
+            govde.pack_start(kaydirma, True, True, 0)
+            govde.pack_end(self._sinav_alt(), False, False, 0)
+            return self._sayfa_dolu(govde)
+
+        def _gozetmen_kod_sayfasi(self):
+            govde = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=120)
+            sol = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            sol.set_valign(Gtk.Align.CENTER)
+            sol.set_size_request(640, -1)  # hata metni gelince tuş takımı kaymasın
+            sol.pack_start(self._etiket("gozetmen-baslik", "Gözetmen kodu"), False, False, 0)
+            self.gk_salon = self._etiket("sinav-salon")
+            self.gk_bilgi = self._etiket("gozetmen-bilgi", "Salon fişindeki 6 haneli kodu girin.")
+            self.gk_bilgi.set_max_width_chars(34)
+            self.gk_hata = self._etiket("gozetmen-hata")
+            self.gk_hata.set_max_width_chars(34)
+            for parca in (self.gk_salon, self.gk_bilgi, self.gk_hata):
+                sol.pack_start(parca, False, False, 0)
+            sol.pack_start(self._dugme("Vazgeç", self._gozetmen_vazgec), False, False, 24)
+            sag = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            sag.set_valign(Gtk.Align.CENTER)
+            self.gk_kod = self._etiket("kod", "")
+            sag.pack_start(self.gk_kod, False, False, 6)
+            self.gk_tuslar = Gtk.Grid(row_spacing=10, column_spacing=10)
+            self.gk_tuslar.set_column_homogeneous(True)
+            for sira, tus in enumerate(["1", "2", "3", "4", "5", "6", "7", "8", "9", "Sil", "0", "Tamam"]):
+                dugme = self._dugme(tus, lambda t=tus: self._gozetmen_tus(t), ana=tus == "Tamam", en=150, boy=96)
+                self.gk_tuslar.attach(dugme, sira % 3, sira // 3, 1, 1)
+            sag.pack_start(self.gk_tuslar, False, False, 0)
+            govde.pack_start(sol, False, False, 0)
+            govde.pack_start(sag, False, False, 0)
+            return self._sayfa(govde)
+
+        def _gozetmen_menu_sayfasi(self):
+            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+            govde.pack_start(self._etiket("gozetmen-baslik", "Gözetmen"), False, False, 0)
+            self.gm_salon = self._etiket("sinav-salon")
+            govde.pack_start(self.gm_salon, False, False, 0)
+            self.gm_yoklama = self._dugme("Yoklama al", lambda: self.baglanti.gonder({"tur": "gozetmen_yoklama"}),
+                                          ana=True, en=560, boy=110)  # fmt: skip
+            self.gm_yoklama.set_halign(Gtk.Align.CENTER)
+            govde.pack_start(self.gm_yoklama, False, False, 20)
+            self.gm_neden = self._etiket("gozetmen-bilgi")
+            self.gm_hata = self._etiket("gozetmen-hata")
+            govde.pack_start(self.gm_neden, False, False, 0)
+            govde.pack_start(self.gm_hata, False, False, 0)
+            cik = self._dugme("Çık", lambda: self.baglanti.gonder({"tur": "gozetmen_cikis"}), en=300, boy=90)
+            cik.set_halign(Gtk.Align.CENTER)
+            govde.pack_start(cik, False, False, 20)
+            return self._sayfa(govde)
+
+        def _gozetmen_yoklama_sayfasi(self):
+            govde = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            self.gy_baslik = self._etiket("sinav-adi")
+            self.gy_hata = self._etiket("gozetmen-hata")
+            self.gy_izgara = Gtk.Grid(row_spacing=10, column_spacing=10)
+            self.gy_izgara.set_row_homogeneous(True)
+            self.gy_izgara.set_column_homogeneous(True)
+            self.gy_izgara.set_halign(Gtk.Align.CENTER)
+            self.gy_izgara.set_valign(Gtk.Align.CENTER)
+            alt = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+            alt.set_halign(Gtk.Align.CENTER)
+            self.gy_kaydet = self._dugme("Kaydet", self._gozetmen_kaydet, ana=True, en=320, boy=90)
+            self.gy_vazgec = self._dugme("Vazgeç", lambda: self.baglanti.gonder({"tur": "gozetmen_cikis"}), en=240, boy=90)
+            alt.pack_start(self.gy_kaydet, False, False, 0)
+            alt.pack_start(self.gy_vazgec, False, False, 0)
+            govde.pack_start(self.gy_baslik, False, False, 0)
+            govde.pack_start(self.gy_hata, False, False, 0)
+            govde.pack_start(self.gy_izgara, True, True, 8)
+            govde.pack_end(alt, False, False, 0)
+            return self._sayfa_dolu(govde)
+
         def _pencere_sinifi(self, sinif):
             """Acil/tatbikat rengini pencereye verir; başka sayfaya geçince kaldırır."""
             if sinif == self.pencere_sinifi:
@@ -490,6 +878,197 @@ def calistir() -> int:
             elif len(self.girilen) < 8:
                 self.girilen += tus
             self.kod_etiketi.set_text("●" * len(self.girilen))
+
+        # ---- gözetmen (A4) ------------------------------------------------------------
+        def _gozetmen_ac(self):
+            self.gozetmen_kod_acik = True
+            self.gozetmen_girilen = ""
+            self.gozetmen_dokunma = time.time()
+            self.gk_kod.set_text("")
+            self._ciz()
+
+        def _gozetmen_vazgec(self):
+            self.gozetmen_kod_acik = False
+            self.gozetmen_girilen = ""
+            self.gk_kod.set_text("")
+            self.baglanti.gonder({"tur": "gozetmen_cikis"})  # servis eski hata metnini de siler
+            self._ciz()
+
+        def _gozetmen_tus(self, tus):
+            self.gozetmen_dokunma = time.time()
+            if tus == "Sil":
+                self.gozetmen_girilen = self.gozetmen_girilen[:-1]
+            elif tus == "Tamam":
+                if self.gozetmen_girilen:
+                    # Kod servise iletilir, sunucuda doğrulanır; burada saklanmaz.
+                    self.baglanti.gonder({"tur": "gozetmen_kod", "kod": self.gozetmen_girilen})
+                self.gozetmen_girilen = ""
+            elif len(self.gozetmen_girilen) < 6:
+                self.gozetmen_girilen += tus
+            self.gk_kod.set_text("●" * len(self.gozetmen_girilen))
+
+        def _gozetmen_kaydet(self):
+            self.baglanti.gonder({"tur": "gozetmen_kaydet", "gelmeyen": sorted(self.izgara_isaret)})
+
+        def _koltuk_degisti(self, dugme, oge):
+            koltuk = oge["k"]
+            if dugme.get_active():
+                self.izgara_isaret.add(koltuk)
+            else:
+                self.izgara_isaret.discard(koltuk)
+            dugme.set_label(koltuk_etiketi(oge, dugme.get_active()))
+            self._izgara_basligi()
+
+        def _izgara_basligi(self):
+            self.gy_baslik.set_text(f"Gelmeyenlere dokunun · Gelmeyen: {len(self.izgara_isaret)}")
+
+        def _izgara_temizle(self):
+            """Yoklama ızgarası kapanınca düğmeler ve işaretler silinir (ekranda iz kalmaz)."""
+            for cocuk in self.gy_izgara.get_children():
+                cocuk.destroy()
+            self.izgara_dugmeleri = {}
+            self.izgara_isaret = set()
+            self.izgara_oturum = None
+
+        def _izgara_kur(self, gozetmen):
+            self._izgara_temizle()
+            liste = gozetmen.get("liste") or []
+            self.izgara_isaret = {k for k in gozetmen.get("gelmeyen") or [] if isinstance(k, int)}
+            n = len(liste)
+            sutun = izgara_sutun(n)
+            satir = max(1, -(-n // sutun))
+            en, boy = self._geometri()
+            en, boy = en or 1920, boy or 1080
+            dugme_en = max(120, min(260, (en - 120) // sutun - 10))
+            dugme_boy = max(80, min(170, (boy - 430) // satir - 10))
+            for sira, oge in enumerate(liste):
+                gelmedi = oge["k"] in self.izgara_isaret
+                dugme = Gtk.ToggleButton(label=koltuk_etiketi(oge, gelmedi))
+                dugme.set_name("koltuk")
+                dugme.set_can_focus(False)
+                dugme.set_size_request(dugme_en, dugme_boy)
+                dugme.set_active(gelmedi)
+                etiket = dugme.get_child()
+                if isinstance(etiket, Gtk.Label):
+                    etiket.set_justify(Gtk.Justification.CENTER)
+                dugme.connect("toggled", self._koltuk_degisti, oge)
+                self.gy_izgara.attach(dugme, sira % sutun, sira // sutun, 1, 1)
+                self.izgara_dugmeleri[oge["k"]] = (dugme, oge)
+            self.gy_izgara.show_all()  # yalnız ızgaranın içi (pencere değil)
+            self.izgara_oturum = gozetmen.get("oturum")
+            self._izgara_basligi()
+
+        def _liste_kur(self, liste):
+            imza = json.dumps(liste, ensure_ascii=False, sort_keys=True)
+            if imza == self.liste_imza:
+                return
+            self.liste_imza = imza
+            for cocuk in self.sg_liste.get_children():
+                cocuk.destroy()
+            if not liste:
+                return
+            n = len(liste)
+            sutun = liste_sutun_sayisi(n)
+            satir = -(-n // sutun)
+            punto = liste_punto(satir, self._geometri()[1])
+            self.liste_saglayici.load_from_data(f".liste-hucre {{ font-size: {punto}px; }}".encode("ascii"))
+            for sira, oge in enumerate(liste):
+                kolon, satir_no = divmod(sira, satir)  # koltuk sırası sütun sütun yukarıdan aşağı
+                for j, metin in enumerate(liste_hucreleri(oge)):
+                    etiket = Gtk.Label(label=metin)
+                    baglam = etiket.get_style_context()
+                    baglam.add_class("liste-hucre")
+                    if j == 0:
+                        baglam.add_class("liste-no")
+                    etiket.set_xalign(1 if j == 0 else 0)
+                    self.sg_liste.attach(etiket, kolon * 5 + j, satir_no, 1, 1)
+                if satir_no == 0 and kolon < sutun - 1:
+                    ara = Gtk.Label(label="")
+                    ara.set_size_request(56, -1)
+                    self.sg_liste.attach(ara, kolon * 5 + 4, 0, 1, 1)
+            self.sg_liste.show_all()
+
+        def _sinav_alt_ciz(self):
+            durum = self.durum or {}
+            cevrimdisi = bool(durum.get("cevrimdisi")) or not durum.get("kayitli", True)
+            for saat, bilgi, dugme in self.sinav_altlari:
+                saat.set_text(time.strftime("%H:%M"))
+                bilgi.set_visible(cevrimdisi)
+                dugme.set_visible(cevrimdisi)
+
+        def _sinav_sayaclari(self, sinav):
+            if sinav.get("evre") == "giris":
+                self.sg_bilgi.set_text(baslama_metni(sinav.get("baslangic_saat", ""), sinav.get("kalan_baslama", 0)))
+            else:
+                kalan = int(sinav.get("kalan_bitis", 0))
+                self.ss_sayac.set_text(sayac_metni(kalan))
+                baglam = self.ss_sayac.get_style_context()
+                if kalan <= SINAV_SON_DAKIKALAR_SN:
+                    baglam.add_class("son")
+                else:
+                    baglam.remove_class("son")
+            self._sinav_alt_ciz()
+
+        def _sinav_ciz(self, sinav):
+            if sinav.get("evre") == "giris":
+                self.sg_ad.set_text(sinav.get("sinav_adi") or "Sınav")
+                self.sg_salon.set_text(sinav.get("salon_adi") or "")
+                liste = sinav.get("liste") or []
+                self._liste_kur(liste)
+                fazla = int(sinav.get("liste_fazla") or 0)
+                self.sg_fazla.set_text(f"ve {fazla} kişi daha — salon listesine bakın" if fazla else "")
+                self.sg_fazla.set_visible(bool(fazla))
+                self.yigin.set_visible_child_name("sinav-giris")
+            else:
+                self._liste_kur([])  # sınav başladı: liste ekrandan silinir
+                self.ss_ad.set_text(sinav.get("sinav_adi") or "Sınav")
+                self.ss_salon.set_text(sinav.get("salon_adi") or "")
+                self.ss_bitis.set_text(bitis_metni(sinav))
+                kurallar = kurallar_metni(sinav.get("kurallar") or "")
+                self.ss_kurallar.set_text(kurallar)
+                self.ss_kurallar.set_visible(bool(kurallar))
+                durum_metni = sinav.get("bildirim") or ("Yoklama alındı" if sinav.get("yoklama_alindi") else "")
+                self.ss_durum.set_text(durum_metni)
+                self.ss_durum.set_visible(bool(durum_metni))
+                self.yigin.set_visible_child_name("sinav")
+            self._sinav_sayaclari(sinav)
+            self._goster(kilit=True)
+
+        def _gozetmen_ciz(self, sinav, gozetmen):
+            durum = gozetmen.get("durum")
+            salon = sinav.get("salon_adi") or ""
+            if durum in ("yoklama", "kaydediliyor"):
+                self.gozetmen_kod_acik = False
+                if self.izgara_oturum != gozetmen.get("oturum"):
+                    self._izgara_kur(gozetmen)
+                kaydediliyor = durum == "kaydediliyor"
+                self.gy_hata.set_text("Kaydediliyor…" if kaydediliyor else gozetmen.get("hata") or "")
+                self.gy_kaydet.set_sensitive(not kaydediliyor)
+                self.gy_vazgec.set_sensitive(not kaydediliyor)
+                self.gy_izgara.set_sensitive(not kaydediliyor)
+                self.yigin.set_visible_child_name("gozetmen-yoklama")
+            elif durum == "menu":
+                self.gozetmen_kod_acik = False
+                self._izgara_temizle()
+                engel = yoklama_engeli(gozetmen)
+                self.gm_salon.set_text(salon)
+                self.gm_yoklama.set_sensitive(not engel)
+                self.gm_neden.set_text(engel)
+                self.gm_neden.set_visible(bool(engel))
+                self.gm_hata.set_text(gozetmen.get("hata") or "")
+                self.gm_hata.set_visible(bool(gozetmen.get("hata")))
+                self.yigin.set_visible_child_name("gozetmen-menu")
+            else:
+                self._izgara_temizle()
+                dogrulaniyor = durum == "dogrulaniyor"
+                bekleme = int(gozetmen.get("bekleme") or 0)
+                self.gk_salon.set_text(salon)
+                hata = gozetmen_kod_hatasi(gozetmen)
+                self.gk_hata.set_text(hata)
+                self.gk_hata.set_visible(bool(hata))
+                self.gk_tuslar.set_sensitive(not dogrulaniyor and not bekleme)
+                self.yigin.set_visible_child_name("gozetmen-kod")
+            self._goster(kilit=True)
 
         def _mesaj(self, mesaj):
             if mesaj.get("tur") == "yeniden_baslat":
@@ -575,6 +1154,27 @@ def calistir() -> int:
                 if self.durum["duyuru"]["kalan"] <= 0:
                     self.durum["duyuru"] = None
                     self._ciz()
+            sinav = self.durum.get("sinav") if self.durum else None
+            if sinav:
+                # Sayaç saniyede bir azalır; kaynak her "durum" iletisinde servisten gelen kalan süredir.
+                sinav["kalan_bitis"] = int(sinav.get("kalan_bitis", 0)) - 1
+                sinav["kalan_baslama"] = max(0, int(sinav.get("kalan_baslama", 0)) - 1)
+                if sinav["kalan_bitis"] <= 0:
+                    self.durum["sinav"] = None  # servisten bağımsız: süre bitince ekran kalkar
+                    self._ciz()
+                elif sinav.get("evre") == "giris" and sinav["kalan_baslama"] <= 0:
+                    sinav["evre"], sinav["liste"] = "suruyor", []  # başlangıç: liste kalkar, sayaç gelir
+                    self._ciz()
+                else:
+                    self._sinav_sayaclari(sinav)
+                    # Gözetmen kodu beklemesi de yerelde azalır; bitince tuş takımı açılır.
+                    gozetmen = sinav.get("gozetmen") or {}
+                    if int(gozetmen.get("bekleme") or 0) > 0:
+                        gozetmen["bekleme"] = int(gozetmen["bekleme"]) - 1
+                        if self.gozetmen_kod_acik and gozetmen["bekleme"] % 60 in (0, 59):
+                            self._ciz()
+            if self.gozetmen_kod_acik and time.time() - self.gozetmen_dokunma > GOZETMEN_KOD_ZAMAN_ASIMI_SN:
+                self._gozetmen_vazgec()
             if self.gorunur:
                 self.pencere.present()
                 self.pencere.fullscreen()
@@ -589,8 +1189,18 @@ def calistir() -> int:
             duyuru = durum.get("duyuru")
             kapatma = durum.get("kapatma")
             acil = durum.get("acil")
+            # Eski servis "sinav" alanını göndermez: sınav yok sayılır (eski davranış sürer).
+            sinav = durum.get("sinav") if isinstance(durum.get("sinav"), dict) else None
+            gozetmen = (sinav or {}).get("gozetmen") or {}
+            if not sinav:
+                self.gozetmen_kod_acik = False
+                self._izgara_temizle()
+                self._liste_kur([])
+            gozetmen_sayfasi = bool(sinav) and (bool(gozetmen.get("durum")) or self.gozetmen_kod_acik)
+            if not gozetmen_sayfasi and self.izgara_oturum is not None:
+                self._izgara_temizle()
             self._bantlari_ciz(durum)
-            # Öncelik (ortak sözlük §5.5): acil > kapatma > duyuru > kilit > gizli.
+            # Öncelik (ortak sözlük §5.5): acil > kapatma > gozetmen-* > duyuru > sinav-giris/sinav > kilit > gizli.
             if acil:
                 tatbikat = acil.get("tur") == "tatbikat"
                 self.acil_bant.set_text(ACIL_BANT["tatbikat" if tatbikat else "acil"])
@@ -620,12 +1230,17 @@ def calistir() -> int:
                 )
                 self.yigin.set_visible_child_name("kapatma")
                 self._goster(kilit=False)
+            elif gozetmen_sayfasi:
+                self._gozetmen_ciz(sinav, gozetmen)
             elif duyuru:
                 self.duyuru_baslik.set_text(duyuru.get("baslik") or "DUYURU")
-                self.duyuru_metin.set_text(duyuru.get("metin") or "")
+                self._duyuru_metni_yaz(duyuru.get("metin") or "")
                 self.duyuru_kapat.set_visible(bool(duyuru.get("kapatilabilir")))
                 self.yigin.set_visible_child_name("duyuru")
-                self._goster(kilit=False)
+                # Sınav sürerken üstte görünen duyuru da klavyeyi bağlar (alttaki sınav ekranı aşılmasın).
+                self._goster(kilit=bool(sinav))
+            elif sinav:
+                self._sinav_ciz(sinav)
             elif durum.get("kilitli"):
                 kod_var = bool(durum.get("kod_var"))
                 bekleme = int(durum.get("bekleme") or 0)
@@ -684,6 +1299,11 @@ def calistir() -> int:
             self.kilit_modu = False
             self.girilen = ""
             self.kod_etiketi.set_text("")
+            self.gozetmen_kod_acik = False
+            self.gozetmen_girilen = ""
+            self.gk_kod.set_text("")
+            self._izgara_temizle()
+            self._liste_kur([])
 
         def _klavye_kilitle(self):
             """Klavye ve fareyi bu pencereye bağlar (X11'de Alt+Tab'ı keser)."""

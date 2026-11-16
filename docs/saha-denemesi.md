@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.4.0)
+# Saha denemesi kılavuzu (0.5.0)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -23,13 +23,16 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Program kilidi (0.4.0): zil saatleri elle, derslik ızgarası, zamanlayıcının verdiği süreli kilidin tahtaya inmesi; kilit ekranında "Bu saatte bu derslikte ders yok · Tahta 04:45'te açılır." (kodlu ve kodsuz); idare kilidinin program kilidini ezmesi; mevcut kilit, duyuru ve kapatma ekranlarının bozulmadığı | Debian 12 kabı + sanal ekran (1920×1080), gerçek paket | Çalıştı |
 | Program sayfası sekmeleri, pano şeridi ve "Program kilidini durdur" menüsü, tahta ızgarası, uyarılar, zil silme onay penceresi, dar ekran | Chromium (geliştirme bilgisayarı) | Çalıştı |
 | Program kilidinin süre dolunca sunucusuz açılması, kodla açma, yeniden başlatmada geri yüklenmemesi | Birim testleri (kapta süre beklenmedi) | Geçti |
+| Sınav kipi (0.5.0): uydurma R5 çizelgesinin içe aktarılması ve derslik adından eşleşme; giriş ekranında 34 ve 64 kişilik maskeli liste (64'te ilk 60 + "ve 4 kişi daha"); yanlış ve doğru gözetmen kodu; sınav başlamadan "Yoklama al"ın pasif olması ve başlayınca açılması; koltuk ızgarasında işaretleme ve kaydetme ("Yoklama kaydedildi: 3 öğrenci gelmedi"); 60'tan kalabalık salonda "Bu salonun yoklaması panelden alınır"; süre uzatmanın birkaç saniyede sayaca yansıması; sınav ekranının üstünde duyuru; sunucu kapalıyken 90 sn sonra "Kilidi aç" düğmesi ve düğmeyle sınav ekranının kalkması, sunucu dönünce geri gelmesi; panelden kip kaldırma; kilit ve kapatma ekranlarının bozulmadığı | Debian 12 kabı + sanal ekran (1920×1080), gerçek paket; dokunma `xdotool` ile | Çalıştı |
+| Sınavlar, sınav sayfası (canlı durum), salon yoklaması, gözetmen fişleri, icmal, onay pencereleri, panoda "Sınav sürüyor" rozeti ve sınavdaki tahtaya kilit açma ek onayı | Chromium (geliştirme bilgisayarı) | Çalıştı |
+| Gerçek Kelebek çizelgesi (okulun Kelebek sürümüyle indirilen R5) | — | Denenmedi |
 | **Gerçek ETAP tahtası** | — | **Denenmedi** |
 | Kurulum dosyasının başka bir bilgisayara kurulması | — | Denenmedi |
 | Gerçek kapatma / yeniden başlatma / uzaktan açma | — | Denenmedi (kapta benzetim) |
 
 ## 1. Sunucuyu kurun
 
-1. `dist\cikti\tahta-kontrol-0.4.0-windows-kurulum.exe` dosyasını sunucu olacak
+1. `dist\cikti\tahta-kontrol-0.5.0-windows-kurulum.exe` dosyasını sunucu olacak
    idari bilgisayara kurun (yönetici izni ister; güvenlik duvarında 8788 kapısını açar).
 2. Açılan pencerede **Paneli aç** deyin; ilk kurulumda okul adını ve yönetici
    hesabını oluşturun.
@@ -129,6 +132,34 @@ deneme tahtası programlı olsun.
 | P13 | Okul Zili'nde planlanmış sınav günü | Sınav penceresinde program kilidi gelmez | |
 | P14 | Sunucu bilgisayarının saati (Ayarlar/Program şeridi) | Okul zili ile aynı dakikada | |
 
+### 3.3 Sınav kipi ve sınav yoklaması (0.5.0)
+
+Hazırlık: Kelebek Sınav'da bir oturumu (tercihen onaylanmış) seçip **Toplu Dağıtım Çizelgesi
+(Excel)** dosyasını indirin. Denemeyi gerçek sınavda değil, öğrenci olmayan bir saatte yapın:
+çizelgedeki gerçek adlar tahtaya maskeli de olsa çıkar. Denenecek tahtanın "Derslik" alanı
+salon adıyla aynı (ör. salon "10/B Dersliği" → derslik "10/B") ya da sınav sayfasında elle seçili
+olsun. Künyede saati 15–20 dk sonraya alın.
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| S1 | Çizelgeyi Sınavlar → Kelebek'ten içe aktar ile yükleyin | Sınav taslak açılır; ad, tarih, saat, salonlar, dersler doğru; derslik adı tutan salonlar eşleşmiş | |
+| S2 | Künyede süreyi yazın, **Yayına al** | "Sınav yayına alındı"; eşli tahtada "Ajan güncellenmeli" yok | |
+| S3 | Şube dersliği tahtasına **Şube duyurusunu gönder** (Tahta sayfasında "Şubeler" dolu) | Duyuruda "Ah*** Yı****  …47  →  10/B Dersliği, koltuk 2" satırları; öğretmen kapatabiliyor | |
+| S4 | **Gözetmen kodlarını yazdır** (A4) | Sayfada 6 fiş, kesik çizgiler; tahtasız salonun fişinde "yoklamayı kâğıda alın" | |
+| S5 | Başlangıçtan 10 dk önce | Salon tahtası kendiliğinden giriş ekranına geçer; liste sınıfın arka sırasından okunur | |
+| S6 | Giriş ekranında ortak kilit kodunu girmeyi deneyin | Kod tuş takımı yok; ekran kalkmaz | |
+| S7 | Başlangıç anında | Liste kalkar, büyük sayaç ve kurallar gelir | |
+| S8 | **Gözetmen** → yanlış kod, sonra fişteki kod | "Kod geçersiz. N deneme hakkı kaldı."; doğru kodla menü; "Yoklama al" | |
+| S9 | Koltuklara dokunup **Kaydet** | "Yoklama kaydedildi: n öğrenci gelmedi"; panel sınav sayfasında "Yoklama alındı (Tahta …)" | |
+| S10 | Panelden **+10 dk** | Birkaç saniyede sayaç ve bitiş saati değişir | |
+| S11 | Sınav sırasında sunucu programını kapatın | Sayaç sürer; 90 sn sonra "Kilidi aç" çıkar; basınca ekran kalkar; sunucu açılınca sınav ekranı geri gelir | |
+| S12 | Sınav sırasında panelden bir tahtaya duyuru | Ek onay ister; duyuru sınav ekranının üstünde görünür, kapatılınca sınav ekranı döner | |
+| S13 | **Sınav kipini kaldır** (bir salonda) | O tahta sınav ekranından çıkar; alttaki kilit durumu görünür | |
+| S14 | Sınav bitişinde | Tahta kendiliğinden eski durumuna döner | |
+| S15 | **Yoklama icmali** yazdırın | Salon özeti, gelmeyenler şube ve okul no sırasıyla, imza alanları; e-Okul'a işlemeye uygun | |
+| S16 | Tahtada `/var/lib/tahta-kontrol/durum.json` ve servis günlüğü (`journalctl -u tahta-ajan`) | Ad, maske, okul no, gözetmen kodu ya da belirteç yok | |
+| S17 | Kişisel veriyi şimdi sil | Sınav sayfasında yalnız sayılar kalır; icmalde "yalnız sayılar gösterilir" | |
+
 ## 4. Otomatik giriş denemesi (elle)
 
 Yazılım otomatik girişi ayarlamaz. Tanılama raporundaki "Giriş ekranı ve
@@ -165,6 +196,23 @@ ve güncellemeden sonra duruyor mu.
 - Teneffüs kilidi dokunmatik hareketlerle aşılamaz (0.1.x deneme 5 ile aynı varsayım).
 - 200 MB'a yakın `.okulzili` yedeğinin yüklenmesi sunucu bilgisayarında bellek/disk sorunu
   çıkarmaz (dosya geçici olarak tutulur, kalıcı yazılmaz).
+- Sınav kipi (0.5.0):
+  - Kelebek'in gerçek R5 çıktısı, okuyucunun beklediği yapıda (tek sayfa `Dagitim`, A1'de
+    "TOPLU DAĞITIM ÇİZELGESİ", A2'de "ad · gg.aa.yyyy SS:DD · dönem", 4. satırda başlıklar).
+    Yalnız Kelebek'in kodu okunarak ve onu taklit eden uydurma dosyayla denendi.
+  - Kelebek salon adları ile tahta "derslik" adlarının otomatik eşleşme oranı.
+  - 10 dakikalık giriş penceresinin teneffüsle çakışıp önceki dersi bölüp bölmediği.
+  - Giriş ekranındaki listenin (her sütunda en çok 20 satır, yazı yaklaşık 23–28 px) sınıfın
+    arka sırasından okunabilirliği; ETAP ekran boyu ve pikseli.
+  - Koltuk ızgarasının dokunmatikte kullanılabilirliği (40 kişide 9 sütun, düğme yaklaşık 190×120 px);
+    yanlış dokunma oranı.
+  - Sınav sırasında tahta–sunucu ağının kesintisizliği (kural 3 düğmesinin sınavda görünme ihtimali).
+  - Gözetmen fişinin zarf usulüyle dağıtımının idarenin sabah iş akışına uyumu.
+  - Tahtanın monotonik saatinin sınav boyunca düzgün işlemesi (uyku/askıya alma kapalı).
+  - Sınav ekranının ETAP'ın pencere yöneticisinde EBA içeriği ya da tam ekran videonun
+    üstüne çıkması (Debian 12 + openbox'ta çıktı).
+  - Dayanaklar: KVKK md. 12 ve sınav kurallarındaki "ilk ve son 10 dakika" kuralı
+    doğrulanacaklar listesindedir (`docs/tasarim.md` §16); arayüzde atıf yoktur.
 
 ## 6. Sorun olursa
 
