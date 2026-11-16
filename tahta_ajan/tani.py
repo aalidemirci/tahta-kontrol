@@ -341,6 +341,52 @@ def _sunucu_adresleri(sunucular):
     return (TAMAM if erisilen == n else UYARI), ayrinti
 
 
+def usb_satirlari(usb: dict | None, udisks=None, mountinfo: str | None = None) -> list[tuple[str, str, str]]:
+    """USB anahtar (0.11.0) bölümü: yalnız sayı ve evet/hayır. Bağlama yolu, bellek etiketi, hesap adı, anahtar
+    kimliği ve gizli değer YAZILMAZ (§8). `usb`: servisin `usb_tani_bilgisi()`; servis dışından çalıştırılınca None."""
+    from . import usb_anahtar
+
+    if usb is None:  # servis dışından: bellekler bu anda sayılır (dosya okunmaz)
+        usb = {"ozellik": None, "izleme": None, "takili": None, "elenen": {}, "son_okuma": "", "son_dogrulama": ""}
+        if mountinfo is None and os.path.exists(sistem.MOUNTINFO):
+            try:
+                with open(sistem.MOUNTINFO, encoding="utf-8", errors="replace") as dosya:
+                    mountinfo = dosya.read()
+            except OSError:
+                mountinfo = None
+        if mountinfo is not None:
+            adaylar, elenen = sistem.cikarilabilir_baglamalar(mountinfo)
+            usb.update(takili=len(adaylar), elenen=elenen)
+    ozellik = {"acik": (BILGI, "açık (sunucu ayarı)"), "kapali": (BILGI, "kapalı"),
+               "bildirmedi": (BILGI, "sunucu bildirmedi (eski sunucu ya da henüz bağlanmadı)")}.get(
+        usb.get("ozellik"), (BILGI, "servis dışından çalıştırıldı; servis raporunda görünür"))  # fmt: skip
+    izleme = {"izleniyor": (TAMAM, "izleniyor"), "kapali": (BILGI, "kapalı"),
+              "desteklenmiyor": (UYARI, "desteklenmiyor: /proc/self/mountinfo yok")}.get(
+        usb.get("izleme"), (BILGI, "bilinmiyor"))  # fmt: skip
+    udisks = sistem.udisks_calisiyor() if udisks is None else udisks
+    if udisks is True:
+        bagla = (TAMAM, "çalışıyor")
+    elif udisks is False:
+        bagla = (UYARI if usb.get("ozellik") == "acik" else BILGI, "çalışmıyor — bellekler bağlanmaz, USB anahtar çalışmaz")
+    else:
+        bagla = (BILGI, "bilinmiyor (systemctl yok)")
+    takili = usb.get("takili")
+    elenen = usb.get("elenen") or {}
+    elenen_metni = ", ".join(f"{ad}: {int(elenen.get(k, 0))}" for k, ad in usb_anahtar.ELENME_ADLARI.items())
+    son_okuma = usb_anahtar.OKUMA_ADLARI.get(usb.get("son_okuma") or "", "yok")
+    if usb.get("son_okuma") == "surum":
+        son_okuma = "reddedildi: sürüm"
+    return [
+        ("USB anahtar: özellik", *ozellik),
+        ("USB anahtar: izleme", *izleme),
+        ("USB anahtar: otomatik bağlama hizmeti (udisks2)", *bagla),
+        ("USB anahtar: takılı çıkarılabilir bellek", BILGI, "bilinmiyor" if takili is None else str(int(takili))),
+        ("USB anahtar: elenen bağlama", BILGI, f"{sum(int(v) for v in elenen.values())} ({elenen_metni})"),
+        ("USB anahtar: son okuma sonucu", BILGI, son_okuma),
+        ("USB anahtar: son sunucu doğrulaması", BILGI, usb.get("son_dogrulama") or "yok"),
+    ]
+
+
 def _servis():
     if not os.path.isdir("/run/systemd/system"):
         return UYARI, "systemd çalışmıyor; ajan servis olarak başlatılamaz."
@@ -352,11 +398,12 @@ def _servis():
 
 def topla(
     sunucu_makine: str = "", sunucu_port: int = 0, sunucu_saat=None, ekranlar=None, sinav_kipi=None, sunucular=None,
-    kilit=None, dugme=None,
+    kilit=None, dugme=None, usb=None,
 ) -> dict:  # fmt: skip
     """sinav_kipi: servisin "yok" / "giris (kimlik)" / "suruyor (kimlik)" satırı (A4). Liste, ad, kod girmez.
     sunucular: ajanın deneme sırasındaki adresler (A6); rapora yalnız sayıları girer.
-    kilit / dugme (0.9.0): servisin kilit ve yüzer düğme satırları; servis dışından çalıştırılınca None."""
+    kilit / dugme (0.9.0): servisin kilit ve yüzer düğme satırları; servis dışından çalıştırılınca None.
+    usb (0.11.0): servisin `usb_tani_bilgisi()` sözlüğü (yalnız sayılar); servis dışından None."""
     ekranlar = ekranlar or []
     ag = sistem.ag_bilgisi(sunucu_makine, sunucu_port) if sunucu_makine else {}
     if not sistem.LINUX:
@@ -398,4 +445,9 @@ def topla(
         except Exception as hata:  # tanılama hiçbir koşulda ajanı düşürmez
             sonuc, ayrinti = UYARI, f"denetim çalışmadı: {type(hata).__name__}: {hata}"
         denetimler.append({"ad": ad, "sonuc": sonuc, "ayrinti": ayrinti})
+    try:
+        for ad, sonuc, ayrinti in usb_satirlari(usb):
+            denetimler.append({"ad": ad, "sonuc": sonuc, "ayrinti": ayrinti})
+    except Exception as hata:  # tanılama hiçbir koşulda ajanı düşürmez
+        denetimler.append({"ad": "USB anahtar", "sonuc": UYARI, "ayrinti": f"denetim çalışmadı: {type(hata).__name__}"})
     return {"ajan_surumu": __version__, "zaman": int(time.time()), "denetimler": denetimler}

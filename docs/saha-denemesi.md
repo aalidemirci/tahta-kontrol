@@ -372,6 +372,42 @@ Panelden ya da yazılımdan çıkan sayılar dışında gerçek veri, ekran gör
 | P4 | Mevcut programı indir → Excel'de bir şubeyi değiştir → şablon olarak geri yükle | Önizlemede yalnız o değişiklik (~); onay; "Önceki programlar"dan geri yükleme eski hâle döndürür | |
 | P5 | Yapay zekâ ile dönüştür: istemi kopyala, okulun dağıttığı programla (kişi adları silinmiş) kurumun izin verdiği araçta çalıştır, çıktıyı yapıştır | Önizlemede şube başına ders sayıları asıl programla karşılaştırılır; hatalı satırlar listelenir | |
 
+### 3.10 USB anahtar (0.11.0)
+
+Hazırlık: Ayarlar › USB anahtar'da "USB anahtar kullanılsın"ı açın. Yoklama › USB anahtarlar'dan kendinize
+bir anahtar üretin (PIN'i not alın), bir öğretmene de anahtar üretin. İndirilen `tahta-kontrol.anahtar`
+dosyasını adını değiştirmeden iki ayrı belleğin en üst klasörüne kopyalayın (bellekte başka dosyalar da
+dursun; biçimlendirmeyin). Bilgisayardaki kopyayı silin.
+
+- [ ] **Bellek takılınca ne oluyor?** Dosya yöneticisi penceresi kendiliğinden açılıyor mu? Açılıyorsa
+      anahtar dosyası sınıfın önünde listelenir: fotoğraf çekmeden not edin; PIN varsayılanları gözden
+      geçirilecek (tasarım §17 açık soru 63). `ogretmen`, `ogrenci`, `etapadmin` ve kişisel hesapta ayrı ayrı.
+- [ ] Bellek otomatik bağlanıyor mu; bağlama `/media/<hesap>/<etiket>` mı, `/run/media/<hesap>/…` mı
+      (`findmnt -l | grep media`; yolu buraya ya da depoya YAZMAYIN, yalnız "media / run-media" yazın).
+- [ ] Takınca köşede "USB anahtar tanındı · …" bildirimi kaç saniyede çıkıyor (hedef ≤ 3 sn)? Tam ekran
+      sunum (LibreOffice Impress, tarayıcı F11) açıkken bildirim üstte görünüyor mu?
+- [ ] Bildirimdeki "Yoklama al" (öğretmen anahtarı, PIN kapalı): kod ve PIN sorulmadan şube/ders seçimi
+      geliyor mu? Yoklamayı kaydedin; panelde öğretmenin adıyla görünüyor mu?
+- [ ] İdare anahtarıyla (PIN açık): "Yoklama al" yalnız PIN istiyor mu; kayıt panelde "idare (kullanıcı adı)"
+      diye görünüyor mu? Yanlış PIN'de "PIN hatalı." çıkıyor mu?
+- [ ] Yoklama listesi açıkken belleği çıkarın: liste açık kalıyor ve kaydediliyor mu? PIN sorulan ekrandayken
+      çıkarın: ekran "USB anahtar çıkarıldı." ile kapanıyor mu?
+- [ ] Tahtayı panelden kilitleyin, belleği takın: kilit ekranında "USB anahtarla aç" çıkıyor mu, dokununca
+      (gerekiyorsa PIN'den sonra) kilit açılıyor mu? İşlem kaydında "Kilit USB anahtarla açıldı" satırı.
+- [ ] Belleği 10 dakikadan uzun takılı bırakın, sonra "Yoklama al": "çok uzun süredir takılı" iletisi ve
+      normal kod + PIN ekranı geliyor mu? Çıkarıp takınca yeniden tanınıyor mu?
+- [ ] Sunucuyu durdurun, belleği takın: "USB anahtar şu an kullanılamıyor: sunucuya ulaşılamıyor." çıkıyor mu;
+      90 sn sonra kilit ekranındaki çevrimdışı düğmesi eskisi gibi çalışıyor mu?
+- [ ] Panelden anahtarı iptal edin (yoklama ekranı açıkken): tahtadaki yoklama kaydedilemiyor ve bellek
+      yeniden takılınca "iptal edilmiş" deniyor mu?
+- [ ] exFAT ya da NTFS biçimli bir bellek de deneyin (bağlama `fuseblk`/`ntfs3`): kök servis dosyayı okuyabiliyor mu?
+- [ ] Tahtanın kart okuyucusu ya da USB çoğaltıcısı üzerinden takılan bellek tanınıyor mu? Tanılamada
+      "USB anahtar: elenen bağlama" satırında "çıkarılabilir değil" sayısı artıyorsa not edin.
+- [ ] Merkezî yönetim (LiderAhenk) USB depolamayı kısıtlıyor mu? Kısıtlıysa özellik o tahtada çalışmaz.
+- [ ] Aynı anahtarı iki derslikte 60 sn içinde kullanın: panelde "kopyalanmış olabilir" rozeti çıkıyor mu?
+      Derslikler arası gerçek yürüme süresi 60 sn eşiğine uyuyor mu?
+- [ ] Tanılama raporunda "USB anahtar: …" satırları: udisks2 "çalışıyor" mu; yol, etiket, ad görünmüyor mu?
+
 ### 3.7 Windows hizmeti (K8, 0.8.0)
 
 Hazırlık: bu denemeler yönetici yetkisi ister ve **önce deneme bilgisayarında** yapılmalıdır.
@@ -543,6 +579,20 @@ ve güncellemeden sonra duruyor mu.
       son yazılarının `-wal` dosyasıyla taşındığı (birim testinde WAL'lı veritabanıyla denendi).
     - Kurucu hesabının `{localappdata}`'sı, yönetici parolasını başka hesap girdiğinde o hesabın
       klasörüdür; bu yüzden bütün profiller taranır (`ProfileList`).
+  - USB anahtar (0.11.0; yalnız Debian 12 kabında loop bellekle denendi, §3.10):
+    - Bellek takılınca ETAP'ın oturumdaki dosya yöneticisi (udisks2) belleği kendiliğinden bağlar ve bağlama
+      `/media/<hesap>/<etiket>` ya da `/run/media/<hesap>/<etiket>` altındadır; otomatik bağlama kapalıysa
+      ya da merkezî yönetim USB depolamayı kısıtlıyorsa özellik çalışmaz (servis bilerek bağlamaz).
+    - **Dosya yöneticisi penceresi kendiliğinden açılıyorsa anahtar dosyası herkese görünür — okulda denetlenecek.**
+    - Gerçek USB belleğin `/sys/dev/block/MAJ:MIN` yolunda `/usb` geçer ya da diskin `removable` değeri 1'dir
+      (kart okuyucu ve USB çoğaltıcı dahil); Docker'da yalnız `TAHTA_AJAN_USB_BENZETIM=1` ile `loop` kabul edildi.
+    - exFAT/NTFS bellek (`fuseblk`, `ntfs3`) kök servisçe okunabilir; fuseblk'te asıl aygıt mountinfo'nun
+      kaynak alanındaki `/dev/sdX1`'den çözülür.
+    - `/proc/self/mountinfo` üzerinde `poll` ETAP çekirdeğinde bağlama değişikliğini bildirir (yoksa 5 sn'lik
+      yedek yoklama devreye girer; tanıma en geç ~5 sn gecikir).
+    - Köşedeki bildirim (override-redirect pencere) tam ekran sunumun üstünde görünür; XFCE'de odak çalmaz.
+    - `tahta-kontrol.anahtar` adı ETAP'ın kendi "USB ile giriş" düzeninin dosya adıyla çakışmaz (doğrulanamadı).
+    - 60 sn'lik "iki tahtada kısa arayla" eşiği derslikler arası yürüme süresinden kısadır.
   - Dayanaklar: KVKK md. 12 ve "yeterli önlemler" kararı doğrulanacaklar listesindedir
     (`docs/tasarim.md` §18); arayüzde atıf yoktur.
 

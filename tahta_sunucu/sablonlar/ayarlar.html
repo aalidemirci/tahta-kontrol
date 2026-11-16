@@ -1,7 +1,7 @@
 {% extends "taban.html" %}
 {% block baslik %}Ayarlar · Tahta Kontrol{% endblock %}
 {# Okul kimliği işlemlerinin iletisi sayfa başında değil, #kimlik bölümünde çizilir (yönlendirme oraya kayar). #}
-{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in ('kimlik', 'acil', 'sinav', 'adresler', 'saklama', 'temizlik', 'dugme', 'acilis') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
+{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in ('kimlik', 'acil', 'sinav', 'adresler', 'saklama', 'temizlik', 'dugme', 'acilis', 'yoklama', 'usb_anahtar') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}
 <div class="sayfa-bas"><h1>Ayarlar</h1></div>
 {% if saklama_durumu.uyari %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ saklama_durumu.uyari }} <a href="#saklama">Kişisel veri saklama</a></p>{% endif %}
@@ -164,6 +164,35 @@
     </div>
     <p class="not">Yoklamalar öğretim yılı sonuna kadar saklanır (<a href="#saklama">Kişisel veri saklama</a>).</p>
     <p class="dugme-satiri"><button class="ana">Yoklama ayarlarını kaydet</button></p>
+  </form>
+</section>
+
+{# USB anahtar (0.11.0): ayrı form (bolum=usb_anahtar); yalnız `usb_anahtar` anahtarını yazar. Varsayılan kapalı.
+   Tahtaya yalnız açık/kapalı bayrağı gider (ayar.usb_anahtar.etkin); PIN ve kilit seçenekleri sunucuda uygulanır. #}
+<h2 id="usb-anahtar">USB anahtar</h2>
+<section class="kutu" aria-labelledby="usb-anahtar" id="usb_anahtar">
+  {% if mesaj and ileti_yeri == 'usb_anahtar' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <p class="ipucu" id="usb-ipucu">İdareciler ve isteyen öğretmenler belleğe kopyaladıkları küçük bir anahtar dosyasıyla tahtada yoklama alır.
+    Bellek biçimlendirilmez ve anahtar olarak işgal edilmez: dosya belleğin en üst klasöründe öteki dosyaların yanında durur.
+    Takılınca hiçbir ekran kendiliğinden açılmaz; tahtada küçük bir bildirim çıkar, yoklama ve kilit açma dokunuşla başlar.
+    Anahtarlar <a href="/usb-anahtarlar">Yoklama › USB anahtarlar</a> sekmesinden üretilir ve iptal edilir.</p>
+  {% if usb_ayari.etkin and usb_yoklama_kapali %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Ders yoklaması kapalı; USB anahtar yalnız kilit açmada işe yarar (<a href="#ders-yoklamasi">Ders yoklaması</a>).</p>{% endif %}
+  <form method="post" action="/ayarlar" class="form-dar">
+    <input type="hidden" name="bolum" value="usb_anahtar">
+    <div class="onay-alani"><label class="satir"><input type="checkbox" name="ua_etkin" value="1" {% if usb_ayari.etkin %}checked{% endif %} aria-describedby="ua-etkin-not"> USB anahtar kullanılsın</label></div>
+    <p class="not" id="ua-etkin-not">Kapalıyken tahtalar takılan belleklere hiç bakmaz.</p>
+    <div class="onay-alani"><label class="satir"><input type="checkbox" name="ua_kilit_acar" value="1" {% if usb_ayari.kilit_acar %}checked{% endif %} aria-describedby="ua-kilit-not"> USB anahtar kilitli tahtayı açabilsin</label></div>
+    <p class="not" id="ua-kilit-not">Ortak kilit kodunun yaptığını yapar; sınav ekranında çalışmaz. İdare ve öğretmen anahtarlarının ikisi de açar.</p>
+    <fieldset class="olcut">
+      <legend>Anahtarla birlikte PIN de sorulsun</legend>
+      <div class="secenekler"><label><input type="checkbox" name="ua_pin_idare" value="1" {% if usb_ayari.pin_idare %}checked{% endif %}> İdare anahtarlarında (önerilen)</label><label><input type="checkbox" name="ua_pin_ogretmen" value="1" {% if usb_ayari.pin_ogretmen %}checked{% endif %}> Öğretmen anahtarlarında</label></div>
+    </fieldset>
+    <p class="not">Öğretmen anahtarında PIN, öğretmenin kendi yoklama PIN'idir.</p>
+    <p class="not">Not: Anahtar bir dosyadır ve kopyalanabilir. Bellek tahtada takılıyken dosya, tahtadaki oturumdan görülebilir.
+      PIN, kopyalanan dosyayı tek başına işe yaramaz kılar. Kaybolan anahtarı hemen iptal edin.
+      Sunucuya ulaşılamayan tahtada USB anahtar çalışmaz (kilit, sunucu 90 saniye görülmezse tahtadan açılır).
+      {% if usb_ayari.etkin and usb_destek.eski %}{{ usb_destek.eski }} tahtada ajan güncellenmeli (eski ajan belleğe bakmaz).{% endif %}</p>
+    <p class="dugme-satiri"><button class="ana">USB anahtar ayarını kaydet</button></p>
   </form>
 </section>
 

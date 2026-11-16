@@ -1,0 +1,41 @@
+{% extends "taban.html" %}
+{% block baslik %}USB anahtar hazır · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Yalnız POST yanıtı (Cache-Control: no-store; şartname §4.3). Gizli değer sayfada YOKTUR, yalnız tek seferlik
+   indirilen dosyada; idare anahtarının PIN'i yalnız burada bir kez görünür. Bağlam: panel_usb.py SÖZLEŞME. #}
+<div class="sayfa-bas"><div class="bas-yazi">
+  <h1>Anahtar hazır: <span class="kod">{{ kimlik }}</span></h1>
+  <p>{{ sahip_metni }} · {{ 'öğretmen anahtarı' if tur == 'ogretmen' else 'idare anahtarı' }}{% if etiket %} · {{ etiket }}{% endif %}</p>
+</div></div>
+{% if ozellik_kapali %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>USB anahtar Ayarlar'da kapalı; anahtar tahtalarda çalışmaz.</p>{% endif %}
+
+<div class="iki-sutun">
+  <section class="kutu" aria-labelledby="indir-bas">
+    <h2 id="indir-bas">1. Dosyayı indirin</h2>
+    <p class="dugme-satiri"><a class="dugme ana" href="{{ indir_adresi }}" data-tek-indirme="indir-bilgi"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Anahtar dosyasını indir</a></p>
+    <p class="not" id="indir-bilgi" role="status" hidden>İndirme başladı. Dosya tarayıcının İndirilenler klasöründe; bağlantı yeniden kullanılamaz.</p>
+    <p class="not">Bağlantı {{ omur_dk }} dakika içinde ve yalnız bir kez çalışır; indirilmezse anahtar kaydedilmez.
+      Anahtar, dosya indirildiği anda geçerli olur.</p>
+    {% if pin %}
+    <div class="bant uyari usb-pin-kutu" role="note">
+      <p>Bu anahtarın PIN'i: <strong class="pusula-pin">{{ pin }}</strong></p>
+      <p>Bir daha gösterilmeyecek. Not alın, belleğe yazmayın.{% if not pin_sorulur %} (PIN şu an sorulmuyor; Ayarlar'da açılırsa bu PIN geçerli olur.){% endif %}</p>
+    </div>
+    {% elif tur == 'ogretmen' %}
+    <p class="not">{% if pin_sorulur %}Tahta anahtarla birlikte PIN de sorar: öğretmen kendi yoklama PIN'ini kullanır.{% else %}PIN istenirse öğretmen kendi yoklama PIN'ini kullanır (şu an sorulmuyor).{% endif %}</p>
+    {% endif %}
+  </section>
+  <section class="kutu" aria-labelledby="bellek-bas">
+    <h2 id="bellek-bas">2. Belleğe kopyalayın</h2>
+    <ol class="adimlar">
+      <li>Dosyayı adını değiştirmeden belleğin en üst klasörüne kopyalayın (<span class="kod">{{ dosya_adi }}</span>).
+        Bellekteki diğer dosyalarınız olduğu gibi kalır; bellek biçimlendirilmez.</li>
+      <li>Bilgisayarınızdaki indirilen kopyayı silin (İndirilenler klasörü ve çöp kutusu).</li>
+      <li>Tahtaya takınca köşede "USB anahtar tanındı" yazar; "Yoklama al" ile yoklama, kilitli tahtada "USB anahtarla aç" ile kilit açılır.</li>
+    </ol>
+    <p class="not">Tarayıcı dosyayı "tahta-kontrol (1).anahtar" gibi başka bir adla kaydederse tahta onu tanımaz; adını düzeltin.</p>
+  </section>
+</div>
+<p class="not">Kaybolan bellek: idareye bildirin; anahtar <a href="/usb-anahtarlar">USB anahtarlar</a> sayfasından iptal edilir. Dosyada ad, kod ya da okul adı yoktur.</p>
+<p><a href="/usb-anahtarlar">← USB anahtarlar</a></p>
+{% endblock %}

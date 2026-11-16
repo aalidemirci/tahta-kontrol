@@ -390,6 +390,41 @@ GOCLER = [
         tahta_sayisi INTEGER NOT NULL,
         veri_json TEXT NOT NULL);               -- [[tahta_id, gun, devre, ders_no, sube], ...]
     """,
+    # 0.11.0 — USB anahtar: yalnız gizli değerin özeti; yoklama belirteci idare oturumunu da taşır.
+    # Belirteç tablosu yeniden kurulur (ogretmen_id NOT NULL kalkar; satırlar ≤ 15 dk yaşar, göçte düşer).
+    """
+    CREATE TABLE usb_anahtar (
+        id INTEGER PRIMARY KEY,
+        kimlik TEXT NOT NULL UNIQUE,            -- 'K7Q2M9XA'; gizli değil
+        gizli_ozet TEXT NOT NULL,               -- sha256(gizli) onaltılık
+        sahip_turu TEXT NOT NULL,               -- 'kullanici' | 'ogretmen'
+        kullanici_id INTEGER REFERENCES kullanici(id) ON DELETE CASCADE,
+        ogretmen_id INTEGER REFERENCES ogretmen(id) ON DELETE CASCADE,
+        etiket TEXT NOT NULL DEFAULT '',        -- "Mavi bellek" gibi; kişi adı yazılmaz
+        pin_ozet TEXT,                          -- yalnız kullanıcı anahtarında (guvenlik.parola_ozetle)
+        hatali_sayi INTEGER NOT NULL DEFAULT 0, -- yalnız kullanıcı anahtarının PIN'i
+        hatali_ilk INTEGER,
+        durum TEXT NOT NULL DEFAULT 'etkin',    -- 'etkin' | 'kilitli' | 'iptal'
+        olusturan TEXT NOT NULL,                -- panel kullanıcı adı
+        olusturma INTEGER NOT NULL,
+        iptal_eden TEXT, iptal_zamani INTEGER,
+        son_kullanim INTEGER,                   -- yalnız SON başarılı tanıma/işlem (geçmiş tutulmaz)
+        son_tahta_id INTEGER REFERENCES tahta(id) ON DELETE SET NULL,
+        kopya_uyarisi INTEGER,                  -- son "iki tahtada" uyarısının zamanı
+        CHECK ((sahip_turu = 'kullanici' AND kullanici_id IS NOT NULL AND ogretmen_id IS NULL)
+            OR (sahip_turu = 'ogretmen' AND ogretmen_id IS NOT NULL AND kullanici_id IS NULL)));
+    CREATE INDEX usb_anahtar_kullanici ON usb_anahtar (kullanici_id, durum);
+    CREATE INDEX usb_anahtar_ogretmen ON usb_anahtar (ogretmen_id, durum);
+    DROP TABLE yoklama_belirtec;
+    CREATE TABLE yoklama_belirtec (
+        belirtec_ozet TEXT PRIMARY KEY,         -- guvenlik.ozet(belirtec)
+        ogretmen_id INTEGER REFERENCES ogretmen(id) ON DELETE CASCADE,
+        kullanici_id INTEGER REFERENCES kullanici(id) ON DELETE CASCADE,
+        anahtar_id INTEGER REFERENCES usb_anahtar(id) ON DELETE CASCADE,   -- NULL: kod + PIN ile açıldı
+        tahta_id INTEGER NOT NULL REFERENCES tahta(id) ON DELETE CASCADE,
+        bitis INTEGER NOT NULL, olusturma INTEGER NOT NULL,
+        CHECK ((ogretmen_id IS NULL) <> (kullanici_id IS NULL)));
+    """,
 ]
 GOC_ONCESI_KALAN = 3
 # Göç (ve göç öncesi kopya), yedek alma ve geri yükleme aynı anda çalışmaz (A6 K-B2).

@@ -1,7 +1,8 @@
 {% extends "taban.html" %}
 {% block baslik %}Öğretmenler ve PIN · Tahta Kontrol{% endblock %}
 {% block icerik %}
-{# Öğretmenler ve yoklama PIN'leri (Aşama 5 §6.5). Bağlam: ogretmenler (yoklama.ogretmen_listesi), yonetici, pin_yok_sayisi.
+{# Öğretmenler ve yoklama PIN'leri (Aşama 5 §6.5). Bağlam: ogretmenler (yoklama.ogretmen_listesi), yonetici, pin_yok_sayisi,
+   usb_sayilari {ogretmen_id: iptal edilmemiş USB anahtar sayısı} (0.11.0; "USB anahtar" sütunu).
    Yeni PIN ve kilit açma iki role açık; ekleme, düzenleme, pasifleştirme ve toplu PIN yalnız yönetici.
    PIN düz metni bu sayfada yoktur: yalnız POST yanıtındaki pusulada bir kez görünür. #}
 {% with bolum='ogretmenler', bas_baslik='Öğretmenler ve PIN',
@@ -36,7 +37,7 @@
 <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="ogretmen-tablo">
 <table class="ogretmen-tablo">
   <caption id="ogretmen-tablo">{{ ogretmenler | length }} öğretmen</caption>
-  <thead><tr><th scope="col">Ad Soyad</th><th scope="col">Kod</th><th scope="col">PIN</th><th scope="col" class="sayi-hucre">Son 24 sa hatalı</th><th scope="col">İşlemler</th></tr></thead>
+  <thead><tr><th scope="col">Ad Soyad</th><th scope="col">Kod</th><th scope="col">PIN</th><th scope="col" class="sayi-hucre">Son 24 sa hatalı</th><th scope="col">USB anahtar</th><th scope="col">İşlemler</th></tr></thead>
   <tbody>
   {% for o in ogretmenler %}
   <tr{% if not o.aktif %} class="pasif"{% endif %}>
@@ -48,6 +49,8 @@
       {%- else %}<span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>PIN yok</span>{% endif -%}
     </td>
     <td data-etiket="Son 24 sa hatalı" class="sayi-hucre">{{ o.hatali }}</td>
+    {%- set usb_n = (usb_sayilari or {}).get(o.id, 0) %}
+    <td data-etiket="USB anahtar">{{ (usb_n ~ ' anahtar') if usb_n else '—' }}{% if yonetici and o.aktif and o.kod and usb_n < 2 %} <a href="/usb-anahtarlar?ogretmen_id={{ o.id }}#ogretmen">Üret<span class="gizli"> ({{ o.ad_soyad }})</span></a>{% endif %}</td>
     <td data-etiket="İşlemler">
       <div class="islemler">
         {% if o.kilitli %}<form method="post" action="/ogretmenler"><input type="hidden" name="eylem" value="pin_kilit_ac"><input type="hidden" name="id" value="{{ o.id }}"><button class="ana">Kilidi aç</button></form>{% endif %}

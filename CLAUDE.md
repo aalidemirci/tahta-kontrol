@@ -6,7 +6,11 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.10.0, saha denemesi sürümü** (0.10.0: Okul Zili'ne bağlı olmayan zil düzenleyicisi —
+- Durum: **0.11.0, saha denemesi sürümü** (0.11.0: USB anahtar — bellekteki küçük anahtar dosyasıyla
+  idareciler her tahtada yoklama alır, isteyen öğretmenlere de anahtar üretilir, ayar açıksa anahtar kilidi
+  açar; takılınca yalnız küçük bildirim, yoklama/kilit dokunuşla; varsayılan kapalı; yalnız Debian 12 kabında
+  loop bellekle (USB benzetimi) denendi, gerçek USB bellek ve ETAP'ta denenmedi; tasarım §14.1;
+  0.10.0: Okul Zili'ne bağlı olmayan zil düzenleyicisi —
   adlandırılmış çizelgeler, haftalık düzen, tarihe özel çizelge, günü önizle, CSV; ders programını içe
   aktarma sihirbazı — aSc XML "deneme", şablon CSV/XLSX, yapay zekâ istemi, önceki programlar; yalnız
   sunucu, ajan değişmedi; tasarım §12.2–12.3; 0.9.0: gerçek ETAP tahtasındaki ilk saha bulguları G1–G3 —
@@ -69,6 +73,10 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   panel_yoklama.py  /yoklama (günlük ızgara, kayıt/düzeltme, panelden gir, icmal + .csv, e-Okul işareti),
                     /ogretmenler (PIN pusulası), /ogrenciler (önizle/aktar/temizle), /ajan/yoklama/*;
                     sonunda şablon bağlamlarının SÖZLEŞME bloğu
+  panel_usb.py      USB anahtar (0.11.0): /usb-anahtarlar (üret, iptal), /usb-anahtarlar/indir/{belirtec} (tek
+                    seferlik, 5 dk), /ajan/usb/{tani,yoklama,kilit_ac}; sonunda SÖZLEŞME bloğu
+  usb_anahtar.py    USB anahtar iş mantığı (FastAPI'siz): ayar, dosya biçimi/ayrıştırıcı (ajandakiyle aynı),
+                    bekleyen indirmeler, tanıma, PIN (öğretmen PIN'i ya da anahtar PIN'i), kopya uyarısı, iptal, yıl sonu
   panel_altyapi.py  /yedekler (parola, ayar, al, indir, geri-yukle + onay/uygula), /envanter (+ .csv),
                     /tahta/{id}/envanter, /tahta/{id}/donanim-goruldu, /arizalar, /ariza/{id}, /yerel/durum
   yedek.py      şifreli yedek .tkyedek (scrypt → X25519 → HKDF → AES-GCM), saklama, ikinci kopya, geri yükleme
@@ -81,7 +89,7 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 program_gecmis.html (0.10.0);
                 sinavlar.html, sinav.html, sinav_yoklama.html, sinav_kodlar.html, sinav_icmal.html, _sinav.html;
                 yoklama*.html, ogretmenler.html, ogretmen_pusula.html, ogrenciler.html, ogrenci_onizleme.html
-                ve ortak başları _yoklama_bas.html (sekmeler + KVKK notu);
+                ve ortak başları _yoklama_bas.html (sekmeler + KVKK notu); usb_anahtarlar.html, usb_anahtar_uretildi.html;
                 yedekler.html, yedek_onay.html, yedek_geri_yukle.html, envanter.html, arizalar.html,
                 ariza.html, _ariza.html (durum rozeti + açma formu makroları), _tahta_altyapi.html
   yoklama.py    ders yoklaması iş mantığı (FastAPI'siz): ayar, A3 uyarlama işlevleri, öneri, PIN kapısı
@@ -137,14 +145,18 @@ tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
                 ders yoklaması (ayar.yoklama_etkin, self.yoklama; belirteç yalnız _yoklama_belirtec'te), yerel soket
                 (ilk satır `arayuz: komut` ise kısa ömürlü istemci: ona yayın yok, ekran sayılmaz);
                 A6: adres listesi (_istemci_kur/_adres_hatasi/_adres_basarili), envanter (donanim_tazele,
-                envanter_iste), arıza kuyruğu (ariza_bildir, durum.json `ariza_kuyrugu`); döngünün bir turu _tur()
+                envanter_iste), arıza kuyruğu (ariza_bildir, durum.json `ariza_kuyrugu`); döngünün bir turu _tur();
+                USB anahtar (0.11.0): izleme iş parçacığı (yalnız ayar açıkken), self.usb durum makinesi, gizli
+                yalnız _usb_gizli'de; _usb_tara, _usb_tani_iste, _usb_kilit_*, _usb_yoklama_baslat
+  usb_anahtar.py  USB anahtar (0.11.0, saf): dosya_coz (sunucuyla aynı), mountinfo_coz, aday_nedeni, ekran metinleri
   envanter.py   envanteri §5.4 biçiminde kurar (seri yer tutucuları boşaltılır), özet
   ariza_penceresi.py  "Arıza bildir" penceresi (GTK3, ayrı süreç; kullanıcı yetkisiyle); gonder() servise
                 `merhaba arayuz=komut` + `ariza` yollar, `ariza_sonuc` bekler
   ekran.py      oturumda çalışan kilit/duyuru/kapatma/acil penceresi (GTK3), üst bantta logo ve okul adı;
                 program kilidinde "Teneffüs · Tahta 10:40'ta açılır." satırı (saat_eki sunucudakiyle aynı);
                 sınav sayfaları: sinav-giris, sinav, gozetmen-kod, gozetmen-menu, gozetmen-yoklama;
-                yoklama sayfaları: yoklama-pin, yoklama-liste, yoklama-onay, yoklama-ileti; kilitte "Yoklama al";
+                yoklama sayfaları: yoklama-pin (USB kipi: yalnız PIN), yoklama-liste, yoklama-onay, yoklama-ileti;
+                kilitte "Yoklama al" ve "USB anahtarla aç"; usb-pin sayfası; UsbBildirimi (köşe, odak çalmaz);
                 ölçüler 1920x1080 için yazılır, ekran_olcegi() ile pencerenin monitörüne orantılanır (0.7.1)
 scripts/ekran_olcum.py  Docker/Xvfb'de her tahta sayfasının ekrana sığıp sığmadığını ölçer (uydurma veri)
   __main__.py   komut satırı; `tahta-ajan yoklama` ("Yoklama Al" kısayolu) servise yoklama_ac yollar;
@@ -152,7 +164,8 @@ scripts/ekran_olcum.py  Docker/Xvfb'de her tahta sayfasının ekrana sığıp s�
   ayar.py       yapılandırma, varsayılan tahta paleti, logonun servis tarafında saklanması, adres doğrulama/sırası
   baglanti.py   sunucu istemcisi (Istemci): HTTPS, sertifika zinciri yerine parmak izi denetimi (tutmazsa tek bayt gitmez)
   sistem.py     işletim sistemine dokunan HER ŞEY (yeni platform = bu dosya); ortak_oturum, temizlik
-                sürecini oturum sahibinin kimliğiyle başlatma (tarayici_temizligi, pencereleri_kapat)
+                sürecini oturum sahibinin kimliğiyle başlatma (tarayici_temizligi, pencereleri_kapat);
+                USB (0.11.0): BaglamaIzleyici (mountinfo poll), cikarilabilir_baglamalar, anahtar_oku, udisks_calisiyor
   temizlik.py   oturum temizliğinin işletim sistemi işleri (ikinci dosya; ayrı süreçte çalışır,
                 `python3 -m tahta_ajan.temizlik tarayici|pencereler`): beyaz liste, yol/bağ koruması,
                 tarayıcı süreçleri, X11 _NET_CLOSE_WINDOW (ctypes libX11), ad içermeyen rapor
@@ -274,8 +287,23 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    (yeni sertifika = bütün tahtalar kopar, kural 4). Taşıma kodları `.iss` ile `tasima.py`'de aynıdır
    (`test_kurucu_tasima_kodlari_python_ile_ayni`). `hizmet.py` modül düzeyinde pywin32 içe aktarmaz.
 
+29. **USB anahtar dar yetkidir ve belleği işgal etmez** (0.11.0; `docs/tasarim.md` §14.1). Servis belleği
+   biçimlendirmez, BAĞLAMAZ (bağlamayı oturumdaki udisks2 yapar), yazmaz; yalnız bağlamanın kök dizinindeki
+   `tahta-kontrol.anahtar`'ı `O_NOFOLLOW`/`dir_fd` ile, ≤ 1 KB, ayrı iş parçacığında 3 sn zaman aşımıyla okur.
+   Gizli değer yalnız servis belleğinde, tanındıktan sonra en çok 10 dk durur; ekran yardımcısına, `durum.json`'a,
+   günlüğe, tanılamaya gitmez; bağlama yolu ve bellek etiketi de yazılmaz. Dosyadaki `sunucu` parmak izine
+   uymazsa gizli hiç gönderilmez. Çevrimdışıyken USB anahtar çalışmaz (kural 3 değişmez). Takılınca tam ekran
+   açılmaz; yoklama ve kilit açma dokunuşla başlar. Sınav ekranında, acil yayında hiçbir şey yapmaz. Sunucu
+   yalnız gizlinin SHA-256 özetini saklar; gizli yalnız tek seferlik indirilen dosyada çıkar. Belleğin
+   kendiliğinden tanınması işlem kaydına YAZILMAZ (konum geçmişi birikmesin; yalnız `son_kullanim`); kilit açma
+   iletileri yalnız ekrandaki oturumun yardımcısından kabul edilir (`_etkin_oturumdan`). İdare anahtarının
+   tahtadaki etiketi panel kullanıcı adını taşımaz (görünen ad tek kelimeyse ya da kullanıcı adıysa "İdare").
+
 ## Bilinen tuzaklar
 
+- **JS'de `form.id` kullanma (0.11.0):** formda `name="id"` alanı varsa `form.id` o alanı döndürür; onay
+  düğmesi forma bağlanmaz, iptal/silme hiç gitmez (0.3.0'dan beri grup silme de böyle bozuktu).
+  `form.getAttribute("id")` kullanılır (`panel.js::formKimligi`; test `form.id` arar).
 - **`ders_saati` türetilmiş tablodur (0.10.0):** haftalık düzen ve çizelgelerden `cizelge.haftalik_yaz`
   ile yeniden yazılır; ona doğrudan INSERT yazan kod (eski `/program/zil/elle`) taşımadan sonra silinir.
   Testlerde zil kurmak için `yardimci.zil_kur` / `zil_elle` kullanılır. Günün planı yalnız
@@ -387,6 +415,12 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
 - **Açılışta kilidin oturum yaşı süreç başlangıcından gelir** (`/proc/self/stat`, `execv`'de korunur):
   güncellemede kendini yeniden başlatan yardımcı yeni oturum sayılmaz. Docker kapları çekirdeği
   paylaştığı için `boot_id` ve açılış sayacı kapta "yeniden başlatma" ile değişmez.
+- **USB bildirimi numarayla tüketilir** (0.11.0): kilit ya da tam ekran sayfa açıkken gelen `bildirim_no`
+  "gösterildi" sayılır; yoksa kilit USB anahtarla açılınca aynı bildirim köşede yeniden çıkıyordu (Docker).
+- **Docker'da USB benzetimi:** `--privileged` kap, `mkfs.vfat` kalıp, `mount -o loop,uid=1000 … /media/ogretmen/BELLEK`,
+  servis `TAHTA_AJAN_USB_BENZETIM=1` ile (yalnız "çıkarılabilir" ölçütü gevşer, `loop` kabul edilir). Kapta
+  systemd yok: tanılamada udisks2 "bilinmiyor" çıkar. İzleme ilk `/ajan/bekle` yanıtından sonra başlar (≤ 25 sn).
+  Xvfb'yi yeniden başlatırken `docker exec -d` kullanın (`bash -c '… &'` süreci exec bitince ölür).
 - **Deneme betiklerinde saat:** Git Bash'te `TZ=Europe/Istanbul date` UTC verir; saati Python ile hesapla.
 - **İlk kurulum yalnız 127.0.0.1'den yapılır;** ağdaki biri yönetici hesabını kapamasın.
 - **Docker'da deneme:** `debian:12` + `python3-gi gir1.2-gtk-3.0 xvfb openbox imagemagick`;

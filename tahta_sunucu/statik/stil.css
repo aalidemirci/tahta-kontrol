@@ -1022,3 +1022,16 @@
   li[data-fark="~"] { color: var(--d-duyuru); }
   .sayi-tablosu { columns: 10rem; padding-inline-start: 1.1rem; font-size: .8125rem; margin-block: .25rem .5rem; }
 }
+
+/* USB anahtar (0.11.0): üretim sayfasındaki tek seferlik PIN ve anahtar tablosu */
+@layer bilesen {
+  a.dugme[aria-disabled="true"] { opacity: .55; cursor: not-allowed; pointer-events: none; }
+  .usb-pin-kutu { display: block; }
+  .usb-pin-kutu > p { margin: 0; }
+  .usb-pin-kutu > p + p { margin-block-start: .5rem; }
+  .usb-pin-kutu .pusula-pin { display: inline-block; font-family: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+    font-size: 2rem; font-weight: 700; letter-spacing: .25ch; line-height: 1.1; padding: .2rem .6rem; margin-inline-start: .25rem;
+    border: 1px solid var(--cizgi); border-radius: .5rem; background: var(--yuzey); color: var(--metin); }
+  .usb-tablo th.kod { white-space: nowrap; }
+  .usb-tablo td .rozet + .not { display: block; }
+}

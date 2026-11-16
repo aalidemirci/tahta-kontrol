@@ -462,3 +462,236 @@ def paket_kur(yol: str) -> tuple[bool, str]:
     except OSError as hata:
         return False, str(hata)
     return True, "Kurulum başlatıldı."
+
+
+# ---- USB anahtar (0.11.0): bağlama noktalarını izleme ve anahtar dosyasını okuma ---------------------
+# Servis belleği BİÇİMLENDİRMEZ, BAĞLAMAZ, YAZMAZ: bağlamayı oturumdaki dosya yöneticisi (udisks2) yapar.
+# Kök yetkiyle güvenilmeyen dosya sistemi bağlamak çekirdek sürücüsünü saldırıya açar ve kurumun USB
+# politikasını deler. Bağlama yolu (/media/<hesap>/<etiket>) ve bellek etiketi kişisel veri taşıyabilir:
+# bu modülden yalnız servis belleğine gider; durum dosyasına, günlüğe, tanılamaya, sunucuya yazılmaz.
+MOUNTINFO = "/proc/self/mountinfo"
+_HESAP_SOR = object()
+
+
+class Red:
+    """Anahtar okunamadı: `neden` yalnız tanılama sayacına yazılır (yol ve içerik taşımaz)."""
+
+    __slots__ = ("neden",)
+
+    def __init__(self, neden: str):
+        self.neden = neden
+
+    def __repr__(self) -> str:
+        return f"Red({self.neden!r})"
+
+
+class BaglamaIzleyici:
+    """`/proc/self/mountinfo` dosyasını poll ile bekler: çekirdek bağlama değişince POLLPRI|POLLERR verir.
+
+    inotify ve udisks D-Bus kullanılmaz (yalnız standart kitaplık). Olay kaçarsa zaman aşımı yedek yoklamadır.
+    """
+
+    def __init__(self, yol: str = MOUNTINFO):
+        import select
+
+        self.fd = os.open(yol, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0))
+        self._poll = select.poll()
+        self._poll.register(self.fd, select.POLLPRI | select.POLLERR)
+
+    def oku(self) -> str:
+        """Dosyayı baştan okur (okumak bekleyen olayı da temizler)."""
+        os.lseek(self.fd, 0, os.SEEK_SET)
+        parcalar, toplam = [], 0
+        while toplam < 4 * 1024 * 1024:
+            parca = os.read(self.fd, 65536)
+            if not parca:
+                break
+            parcalar.append(parca)
+            toplam += len(parca)
+        return b"".join(parcalar).decode("utf-8", "replace")
+
+    def bekle(self, zaman_asimi: float) -> bool:
+        """Bağlama değişti mi (olay geldi mi)? Zaman aşımında False."""
+        try:
+            return bool(self._poll.poll(int(zaman_asimi * 1000)))
+        except OSError:
+            return False
+
+    def kapat(self):
+        try:
+            os.close(self.fd)
+        except OSError:
+            pass
+
+
+def baglama_izleyici(yol: str = MOUNTINFO) -> BaglamaIzleyici | None:
+    """İzleyici; Linux değilse ya da mountinfo yoksa None ("desteklenmiyor")."""
+    if not LINUX and yol == MOUNTINFO:
+        return None
+    try:
+        return BaglamaIzleyici(yol)
+    except (OSError, AttributeError, ImportError):
+        return None
+
+
+def sys_aygit(aygit: tuple[int, int], sys_kok: str = "/sys") -> tuple[str, str] | None:
+    """Blok aygıtın /sys/dev/block/MAJ:MIN gerçek yolu ve (bölümse üst) diskinin `removable` değeri."""
+    yol = os.path.join(sys_kok, "dev", "block", f"{aygit[0]}:{aygit[1]}")
+    try:
+        gercek = os.path.realpath(yol)
+    except OSError:
+        return None
+    if not os.path.exists(gercek):
+        return None
+    disk = os.path.dirname(gercek) if os.path.exists(os.path.join(gercek, "partition")) else gercek
+    return gercek.replace("\\", "/"), _ilk_satir(os.path.join(disk, "removable"), 4)
+
+
+def cikarilabilir_mi(gercek: str, removable: str, benzetim: bool = False) -> bool:
+    """Gerçek yolu /usb içeriyor ya da diskin `removable` dosyası 1. loop, dm-, nvme, zram, md, sr reddedilir
+    (benzetimde loop kabul edilir: Docker denemesi; öteki ölçütler benzetimde de geçerlidir)."""
+    ad = gercek.rstrip("/").rsplit("/", 1)[-1]
+    if ad.startswith("loop"):
+        return benzetim
+    if ad.startswith(("dm-", "nvme", "zram", "md", "sr")):
+        return False
+    return "/usb" in gercek or removable == "1"
+
+
+def _kaynak_aygit(kaynak: str) -> tuple[int, int] | None:
+    """fuseblk (exFAT/NTFS) bağlamasında asıl aygıt mountinfo'nun kaynak alanındaki /dev yolundan çözülür."""
+    if not kaynak.startswith("/dev/"):
+        return None
+    try:
+        rdev = os.stat(kaynak).st_rdev
+    except OSError:
+        return None
+    return (os.major(rdev), os.minor(rdev)) if rdev else None
+
+
+def cikarilabilir_baglamalar(mountinfo: str, sys_kok: str = "/sys", hesap=_HESAP_SOR, benzetim: bool | None = None,
+                             kaynak_coz=_kaynak_aygit, aygit_coz=None) -> tuple[list[dict], dict]:  # fmt: skip
+    """Ölçütlere uyan USB bellek bağlamaları (en çok 8) ve elenenlerin neden sayıları.
+
+    Dönen öğe: {"kimlik": mountinfo bağlama kimliği, "yol", "aygit": (maj, min) — dosya sisteminin st_dev'i}.
+    `hesap`: etkin oturumun hesap adı (verilmezse loginctl'den okunur; bilinmiyorsa ölçüt gevşer).
+    `kaynak_coz` / `aygit_coz` yalnız testler içindir (sahte /dev ve /sys).
+    """
+    from . import usb_anahtar
+
+    aygit_coz = aygit_coz or (lambda a: sys_aygit(a, sys_kok))
+
+    if benzetim is None:
+        benzetim = os.environ.get("TAHTA_AJAN_USB_BENZETIM") == "1"
+    baglamalar = usb_anahtar.mountinfo_coz(mountinfo)
+    if hesap is _HESAP_SOR:
+        # Hesap adı tembel sorulur: /media altında hiç bağlama yoksa (bellek takılı değilken izleme her 5 sn'de
+        # bir uyanır) loginctl süreçleri başlatılmaz.
+        hesap = None
+        if any(usb_anahtar.aday_nedeni(b, None) != "yer" for b in baglamalar):
+            ham = _etkin_oturum_ham()
+            hesap = ham["ad"] if ham and ham.get("ad") else None
+    adaylar, elenen = [], {}
+    for b in baglamalar:
+        neden = usb_anahtar.aday_nedeni(b, hesap)
+        if neden == "yer":
+            continue  # /media dışındaki bağlamalar sayılmaz (sistem diskleri)
+        if not neden:
+            aygit = kaynak_coz(b["kaynak"]) if b["fs"] == "fuseblk" else b["aygit"]
+            bilgi = aygit_coz(aygit) if aygit is not None else None
+            if bilgi is None or not cikarilabilir_mi(bilgi[0], bilgi[1], benzetim):
+                neden = "cikarilabilir_degil"
+        if neden:
+            elenen[neden] = elenen.get(neden, 0) + 1
+            continue
+        if len(adaylar) < usb_anahtar.ADAY_EN_COK:
+            adaylar.append({"kimlik": b["kimlik"], "yol": b["yol"], "aygit": b["aygit"]})
+    return adaylar, elenen
+
+
+_okuma_is = None  # süren okuma iş parçacığı (aynı anda tek okuma)
+
+
+def _anahtar_oku_ic(baglama: dict, sonuc: list, acici=os.open):
+    import errno
+    import stat
+
+    from . import usb_anahtar
+
+    kok = fd = None
+    try:
+        try:
+            kok = acici(baglama["yol"], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0))
+        except OSError:
+            sonuc.append(Red("okunamadi"))
+            return
+        kok_st = os.fstat(kok)
+        if (os.major(kok_st.st_dev), os.minor(kok_st.st_dev)) != tuple(baglama["aygit"]):
+            sonuc.append(Red("aygit"))  # bağlama arada değişti (yarış)
+            return
+        bayrak = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_NOCTTY | getattr(os, "O_CLOEXEC", 0)
+        try:
+            try:
+                fd = acici(usb_anahtar.DOSYA_ADI, bayrak | getattr(os, "O_NOATIME", 0), dir_fd=kok)
+            except PermissionError:
+                fd = acici(usb_anahtar.DOSYA_ADI, bayrak, dir_fd=kok)  # O_NOATIME izni yoksa vazgeçilir
+        except FileNotFoundError:
+            sonuc.append(Red("yok"))
+            return
+        except OSError as hata:
+            sonuc.append(Red("sembolik" if hata.errno == errno.ELOOP else "okunamadi"))
+            return
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            sonuc.append(Red("duz_degil"))
+        elif st.st_dev != kok_st.st_dev:
+            sonuc.append(Red("aygit"))
+        elif st.st_size > usb_anahtar.DOSYA_EN_BUYUK:
+            sonuc.append(Red("buyuk"))
+        else:
+            veri = os.read(fd, usb_anahtar.DOSYA_EN_BUYUK + 1)
+            sonuc.append(Red("buyuk") if len(veri) > usb_anahtar.DOSYA_EN_BUYUK else bytes(veri))
+    except OSError:
+        sonuc.append(Red("okunamadi"))
+    finally:
+        for acik in (fd, kok):
+            if acik is not None:
+                try:
+                    os.close(acik)
+                except OSError:
+                    pass
+
+
+def anahtar_oku(baglama: dict, zaman_asimi: float | None = None, acici=os.open):
+    """Bağlamanın KÖK dizinindeki `tahta-kontrol.anahtar` dosyasını okur: bytes ya da Red(neden).
+
+    Dizin listelenmez, alt klasöre bakılmaz; sembolik bağ (O_NOFOLLOW → ELOOP), FIFO (O_NONBLOCK; düz dosya
+    değil), aygıt, dizin ve 1 KB'tan büyük dosya reddedilir; dosya ile kök aynı aygıtta olmalı. Dosyaya yazılmaz,
+    zaman damgası değiştirilmez (O_NOATIME denenir). Okuma ayrı iş parçacığında, zaman aşımıyla; aynı anda tek
+    okuma (bozuk bellek iş parçacığı yığmasın): önceki okuma sürüyorsa Red("zaman_asimi").
+    `acici` yalnız testler içindir.
+    """
+    import threading
+
+    from . import usb_anahtar
+
+    global _okuma_is
+    zaman_asimi = usb_anahtar.OKUMA_ZAMAN_ASIMI_SN if zaman_asimi is None else zaman_asimi
+    if _okuma_is is not None and _okuma_is.is_alive():
+        return Red("zaman_asimi")
+    sonuc: list = []
+    is_ = threading.Thread(target=_anahtar_oku_ic, args=(baglama, sonuc, acici), daemon=True)
+    _okuma_is = is_
+    is_.start()
+    is_.join(zaman_asimi)
+    if is_.is_alive() or not sonuc:
+        return Red("zaman_asimi")
+    return sonuc[0]
+
+
+def udisks_calisiyor() -> bool | None:
+    """Otomatik bağlama hizmeti (udisks2) çalışıyor mu; systemctl yoksa None."""
+    if not LINUX or not shutil.which("systemctl") or not os.path.isdir("/run/systemd/system"):
+        return None  # systemd yok (ör. kapsayıcı): bilinmiyor
+    kod, _ = calistir(["systemctl", "is-active", "--quiet", "udisks2"], 4)
+    return kod == 0

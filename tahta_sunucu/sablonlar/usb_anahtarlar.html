@@ -1,0 +1,113 @@
+{% extends "taban.html" %}
+{% block baslik %}USB anahtarlar · Tahta Kontrol{% endblock %}
+{# Öğretmen bölümünün iletisi sayfa başında değil, #ogretmen kutusunda çizilir (yönlendirme oraya kayar; dar ekranda
+   sayfa başındaki bant görünmezdi). #}
+{% block mesaj_yeri %}{% if mesaj and not (ileti_yeri == 'ogretmen' and yonetici) %}{% include "_ileti.html" %}{% endif %}{% endblock %}
+{% block icerik %}
+{# USB anahtarlar (0.11.0; şartname §4.2). Bağlam: panel_usb.py SÖZLEŞME. Gizli değer ve PIN bu sayfada YOKTUR:
+   gizli yalnız tek seferlik indirilen dosyada, PIN yalnız üretim yanıtında bir kez görünür.
+   İptal tetikleri type="button" + data-onay="usb_iptal": JS yoksa hiçbir şey gönderilmez (güvenli başarısızlık). #}
+{% with bolum='usb', bas_baslik='USB anahtarlar',
+        bas_aciklama='Belleğe kopyalanan küçük bir dosyayla tahtada yoklama alınır; ayar açıksa kilit de açılır. Bellek biçimlendirilmez, içindeki dosyalara dokunulmaz.' %}
+{% include "_yoklama_bas.html" %}
+{% endwith %}
+
+{% if ozellik_kapali %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ kapali_iletisi }}{% if yonetici %} <a href="/ayarlar#usb-anahtar">Ayarlar'da aç</a>{% endif %}</p>{% endif %}
+{% if yoklama_kapali and not ozellik_kapali %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Ders yoklaması kapalı; USB anahtar yalnız kilit açmada işe yarar.</p>{% endif %}
+
+{% macro uret_ipucu(kimlik) -%}
+<p class="ipucu" id="{{ kimlik }}">Belleği tanımanız için kısa ad, ör. Mavi bellek. Kişi adı yazmayın. En çok {{ etiket_en_uzun }} karakter.</p>
+{%- endmacro %}
+
+<div class="iki-sutun">
+  <section class="kutu" aria-labelledby="kendi-bas">
+    <h2 id="kendi-bas">Kendi anahtarlarım</h2>
+    <p class="not">Anahtarınız her tahtada her şubenin yoklamasını sizin adınıza ("idare") yazar{% if usb_ayari.kilit_acar %} ve kilitli tahtayı açar{% endif %}.
+      {% if usb_ayari.pin_idare %}Tahta, anahtarla birlikte üretimde verilen 6 haneli PIN'i de sorar.{% else %}PIN sorulmuyor (Ayarlar); kopyalanan dosya tek başına çalışır.{% endif %}</p>
+    <form method="post" action="/usb-anahtarlar" class="form-dar">
+      <input type="hidden" name="eylem" value="uret"><input type="hidden" name="sahip" value="kendim">
+      <label for="ua-etiket">Etiket (isteğe bağlı)</label>
+      {{ uret_ipucu("ua-etiket-ipucu") }}
+      <input type="text" id="ua-etiket" name="etiket" maxlength="{{ etiket_en_uzun }}" autocomplete="off" aria-describedby="ua-etiket-ipucu" placeholder="Mavi bellek">
+      <p class="dugme-satiri"><button class="ana" {% if kendi_dolu %}disabled aria-describedby="ua-dolu"{% endif %}><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>Yeni anahtar üret</button></p>
+      {% if kendi_dolu %}<p class="not" id="ua-dolu">{{ kisi_basi }} etkin anahtarınız var. Yenisi için önce birini iptal edin.</p>{% endif %}
+    </form>
+  </section>
+
+  {% if yonetici %}
+  <section class="kutu" id="ogretmen" aria-labelledby="ogretmen-bas">
+    <h2 id="ogretmen-bas">Öğretmen anahtarları</h2>
+    {% if mesaj and ileti_yeri == 'ogretmen' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+    <p class="not">Öğretmen anahtarı, öğretmen kodu ve PIN ile girişin yaptığını yapar; yoklama öğretmenin adına yazılır.
+      {% if usb_ayari.pin_ogretmen %}Tahta öğretmenin kendi yoklama PIN'ini de sorar.{% else %}PIN sorulmuyor (Ayarlar).{% endif %}</p>
+    {% if ogretmenler %}
+    <form method="post" action="/usb-anahtarlar" class="form-dar">
+      <input type="hidden" name="eylem" value="uret"><input type="hidden" name="sahip" value="ogretmen">
+      <label for="ua-ogretmen">Öğretmen</label>
+      <select id="ua-ogretmen" name="ogretmen_id" required class="alan-oto">
+        <option value="">Seçin…</option>
+        {% for o in ogretmenler %}<option value="{{ o.id }}" {% if o.id == secili_ogretmen_id %}selected{% endif %}>{{ o.etiket }}</option>{% endfor %}
+      </select>
+      <label for="ua-ogretmen-etiket">Etiket (isteğe bağlı)</label>
+      {{ uret_ipucu("ua-ogretmen-etiket-ipucu") }}
+      <input type="text" id="ua-ogretmen-etiket" name="etiket" maxlength="{{ etiket_en_uzun }}" autocomplete="off" aria-describedby="ua-ogretmen-etiket-ipucu">
+      <p class="dugme-satiri"><button class="ana">Öğretmen için üret</button></p>
+    </form>
+    {% else %}
+    <p class="bos-not">Anahtar üretilebilecek öğretmen yok: öğretmenin etkin ve kodlu olması gerekir (<a href="/ogretmenler">Öğretmenler ve PIN</a>).</p>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+
+<h2 id="anahtar-liste">{{ 'Bütün anahtarlar' if yonetici else 'Anahtarlarım' }}</h2>
+{% if anahtarlar %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="anahtar-liste">
+<table class="usb-tablo">
+  <caption class="gizli">{{ anahtarlar | length }} USB anahtar</caption>
+  <thead><tr><th scope="col">Kimlik</th><th scope="col">Sahip</th><th scope="col">Etiket</th><th scope="col">Üretildi</th>
+    <th scope="col">Son kullanım</th><th scope="col">Durum</th><th scope="col">İşlem</th></tr></thead>
+  <tbody>
+  {% for a in anahtarlar %}
+  <tr{% if a.durum == 'iptal' %} class="pasif"{% endif %}>
+    <th scope="row" data-etiket="Kimlik" class="kod">{{ a.kimlik }}</th>
+    <td data-etiket="Sahip">{{ a.sahip }} <span class="not">· {{ 'öğretmen' if a.tur == 'ogretmen' else 'idare' }}</span></td>
+    <td data-etiket="Etiket">{{ a.etiket or '—' }}</td>
+    <td data-etiket="Üretildi">{{ a.olusturma }}<br><span class="not">{{ a.olusturan }}</span></td>
+    <td data-etiket="Son kullanım">{{ a.son_kullanim }}</td>
+    <td data-etiket="Durum">
+      {%- if a.durum == 'etkin' %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>{{ a.durum_adi }}</span>
+      {%- elif a.durum == 'kilitli' %}<span class="rozet" data-durum="sorun"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ a.durum_adi }}</span>
+      {%- else %}<span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-kapali"/></svg>{{ a.durum_adi }}</span>{% if a.iptal %}<br><span class="not">{{ a.iptal }}</span>{% endif %}{% endif %}
+      {%- if a.kopya_uyarisi %}<br><span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>İki tahtada kısa arayla kullanıldı — kopyalanmış olabilir</span>
+      <span class="not">İptal edip yenisini üretin.</span>{% endif -%}
+    </td>
+    <td data-etiket="İşlem">
+      {% if a.durum != 'iptal' %}
+      <form method="post" action="/usb-anahtarlar" id="usb-iptal-{{ a.id }}" class="satir-ici">
+        <input type="hidden" name="id" value="{{ a.id }}">
+        <button type="button" class="tehlike" data-onay="usb_iptal" data-onay-ad="{{ a.kimlik }}" aria-haspopup="dialog">İptal et…<span class="gizli"> {{ a.kimlik }}</span></button>
+      </form>
+      {% if a.durum == 'kilitli' %}<p class="not">PIN kilidi açılmaz: iptal edip yenisini üretin.</p>{% endif %}
+      {% else %}—{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="bos-not">Henüz anahtar yok.</p>
+{% endif %}
+
+<p class="not">USB anahtarı destekleyen tahta: {{ destek.destekleyen }}/{{ destek.onayli }}.{% if destek.eski %} {{ destek.eski }} tahtada ajan güncellenmeli.{% endif %}</p>
+<details class="kutu">
+  <summary><h2 class="satir-ici">Bellek kaybolursa ya da kopyalandıysa</h2></summary>
+  <p class="not">Anahtar dosyasında ad, kod ya da okul adı yoktur; bulan kişi kime ait olduğunu dosyadan öğrenemez. Ama dosya kopyalanabilir:
+    bellek tahtada takılıyken tahtadaki oturumdan görülebilir. Kaybolan ya da kopyalandığından kuşkulanılan anahtarı buradan hemen
+    iptal edin (idareci kendi anahtarını, yönetici herhangi birini); iptal o anahtarla açılmış yoklama ekranlarını da kapatır.
+    Sonra yeni anahtar üretin. Yenileme yoktur: iptal ve yeni üretim.</p>
+  <p class="not">Kilitli tahtada bellek takılıysa kilit ekranında "USB anahtarla aç" düğmesi belirir; takılınca hiçbir ekran kendiliğinden açılmaz.
+    Tanınan anahtar 10 dakika geçerlidir; sonra belleği çıkarıp yeniden takın. Sunucuya ulaşılamayan tahtada USB anahtar çalışmaz.</p>
+</details>
+{% endblock %}

@@ -761,6 +761,63 @@ Sonraya bırakılanlar (göç gerektirmez): e-Okul personel listesi (OOK01001R1)
 (öğretmenler elle eklenir); günlük ızgarada "programdaki öğretmenden farklı" işareti (Aşama 3
 öğretmen tutmaz).
 
+### 14.1 USB anahtar (0.11.0)
+
+İstek: idareciler her sınıfta USB bellekle yoklama alabilsin; isteyen öğretmenler için de seçenek olsun;
+bellek "yalnız anahtar olarak işgal edilmesin". Özellik Ayarlar › USB anahtar'da **varsayılan kapalıdır**;
+kapalıyken tahtalar takılan belleklere hiç bakmaz.
+
+| Konu | Karar | Gerekçe |
+|---|---|---|
+| Bellek | Biçimlendirilmez, bölünmez, yazılmaz. Anahtar kök dizindeki tek küçük metin dosyasıdır: `tahta-kontrol.anahtar` (ASCII, ≤ 1 KB) | Bellek ders sunumu için de kullanılır |
+| Dosya | Başlık + `surum=1` + `kimlik` (8 karakter, gizli değil) + `sunucu` (sertifika parmak izinin ilk 16 hanesi) + `gizli` (32 rastgele bayt, base32). Ad, kod, kullanıcı adı, okul adı YOK | Bulan kişi kime ait olduğunu öğrenemez |
+| Sunucu | Yalnız gizlinin SHA-256 özeti saklanır; gizli yalnız bir kez, tek seferlik indirilen dosyada çıkar (5 dk, yalnız üreten oturum) | Veritabanı ya da yedek sızarsa anahtar üretilemez |
+| Okuyan | Yalnız kök yetkili servis (`sistem.anahtar_oku`): kök dizinde `O_NOFOLLOW`/`dir_fd`, düz dosya, aynı aygıt, ≤ 1 KB, ayrı iş parçacığında 3 sn zaman aşımı; dizin listelenmez | Güvenilmeyen bellekte sembolik bağ, FIFO, dev dosya, yarış |
+| Bağlama | Servis BAĞLAMAZ; oturumdaki dosya yöneticisi (udisks2) bağlar. `/proc/self/mountinfo` poll ile izlenir (5 sn yedek). Aday: `/media` ya da `/run/media`, kök `/`, vfat/exfat/ntfs/fuseblk/ext4, çıkarılabilir aygıt (`/usb` yolu ya da `removable=1`), etkin oturumun hesabı | Kök yetkiyle bağlama çekirdek sürücüsünü saldırıya açar, kurumun USB politikasını deler |
+| Tetikleme | Takılınca tam ekran açılmaz; köşede 10 sn'lik bildirim ("USB anahtar tanındı · A. Yılmaz (kod 112)" [Yoklama al] [Kapat]). Kilitliyse kilit ekranında aynı satır + "USB anahtarla aç" | Yanlışlıkla yoklama/kilit ekranı açılmasın |
+| Yoklama | Her "Yoklama al" yolu (yüzer düğme, kilit ekranı, kısayol, bildirim) tanınan anahtarla kod + PIN adımını atlar; PIN gerekiyorsa yalnız 6 haneli PIN sorulur; "Başka öğretmen (kod ve PIN)" anahtarı o yoklamada yok sayar | Tek dokunuş; bellek takılıyken başkası da yoklama alabilsin |
+| Kimin adına | Öğretmen anahtarı: kod + PIN ile alınanla aynı satır. İdare anahtarı: öğretmensiz, `kaydeden='kullanici:<ad>'` (panelde "idare (ad)"); her şube seçilebilir | Kullanıcının yanıtlamadığı soruda şartname varsayımı (açık soru 61) |
+| Kilit | Ayar açıksa (varsayılan açık) idare ve öğretmen anahtarları kilidi açar; sınav ekranında ve acil yayında hayır. Sunucu onay verir, kilidi servis açar | Ortak kilit kodundan zayıf değil; kişiye bağlı, iptal edilebilir, iz bırakır |
+| PIN | İdare anahtarında varsayılan açık (anahtarın kendi PIN'i, üretimde bir kez gösterilir); öğretmen anahtarında varsayılan kapalı (açılırsa öğretmenin yoklama PIN'i, aynı sayaçlar) | Kopyalanan idare dosyası tek başına işe yaramasın |
+| Ömür | Tanınan anahtar tahtada 10 dk geçerli; sonra "çıkarıp yeniden takın". Bellek çıkarılınca gizli silinir, açık yoklama listesi KALIR, PIN bekleyen ekran kapanır | Unutulan bellek kalıcı yetki bırakmasın; öğretmen listeyi bitirebilsin |
+| Çevrimdışı | Çalışmaz ("sunucuya ulaşılamıyor"); bağlantı gelince bir kez yeniden dener. Kural 3 (90 sn sonra kodsuz açma) değişmez | İptal edilen anahtar tahtada geçerli kalmasın |
+| Kapsam | Yalnız ders yoklaması ve kilit açma; panel oturumu, ayar, komut, duyuru, sınav/gözetmen yok | Dar yetki = küçük zarar |
+| Kişi başına | En çok 2 iptal edilmemiş anahtar; yenileme yok (iptal + yeni üretim) | Tek yol, tek kural |
+
+**Dürüst sınır.** Anahtar bir dosyadır ve kopyalanabilir: bellek tahtaya takılınca udisks onu oturumdaki
+kullanıcının izinleriyle bağlar; tahtayı kullanan herkes (öğrenci dahil) dosya yöneticisinden dosyayı
+birkaç saniyede kopyalayabilir. Bunu belleği "işgal etmeden" engellemenin yolu yoktur (dosyayı gizlemek
+koruma değildir). Karşı önlemler katmanlıdır: PIN, dar yetki, anlık iptal (o anahtarla açılmış yoklama
+oturumları da düşer), her işlemin (yoklama, kilit açma, reddedilen deneme) anahtar kimliği + sahip
+koduyla işlem kaydına düşmesi, 60 sn içinde iki
+farklı tahtada kullanılan anahtar için "kopyalanmış olabilir" uyarısı (engellemez), 10 dk tanıma ömrü,
+geçersiz anahtar ve PIN için hız sınırları, dosyadaki sunucu parmak izi (başka sunucuya gizli gitmez).
+**Bellek takılınca dosya yöneticisi penceresi kendiliğinden açılıyorsa anahtar dosyası sınıfın önünde
+listelenir — okulda denetlenecek** (`docs/saha-denemesi.md` §3.10).
+
+**Tahtada iz yok.** Gizli değer yalnız servis belleğinde durur (Python belleği sıfırlamayı garanti etmez;
+referans bırakılır — bilinen sınır). Gizli, anahtar kimliği, bağlama yolu (`/media/<hesap>/…`) ve bellek
+etiketi `durum.json`'a, günlüğe, tanılamaya, ekran yardımcısına, sunucuya giden duruma yazılmaz; sunucuya
+yalnız `usb_izleme` (`kapali` | `izleniyor` | `desteklenmiyor`) gider. Tanılama yalnız sayı ve evet/hayır verir.
+
+**Sunucuda saklama.** `usb_anahtar` satırı yalnız SON kullanım zamanını ve tahtasını tutar (geçmiş tablo
+yok; panelde yalnız yöneticiye ve sahibine görünür). Belleğin kendiliğinden tanınması işlem kaydına
+yazılmaz (açık soru 64); kayda yalnız yoklama, kilit açma ve reddedilen denemeler düşer. Öğretim yılı bitişinde (kural 24) iptal edilmiş
+anahtarlar silinir, etkinlerin son kullanım bilgisi boşaltılır; etkin anahtar yeni yıla geçer.
+
+**Kaybolan bellek.** Sahibi idareye bildirir → anahtar Yoklama › USB anahtarlar'dan iptal edilir (idareci
+kendi anahtarını, yönetici herhangi birini) → yeni anahtar üretilir. Dosyada kişi verisi olmadığından kayıp
+yalnız yetki kaybıdır; iptal onu kapatır. PIN'i kilitlenen idare anahtarının kilidi açılmaz: iptal + yeni.
+
+**Geriye uyum.** Yeni sunucu + eski ajan: `ayar.usb_anahtar` yok sayılır, anahtar o tahtada çalışmaz; panel
+"N tahtada ajan güncellenmeli" der (yetenek `usb_anahtar`). Eski sunucu + yeni ajan: alan gelmez, izleme
+kapalı kalır. Yeni servis + eski ekran yardımcısı: "merhaba" sürüm farkıyla yardımcı yeniden başlar.
+
+Yerleşim: sunucu `usb_anahtar.py` (iş mantığı), `panel_usb.py` (panel ve `/ajan/usb/{tani,yoklama,kilit_ac}`
+uçları, SÖZLEŞME bloğu); ajan `usb_anahtar.py` (saf: ayrıştırıcı, mountinfo, metinler), `sistem.py`
+(izleme, okuma), `servis.py` (durum makinesi), `ekran.py` (usb-pin sayfası, yoklama PIN'inin USB kipi,
+kilit ekranı düğmesi, `UsbBildirimi`), `tani.py` (USB satırları).
+
 ## 15. Altyapı: şifreli yedek, sunucu adresleri, envanter, arıza (0.7.0)
 
 Aşama 6'nın çekirdeği (6A). Windows hizmeti 0.8.0'da geldi (K8, §15.6); ajan paketi imzası
@@ -1007,6 +1064,7 @@ hizmet olarak çalışması henüz yönetici yetkili bir denemede doğrulanmadı
 | 6A | Altyapı çekirdeği: şifreli yedek ve geri yükleme, sunucu adres listesi (`tahta-ajan sunucu`), tahta envanteri, arıza bildirimi (panel + tahtadaki "Arıza bildir" penceresi) | 0.7.0 — Debian 12 kabında ve tarayıcıda denendi; ETAP'ta denenecek (§15) |
 | 6B | Sunucunun Windows hizmeti olarak çalışması (oturum açılmadan başlar, Yerel Hizmet hesabı, veri ProgramData'ya kurucuda kopyalanır, durum penceresi) | 0.8.0 (K8, §15.6) — birim testleriyle ve hizmet kipi uçbirimde denendi; gerçek hizmet kurulumu yönetici yetkili denemede doğrulanacak. Ajan paketi imzası sonraya |
 | K | 16.11.2026 kararları (§17): ikili eğitim denetimi ve düzeltmeleri (yoklama önerisi, devre süzgeci, sınav şube duyurusu, ızgara/icmalde devre adı), öğretim yılı sonuna kadar saklama, acil yayını bütün idarecilere açma, yardımcı kayıt metinleri, boş ders uyarısı varsayılan açık + rapor; gün sonu oturum temizliği (K7, §12.1) | 0.8.0 — testlerle ve tarayıcıda denendi; oturum temizliği Debian 12 kabında (Xvfb + openbox, sahte profil) denendi; ETAP'ta denenecek |
+| 5B | USB anahtar: bellekteki anahtar dosyasıyla idare ve isteyen öğretmen için yoklama, ayarla kilit açma; tek seferlik indirme, iptal, kopya uyarısı (§14.1) | 0.11.0 — testlerle, tarayıcıda ve Debian 12 kabında loop bellekle (USB benzetimi) denendi; gerçek USB bellek, udisks ve ETAP'ta denenecek |
 | 3B | Zil düzenleyici (çizelgeler, haftalık düzen, tarihe özel çizelge, günü önizle, CSV; Okul Zili'nden alma aynı yapıya yazar) ve ders programını içe aktarma sihirbazı (aSc XML deneme, şablon CSV/XLSX, yapay zekâ istemi, önceki programlar) | 0.10.0 (§12.2–12.3) — testlerle ve tarayıcıda uydurma veriyle denendi; gerçek aSc dosyası ve okulun gerçek zil saatleriyle denenecek. e-Okul kaynağı örnek dosya gelince |
 
 Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" ve "Seçili
@@ -1174,6 +1232,23 @@ Altyapı (0.7.0 ve 6B):
     dışarıda bırakıyordu). Cihaz verisidir ama ağ yönetimi bilgisidir; CSV'den çıkarılsın mı?
 53. **Arıza penceresi okulun renklerini kullansın mı?** Şimdi varsayılan tahta paletiyle çiziliyor
     (pencere servisten durum yayını almaz). İstenirse servis pencereye yalnız paleti verebilir.
+USB anahtar (0.11.0; yanıt gelene kadar karar geçerli):
+
+60. **Öğretmen anahtarında PIN sorulsun mu?** (Karar, 0.11.0: varsayılan sorulmaz; Ayarlar'dan açılır.
+   Bedeli: bellek tahtada takılıyken bir öğrenci dosyayı kopyalarsa o öğretmen adına yoklama yazıp kilidi
+   açabilir; her kayıt anahtar kimliğiyle iz bırakır ve yoklama düzeltilebilir.)
+61. **İdare anahtarıyla alınan yoklama kimin adına?** (Karar, 0.11.0: "idare (kullanıcı adı)" adına,
+   öğretmen seçilmez. İstenirse tahtada dersin öğretmenini seçme adımı eklenir.)
+62. **Kilidi hangi anahtar açsın?** (Karar, 0.11.0: ayar açıkken idare ve öğretmen anahtarlarının ikisi
+   de; ayar kapatılınca hiçbiri. Yalnız idare anahtarı seçeneği istenirse ayar genişletilir.)
+63. **Tahtada bellek takınca dosya yöneticisi kendiliğinden açılıyor mu?** Açılıyorsa anahtar dosyası
+   ekranda herkese görünür; PIN varsayılanları buna göre gözden geçirilir. Okulda denetlenecek.
+64. **Belleğin her tanınması işlem kaydına yazılsın mı?** (Karar, 0.11.0: yazılmaz. Tahta belleği takılır
+   takılmaz, dokunuş beklemeden tanır; bellek yalnız sunum için takıldığında da. Her tanımayı kayda yazmak,
+   işlem kaydını gören her panel kullanıcısına personelin gün gün hangi tahtada olduğunu süresiz gösterirdi;
+   bu, "yalnız son kullanım" kararıyla çelişir. Kayda yalnız yoklama, kilit açma ve reddedilen denemeler
+   düşer — bugünkü kod + PIN yoklamasının kaydıyla aynı düzey. İşlem kaydı sayfası idareciye de açıktır;
+   USB satırları yalnız yöneticiye gösterilsin mi?)
 
 ## 18. Doğrulanacak dayanaklar
 

@@ -38,11 +38,13 @@ from . import (
     metin,
     paket,
     panel_program,
+    panel_usb,
     panel_yoklama,
     program_is,
     saklama,
     sinav,
     tema,
+    usb_anahtar,
     vt,
     wol,
     yedek,
@@ -69,7 +71,7 @@ MENU = [
     {"ad": "Duyurular", "yol": "/duyurular", "esler": ["/duyurular"]},
     {"ad": "Program", "yol": "/program", "esler": ["/program"]},
     {"ad": "Sınavlar", "yol": "/sinavlar", "esler": ["/sinavlar", "/sinav"]},
-    {"ad": "Yoklama", "yol": "/yoklama", "esler": ["/yoklama", "/ogretmenler", "/ogrenciler"]},
+    {"ad": "Yoklama", "yol": "/yoklama", "esler": ["/yoklama", "/ogretmenler", "/ogrenciler", "/usb-anahtarlar"]},
     {
         "ad": "Tahtalar",
         "alt": [
@@ -366,6 +368,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             "ariza_yetenegi": ariza_mod.YETENEK in yetenekler,
             "adres_listesi_yetenegi": ADRES_YETENEGI in yetenekler,
             "dugme_yetenegi": dugme.YETENEK in yetenekler,
+            # 0.11.0: rozet "USB anahtar: ajan güncellenmeli" (yalnız özellik açıkken anlamlı).
+            "usb_anahtar_yetenegi": usb_anahtar.YETENEK in yetenekler,
             "bagli_adres": str(durum.get("sunucu_adresi") or "")[:200],
         }
 
@@ -717,6 +721,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             tahta_arizalari = ariza_mod.listele(b, "", tahta_id)
             adres_listesi = adresler.al(b)
             temizlik_ozeti = temizlik_mod.tahta_ozeti(b, satir)
+            usb_etkin = usb_anahtar.ayar_al(b)["etkin"]  # 0.11.0: "USB anahtar" satırı yalnız özellik açıkken
         tani = json.loads(satir["tani_json"]) if satir["tani_json"] else None
         durum = json.loads(satir["durum_json"] or "{}")
         t_gorunum = tahta_gorunumu(satir, None, uyelik, None, sinavlar, altyapi)
@@ -751,6 +756,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             gun_adlari=program_mod.GUN_ADLARI,
             temizlik=temizlik_ozeti,
             temizlik_zamanlari=temizlik_mod.ZAMANLAR,
+            usb_etkin=usb_etkin,
         )
 
     @uygulama.post("/tahta/{tahta_id}/temizlik")
@@ -1068,6 +1074,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             sinav_kurallari = sinav.kurallar(b)
             sinav_kurallari_ozel = isinstance(vt.ayar_al(b, "sinav_kurallari"), str)
             yoklama_baglami = panel_yoklama.ayar_baglami(b)
+            usb_baglami = panel_usb.ayar_baglami(b)
             saklama_durumu = saklama.durum(b, datetime.fromtimestamp(vt.simdi(), ISTANBUL).date())
             temizlik_ayari = temizlik_mod.ayar_al(b)
             temizlik_zamani = temizlik_mod.zaman_ozeti(b, datetime.fromtimestamp(vt.simdi(), ISTANBUL).date())
@@ -1132,6 +1139,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             sinav_kurallari_varsayilan=sinav.SINAV_KURALLARI_VARSAYILAN,
             sinav_kurallari_en_uzun=sinav.KURALLAR_EN_UZUN,
             **yoklama_baglami,
+            **usb_baglami,
             saklama_durumu=saklama_durumu,
             temizlik_ayari=temizlik_ayari,
             temizlik_zamani=temizlik_zamani,
@@ -1336,6 +1344,24 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             mesaj = "Açılışta kilit açık: tahta açılınca ya da oturum açılınca, sunucuya ulaşabiliyorsa kilitli başlar."
         return yonlendir("/ayarlar?yer=acilis#ileti", mesaj, hata=yeni and not kod_var)
 
+    def usb_anahtar_kaydet(k, form, ip: str):
+        """Ayarlar › USB anahtar (bolum=usb_anahtar, 0.11.0): yalnız `usb_anahtar` anahtarı yazılır.
+
+        Tahtaya yalnız `ayar.usb_anahtar.etkin` iner; değişiklikte tahtalar uyandırılır (izleme hemen başlasın/dursun).
+        """
+        yeni = usb_anahtar.ayar_coz(form)
+        with vt.islem() as b:
+            onceki = usb_anahtar.ayar_al(b)
+            vt.ayar_yaz(b, usb_anahtar.AYAR_ANAHTARI, yeni)
+            vt.kayit_dus(b, k["ad"], "USB anahtar ayarı kaydedildi", usb_anahtar.ayar_ozeti(yeni), ip)
+            yoklama_kapali = not yoklama_mod.etkin(b)
+        if onceki != yeni:
+            onayli_tahtalari_uyandir()
+        mesaj = "USB anahtar ayarı kaydedildi." if yeni["etkin"] else "USB anahtar kapalı; tahtalar takılan belleklere bakmaz."
+        if yeni["etkin"] and yoklama_kapali:
+            mesaj += " Ders yoklaması kapalı; USB anahtar yalnız kilit açmada işe yarar."
+        return yonlendir("/ayarlar?yer=usb_anahtar#ileti", mesaj)
+
     def adresleri_kaydet(istek: Request, k, form, ip: str):
         """Ayarlar › Sunucu adresleri (bolum=adresler): `sunucu_adresleri` (satır başına bir adres, en çok 5).
 
@@ -1379,6 +1405,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             return dugme_ayarini_kaydet(k, form, istemci_ip(istek))
         if bolum == "acilis_kilidi":
             return acilis_kilidi_kaydet(k, form, istemci_ip(istek))
+        if bolum == "usb_anahtar":
+            return usb_anahtar_kaydet(k, form, istemci_ip(istek))
         if bolum != "genel":
             return yonlendir("/ayarlar", "Bilinmeyen ayar bölümü.", hata=True)
         with vt.islem() as b:
@@ -1574,6 +1602,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             "yoklama_etkin": yoklama_mod.etkin(b),
             # 0.9.0 (G3): yüzer düğme, durum tabanlı. Alan yoksa (eski sunucu) ajan düğmeyi göstermez.
             "dugme": dugme.ajan_gorunumu(b),
+            # 0.11.0: durum tabanlı, YALNIZ açık/kapalı (anahtar listesi, özet, PIN ayarı tahtaya inmez).
+            "usb_anahtar": usb_anahtar.ajan_gorunumu(b),
         }
         # A6: durum tabanlı adres listesi; boşsa gönderilmez (ajan elindeki listeyi korur).
         liste = adresler.al(b)
@@ -1999,6 +2029,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
     panel_aktar.kaydet(uygulama, y)
     panel_sinav.kaydet(uygulama, y)
     panel_yoklama.kaydet(uygulama, y)
+    panel_usb.kaydet(uygulama, y)
     panel_altyapi.kaydet(uygulama, y)
 
     uygulama.state.zamanlayici = zamanlayici
@@ -2029,6 +2060,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         ("sinav_saklama", sinav_zamanlayici),
         ("yoklama_imha", yoklama_zamanlayici),
         ("yedek", yedek_zamanlayici),
+        # 0.11.0: indirilmeden süresi dolan USB anahtarlar düşer (işlem kaydına "indirilmedi").
+        ("usb_bekleyen", uygulama.state.usb_bekleyen_temizle),
     ]
     # Otomatik yedeğin "program ≥ 5 dk açık" ölçüsü (testler ilerletebilir).
     uygulama.state.acilis = acilis

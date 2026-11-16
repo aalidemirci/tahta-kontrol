@@ -258,7 +258,7 @@ def test_goc_ders_saati_cizelgelere_tasinir_ders_saati_ayni_kalir(tmp_path, monk
         once = sorted(tuple(s) for s in b.execute("SELECT * FROM ders_saati"))
     vt.hazirla()
     with vt.islem() as b:
-        assert b.execute("PRAGMA user_version").fetchone()[0] == len(vt.GOCLER) == 9
+        assert b.execute("PRAGMA user_version").fetchone()[0] == len(vt.GOCLER) >= 9
         assert sorted(tuple(s) for s in b.execute("SELECT * FROM ders_saati")) == once
         assert sorted(tuple(s) for s in b.execute("SELECT * FROM tahta_ders")) == sorted(program_)
         cizelgeler = b.execute("SELECT * FROM zil_cizelgesi ORDER BY id").fetchall()

@@ -119,6 +119,12 @@
       metin: "Tahta kullanılıyorsa 60 saniyelik uyarı çıkar ve kullanan kişi vazgeçebilir. Açık pencereler kapanır, tarayıcı oturumları ve çerezler silinir; dosyalara, geçmişe ve kayıtlı parolalara dokunulmaz.",
       baslik: function () { return "Bu tahtada oturum temizliği yapılsın mı?"; }
     },
+    /* USB anahtar (0.11.0): anlık ve geri alınmaz */
+    usb_iptal: {
+      ad: "eylem", deger: "iptal", evet: "Anahtarı iptal et",
+      metin: "Bu anahtar hemen geçersiz olur ve geri alınamaz. Bu anahtarla açılmış yoklama ekranları da kapanır.",
+      baslik: function (n, ad) { return (ad ? ad + " a" : "A") + "nahtarı iptal edilsin mi?"; }
+    },
     sinav_sil: {
       ad: "eylem", deger: "sil", evet: "Sınavı sil",
       metin: "Sınav, salonları ve öğrenci listesi tamamen silinir; icmal de üretilemez. Geri alınamaz.",
@@ -165,10 +171,15 @@
       return parseInt(form.getAttribute("data-sinavdaki") || "0", 10) || 0;
     }
 
+    function formKimligi(form) {
+      return form.getAttribute("id") || "";
+    }
+
     function ac(form, baslik, metin, ad, deger, evetMetni) {
       $("onay-baslik").textContent = baslik;
       $("onay-metin").textContent = metin;
-      evet.setAttribute("form", form.id);
+      // Formun "id" özelliği kullanılmaz: formda name="id" alanı varsa özellik o alanı döndürür (adlandırılmış öğe gölgelemesi).
+      evet.setAttribute("form", formKimligi(form));
       evet.name = ad;
       evet.value = deger;
       evet.textContent = evetMetni;
@@ -198,7 +209,7 @@
       tetik.addEventListener("click", function () {
         var tanim = ONAY[tetik.getAttribute("data-onay")];
         var form = tetik.form || tetik.closest("form");
-        if (!tanim || !form || !form.id) return;
+        if (!tanim || !form || !formKimligi(form)) return;
         // Onay düğmesi formnovalidate'tir; zorunlu alanı olan işlemde form önce burada doğrulanır.
         if (tanim.dogrula && form.reportValidity && !form.reportValidity()) return;
         var n = null;
@@ -1017,6 +1028,23 @@
     });
   }
 
+  /* ---- USB anahtar: indirme bağlantısı tek kullanımlıktır (0.11.0) ----------------
+     İlk tıklamadan sonra bağlantı devre dışı kalır: ikinci tıklama sayfadan ayrılıp bir kez
+     gösterilen PIN'i kaybettirmesin. JS yoksa bağlantı düz çalışır; sunucu ikinci isteği iletiyle
+     panele yönlendirir. */
+  function tekIndirmeKur() {
+    Array.prototype.forEach.call(document.querySelectorAll("a[data-tek-indirme]"), function (a) {
+      a.addEventListener("click", function () {
+        setTimeout(function () {
+          a.removeAttribute("href");
+          a.setAttribute("aria-disabled", "true");
+          var not = $(a.getAttribute("data-tek-indirme"));
+          if (not) not.hidden = false;
+        }, 0);
+      });
+    });
+  }
+
   /* ---- ayarlar: acil şablonu satırını sil (adı boşaltır; kaydedince silinir) ------ */
   function sablonKur() {
     Array.prototype.forEach.call(document.querySelectorAll("button[data-sablon-sil]"), function (d) {
@@ -1463,6 +1491,7 @@
   duyuruFormuKur();
   acilKur();
   yazdirKur();
+  tekIndirmeKur();
   sablonKur();
   onayKur();
   ayarlarKur();

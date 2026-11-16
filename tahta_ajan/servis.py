@@ -24,7 +24,7 @@ import unicodedata
 from collections import deque
 from urllib.parse import urlsplit
 
-from . import __version__, ayar, envanter, sistem, tani
+from . import __version__, ayar, envanter, sistem, tani, usb_anahtar
 from .baglanti import BaglantiHatasi, Istemci
 
 gunluk = logging.getLogger("tahta-ajan")
@@ -36,7 +36,7 @@ LOGO_YENIDEN_DENEME_SN = 60
 # Sunucunun bu ajana uygulayabileceği yetenekler (sürüm karşılaştırması yerine).
 YETENEKLER = [
     "acil", "duyuru_id", "program_kilidi", "sinav", "yoklama", "adres_listesi", "envanter", "ariza", "temizlik",
-    "dugme", "acilis_kilidi",
+    "dugme", "acilis_kilidi", "usb_anahtar",
 ]  # fmt: skip
 # Yüzer düğme (0.9.0, G3). Ayar sunucudan (`ayar.dugme`) gelir ve durum.json'da saklanır (sır değil): sunucu
 # kapalıyken servis yeniden başlasa da düğme görünür ve tahtadan kilitlenebilir. Ekrandan gelen her işlem
@@ -106,6 +106,10 @@ ILETI_ARIZA_KAYITSIZ = "Bu tahta henüz sunucuya kayıtlı değil."
 ILETI_ARIZA_KATEGORI = "Geçersiz kategori."
 ILETI_ARIZA_SINIR = "Bu tahtadan son bir saatte çok bildirim yapıldı; idareye başvurun."
 ILETI_ARIZA_KUYRUK = "Bekleyen bildirim çok; sunucuya ulaşılınca yeniden deneyin."
+# USB anahtar (0.11.0): "çıkarıldı" iletisi ekranda bu kadar kalır; kilit açma PIN sayfası dokunulmazsa kapanır.
+USB_CIKARILDI_SN = 4
+USB_ILETI_SN = 8
+USB_PIN_BOSTA_SN = 90
 # Ekran sayılmayan yerel bağlantılar: kitaplığı olmayan yardımcı ("yok") ve kısa ömürlü komut istemcisi.
 GORUNMEZ_ARAYUZ = (None, "yok", "komut")
 
@@ -159,6 +163,24 @@ class Servis:
         self._yoklama_oturum_no = 0
         # Sunucunun durum tabanlı `ayar.yoklama_etkin` bayrağı; None = sunucu bildirmedi (eski sunucu).
         self.yoklama_etkin = None
+        # USB anahtar (0.11.0): sunucunun durum tabanlı `ayar.usb_anahtar.etkin` bayrağı (None = bildirmedi:
+        # eski sunucu → izleme kapalı). Gizli değer YALNIZ `_usb_gizli`de, tanındıktan sonra en çok
+        # TANI_OMRU_SN durur; görünüme, durum dosyasına, günlüğe, tanılamaya ve sunucuya giden duruma girmez.
+        # Bağlama yolu da yalnız bu bellekte, okunurken kullanılır (kişisel hesap adı taşıyabilir).
+        self.usb_etkin = None
+        self.usb = _usb_bos()
+        self._usb_gizli = None  # (kimlik, gizli)
+        self._usb_baglama = None  # anahtarın okunduğu bağlamanın mountinfo kimliği
+        self._usb_gorulen: set[int] = set()  # bir kez okunmuş bağlamalar (çıkarılıp takılan yeni kimlik alır)
+        self._usb_izleme = None  # {"dur": Event} — izleme iş parçacığı yalnız özellik açıkken çalışır
+        self._usb_izleme_durumu = "kapali"  # "kapali" | "izleniyor" | "desteklenmiyor"
+        self._usb_pin = None  # kilit açma PIN sayfası: {"hata","istek","bekleme_bitis","son_dokunma"}
+        self._usb_kilit_suruyor = False
+        self._usb_istek_no = 0  # tanıma isteğinin sırası: geç gelen eski yanıt yeni durumu ezmesin
+        self._usb_bildirim_no = 0
+        self._usb_bildirim_kapali = 0
+        self._usb_tani = {"takili": 0, "elenen": {}, "son_okuma": "", "son_dogrulama": "yok"}
+        self.usb_izleyici_kur = sistem.baglama_izleyici  # testler değiştirir
         # Ağ isteği atan işler ayrı iş parçacığında çalışır (ekran beklemez); testler eşzamanlı yapar.
         self.arka_plan = lambda is_: threading.Thread(target=is_, daemon=True).start()
         self.zamanla = lambda sn, is_: threading.Timer(sn, is_).start()
@@ -576,6 +598,8 @@ class Servis:
             "istek": False,  # sunucuya giden istek sürüyor
             "kaydet_denendi": False,
             "uyari_son": False,
+            "usb": False,  # 0.11.0: oturum USB anahtarla açılacak (öğretmen kodu sorulmaz)
+            "usb_not": "",  # PIN sayfasında gösterilecek USB bilgisi ("çok uzun süredir takılı")
         }
 
     def _yoklama_ileti_ver(self, metin: str, sure: int = YOKLAMA_ILETI_SN):
@@ -636,6 +660,11 @@ class Servis:
                     self.yoklama = self._yoklama_yeni("yukleniyor")
                     self.yoklama["istek"] = True
                     oturum = self.yoklama["oturum"]
+                    # USB anahtar (0.11.0): tanınmış ve yoklama izinli anahtar kod + PIN adımını atlatır.
+                    if self._usb_gizli is not None and self.usb["durum"] == "tanindi" and "yoklama" in self.usb["izinler"]:
+                        self.yoklama["usb"] = True
+                    elif self.usb_etkin and self.usb["durum"] == "suresi_doldu":
+                        self.yoklama["usb_not"] = usb_anahtar.ILETI_SURESI_DOLDU
         self.yayinla()
         self.bildir()
         if oturum is not None:
@@ -644,7 +673,7 @@ class Servis:
     def _yoklama_oneri_al(self, oturum: int, sube: str | None = None):
         """İlk açılışta öneri (sube=None) ya da şube değişince o şubenin ders saatleri."""
         kod, yanit = self._yoklama_istek("/ajan/yoklama/oneri", {"sube": sube} if sube else {})
-        belirtec = None
+        belirtec, usb_baslat = None, None
         with self.kilit:
             y = self.yoklama
             if y is None or y["oturum"] != oturum or (sube is not None and y["sube"] != sube):
@@ -652,8 +681,13 @@ class Servis:
             y["istek"] = False
             if kod == 200:
                 oneri = _oneri_coz(yanit)
-                if sube is None:
-                    y.update(oneri=oneri, sube=oneri["sube"], ders_no=oneri["ders_no"], asama="pin", hata="")
+                if sube is None and y["usb"] and not self.usb["pin_gerek"]:
+                    # USB anahtar, PIN sorulmuyor: PIN sayfası hiç açılmadan oturum istenir.
+                    y.update(oneri=oneri, sube=oneri["sube"], ders_no=oneri["ders_no"], hata="", istek=True)
+                    y["son_dokunma"] = time.monotonic()
+                    usb_baslat = oturum
+                elif sube is None:
+                    y.update(oneri=oneri, sube=oneri["sube"], ders_no=oneri["ders_no"], asama="pin", hata=y["usb_not"])
                     y["son_dokunma"] = time.monotonic()
                 elif y["oneri"] is not None:
                     y["oneri"]["ders_saatleri"] = oneri["ders_saatleri"]
@@ -669,6 +703,8 @@ class Servis:
         self._yoklama_bitir_gonder(belirtec)
         self.yayinla()
         self.bildir()
+        if usb_baslat is not None:
+            self._usb_yoklama_baslat(usb_baslat, None)
 
     def _yoklama_pin(self, kod, pin):
         """Ekrandan gelen öğretmen kodu + PIN: sunucuda doğrulanır. PIN saklanmaz, günlüğe yazılmaz."""
@@ -683,16 +719,18 @@ class Servis:
             y["son_dokunma"] = simdi
             if simdi < y["bekleme_bitis"]:
                 y["hata"] = f"Çok fazla hatalı deneme. {int(y['bekleme_bitis'] - simdi) + 1} saniye bekleyin."
-            elif len(kod) != 3:
+            elif len(kod) != 3 and not y["usb"]:  # USB kipinde öğretmen kodu sorulmaz (gelirse yok sayılır)
                 y["hata"] = "Öğretmen kodu 3 hanelidir."
             elif len(pin) != 6:
                 y["hata"] = "PIN 6 hanelidir."
             else:
                 y["hata"], y["istek"] = "", True
-                istek = (y["oturum"], kod, pin)
+                istek = (y["oturum"], kod, pin, y["usb"])
         self.yayinla()
-        if istek:
-            self.arka_plan(lambda: self._yoklama_baslat(*istek))
+        if istek and istek[3]:
+            self.arka_plan(lambda: self._usb_yoklama_baslat(istek[0], istek[2]))
+        elif istek:
+            self.arka_plan(lambda: self._yoklama_baslat(*istek[:3]))
 
     def _yoklama_baslat(self, oturum: int, kod: str, pin: str):
         durum_kodu, yanit = self._yoklama_istek("/ajan/yoklama/baslat", {"kod": kod, "pin": pin})
@@ -704,18 +742,8 @@ class Servis:
             if y is None or y["oturum"] != oturum or y["asama"] != "pin":
                 kapatilacak = belirtec  # bu arada vazgeçildi: açılan oturum boşa kalmasın
             elif belirtec:
-                self._yoklama_belirtec = belirtec[:200]
-                kalan = min(YOKLAMA_OTURUM_EN_UZUN_SN, max(30, _sayi(yanit.get("kalan_sn")) or 480))
-                ogretmen = yanit.get("ogretmen") if isinstance(yanit.get("ogretmen"), dict) else {}
-                y.update(
-                    asama="liste", hata="", istek=False, bitis=time.monotonic() + kalan, son_dokunma=time.monotonic(),
-                    bosta_sn=min(600, max(30, _sayi(yanit.get("bosta_sn")) or YOKLAMA_BOSTA_VARSAYILAN_SN)),
-                    ogretmen={"kod": _kes(ogretmen.get("kod"), 4), "etiket": _kes(ogretmen.get("etiket"), 60)},
-                )  # fmt: skip
+                liste = self._yoklama_oturum_acildi(y, yanit, oturum, belirtec)
                 self.olaylar.append("Ders yoklaması oturumu açıldı.")
-                if y["sube"] and y["ders_no"]:
-                    y["istek"] = True
-                    liste = (oturum, y["sube"], y["ders_no"])
             else:
                 y["istek"] = False
                 hata = _kes(yanit.get("hata"), 200)
@@ -741,6 +769,21 @@ class Servis:
         self.bildir()
         if liste:
             self._yoklama_liste_al(*liste)
+
+    def _yoklama_oturum_acildi(self, y: dict, yanit: dict, oturum: int, belirtec: str):
+        """Sunucu oturumu açtı (kod + PIN ya da USB anahtar; çağıran kilidi tutar). Liste isteğini döndürür."""
+        self._yoklama_belirtec = belirtec[:200]
+        kalan = min(YOKLAMA_OTURUM_EN_UZUN_SN, max(30, _sayi(yanit.get("kalan_sn")) or 480))
+        ogretmen = yanit.get("ogretmen") if isinstance(yanit.get("ogretmen"), dict) else {}
+        y.update(
+            asama="liste", hata="", istek=False, bitis=time.monotonic() + kalan, son_dokunma=time.monotonic(),
+            bosta_sn=min(600, max(30, _sayi(yanit.get("bosta_sn")) or YOKLAMA_BOSTA_VARSAYILAN_SN)),
+            ogretmen={"kod": _kes(ogretmen.get("kod"), 4), "etiket": _kes(ogretmen.get("etiket"), 60)},
+        )  # fmt: skip
+        if y["sube"] and y["ders_no"]:
+            y["istek"] = True
+            return (oturum, y["sube"], y["ders_no"])
+        return None
 
     def _yoklama_liste_al(self, oturum: int, sube: str, ders_no: int):
         with self.kilit:
@@ -937,7 +980,414 @@ class Servis:
             "hata": y["hata"],
             "bekleme": max(0, int(y["bekleme_bitis"] - simdi + 0.999)) if y["bekleme_bitis"] else 0,
             "istek": y["istek"],
+            # USB anahtar (0.11.0): "usb" ise PIN sayfasında öğretmen kodu sorulmaz (yalnız PIN).
+            "pin_kipi": "usb" if y.get("usb") else "",
+            "usb_etiket": usb_anahtar.sahip_metni(self.usb) if y.get("usb") else "",
         }
+
+    # ---- USB anahtar (0.11.0) -------------------------------------------------------------
+    # Akış: izleme (yalnız ayar açıkken) → yeni bağlamanın kökünde anahtar dosyası → parmak izi denetimi →
+    # /ajan/usb/tani → "tanındı" (gizli bellekte, en çok TANI_OMRU_SN). Yoklama ve kilit açma DOKUNUŞLA başlar;
+    # takılınca yalnız küçük bir bildirim çıkar. Bellek çıkarılınca gizli silinir, açık yoklama listesi kalır.
+    def _usb_izlemeyi_ayarla(self, etkin) -> bool:
+        """Sunucunun `ayar.usb_anahtar.etkin` bayrağı (None: alan yok = eski sunucu). Değiştiyse True."""
+        baslat = None
+        with self.kilit:
+            if etkin == self.usb_etkin:
+                return False
+            self.usb_etkin = etkin
+            if etkin and self._usb_izleme is None:
+                baslat = threading.Event()
+                self._usb_izleme = {"dur": baslat}
+            elif not etkin and self._usb_izleme is not None:
+                self._usb_izleme["dur"].set()
+                self._usb_izleme = None
+                self._usb_izleme_durumu = "kapali"
+                self._usb_gorulen.clear()
+                self._usb_baglama = None
+                self._usb_istek_no += 1
+                self._usb_sifirla()  # açık yoklama oturumu sürer (belirteç ayrı yetkidir)
+        if baslat is not None:
+            self.arka_plan_surekli(lambda: self._usb_izle(baslat))
+        return True
+
+    def arka_plan_surekli(self, is_):
+        """Uzun süren iş (izleme döngüsü) her zaman ayrı iş parçacığında çalışır (testler `_usb_tara` çağırır)."""
+        threading.Thread(target=is_, daemon=True).start()
+
+    def _usb_izle(self, dur: threading.Event):
+        izleyici = self.usb_izleyici_kur()
+        with self.kilit:
+            if self._usb_izleme is None or self._usb_izleme["dur"] is not dur:
+                if izleyici is not None:
+                    izleyici.kapat()
+                return
+            self._usb_izleme_durumu = "izleniyor" if izleyici is not None else "desteklenmiyor"
+        if izleyici is None:
+            gunluk.info("USB anahtar: bağlama noktaları izlenemiyor (desteklenmiyor).")
+            return
+        gunluk.info("USB anahtar: bağlama noktaları izleniyor.")
+        try:
+            while not dur.is_set() and not self.dur.is_set():
+                try:
+                    self._usb_tara(izleyici.oku())
+                except Exception as hata:  # izleme hiçbir koşulda servisi düşürmez; yol/içerik günlüğe yazılmaz
+                    gunluk.warning("USB anahtar izleme turu başarısız: %s", type(hata).__name__)
+                izleyici.bekle(usb_anahtar.IZLEME_ZAMAN_ASIMI_SN)
+        finally:
+            izleyici.kapat()
+
+    def _usb_sifirla(self, durum: str = "yok", ileti: str = "", ileti_sn: float | None = None):
+        """Anahtar durumunu sıfırlar ve gizli değeri bellekten atar (çağıran kilidi tutar)."""
+        self._usb_gizli = None
+        self._usb_pin = None
+        self.usb = _usb_bos(durum, ileti, time.monotonic() + ileti_sn if ileti_sn else None)
+
+    def _usb_bildirim(self):
+        """Ekranda küçük bildirim (tanındı/reddedildi). Yeni numara gelmedikçe kapanan bildirim yeniden açılmaz."""
+        self._usb_bildirim_no += 1
+
+    def _usb_tara(self, mountinfo: str):
+        """Bir izleme turu: takılı bellekleri bulur, çıkarılanı düşürür, yeni bağlamanın kökündeki anahtarı okur."""
+        adaylar, elenen = sistem.cikarilabilir_baglamalar(mountinfo)
+        kimlikler = {a["kimlik"] for a in adaylar}
+        kapatilacak, degisti = None, False
+        with self.kilit:
+            if self._usb_izleme is None:
+                return
+            self._usb_tani.update(takili=len(adaylar), elenen=dict(elenen))
+            self._usb_gorulen &= kimlikler
+            if self._usb_baglama is not None and self._usb_baglama not in kimlikler:
+                kapatilacak, degisti = self._usb_cikarildi(), True
+            yeniler = [a for a in adaylar if a["kimlik"] not in self._usb_gorulen]
+            self._usb_gorulen |= {a["kimlik"] for a in yeniler}
+        bulunan = []
+        for baglama in yeniler:
+            veri = sistem.anahtar_oku(baglama)
+            if isinstance(veri, sistem.Red):
+                with self.kilit:
+                    self._usb_tani["son_okuma"] = veri.neden
+                continue
+            try:
+                bulunan.append((baglama["kimlik"], usb_anahtar.dosya_coz(veri)))
+                sonuc = "bulundu"
+            except usb_anahtar.DosyaHatasi as hata:
+                sonuc = "surum" if hata.neden == "surum" else "bicim"
+            del veri
+            with self.kilit:
+                self._usb_tani["son_okuma"] = sonuc
+                if sonuc == "surum" and self.usb["durum"] in ("yok", "cikarildi", "suresi_doldu"):
+                    self._usb_baglama = baglama["kimlik"]
+                    self._usb_sifirla("reddedildi", usb_anahtar.ILETI_SURUM)
+                    self._usb_bildirim()
+                    degisti = True
+        tani_iste = False
+        for baglama_kimlik, dosya in bulunan:
+            with self.kilit:
+                if self.usb["durum"] in ("okunuyor", "tanindi", "cevrimdisi") and self._usb_baglama is not None:
+                    # İlk tanınan geçerlidir; ötekiler yok sayılır (gizli değerleri hiç saklanmaz).
+                    self.usb.update(ileti=usb_anahtar.ILETI_BIRDEN_COK, ileti_bitis=time.monotonic() + USB_ILETI_SN)
+                    self._usb_bildirim()
+                    degisti = True
+                    continue
+                self._usb_baglama = baglama_kimlik
+                self._usb_istek_no += 1
+                if not usb_anahtar.sunucu_uyar_mi(dosya["sunucu"], self.yapi.get("parmak_izi", "")):
+                    # Başka bir sunucunun anahtarı: gizli değer hiçbir yere gönderilmez.
+                    self._usb_sifirla("yabanci", usb_anahtar.ILETI_YABANCI)
+                    self._usb_tani["son_dogrulama"] = "başka sunucunun anahtarı"
+                    self._usb_bildirim()
+                    degisti = True
+                    continue
+                self._usb_sifirla("okunuyor")
+                self._usb_gizli = (dosya["kimlik"], dosya["gizli"])
+                tani_iste = True
+            del dosya
+        self._yoklama_bitir_gonder(kapatilacak)
+        if tani_iste:
+            self._usb_tani_iste()
+        elif degisti:
+            self.yayinla()
+
+    def _usb_cikarildi(self):
+        """Bellek çıkarıldı (çağıran kilidi tutar): gizli silinir; PIN bekleyen USB'li yoklama ve kilit açma
+        PIN sayfası kapanır (PIN bellek olmadan girilmesin). Açık yoklama listesi KALIR. Kapatılacak belirteci döndürür."""
+        kapatilacak = None
+        y = self.yoklama
+        if y is not None and y.get("usb") and y["asama"] in ("yukleniyor", "pin"):
+            kapatilacak = self._yoklama_ileti_ver(usb_anahtar.ILETI_CIKARILDI)
+        self._usb_baglama = None
+        self._usb_istek_no += 1
+        self._usb_kilit_suruyor = False
+        self._usb_sifirla("cikarildi", usb_anahtar.ILETI_CIKARILDI, USB_CIKARILDI_SN)
+        return kapatilacak
+
+    def _usb_tani_iste(self):
+        """Okunan anahtarı sunucuda doğrular (arka planda). Sunucuya ulaşılamıyorsa "cevrimdisi"."""
+        istek = None
+        with self.kilit:
+            gizli = self._usb_gizli
+            if gizli is None:
+                return
+            if self.istemci is None or not self.kayitli() or self.cevrimdisi():
+                ileti = usb_anahtar.ILETI_KAYITSIZ if not self.kayitli() else usb_anahtar.ILETI_CEVRIMDISI
+                if self.usb["durum"] != "cevrimdisi":
+                    self._usb_bildirim()
+                self.usb.update(durum="cevrimdisi", ileti=ileti)
+                self._usb_tani["son_dogrulama"] = "sunucuya ulaşılamadı"
+            else:
+                self._usb_istek_no += 1
+                self.usb["durum"] = "okunuyor"
+                istek = (self._usb_istek_no, gizli)
+        self.yayinla()
+        if istek:
+            self.arka_plan(lambda: self._usb_tani_gonder(*istek))
+
+    def _usb_tani_gonder(self, no: int, gizli: tuple[str, str]):
+        kod, yanit = self._yoklama_istek("/ajan/usb/tani", {"kimlik": gizli[0], "gizli": gizli[1]})
+        with self.kilit:
+            if no != self._usb_istek_no or self._usb_gizli != gizli:
+                return  # bu arada bellek çıkarıldı ya da başka anahtar geldi
+            anahtar = yanit.get("anahtar")
+            if kod == 200 and isinstance(anahtar, dict):
+                tur = "idare" if anahtar.get("tur") == "idare" else "ogretmen"
+                omur = min(usb_anahtar.TANI_OMRU_SN, max(10, _sayi(yanit.get("omur_sn")) or usb_anahtar.TANI_OMRU_SN))
+                izinler = yanit.get("izinler") if isinstance(yanit.get("izinler"), list) else []
+                if self.usb["ileti_bitis"] is None:
+                    self.usb["ileti"] = ""  # "sunucuya ulaşılamıyor" gibi durum iletisi kalkar; süreli ileti kalır
+                self.usb.update(
+                    durum="tanindi", tur=tur, etiket=_kes(anahtar.get("etiket"), 60),
+                    kod=_kes(anahtar.get("kod"), 4) if tur == "ogretmen" else "", pin_gerek=bool(yanit.get("pin_gerek")),
+                    izinler=[i for i in ("yoklama", "kilit_ac") if i in izinler], omur_bitis=time.monotonic() + omur,
+                )  # fmt: skip
+                self._usb_tani["son_dogrulama"] = f"tanındı ({'idare' if tur == 'idare' else 'öğretmen'} anahtarı)"
+                self._usb_bildirim()
+            elif kod is None:
+                if self.usb.get("yeniden"):
+                    self._usb_gizli = None  # bir kez yeniden denendi; çıkarıp takınca yeniden okunur
+                self.usb.update(durum="cevrimdisi", ileti=usb_anahtar.ILETI_CEVRIMDISI)
+                self._usb_tani["son_dogrulama"] = "sunucuya ulaşılamadı"
+                self._usb_bildirim()
+            else:
+                self._usb_reddet(kod, yanit)
+        self.yayinla()
+
+    def _usb_reddet(self, kod, yanit: dict) -> str:
+        """Sunucu anahtarı reddetti (çağıran kilidi tutar): gizli silinir, ileti verilir. İletiyi döndürür."""
+        neden = yanit.get("neden") if isinstance(yanit.get("neden"), str) else ""
+        if kod == 401:
+            ileti = usb_anahtar.ILETI_TANINMIYOR
+        else:
+            ileti = _kes(yanit.get("hata"), 200) or usb_anahtar.NEDEN_ILETISI.get(neden) or f"USB anahtar doğrulanamadı (HTTP {kod})."
+        self._usb_tani["son_dogrulama"] = {"iptal": "iptal edilmiş", "kilitli": "kilitli"}.get(neden, "geçersiz")
+        self._usb_sifirla("reddedildi", ileti)
+        self._usb_bildirim()
+        return ileti
+
+    def _usb_denetle(self):
+        """Bekçi (1 sn): tanıma ömrü, ileti süresi, kilit açma PIN sayfasının durumu, çevrimdışı tanımanın yeniden denenmesi."""
+        degisti, yeniden = False, False
+        with self.kilit:
+            u, simdi = self.usb, time.monotonic()
+            if u["durum"] == "tanindi" and u["omur_bitis"] is not None and simdi >= u["omur_bitis"]:
+                # Unutulan bellek kalıcı yetki bırakmaz; ileti yalnız bir dokunuşta gösterilir.
+                self._usb_sifirla("suresi_doldu")
+                self._usb_tani["son_dogrulama"] = "süresi doldu"
+                degisti = True
+            if u["ileti_bitis"] is not None and simdi >= u["ileti_bitis"]:
+                u.update(ileti="", ileti_bitis=None)
+                if u["durum"] == "cikarildi":
+                    u["durum"] = "yok"
+                degisti = True
+            p = self._usb_pin
+            if p is not None:
+                if not self._usb_kilit_acilabilir() or (not p["istek"] and simdi - p["son_dokunma"] >= USB_PIN_BOSTA_SN):
+                    self._usb_pin, degisti = None, True
+                elif p["bekleme_bitis"] and simdi >= p["bekleme_bitis"]:
+                    p["bekleme_bitis"], p["hata"], degisti = 0.0, "", True
+            if (u["durum"] == "cevrimdisi" and self._usb_gizli is not None and not u.get("yeniden")
+                    and self.istemci is not None and self.kayitli() and not self.cevrimdisi()):  # fmt: skip
+                u["yeniden"], yeniden = True, True
+        if yeniden:
+            self._usb_tani_iste()
+        elif degisti:
+            self.yayinla()
+
+    def _usb_kilit_acilabilir(self) -> bool:
+        """"USB anahtarla aç" geçerli mi (çağıran kilidi tutar): tahta kilitli, sınav ve acil yok, anahtar tanınmış ve izinli."""
+        return (
+            self.kilitli and self._usb_gizli is not None and self.usb["durum"] == "tanindi"
+            and "kilit_ac" in self.usb["izinler"] and self._sinav_aktif() is None
+            and not (self.acil is not None and self.acil["bitis"] > time.time())
+        )  # fmt: skip
+
+    def _usb_kilit_iste(self):
+        """Kilit ekranındaki "USB anahtarla aç": PIN gerekiyorsa PIN sayfası, değilse sunucuya onay isteği."""
+        gonder = None
+        with self.kilit:
+            if self._usb_kilit_acilabilir() and not self._usb_kilit_suruyor and self._usb_pin is None:
+                if self.usb["pin_gerek"]:
+                    self._usb_pin = {"hata": "", "istek": False, "bekleme_bitis": 0.0, "son_dokunma": time.monotonic()}
+                else:
+                    self._usb_kilit_suruyor = True
+                    gonder = self._usb_gizli
+        self.yayinla()
+        if gonder:
+            self.arka_plan(lambda: self._usb_kilit_gonder(gonder, None))
+
+    def _usb_pin_gir(self, pin):
+        """usb-pin sayfasından PIN (yalnız sayfa açıkken). PIN saklanmaz, günlüğe yazılmaz."""
+        pin = "".join(c for c in str(pin) if c in RAKAMLAR)[:7]
+        gonder = None
+        with self.kilit:
+            p = self._usb_pin
+            if p is None or p["istek"] or not self._usb_kilit_acilabilir():
+                return
+            simdi = time.monotonic()
+            p["son_dokunma"] = simdi
+            if simdi < p["bekleme_bitis"]:
+                p["hata"] = f"Çok fazla hatalı deneme. {int(p['bekleme_bitis'] - simdi) + 1} saniye bekleyin."
+            elif len(pin) != 6:
+                p["hata"] = "PIN 6 hanelidir."
+            else:
+                p.update(istek=True, hata="")
+                gonder = self._usb_gizli
+        self.yayinla()
+        if gonder:
+            self.arka_plan(lambda: self._usb_kilit_gonder(gonder, pin))
+
+    def _usb_kilit_gonder(self, gizli: tuple[str, str], pin):
+        govde = {"kimlik": gizli[0], "gizli": gizli[1]}
+        if pin:
+            govde["pin"] = pin
+        kod, yanit = self._yoklama_istek("/ajan/usb/kilit_ac", govde)
+        del govde, pin
+        with self.kilit:
+            self._usb_kilit_suruyor = False
+            p = self._usb_pin
+            if p is not None:
+                p["istek"] = False
+            neden = yanit.get("neden") if isinstance(yanit.get("neden"), str) else ""
+            hata = _kes(yanit.get("hata"), 200)
+            if self._usb_gizli != gizli:
+                pass  # bu arada bellek çıkarıldı: kilit açılmaz
+            elif kod == 200 and yanit.get("tamam") is True:
+                self._usb_pin = None
+                if self._usb_kilit_acilabilir():
+                    program = self._program_kilidi()
+                    self._kilit_birak()
+                    self.hatali_deneme = 0
+                    self.olaylar.append(
+                        "Program kilidi tahtadan USB anahtarla açıldı." if program else "Kilit tahtadan USB anahtarla açıldı."
+                    )
+                    self._kaydet()
+            elif kod == 403 and neden == "pin_gerek":
+                self.usb["pin_gerek"] = True  # ayar bu arada değişti
+                self._usb_pin = {"hata": "", "istek": False, "bekleme_bitis": 0.0, "son_dokunma": time.monotonic()}
+            elif kod == 403 and neden == "pin" and p is not None:
+                p["hata"] = hata or usb_anahtar.ILETI_PIN_HATALI
+            elif kod == 429 and neden == "bekle" and p is not None:
+                p["bekleme_bitis"] = time.monotonic() + min(3600, max(1, _sayi(yanit.get("bekleme_sn")) or 120))
+                p["hata"] = hata or "Çok fazla hatalı deneme. Biraz bekleyip yeniden deneyin."
+            elif kod is None:
+                if p is not None:
+                    p["hata"] = "Sunucuya ulaşılamadı; yeniden deneyin."
+                else:
+                    self.usb.update(ileti=usb_anahtar.ILETI_CEVRIMDISI, ileti_bitis=time.monotonic() + USB_ILETI_SN)
+            elif kod in (401, 403, 410, 423):
+                self._usb_reddet(kod, yanit)
+            else:  # 409 (kilit açma kapalı, sınav, özellik kapalı), 429 (tahta sınırı)
+                self._usb_pin = None
+                if neden == "kilit_kapali":
+                    self.usb["izinler"] = [i for i in self.usb["izinler"] if i != "kilit_ac"]
+                self.usb.update(ileti=hata or usb_anahtar.NEDEN_ILETISI.get(neden, ""), ileti_bitis=time.monotonic() + USB_ILETI_SN)
+        self.yayinla()
+        self.bildir()
+
+    def _usb_yoklama_baslat(self, oturum: int, pin):
+        """USB anahtarla yoklama oturumu: /ajan/usb/yoklama (yanıt /ajan/yoklama/baslat biçiminde)."""
+        with self.kilit:
+            y = self.yoklama
+            if y is None or y["oturum"] != oturum:
+                return
+            gizli = self._usb_gizli if self.usb["durum"] == "tanindi" else None
+            if gizli is None:
+                metin = usb_anahtar.ILETI_SURESI_DOLDU if self.usb["durum"] == "suresi_doldu" else usb_anahtar.ILETI_CIKARILDI
+                self._yoklama_ileti_ver(metin)
+        if gizli is None:
+            self.yayinla()
+            return
+        govde = {"kimlik": gizli[0], "gizli": gizli[1]}
+        if pin:
+            govde["pin"] = pin
+        durum_kodu, yanit = self._yoklama_istek("/ajan/usb/yoklama", govde)
+        del govde, pin
+        kapatilacak, liste = None, None
+        with self.kilit:
+            y = self.yoklama
+            belirtec = yanit.get("belirtec") if durum_kodu == 200 and isinstance(yanit.get("belirtec"), str) else None
+            if y is None or y["oturum"] != oturum or y["asama"] not in ("yukleniyor", "pin"):
+                kapatilacak = belirtec
+            elif belirtec:
+                liste = self._yoklama_oturum_acildi(y, yanit, oturum, belirtec)
+                self.olaylar.append("Ders yoklaması oturumu USB anahtarla açıldı.")
+            else:
+                y["istek"] = False
+                neden = yanit.get("neden") if isinstance(yanit.get("neden"), str) else ""
+                hata = _kes(yanit.get("hata"), 200)
+                if durum_kodu == 403 and neden == "pin_gerek":
+                    self.usb["pin_gerek"] = True  # ayar bu arada değişti: PIN sorulur
+                    y.update(asama="pin", hata="", son_dokunma=time.monotonic())
+                elif durum_kodu == 403 and neden == "pin":
+                    y.update(asama="pin", hata=hata or usb_anahtar.ILETI_PIN_HATALI)
+                elif durum_kodu == 429 and neden == "bekle":
+                    y["bekleme_bitis"] = time.monotonic() + min(3600, max(1, _sayi(yanit.get("bekleme_sn")) or 120))
+                    y.update(asama="pin", hata=hata or "Çok fazla hatalı deneme. Biraz bekleyip yeniden deneyin.")
+                elif durum_kodu in (401, 403, 410, 423):
+                    kapatilacak = self._yoklama_ileti_ver(self._usb_reddet(durum_kodu, yanit), 8)
+                elif durum_kodu == 409:
+                    kapatilacak = self._yoklama_ileti_ver(hata or ILETI_YOKLAMA_KAPALI)
+                elif durum_kodu is None and y["asama"] == "pin":
+                    y["hata"] = "Sunucuya ulaşılamadı; yeniden deneyin."
+                elif durum_kodu is None:
+                    kapatilacak = self._yoklama_ileti_ver(ILETI_YOKLAMA_SUNUCU_YOK)
+                else:
+                    kapatilacak = self._yoklama_ileti_ver(hata or f"USB anahtar doğrulanamadı (HTTP {durum_kodu}).")
+        self._yoklama_bitir_gonder(kapatilacak)
+        self.yayinla()
+        self.bildir()
+        if liste:
+            self._yoklama_liste_al(*liste)
+
+    def _usb_gorunumu(self) -> dict | None:
+        """Ekrana giden USB görünümü (çağıran kilidi tutar): gizli, kimlik, bağlama yolu, bellek etiketi GİRMEZ."""
+        if not self.usb_etkin:
+            return None
+        u, p = self.usb, self._usb_pin
+        simdi = time.monotonic()
+        return {
+            "durum": u["durum"],
+            "tur": u["tur"],
+            "etiket": u["etiket"],
+            "kod": u["kod"],
+            "pin_gerek": u["pin_gerek"],
+            "izinler": list(u["izinler"]),
+            "metin": usb_anahtar.ekran_metni(u),
+            "kilit_ac": self._usb_kilit_acilabilir(),
+            "bildirim_no": self._usb_bildirim_no if self._usb_bildirim_no != self._usb_bildirim_kapali else 0,
+            "pin": (
+                {"hata": p["hata"], "istek": p["istek"],
+                 "bekleme": max(0, int(p["bekleme_bitis"] - simdi + 0.999)) if p["bekleme_bitis"] else 0}
+                if p is not None else None
+            ),  # fmt: skip
+        }
+
+    def usb_tani_bilgisi(self) -> dict:
+        """Tanılama "USB anahtar" satırları için yalnız sayı ve evet/hayır (yol, etiket, hesap adı, kimlik YOK)."""
+        with self.kilit:
+            ozellik = "bildirmedi" if self.usb_etkin is None else ("acik" if self.usb_etkin else "kapali")
+            return {"ozellik": ozellik, "izleme": self._usb_izleme_durumu, **{k: (dict(v) if isinstance(v, dict) else v)
+                    for k, v in self._usb_tani.items()}}  # fmt: skip
 
     def gorunum(self) -> dict:
         with self.kilit:
@@ -1007,6 +1457,8 @@ class Servis:
                 "derslik": self.tahta_bilgi["derslik"],
                 # Yüzer düğme (G3): görünecek işlemler; kilit kodu özeti GİTMEZ, yalnız var/yok sonucu.
                 "dugme": self._dugme_gorunumu(),
+                # USB anahtar (0.11.0): None (özellik kapalı) ya da durum, kısa ad/kod, izinler. Gizli değer GİRMEZ.
+                "usb": self._usb_gorunumu(),
             }
 
     def _oturum_gor(self, baslangic):
@@ -1177,6 +1629,8 @@ class Servis:
             "acil_id": acil_id,
             "sinav": self._sinav_durumu(),  # {kimlik, evre, yerel_kapali} | None — ad ve liste yok
             "yoklama_acik": self.yoklama_acik(),  # yalnız bayrak: şube, öğretmen, öğrenci yok (M4)
+            # USB anahtar (0.11.0): yalnız izlemenin durumu; takılı bellek, etiket, kimlik GÖNDERİLMEZ.
+            "usb_izleme": self._usb_izleme_durumu,
             "ekranlar": ekranlar,
             "oturum": oturum,
             "acik_sure": sistem.acik_sure(),
@@ -1312,6 +1766,33 @@ class Servis:
             self._yoklama_asama("onay", "liste")
         elif tur == "yoklama_onayla":
             self._yoklama_onayla()
+        elif tur == "yoklama_kod_pin":
+            # "Başka öğretmen (kod ve PIN)": takılı anahtar bu yoklamada yok sayılır.
+            with self.kilit:
+                y = self.yoklama
+                if y is not None and y["usb"] and y["asama"] == "pin" and not y["istek"]:
+                    y.update(usb=False, hata="", son_dokunma=time.monotonic())
+            self.yayinla()
+        # ---- USB anahtar (0.11.0): yetki bellekten gelir, iletiden değil (bellek takılı ve tanınmışken etkili) ----
+        elif tur in ("usb_kilit_ac", "usb_pin"):
+            # Kilit açma yalnız ekrandaki oturumun görünür yardımcısından (yüzer düğmeyle aynı daraltma, 0.9.0):
+            # anahtar tanınmışken arka plandaki başka bir hesabın süreci ya da komut istemcisi kilidi açamasın.
+            if not self._etkin_oturumdan(no):
+                gunluk.warning("USB kilit açma isteği reddedildi (no %s): ekrandaki oturumun yardımcısı değil.", no)
+            elif tur == "usb_kilit_ac":
+                self._usb_kilit_iste()
+            else:
+                self._usb_pin_gir(mesaj.get("pin", ""))
+        elif tur == "usb_vazgec":
+            with self.kilit:
+                self._usb_pin = None
+            self.yayinla()
+        elif tur == "usb_bildirim_kapat":
+            with self.kilit:
+                no = mesaj.get("bildirim_no")
+                if _tamsayi_mi(no) and no == self._usb_bildirim_no:
+                    self._usb_bildirim_kapali = no
+            self.yayinla()
         elif tur == "yoklama_kapat":
             with self.kilit:
                 belirtec = self._yoklama_kapat()
@@ -1526,6 +2007,7 @@ class Servis:
             rapor = tani.topla(
                 parca.hostname or "", parca.port or 443, self.sunucu_saat, ekranlar, self.sinav_tani_metni(),
                 sunucular=ayar.adres_sirasi(self.yapi), kilit=self.kilit_tani_metni(), dugme=self.dugme_tani_metni(),
+                usb=self.usb_tani_bilgisi(),
             )
             return True, json.dumps(rapor, ensure_ascii=False)
         if tur == "guncelle":
@@ -1826,6 +2308,11 @@ class Servis:
             with self.kilit:
                 if etkin != self.yoklama_etkin:
                     self.yoklama_etkin, acil_degisti = etkin, True
+        # USB anahtar (0.11.0): durum tabanlı, yalnız açık/kapalı. Alan yoksa (eski sunucu) izleme kapalı kalır.
+        usb = ayarlar.get("usb_anahtar")
+        usb_etkin = (isinstance(usb, dict) and usb.get("etkin") is True) if "usb_anahtar" in ayarlar else None
+        if self._usb_izlemeyi_ayarla(usb_etkin):
+            acil_degisti = True
         logo_degisti = False
         if "logo_sha256" in ayarlar:
             sha = ayarlar["logo_sha256"]
@@ -2008,6 +2495,7 @@ class Servis:
                     self.olaylar.append("Acil yayının süresi doldu.")
             self._sinav_denetle()
             self._yoklama_denetle()
+            self._usb_denetle()
             durum =(self.cevrimdisi(), self.duyuru is not None and self.duyuru["bitis"] <= time.time())
             if durum != self._son_cevrimdisi or durum[1] or acil_bitti:
                 self._son_cevrimdisi = durum
@@ -2095,6 +2583,12 @@ class Servis:
             self._dongu()
         finally:
             yerel.shutdown()
+
+
+def _usb_bos(durum: str = "yok", ileti: str = "", ileti_bitis: float | None = None) -> dict:
+    """USB anahtarın ekranda gösterilebilen durumu (gizli değer burada DEĞİL, `Servis._usb_gizli`de)."""
+    return {"durum": durum, "tur": "", "etiket": "", "kod": "", "pin_gerek": False, "izinler": [], "ileti": ileti,
+            "ileti_bitis": ileti_bitis, "omur_bitis": None, "yeniden": False}  # fmt: skip
 
 
 def _kisa(deger) -> str:

@@ -590,7 +590,7 @@ def test_goc_mevcut_veritabanina_uygulanir_program_aktarma_tablolari(tmp_path, m
     b.close()
     vt.hazirla()
     with vt.islem() as b:
-        assert b.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert b.execute("PRAGMA user_version").fetchone()[0] == len(vt.GOCLER) >= 9
         assert b.execute("SELECT COUNT(*) FROM program_eslesme").fetchone()[0] == 0
         assert b.execute("SELECT COUNT(*) FROM program_surum").fetchone()[0] == 0
 

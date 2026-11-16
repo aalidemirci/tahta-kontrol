@@ -162,6 +162,16 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
   "Önceki programlar"dan geri yüklenir. e-Okul'un ders programı çıktısı, biçimi doğrulanamadığı için
   okunmaz (yapay zekâ yolu ya da şablonla aktarılır).
 
+0.11.0 ile:
+
+- **USB anahtar (isteğe bağlı, varsayılan kapalı):** idareciler bellekteki küçük bir anahtar dosyasıyla
+  her tahtada, her şubenin yoklamasını öğretmen kodu ve PIN yazmadan alır; isteyen öğretmenlere de
+  anahtar üretilir. Ayar açıksa anahtar kilitli tahtayı da açar. Bellek biçimlendirilmez, anahtar olarak
+  işgal edilmez: dosya belleğin en üst klasöründe öteki dosyaların yanında durur. Takılınca tahtada
+  yalnız köşede küçük bir bildirim çıkar; yoklama ve kilit açma dokunuşla başlar. İdare anahtarlarında
+  PIN de sorulur (Ayarlar'dan değiştirilir). Kaybolan anahtar panelden hemen iptal edilir. Sunucuya
+  ulaşılamayan tahtada ve sınav ekranında çalışmaz.
+
 ## Çalıştırma (geliştirme)
 
 Python 3.12 ve [uv](https://docs.astral.sh/uv/) gerekir.
@@ -189,6 +199,10 @@ Windows hizmeti olarak kaydeder (pywin32; ayrı bir hizmet aracı kullanılmaz).
 - Ders yoklamasında tahtada öğrenci yalnız maskeli adla görünür; liste tahtada diske yazılmaz.
   Öğretmen PIN'i sunucuda yalnız geri çevrilemez özet olarak durur ve tahtaya gitmez. Yoklama
   kayıtları öğretim yılı sonunda silinir; öğrenci listesi dışa verilmez.
+- USB anahtar dosyasında ad, kod ya da okul adı yoktur; sunucu anahtarın gizli değerini değil, yalnız
+  geri çevrilemez özetini saklar. Dosya kopyalanabilir (bellek tahtada takılıyken tahtadaki oturumdan
+  görülebilir); bu yüzden PIN, iptal, kısa tanıma süresi (10 dk) ve "iki tahtada kısa arayla kullanıldı"
+  uyarısı vardır. Anahtar yalnız yoklama ve kilit açmaya yetkilidir; panel, ayar, duyuru, kapatma, sınav yok.
 - Panel dış kaynak (font, CDN, analitik) yüklemez; satır içi betik ve stil
   içermez, içerik güvenliği politikası (CSP) bunu zorlar. Logo yalnız PNG ya da
   JPEG olarak kabul edilir.

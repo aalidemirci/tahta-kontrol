@@ -15,6 +15,7 @@ ders var" bilgisi `ders_saati` + `tahta_ders`'ten okunur. Program yoksa öneri b
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import time
 from datetime import date, datetime, timedelta
@@ -49,6 +50,8 @@ CIFT_ARDISIK, CIFT_BEKLEME_SN = 3, 120
 OGRETMEN_HATA_ADET, OGRETMEN_PENCERE_SN = 10, 86400
 
 ILETI_ETKIN_DEGIL = "Ders yoklaması bu okulda etkin değil."
+# `oturum_kaydedeni`nin USB eki: "...(tahta:X) USB K7Q2M9XA" (anahtar kimliği alfabesi, metnin sonunda).
+_USB_IZ_EKI = re.compile(r"\) USB [ABCDEFGHJKMNPQRSTUVWXYZ2-9]{8}$")
 ILETI_HATALI = "Öğretmen kodu ya da PIN hatalı."
 ILETI_BEKLE = "Çok fazla hatalı deneme. Biraz bekleyip yeniden deneyin."
 ILETI_TAHTA_KAPALI = "Bu tahtada çok fazla hatalı deneme yapıldı. Yoklama girişi 10 dakika kapalı."
@@ -498,31 +501,70 @@ def pin_dogrula(b, kapi: PinKapisi, kod, pin, tahta_id: int, an: int) -> tuple[s
     return "hatali", satir, 0
 
 
-def oturum_ac(b, ogretmen_id: int, tahta_id: int, an: int, oturum_dk: int) -> tuple[str, int]:
-    """Yoklama belirteci üretir (aynı öğretmen-tahta çiftinin eski oturumları silinir). (belirteç, bitiş)."""
-    b.execute("DELETE FROM yoklama_belirtec WHERE (ogretmen_id = ? AND tahta_id = ?) OR bitis <= ?", (ogretmen_id, tahta_id, an))
+def oturum_ac(
+    b, ogretmen_id: int | None = None, tahta_id: int | None = None, an: int | None = None, oturum_dk: int | None = None,
+    *, kullanici_id: int | None = None, anahtar_id: int | None = None,
+) -> tuple[str, int]:  # fmt: skip
+    """Yoklama belirteci üretir; (belirteç, bitiş). Aynı kişi-tahta çiftinin eski oturumları silinir.
+
+    Öğretmen oturumu (`ogretmen_id`; kod + PIN ya da öğretmen USB anahtarı) ya da idare oturumu
+    (`kullanici_id`; yalnız idare USB anahtarı). `anahtar_id` doluysa oturum o anahtarla açılmıştır
+    (anahtar iptal edilince düşer). 0.6.0'daki konumsal çağrı biçimi (ilk argüman ogretmen_id) korunur.
+    """
+    if (ogretmen_id is None) == (kullanici_id is None):
+        raise ValueError("Oturum ya öğretmenin ya idarenin olmalı.")
+    if ogretmen_id is not None:
+        b.execute("DELETE FROM yoklama_belirtec WHERE (ogretmen_id = ? AND tahta_id = ?) OR bitis <= ?", (ogretmen_id, tahta_id, an))
+    else:
+        b.execute("DELETE FROM yoklama_belirtec WHERE (kullanici_id = ? AND tahta_id = ?) OR bitis <= ?", (kullanici_id, tahta_id, an))
     belirtec = guvenlik.belirtec()
     bitis = an + oturum_dk * 60
     b.execute(
-        "INSERT INTO yoklama_belirtec (belirtec_ozet, ogretmen_id, tahta_id, bitis, olusturma) VALUES (?, ?, ?, ?, ?)",
-        (guvenlik.ozet(belirtec), ogretmen_id, tahta_id, bitis, an),
+        "INSERT INTO yoklama_belirtec (belirtec_ozet, ogretmen_id, kullanici_id, anahtar_id, tahta_id, bitis, olusturma) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (guvenlik.ozet(belirtec), ogretmen_id, kullanici_id, anahtar_id, tahta_id, bitis, an),
     )
     return belirtec, bitis
 
 
 def oturum_coz(b, belirtec, tahta_id: int, an: int):
-    """Geçerli (bu tahtanın, süresi dolmamış, öğretmeni etkin ve PIN'i kilitsiz) oturum; değilse None.
+    """Geçerli (bu tahtanın, süresi dolmamış) oturum; değilse None.
 
-    Satır: belirtec_ozet, bitis, ogretmen_id, ad, soyad, kod.
+    Öğretmen oturumu: öğretmen etkin ve PIN'i kilitsiz. İdare oturumu: kullanıcı etkin ve rolü yönetici/idareci.
+    USB anahtarla açılmışsa anahtar `etkin` olmalı (iptal ya da PIN kilidi oturumu düşürür).
+    Satır: belirtec_ozet, bitis, ogretmen_id, kullanici_id, anahtar_id, ad, soyad, kod, tur ('ogretmen'|'idare'),
+    kullanici_ad, gorunen_ad, anahtar_kimlik.
     """
     if not isinstance(belirtec, str) or not belirtec or len(belirtec) > 200:
         return None
     return b.execute(
-        "SELECT y.belirtec_ozet, y.bitis, y.ogretmen_id, o.ad, o.soyad, p.kod FROM yoklama_belirtec y "
-        "JOIN ogretmen o ON o.id = y.ogretmen_id JOIN ogretmen_pin p ON p.ogretmen_id = o.id "
-        "WHERE y.belirtec_ozet = ? AND y.tahta_id = ? AND y.bitis > ? AND o.aktif = 1 AND p.kilitli = 0",
+        "SELECT y.belirtec_ozet, y.bitis, y.ogretmen_id, y.kullanici_id, y.anahtar_id, o.ad, o.soyad, p.kod, "
+        "CASE WHEN y.kullanici_id IS NOT NULL THEN 'idare' ELSE 'ogretmen' END AS tur, "
+        "k.ad AS kullanici_ad, k.gorunen_ad, a.kimlik AS anahtar_kimlik FROM yoklama_belirtec y "
+        "LEFT JOIN ogretmen o ON o.id = y.ogretmen_id LEFT JOIN ogretmen_pin p ON p.ogretmen_id = y.ogretmen_id "
+        "LEFT JOIN kullanici k ON k.id = y.kullanici_id LEFT JOIN usb_anahtar a ON a.id = y.anahtar_id "
+        "WHERE y.belirtec_ozet = ? AND y.tahta_id = ? AND y.bitis > ? "
+        "AND ((y.ogretmen_id IS NOT NULL AND o.aktif = 1 AND p.kilitli = 0) "
+        "  OR (y.kullanici_id IS NOT NULL AND k.aktif = 1 AND k.rol IN ('yonetici', 'idareci'))) "
+        "AND (y.anahtar_id IS NULL OR a.durum = 'etkin')",
         (guvenlik.ozet(belirtec), tahta_id, an),
     ).fetchone()
+
+
+def oturum_kaydedeni(oturum, tahta_ad: str) -> tuple[int | None, str, str]:
+    """Tahtadan alınan yoklamanın (ogretmen_id, kaydeden, iz `kim`) üçlüsü, oturumun türüne göre.
+
+    Öğretmen: (id, 'ogretmen:112', 'ogretmen:112 (tahta:X)'); idare: (None, 'kullanici:mdryrd', …).
+    USB anahtarla açılan oturumda iz metnine ' USB K7Q2M9XA' eklenir (kayit_ayrintisi bunu okur).
+    """
+    if oturum["tur"] == "idare":
+        ogretmen_id, kaydeden = None, f"kullanici:{oturum['kullanici_ad']}"
+    else:
+        ogretmen_id, kaydeden = oturum["ogretmen_id"], f"ogretmen:{oturum['kod']}"
+    kim = f"{kaydeden} (tahta:{tahta_ad})"
+    if oturum["anahtar_kimlik"]:
+        kim += f" USB {oturum['anahtar_kimlik']}"
+    return ogretmen_id, kaydeden, kim
 
 
 def oturum_kapat(b, belirtec) -> None:
@@ -650,9 +692,12 @@ def _gunun_yoklari(b, tarih: str) -> dict[int, set[int]]:
 
 
 def alan_etiketi(y) -> str:
-    """Yoklamayı alan: öğretmen etiketi ya da "panel"."""
+    """Yoklamayı alan: öğretmen etiketi, "idare (kullanıcı adı)" (idare USB anahtarı, 0.11.0) ya da "panel"."""
     if y["ogretmen_id"] and y["ogretmen_ad"] is not None:
         return ogretmen_etiketi(y["ogretmen_ad"], y["ogretmen_soyad"])
+    kaydeden = str(y["kaydeden"] or "")
+    if y["kaynak"] == "tahta" and not y["ogretmen_id"] and kaydeden.startswith("kullanici:"):
+        return f"idare ({kaydeden.removeprefix('kullanici:')})"
     return "panel" if y["kaynak"] == "panel" else "?"
 
 
@@ -855,7 +900,10 @@ def kayit_ayrintisi(b, yoklama_id: int) -> dict | None:
             liste[o["id"]] = o
     adlar = {i: ad_soyad(o) for i, o in liste.items()}
     izler = []
+    usb = False
     for iz in b.execute("SELECT * FROM yoklama_iz WHERE yoklama_id = ? ORDER BY id", (yoklama_id,)):
+        # Ek yalnız iz metninin SONUNDA aranır: tahta adı serbest metindir ("Lab USB 2" gibi).
+        usb = usb or bool(_USB_IZ_EKI.search(str(iz["kim"])))
         eklenen, cikarilan = json.loads(iz["eklenen"] or "[]"), json.loads(iz["cikarilan"] or "[]")
         izler.append({
             "zaman": an_yazi(iz["zaman"]), "kim": iz["kim"], "islem": IZ_ISLEM_ADI.get(iz["islem"], iz["islem"]),
@@ -867,6 +915,10 @@ def kayit_ayrintisi(b, yoklama_id: int) -> dict | None:
         kaynak = f"panel: {y['kaydeden']}"
     else:
         kaynak = f"tahta: {y['tahta_ad']}" if y["tahta_ad"] else "tahta (kaldırılmış)"
+        if not y["ogretmen_id"] and str(y["kaydeden"]).startswith("kullanici:"):
+            kaynak += f" · idare ({str(y['kaydeden']).removeprefix('kullanici:')})"
+        if usb:
+            kaynak += " · USB anahtar"
     return {
         "id": y["id"],
         "tarih": y["tarih"],
@@ -1070,9 +1122,14 @@ def imha(b, an: int) -> dict:
     """
     sinir = saklama.imha_siniri(b, bugun(an))
     kayit = 0
+    usb = {"silinen": 0, "bosaltilan": 0}
     if sinir:
+        from . import usb_anahtar  # döngüsel içe aktarma olmasın (usb_anahtar bu modülü kullanır)
+
         kayit = b.execute("DELETE FROM yoklama WHERE tarih <= ?", (sinir.isoformat(),)).rowcount
         b.execute("DELETE FROM eokul_islendi WHERE tarih <= ?", (sinir.isoformat(),))
+        # 0.11.0 §7: iptal edilmiş USB anahtarları silinir, etkinlerin son kullanım bilgisi boşaltılır.
+        usb = usb_anahtar.yil_sonu(b, sinir)
     ogrenci = b.execute(
         "DELETE FROM ogrenci WHERE aktif = 0 AND NOT EXISTS (SELECT 1 FROM yoklama_yok yy WHERE yy.ogrenci_id = ogrenci.id)"
     ).rowcount
@@ -1086,7 +1143,10 @@ def imha(b, an: int) -> dict:
         if kayit:
             ayrinti += f" (öğretim yılı bitişi {saklama.tarih_metni(sinir)})"
         vt.kayit_dus(b, "sistem", "Yoklama imhası", ayrinti)
-    return {"kayit": kayit, "ogrenci": ogrenci}
+    if usb["silinen"] or usb["bosaltilan"]:
+        vt.kayit_dus(b, "sistem", "USB anahtar yıl sonu temizliği",
+                     f"{usb['silinen']} iptal edilmiş anahtar silindi, {usb['bosaltilan']} anahtarın son kullanım bilgisi silindi")  # fmt: skip
+    return {"kayit": kayit, "ogrenci": ogrenci, "usb": usb["silinen"] + usb["bosaltilan"]}
 
 
 class YoklamaZamanlayici:
@@ -1098,4 +1158,4 @@ class YoklamaZamanlayici:
             return False
         vt.ayar_yaz(b, "yoklama_imha_son_tur", an)
         sonuc = imha(b, an)
-        return bool(sonuc["kayit"] or sonuc["ogrenci"])
+        return bool(sonuc["kayit"] or sonuc["ogrenci"] or sonuc["usb"])

@@ -19,7 +19,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.datastructures import UploadFile
 
-from . import acil, eokul, maske, metin, sinav, vt
+from . import acil, eokul, maske, metin, sinav, usb_anahtar, vt
 from . import yoklama as yk
 from .panel_program import bellekte_form, govde_uzunlugu
 
@@ -311,7 +311,8 @@ def kaydet(uygulama, y) -> None:
             return y.yonlendir("/giris")
         with vt.islem() as b:
             liste = yk.ogretmen_listesi(b, vt.simdi())
-        return y.sayfa(istek, "ogretmenler.html", k, ogretmenler=liste, yonetici=k["rol"] == "yonetici",
+            usb_sayilari = usb_anahtar.ogretmen_sayilari(b)  # 0.11.0: "USB anahtar" sütunu
+        return y.sayfa(istek, "ogretmenler.html", k, ogretmenler=liste, yonetici=k["rol"] == "yonetici", usb_sayilari=usb_sayilari,
                        pin_yok_sayisi=sum(1 for o in liste if o["aktif"] and o["pin_durumu"] == "yok"))  # fmt: skip
 
     def pusula_sayfasi(istek: Request, k, pusulalar: list[dict]) -> HTMLResponse:
@@ -617,8 +618,9 @@ def kaydet(uygulama, y) -> None:
             liste = sorted(({"id": o["id"], "etiket": etiketler[o["id"]]} for o in ogrenciler),
                            key=lambda x: (metin.tr_sirala_anahtari(x["etiket"]), x["id"]))  # fmt: skip
             gecerli = {o["id"] for o in ogrenciler}
-            yok = [i for i in yk.onceki_yok(b, tarih, sube, ders_no, oturum["ogretmen_id"], "tahta") if i in gecerli]
-            baska = yk.baska_yoklama_var(b, tarih, sube, ders_no, oturum["ogretmen_id"], "tahta")
+            ogretmen_id = oturum["ogretmen_id"] if oturum["tur"] == "ogretmen" else None  # idare oturumu öğretmensizdir
+            yok = [i for i in yk.onceki_yok(b, tarih, sube, ders_no, ogretmen_id, "tahta") if i in gecerli]
+            baska = yk.baska_yoklama_var(b, tarih, sube, ders_no, ogretmen_id, "tahta")
         yanit = {"sube": sube, "ders_no": ders_no, "ders_adi": "", "ogrenciler": liste, "yok": yok, "baska_yoklama": baska,
                  "kalan_sn": oturum["bitis"] - an, "mevcut": len(liste)}  # fmt: skip
         if not liste:
@@ -646,11 +648,17 @@ def kaydet(uygulama, y) -> None:
                 yok = yk.yok_idleri_coz(govde["yok"], {o["id"] for o in ogrenciler})
             except ValueError as hata_:
                 return JSONResponse({"hata": str(hata_)}, status_code=409)
-            yk.yoklama_yaz(b, tarih=yk.bugun(an).isoformat(), sube=sube, ders_no=ders_no, ogretmen_id=oturum["ogretmen_id"],
-                           kaynak="tahta", kaydeden=f"ogretmen:{oturum['kod']}", tahta_id=tahta["id"], yok=yok,
-                           kim=f"ogretmen:{oturum['kod']} (tahta:{tahta['ad']})", an=an)  # fmt: skip
+            # 0.11.0: idare USB anahtarıyla açılan oturumda öğretmen yoktur; kayıt "kullanici:<ad>" adına yazılır.
+            ogretmen_id, kaydeden, kim = yk.oturum_kaydedeni(oturum, tahta["ad"])
+            yk.yoklama_yaz(b, tarih=yk.bugun(an).isoformat(), sube=sube, ders_no=ders_no, ogretmen_id=ogretmen_id,
+                           kaynak="tahta", kaydeden=kaydeden, tahta_id=tahta["id"], yok=yok, kim=kim, an=an)  # fmt: skip
             b.execute("DELETE FROM yoklama_belirtec WHERE belirtec_ozet = ?", (oturum["belirtec_ozet"],))  # kaydet tek seferliktir
-            vt.kayit_dus(b, f"tahta:{tahta['ad']}", "Yoklama alındı", yk.kayit_metni(sube, ders_no, len(yok), oturum["kod"]), ip(istek))
+            ayrinti = yk.kayit_metni(sube, ders_no, len(yok), oturum["kod"] if oturum["tur"] == "ogretmen" else None)
+            if oturum["tur"] == "idare":
+                ayrinti += f", kullanıcı {oturum['kullanici_ad']}"
+            if oturum["anahtar_kimlik"]:
+                ayrinti += f" · USB {oturum['anahtar_kimlik'][:4]}-{oturum['anahtar_kimlik'][4:]}"
+            vt.kayit_dus(b, f"tahta:{tahta['ad']}", "Yoklama alındı", ayrinti, ip(istek))
         return {"tamam": True, "yok_sayisi": len(yok), "mevcut": len(ogrenciler)}
 
     @uygulama.post("/ajan/yoklama/bitir")

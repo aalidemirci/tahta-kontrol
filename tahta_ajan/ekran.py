@@ -24,6 +24,11 @@ gelen durum iletisinde ve düğmelerde durur; yoklama kapanınca düğmeler yok 
 bu yardımcıya hiç gelmez; PIN servise iletilir, burada saklanmaz. Öncelik: acil > kapatma > temizlik >
 gözetmen > yoklama > duyuru > sınav > kilit. Klavye kilidi yalnız tahta kilitliyse alınır.
 
+USB anahtar (0.11.0): kilit ekranında anahtarın bilgi satırı ve "USB anahtarla aç" düğmesi, kilit açma PIN
+sayfası (usb-pin), yoklama PIN sayfasının USB kipi (öğretmen kodu sorulmaz) ve köşede odak çalmayan küçük
+bildirim penceresi (UsbBildirimi). Takılınca hiçbir tam ekran sayfa kendiliğinden açılmaz; anahtar dosyası ve
+gizli değer bu yardımcıya hiç gelmez (yalnız rol, kısa ad, kod ve izinler).
+
 Oturum temizliği (K7, 0.8.0): kapatma uyarısı sayfası 60 sn geri sayımlı temizlik uyarısı olarak da
 kullanılır; servisin "pencereleri_kapat" isteğinde pencere kapatma ayrı süreçte yapılır
 (sistem.pencereleri_kapat) ve yalnız sayılar servise döner.
@@ -41,7 +46,7 @@ import sys
 import threading
 import time
 
-from . import __version__, ayar, sistem
+from . import __version__, ayar, sistem, usb_anahtar
 
 # Oturum temizliği uyarısı (K7): neyin yapılıp neye dokunulmadığı açıkça yazılır.
 TEMIZLIK_UYARI_METNI = (
@@ -114,6 +119,7 @@ STIL_OLCU = b"""
 #tarih { font-size: 30px; }
 #kilit-yazi { font-size: 40px; font-weight: 600; margin-top: 24px; }
 #program-bilgi { font-size: 32px; font-weight: 600; }
+#usb-bilgi { font-size: 26px; font-weight: 600; }
 #bilgi { font-size: 24px; }
 #kod { font-size: 56px; letter-spacing: 12px; }
 #duyuru-baslik { font-size: 72px; font-weight: 700; }
@@ -413,6 +419,54 @@ def yoklama_pin_hatasi(yoklama: dict) -> str:
     if bekleme > 0:
         return f"Çok fazla hatalı deneme. {bekleme} saniye bekleyin."
     return str(yoklama.get("hata") or "")
+
+
+# ---- USB anahtar bildirimi (0.11.0; saf, test edilir) -------------------------------------------
+# Ölçüler 1920x1080 içindir ve olcekli_stil() ile ölçeklenir; renkler yüzer düğmenin sabit koyu paletinden
+# (koyu zemin, açık yazı; 7:1 üstü), markadan bağımsız.
+USB_BILDIRIM_SN = 10
+USB_BILDIRIM_BOSLUK = 18  # ekran kenarından ve yüzer düğmeden uzaklık
+USB_BILDIRIM_STIL = b"""
+#ub-kutu { min-width: 640px; padding: 24px; border-radius: 16px; border-width: 2px; border-style: solid; }
+#ub-kutu label { font-size: 28px; }
+#ub-kutu button { font-size: 28px; font-weight: 600; padding: 10px 24px; min-height: 48px; border-radius: 10px;
+                  border-width: 1px; border-style: solid; background-image: none; box-shadow: none; text-shadow: none; }
+"""
+USB_BILDIRIM_RENK = b"""
+#ub-pencere { background-color: #111827; }
+#ub-kutu { background-color: #111827; border-color: #9ca3af; }
+#ub-kutu label { color: #f9fafb; }
+#ub-kutu button { background-color: #1f2937; border-color: #6b7280; }
+#ub-kutu button label { color: #f9fafb; }
+#ub-kutu #ub-yoklama { background-color: #1e40af; border-color: #93c5fd; }
+#ub-kutu #ub-yoklama label { color: #ffffff; }
+"""
+
+
+def usb_bildirim_gosterilir(usb, ana_gorunur: bool, kilitli: bool) -> bool:
+    """Bildirim yalnız tahta kilitli değilken ve tam ekran sayfa (kilit, duyuru, acil, sınav, kapatma, yoklama)
+    yokken, gösterilecek metin ve yeni bir bildirim numarası varken çıkar."""
+    if not isinstance(usb, dict) or ana_gorunur or kilitli:
+        return False
+    return bool(usb.get("bildirim_no")) and bool(usb.get("metin"))
+
+
+def usb_bildirim_yoklama_dugmesi(usb) -> bool:
+    """[Yoklama al] yalnız anahtar tanınmış ve yoklama izni varken."""
+    return isinstance(usb, dict) and usb.get("durum") == "tanindi" and "yoklama" in (usb.get("izinler") or [])
+
+
+def usb_bildirim_konumu(alan: tuple[int, int, int, int], en: int, boy: int, bosluk: int,
+                        yuzer: tuple[int, int, int] | None = None) -> tuple[int, int]:  # fmt: skip
+    """Sağ alt köşe; yüzer düğme (x, y, çap) sağ kenarda ve bildirimin dikey aralığındaysa onun üstüne çıkar."""
+    ax, ay, alan_en, alan_boy = alan
+    x = ax + alan_en - en - bosluk
+    y = ay + alan_boy - boy - bosluk
+    if yuzer is not None:
+        dx, dy, cap = yuzer
+        if dx + cap / 2 >= ax + alan_en / 2 and dy + cap > y and dy < y + boy:
+            y = dy - boy - bosluk
+    return max(ax, int(x)), max(ay, int(y))
 
 
 DUYURU_SUTUN_ESIGI = 12  # bundan çok satırlı duyuru (ör. şube oturma listesi) sütunlara bölünür
@@ -725,6 +779,8 @@ def calistir() -> int:
             self.yk_liste_imza = None
             self.yk_secim_imza = None
             self.yk_dugmeler: dict[int, tuple] = {}  # id -> (düğme, etiket)
+            self.yk_usb = False  # PIN sayfası USB kipinde (öğretmen kodu sorulmaz)
+            self.usb_girilen = ""  # kilit açma PIN'i: yalnız gönderilene dek burada
             self.yk_guncelleniyor = False
             # Ekran ölçeği: pencerenin bulunduğu ekranın (monitör) boyutundan. Piksel ölçüleri
             # _olcu() ile kaydedilir; ölçek değişince (başka monitör, çözünürlük değişimi) yeniden uygulanır.
@@ -795,6 +851,8 @@ def calistir() -> int:
             self.yigin.add_named(self._yoklama_liste_sayfasi(), "yoklama-liste")
             self.yigin.add_named(self._yoklama_onay_sayfasi(), "yoklama-onay")
             self.yigin.add_named(self._yoklama_ileti_sayfasi(), "yoklama-ileti")
+            # USB anahtar (0.11.0): kilit açma PIN sayfası da show_all()'dan ÖNCE eklenir (GtkStack tuzağı).
+            self.yigin.add_named(self._usb_pin_sayfasi(), "usb-pin")
             # Fiziksel klavyeden rakam (yalnız yoklama PIN sayfasında; kilit davranışı değişmez).
             self.pencere.connect("key-press-event", self._tus_basildi)
             self.pencere_sinifi = None  # "acil" | "tatbikat" | None
@@ -817,6 +875,12 @@ def calistir() -> int:
                 self.yuzer = yuzer.kur(self)
             except Exception as hata:
                 print(f"Yüzer düğme kurulamadı: {type(hata).__name__}: {hata}", file=sys.stderr)
+            # USB anahtar bildirimi (0.11.0): kurulamazsa ekran bildirimsiz çalışır (kilit ekranındaki düğme yeter).
+            self.usb_bildirim = None
+            try:
+                self.usb_bildirim = UsbBildirimi(self)
+            except Exception as hata:
+                print(f"USB bildirimi kurulamadı: {type(hata).__name__}: {hata}", file=sys.stderr)
             self.baglanti.merhaba = dict(
                 _ortam_bilgisi(), arayuz="gtk3", genislik=geometri[0], yukseklik=geometri[1],
                 dugme=self.yuzer is not None, bilesik=bool(ekran.is_composited()),
@@ -1037,6 +1101,13 @@ def calistir() -> int:
             self.kilit_yoklama.connect("clicked", lambda *_: self.baglanti.gonder({"tur": "yoklama_ac"}))
             self._ekle(sol, self.kilit_yoklama, 16)
 
+            # USB anahtar (0.11.0): anahtarın durumu ("USB anahtar tanındı · A. Yılmaz (kod 112)" ya da ileti).
+            self.kilit_usb_bilgi = self._etiket("usb-bilgi")
+            self.kilit_usb_bilgi.set_max_width_chars(40)
+            self._ekle(sol, self.kilit_usb_bilgi, 8)
+
+            sag = self._kutu(Gtk.Orientation.VERTICAL, 24)
+            sag.set_valign(Gtk.Align.CENTER)
             self.kod_kutusu = self._kutu(Gtk.Orientation.VERTICAL, 10)
             self.kod_kutusu.set_halign(Gtk.Align.CENTER)
             self.kod_kutusu.set_valign(Gtk.Align.CENTER)
@@ -1044,7 +1115,14 @@ def calistir() -> int:
             self._ekle(self.kod_kutusu, self.kod_etiketi, 6)
             tuslar = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "Sil", "0", "Aç"]
             self.kod_kutusu.pack_start(self._tus_takimi(tuslar, lambda t: self._tus(None, t)), False, False, 0)
-            govde.pack_start(self.kod_kutusu, False, False, 0)
+            sag.pack_start(self.kod_kutusu, False, False, 0)
+            # Anahtar tanınmış ve kilit açma izni varken kod kutusunun altında ana düğme (show()/hide() ile).
+            self.kilit_usb_dugmesi = self._dugme("USB anahtarla aç", lambda: self.baglanti.gonder({"tur": "usb_kilit_ac"}),
+                                                 ana=True, boy=96)  # fmt: skip
+            self.kilit_usb_dugmesi.set_halign(Gtk.Align.CENTER)
+            sag.pack_start(self.kilit_usb_dugmesi, False, False, 0)
+            govde.pack_start(sag, False, False, 0)
+            self.kilit_sag = sag
             return self._sayfa(govde)
 
         def _duyuru_sayfasi(self):
@@ -1322,7 +1400,9 @@ def calistir() -> int:
             sol.set_valign(Gtk.Align.CENTER)
             # Hata metni gelince tuş takımı kaymasın: sol sütunun eni ölçekli sabittir (1920'de 720).
             self._olcu(sol.set_size_request, 720, -1)
-            sol.pack_start(self._etiket("yoklama-baslik", "Ders yoklaması"), False, False, 0)
+            self.yp_baslik = self._etiket("yoklama-baslik", "Ders yoklaması")
+            self.yp_baslik.set_max_width_chars(28)
+            sol.pack_start(self.yp_baslik, False, False, 0)
             self.yp_bilgi = self._etiket("yoklama-bilgi")
             self.yp_bilgi.set_max_width_chars(40)
             self.yp_sube = self._etiket("yoklama-bilgi")
@@ -1337,6 +1417,10 @@ def calistir() -> int:
             vazgec = self._dugme("Vazgeç", lambda: self.baglanti.gonder({"tur": "yoklama_kapat"}), en=300, boy=90)
             vazgec.set_halign(Gtk.Align.CENTER)
             self._ekle(sol, vazgec, 24)
+            # USB kipinde: bellek takılıyken başka öğretmen kendi kodu ve PIN'iyle yoklama alabilsin.
+            self.yp_kodpin = self._dugme("Başka öğretmen (kod ve PIN)", lambda: self.baglanti.gonder({"tur": "yoklama_kod_pin"}))
+            self.yp_kodpin.set_halign(Gtk.Align.CENTER)
+            sol.pack_start(self.yp_kodpin, False, False, 0)
             sag = self._kutu(Gtk.Orientation.VERTICAL, 10)
             sag.set_valign(Gtk.Align.CENTER)
             self.yp_kod = self._etiket("kod", "")
@@ -1347,6 +1431,51 @@ def calistir() -> int:
             govde.pack_start(sol, False, False, 0)
             govde.pack_start(sag, False, False, 0)
             return self._sayfa(govde)
+
+        def _usb_pin_sayfasi(self):
+            """USB anahtarla kilit açma PIN'i (0.11.0): yoklama PIN sayfasıyla aynı yerleşim, 12 tuş."""
+            govde = self._kutu(Gtk.Orientation.HORIZONTAL, 120, iki_sutun=True)
+            sol = self._kutu(Gtk.Orientation.VERTICAL, 12)
+            sol.set_valign(Gtk.Align.CENTER)
+            self._olcu(sol.set_size_request, 720, -1)
+            sol.pack_start(self._etiket("yoklama-baslik", "USB anahtarla aç"), False, False, 0)
+            self.up_sahip = self._etiket("yoklama-bilgi")
+            self.up_sahip.set_max_width_chars(40)
+            self.up_adim = self._etiket("yoklama-adim", "PIN'inizi girin")
+            self.up_hata = self._etiket("yoklama-hata")
+            self.up_hata.set_max_width_chars(36)
+            ipucu = self._etiket("yoklama-bilgi", "PIN'i girerken tuş takımını elinizle kapatın.")
+            ipucu.set_max_width_chars(40)
+            for parca in (self.up_sahip, self.up_adim, self.up_hata, ipucu):
+                sol.pack_start(parca, False, False, 0)
+            vazgec = self._dugme("Vazgeç", self._usb_vazgec, en=300, boy=90)
+            vazgec.set_halign(Gtk.Align.CENTER)
+            self._ekle(sol, vazgec, 24)
+            sag = self._kutu(Gtk.Orientation.VERTICAL, 10)
+            sag.set_valign(Gtk.Align.CENTER)
+            self.up_kod = self._etiket("kod", "")
+            self._ekle(sag, self.up_kod, 6)
+            self.up_tuslar = self._tus_takimi(["1", "2", "3", "4", "5", "6", "7", "8", "9", "Sil", "0", "Tamam"], self._usb_tus)
+            sag.pack_start(self.up_tuslar, False, False, 0)
+            govde.pack_start(sol, False, False, 0)
+            govde.pack_start(sag, False, False, 0)
+            return self._sayfa(govde)
+
+        def _usb_tus(self, tus):
+            if tus == "Sil":
+                self.usb_girilen = self.usb_girilen[:-1]
+            elif tus == "Tamam":
+                if len(self.usb_girilen) == YOKLAMA_PIN_HANE:
+                    # PIN servise iletilir ve sunucuda doğrulanır; burada saklanmaz.
+                    self.baglanti.gonder({"tur": "usb_pin", "pin": self.usb_girilen})
+                    self.usb_girilen = ""
+            elif len(self.usb_girilen) < YOKLAMA_PIN_HANE:
+                self.usb_girilen += tus
+            self.up_kod.set_text("●" * len(self.usb_girilen) + "○" * (YOKLAMA_PIN_HANE - len(self.usb_girilen)))
+
+        def _usb_vazgec(self):
+            self.usb_girilen = ""
+            self.baglanti.gonder({"tur": "usb_vazgec"})
 
         def _yoklama_liste_sayfasi(self):
             """Üst satır (şube · ders · öğretmen · kalan süre), ortada kaydırılabilir öğrenci düğmeleri
@@ -1598,23 +1727,28 @@ def calistir() -> int:
         # ---- ders yoklaması (A5) ------------------------------------------------------------
         def _tus_basildi(self, _pencere, olay):
             """Fiziksel klavye: yalnız yoklama PIN sayfasında rakam, BackSpace (Sil), Enter (Tamam)."""
-            if self.yigin.get_visible_child_name() != "yoklama-pin" or not self.yp_tuslar.get_sensitive():
+            sayfa = self.yigin.get_visible_child_name()
+            if sayfa == "yoklama-pin" and self.yp_tuslar.get_sensitive():
+                islev = self._yoklama_tus
+            elif sayfa == "usb-pin" and self.up_tuslar.get_sensitive():
+                islev = self._usb_tus
+            else:
                 return False
             ad = Gdk.keyval_name(olay.keyval) or ""
             ad = ad[3:] if ad.startswith("KP_") else ad
             if len(ad) == 1 and ad.isdigit():
-                self._yoklama_tus(ad)
+                islev(ad)
             elif ad == "BackSpace":
-                self._yoklama_tus("Sil")
+                islev("Sil")
             elif ad in ("Return", "Enter"):
-                self._yoklama_tus("Tamam")
+                islev("Tamam")
             else:
                 return False
             return True
 
         def _yoklama_tus(self, tus):
             if tus == "Sil":
-                if self.yk_adim == "pin" and not self.yk_pin:
+                if self.yk_adim == "pin" and not self.yk_pin and not self.yk_usb:
                     self.yk_adim = "kod"  # boş PIN'de Sil: öğretmen kodunu düzeltmeye dön
                 elif self.yk_adim == "pin":
                     self.yk_pin = self.yk_pin[:-1]
@@ -1624,8 +1758,9 @@ def calistir() -> int:
                 if self.yk_adim == "kod" and len(self.yk_kod) == YOKLAMA_KOD_HANE:
                     self.yk_adim = "pin"
                 elif self.yk_adim == "pin" and len(self.yk_pin) == YOKLAMA_PIN_HANE:
-                    # PIN servise iletilir ve sunucuda doğrulanır; burada saklanmaz.
-                    self.baglanti.gonder({"tur": "yoklama_pin", "kod": self.yk_kod, "pin": self.yk_pin})
+                    # PIN servise iletilir ve sunucuda doğrulanır; burada saklanmaz. USB kipinde kod boş gider.
+                    kod = "" if self.yk_usb else self.yk_kod
+                    self.baglanti.gonder({"tur": "yoklama_pin", "kod": kod, "pin": self.yk_pin})
                     self.yk_pin = ""
             elif self.yk_adim == "kod":
                 self.yk_kod = (self.yk_kod + tus)[:YOKLAMA_KOD_HANE]
@@ -1636,7 +1771,10 @@ def calistir() -> int:
             self._yoklama_pin_yaz()
 
         def _yoklama_pin_yaz(self):
-            if self.yk_adim == "kod":
+            if self.yk_usb:
+                self.yp_adim.set_text("PIN'inizi girin")
+                self.yp_kod.set_text("●" * len(self.yk_pin) + "○" * (YOKLAMA_PIN_HANE - len(self.yk_pin)))
+            elif self.yk_adim == "kod":
                 self.yp_adim.set_text("Öğretmen kodunuz (3 hane)")
                 # Öğretmen kodu gizli değildir; PIN yalnız nokta olarak görünür.
                 self.yp_kod.set_text(self.yk_kod + "_" * (YOKLAMA_KOD_HANE - len(self.yk_kod)))
@@ -1658,7 +1796,7 @@ def calistir() -> int:
                     cocuk.destroy()
             self.yk_secim_imza = None
             self.yk_oturum = None
-            self.yk_adim, self.yk_kod, self.yk_pin = "kod", "", ""
+            self.yk_adim, self.yk_kod, self.yk_pin, self.yk_usb = "kod", "", "", False
             self.yp_kod.set_text("")
             # Onay ve liste sayfasındaki etiketler (yok yazılanların maskeli adları) de bellekte kalmaz.
             for etiket in (self.yo_ust, self.yo_baslik, self.yo_liste, self.yl_ust, self.yl_bilgi):
@@ -1814,6 +1952,18 @@ def calistir() -> int:
                 self.yp_hata.set_text(hata)
                 self.yp_hata.set_visible(bool(hata))
                 self.yp_tuslar.set_sensitive(not yoklama.get("istek") and not int(yoklama.get("bekleme") or 0))
+                # USB anahtar kipi (0.11.0): öğretmen kodu adımı yok, yalnız 6 haneli PIN.
+                usb_kip = yoklama.get("pin_kipi") == "usb"
+                if usb_kip != self.yk_usb:
+                    self.yk_usb, self.yk_pin = usb_kip, ""
+                    self.yk_adim = "pin" if usb_kip else "kod"
+                # Başlık kısa kalır (52 px yazı dar sütunda iki satıra bölünmesin); sahip bilgi satırının başında.
+                sahip = yoklama.get("usb_etiket") or ""
+                self.yp_baslik.set_text("Yoklama · USB anahtar" if usb_kip else "Ders yoklaması")
+                if usb_kip and sahip:
+                    self.yp_bilgi.set_text(" · ".join(p for p in (sahip, bilgi) if p))
+                self.yp_kodpin.set_visible(usb_kip)
+                self.yp_kodpin.set_sensitive(not yoklama.get("istek"))
                 self._yoklama_pin_yaz()
                 self.yigin.set_visible_child_name("yoklama-pin")
             elif asama == "liste":
@@ -2065,6 +2215,8 @@ def calistir() -> int:
                 if int(yoklama.get("bekleme") or 0) > 0:
                     yoklama["bekleme"] = int(yoklama["bekleme"]) - 1
                     self._ciz()
+            if getattr(self, "usb_bildirim", None) is not None:
+                self.usb_bildirim.saniye()
             if self.gozetmen_kod_acik and time.time() - self.gozetmen_dokunma > GOZETMEN_KOD_ZAMAN_ASIMI_SN:
                 self._gozetmen_vazgec()
             if self.gorunur:
@@ -2083,6 +2235,8 @@ def calistir() -> int:
             # Yüzer düğme yalnız tam ekran sayfa yokken (ana pencere gizliyken) görünür.
             if self.yuzer is not None:
                 self.yuzer.guncelle(self.durum, self.gorunur)
+            if self.usb_bildirim is not None:
+                self.usb_bildirim.guncelle(self.durum, self.gorunur)
 
         def _sayfayi_ciz(self):
             durum = self.durum or {}
@@ -2105,6 +2259,11 @@ def calistir() -> int:
             yoklama = durum.get("yoklama") if isinstance(durum.get("yoklama"), dict) else None
             if not yoklama and self.yk_oturum is not None:
                 self._yoklama_temizle()
+            # USB anahtar (0.11.0). Eski servis "usb" alanını göndermez: düğme ve satır gizli kalır.
+            usb = durum.get("usb") if isinstance(durum.get("usb"), dict) else None
+            usb_pin = usb.get("pin") if usb and isinstance(usb.get("pin"), dict) else None
+            if usb_pin is None:
+                self.usb_girilen = ""
             self._bantlari_ciz(durum)
             # Öncelik (ortak sözlük §5.5; K7 temizlik uyarısı kapatmanın hemen altında): acil > kapatma > temizlik > gozetmen-* > yoklama-* > duyuru > sinav-giris/sinav > kilit > gizli.
             if acil:
@@ -2153,6 +2312,16 @@ def calistir() -> int:
                 # Klavye kilidi yalnız tahta kilitliyse (yoklama kilidi açmaz).
                 self._yoklama_ciz(yoklama)
                 self._goster(kilit=bool(durum.get("kilitli")))
+            elif usb_pin is not None and durum.get("kilitli"):
+                # USB anahtarla kilit açma PIN'i (0.11.0): yoklama-* ile aynı basamak; tahta kilitli kalır.
+                self.up_sahip.set_text(usb_anahtar.sahip_metni(usb))
+                hata = yoklama_pin_hatasi(usb_pin)
+                self.up_hata.set_text(hata)
+                self.up_hata.set_visible(bool(hata))
+                self.up_tuslar.set_sensitive(not usb_pin.get("istek") and not int(usb_pin.get("bekleme") or 0))
+                self.up_kod.set_text("●" * len(self.usb_girilen) + "○" * (YOKLAMA_PIN_HANE - len(self.usb_girilen)))
+                self.yigin.set_visible_child_name("usb-pin")
+                self._goster(kilit=True)
             elif duyuru:
                 self.duyuru_baslik.set_text(duyuru.get("baslik") or "DUYURU")
                 self._duyuru_metni_yaz(duyuru.get("metin") or "")
@@ -2174,6 +2343,8 @@ def calistir() -> int:
                     self.bilgi.set_text("Açmak için kilit kodunu girin.")
                 elif durum.get("kilit_kaynak") == "program":
                     self.bilgi.set_text("Okul idaresi de açabilir.")
+                elif usb and usb.get("kilit_ac"):
+                    self.bilgi.set_text("Kilidi USB anahtarla açabilirsiniz.")
                 else:
                     self.bilgi.set_text("Kilit okul idaresince açılır.")
                 program = program_bilgisi(durum)
@@ -2182,6 +2353,12 @@ def calistir() -> int:
                 self.program_bilgi.set_visible(bool(program))
                 self.kod_kutusu.set_visible(kod_var and not bekleme and not cevrimdisi)
                 self.cevrimdisi_dugmesi.set_visible(cevrimdisi)
+                usb_metin = (usb or {}).get("metin") or ""
+                self.kilit_usb_bilgi.set_text(usb_metin)
+                self.kilit_usb_bilgi.set_visible(bool(usb_metin))
+                usb_ac = bool(usb and usb.get("kilit_ac")) and not cevrimdisi
+                self.kilit_usb_dugmesi.set_visible(usb_ac)
+                self.kilit_sag.set_visible(usb_ac or (kod_var and not bekleme and not cevrimdisi))
                 self.kilit_yoklama.set_visible(bool(durum.get("yoklama_etkin")) and not cevrimdisi)
                 self.yigin.set_visible_child_name("kilit")
                 self._goster(kilit=True)
@@ -2256,6 +2433,133 @@ def calistir() -> int:
                 Gdk.Display.get_default().get_default_seat().ungrab()
             except Exception:
                 pass
+
+    class UsbBildirimi:
+        """Köşedeki USB anahtar bildirimi: odak çalmayan (override-redirect) küçük pencere, klavye almaz.
+
+        "USB anahtar tanındı · A. Yılmaz (kod 112)" [Yoklama al] [Kapat]; 10 sn sonra ya da Kapat ile kapanır;
+        tahta kilitlenince, tam ekran sayfa ya da yoklama açılınca hemen kapanır. Yeni bildirim numarası
+        gelmedikçe yeniden açılmaz. Ölçüler 1920x1080 içindir ve ekran ölçeğiyle büyür/küçülür.
+        """
+
+        def __init__(self, ekran):
+            self.ekran = ekran
+            self.gosterilen_no = 0
+            self.bitis = 0.0
+            self.acik = False
+            self.olcek = None
+            gdk_ekran = Gdk.Screen.get_default()
+            self.olcu = Gtk.CssProvider()
+            self.olcu.load_from_data(USB_BILDIRIM_STIL)
+            renk = Gtk.CssProvider()
+            renk.load_from_data(USB_BILDIRIM_RENK)
+            for saglayici in (self.olcu, renk):
+                Gtk.StyleContext.add_provider_for_screen(gdk_ekran, saglayici, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION + 1)
+            self.pencere = Gtk.Window(type=Gtk.WindowType.POPUP)
+            self.pencere.set_name("ub-pencere")
+            self.pencere.set_accept_focus(False)
+            self.pencere.set_focus_on_map(False)
+            self.pencere.set_skip_taskbar_hint(True)
+            self.pencere.set_skip_pager_hint(True)
+            self.pencere.set_type_hint(Gdk.WindowTypeHint.NOTIFICATION)
+            self.kutu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            self.kutu.set_name("ub-kutu")
+            self.metin = Gtk.Label(label="")
+            self.metin.set_line_wrap(True)
+            self.metin.set_xalign(0)
+            self.metin.set_max_width_chars(36)
+            self.dugmeler = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+            self.dugmeler.set_halign(Gtk.Align.END)
+            self.yoklama = Gtk.Button(label="Yoklama al")
+            self.yoklama.set_name("ub-yoklama")
+            self.kapat = Gtk.Button(label="Kapat")
+            for dugme in (self.yoklama, self.kapat):
+                dugme.set_can_focus(False)
+                dugme.set_focus_on_click(False)
+            self.yoklama.connect("clicked", lambda *_: self._yoklama())
+            self.kapat.connect("clicked", lambda *_: self._kapat())
+            self.dugmeler.pack_start(self.yoklama, False, False, 0)
+            self.dugmeler.pack_start(self.kapat, False, False, 0)
+            self.kutu.pack_start(self.metin, False, False, 0)
+            self.kutu.pack_start(self.dugmeler, False, False, 0)
+            self.pencere.add(self.kutu)
+            self._olcek_uygula()
+
+        def _alan(self):
+            gosterge = Gdk.Display.get_default()
+            monitor = gosterge.get_primary_monitor() or gosterge.get_monitor(0)
+            alan, geo = monitor.get_workarea(), monitor.get_geometry()
+            return (alan.x, alan.y, alan.width, alan.height), (geo.width, geo.height)
+
+        def _olcek_uygula(self):
+            try:
+                alan, (en, boy) = self._alan()
+            except Exception:
+                alan, (en, boy) = (0, 0, 1920, 1080), (1920, 1080)
+            olcek = ekran_olcegi(en, boy)
+            if olcek != self.olcek:
+                self.olcek = olcek
+                self.olcu.load_from_data(olcekli_stil(USB_BILDIRIM_STIL, olcek))
+                self.kutu.set_spacing(olcekle(16, olcek))
+                self.dugmeler.set_spacing(olcekle(16, olcek))
+            return alan
+
+        def _yerlestir(self):
+            alan = self._olcek_uygula()
+            _, dogal = self.pencere.get_preferred_size()
+            yuzer = None
+            y_ = getattr(self.ekran, "yuzer", None)
+            if y_ is not None and getattr(y_, "istenen", False):
+                try:
+                    dx, dy = y_.pencere.get_position()
+                    yuzer = (dx, dy, int(y_.cap))
+                except Exception:
+                    yuzer = None
+            x, y = usb_bildirim_konumu(alan, dogal.width, dogal.height, olcekle(USB_BILDIRIM_BOSLUK, self.olcek), yuzer)
+            self.pencere.move(x, y)
+
+        def guncelle(self, durum, ana_gorunur):
+            usb = (durum or {}).get("usb")
+            if not usb_bildirim_gosterilir(usb, ana_gorunur, bool((durum or {}).get("kilitli"))):
+                if isinstance(usb, dict) and (ana_gorunur or (durum or {}).get("kilitli")):
+                    # Tam ekran sayfa ya da kilit açıktı: bu numaralı bildirim tüketildi, sonra yeniden açılmaz.
+                    self.gosterilen_no, self.bitis = int(usb.get("bildirim_no") or 0), 0.0
+                self.gizle()
+                return
+            no = int(usb.get("bildirim_no") or 0)
+            if no != self.gosterilen_no:
+                self.gosterilen_no, self.bitis = no, time.monotonic() + USB_BILDIRIM_SN
+            if time.monotonic() >= self.bitis:
+                self.gizle()
+                return
+            self.metin.set_text(str(usb.get("metin") or ""))
+            self.yoklama.set_visible(usb_bildirim_yoklama_dugmesi(usb))
+            if not self.acik:
+                self.kutu.show_all()
+                self.yoklama.set_visible(usb_bildirim_yoklama_dugmesi(usb))
+                self.pencere.show()
+                self.acik = True
+            self.pencere.resize(1, 1)
+            self._yerlestir()
+
+        def saniye(self):
+            if self.acik and time.monotonic() >= self.bitis:
+                self.gizle()
+
+        def gizle(self):
+            if self.acik:
+                self.pencere.hide()
+            self.acik = False
+
+        def _yoklama(self):
+            self.bitis = 0.0
+            self.gizle()
+            self.ekran.baglanti.gonder({"tur": "yoklama_ac"})
+
+        def _kapat(self):
+            self.bitis = 0.0
+            self.gizle()
+            self.ekran.baglanti.gonder({"tur": "usb_bildirim_kapat", "bildirim_no": self.gosterilen_no})
 
     Ekran()
     Gtk.main()

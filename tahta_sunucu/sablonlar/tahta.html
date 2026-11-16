@@ -83,6 +83,11 @@
       <dt>Ders yoklaması</dt><dd>{% if t.yoklama_yetenegi %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Yoklama: destekleniyor</span>{% if t.yoklama_acik %} <span class="rozet" data-durum="duyuru"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Şu an yoklama alınıyor</span>{% endif %}
         {%- elif ham.surum %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Yoklama: ajan güncellenmeli</span>{% else %}—{% endif %}
         {% if not t.subeler %}<span class="not"> · Şube(ler) alanı boş: tahtada şube önerisi gelmez.</span>{% endif %}</dd>
+      {% if usb_etkin %}
+      {# 0.11.0: USB anahtarı tanımayan (eski) ajan belleğe bakmaz; satır yalnız özellik açıkken. #}
+      <dt>USB anahtar</dt><dd>{% if t.usb_anahtar_yetenegi %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>USB anahtar: destekleniyor</span>{% if durum.usb_izleme == 'desteklenmiyor' %} <span class="not">· bu tahtada bellekler izlenemiyor (tanılamaya bakın)</span>{% endif %}
+        {%- elif ham.surum %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>USB anahtar: ajan güncellenmeli</span>{% else %}—{% endif %}</dd>
+      {% endif %}
       {% if t.sinav %}
       {# A4: sunucunun hesabıyla sınav penceresi (ajan sürümünden bağımsız). #}
       <dt>Sınav</dt><dd><a href="/sinav/{{ t.sinav.sinav_id }}">{{ t.sinav.sinav_adi }}</a> · {{ t.sinav.salon_adi }}
