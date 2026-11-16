@@ -1,0 +1,20 @@
+{"schema_version": 7, "school_name": "Örnek Anadolu Lisesi", "timezone": "Europe/Istanbul",
+ "preparation_enabled": true, "selected_device": "varsayilan", "sounds": {},
+ "weekly_schedule": {
+  "0": [
+   {"at": "08:18:00", "event_type": "hazirlik", "label": "1. ders öğrenci zili", "sound_id": "ogrenci", "session": "normal", "sequence": 0},
+   {"at": "08:20:00", "event_type": "ders_baslangici", "label": "1. ders öğretmen zili", "sound_id": "ogretmen", "session": "normal", "sequence": 0},
+   {"at": "09:00:00", "event_type": "ders_bitisi", "label": "1. ders bitişi", "sound_id": "teneffus", "session": "normal", "sequence": 0},
+   {"at": "09:10:00", "event_type": "ders_baslangici", "label": "2-3. ders bloğu öğretmen zili", "sound_id": "ogretmen", "session": "normal", "sequence": 0},
+   {"at": "09:50:00", "event_type": "blok_ici_gecis", "label": "2. ders sonu · blok içi sınıf değişimi", "sound_id": "blok_gecis", "session": "normal", "sequence": 0},
+   {"at": "10:30:00", "event_type": "ders_bitisi", "label": "2-3. ders bloğu bitişi", "sound_id": "teneffus", "session": "normal", "sequence": 0}]},
+ "extra_events": {}, "day_schedules": {},
+ "academic_calendar": {"label": "2026-2027", "teaching_start": "2026-09-07", "teaching_end": "2027-06-25",
+  "term1_start": "2026-09-07", "term1_end": "2027-01-22", "term2_start": "2027-02-08", "term2_end": "2027-06-25",
+  "breaks": [{"name": "1. ara tatil", "start": "2026-11-09", "end": "2026-11-13"}],
+  "ramadan_start": null, "ramadan_end": null, "sacrifice_start": null, "sacrifice_end": null,
+  "official_holidays_enabled": true},
+ "date_rules": [{"name": "Kısa gün", "kind": "kisaltilmis_gun", "start": "2026-12-04", "end": "2026-12-04",
+  "events": [{"at": "08:20:00", "event_type": "ders_baslangici", "label": "1. ders öğretmen zili", "sound_id": "ogretmen", "session": "normal", "sequence": 0},
+             {"at": "08:50:00", "event_type": "ders_bitisi", "label": "1. ders bitişi", "sound_id": "teneffus", "session": "normal", "sequence": 0}],
+  "target_weekday": null, "enabled": true}]}

@@ -21,6 +21,30 @@
   {% endif %}
 </div>
 
+{% if program.ders_saati_var %}
+{# Program şeridi: panel.js 4 sn'de bir /api/durum.program ile günceller (data-alan kancaları). #}
+<section class="program-serit" id="pano-program" aria-label="Ders programı">
+  <p class="serit-ana">
+    <svg class="simge" aria-hidden="true"><use href="#s-takvim"/></svg>
+    <span>Şu an: <strong data-alan="simdi">{{ program.simdi }}</strong></span>
+  </p>
+  <div class="serit-rozetler">
+    <span data-alan="kilit">{% if program.kilit == 'acik' %}<span class="rozet" data-durum="acik"><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>Program kilidi açık</span>
+    {% elif program.kilit == 'durduruldu' %}<span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Program kilidi durduruldu · bitiş {{ program.durduruldu_bitis }}</span>
+    {% else %}<span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-kapali"/></svg>Program kilidi kapalı</span>{% endif %}</span>
+    <a class="rozet" data-durum="sorun" data-alan="uyari" href="/program/uyarilar" {% if not program.uyari_sayisi %}hidden{% endif %}><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>{{ program.uyari_sayisi }} boş ders uyarısı</span></a>
+    <details class="acilir durdur-menu" data-alan="durdur" {% if program.kilit != 'acik' %}hidden{% endif %}>
+      <summary class="dugme">Program kilidini durdur<svg class="simge" aria-hidden="true"><use href="#s-asagi"/></svg></summary>
+      <form method="post" action="/program/istisna" class="acilir-ic">
+        <input type="hidden" name="donus" value="/">
+        <p class="not">Bütün tahtalarda; program kaynaklı kilitli tahtalar hemen açılır.</p>
+        <p class="dugme-satiri"><button name="sure" value="1sa">1 saat</button><button name="sure" value="bugun">Bugün</button></p>
+      </form>
+    </details>
+  </div>
+</section>
+{% endif %}
+
 <div class="bant uyari" id="yenile-bandi" hidden>Yeni tahta onaylandı ya da onay bekleyen sayısı değişti. <a href="/">Sayfayı yenile</a></div>
 
 {% if bekleyen %}
@@ -110,6 +134,6 @@
 
 <p id="canli-bolge" class="gizli" aria-live="polite"></p>
 <script id="ilk-veri" type="application/json">{{ onayli | tojson }}</script>
-<script id="pano-veri" type="application/json">{{ {"bekleyen": bekleyen | length, "acil": aktif_acil is not none} | tojson }}</script>
+<script id="pano-veri" type="application/json">{{ {"bekleyen": bekleyen | length, "acil": aktif_acil is not none, "program_kilidi": program.kilit != 'kapali'} | tojson }}</script>
 {% endif %}
 {% endblock %}

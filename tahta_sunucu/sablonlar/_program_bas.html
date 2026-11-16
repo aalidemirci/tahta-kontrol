@@ -1,0 +1,44 @@
+{# Program sayfası ve Uyarılar sekmesinin ortak başı: başlık, bugünün durum şeridi, sekmeler.
+   Bağlam: serit (program_is.program_ozeti), bolum (zil|derslik|kurallar|istisnalar|uyarilar). #}
+{% set donus_yolu = '/program/uyarilar' if bolum == 'uyarilar' else '/program?bolum=' ~ bolum %}
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>Program</h1>
+    <p>Zil saatleri, derslik programları ve programa bağlı tahta kilidi. Saatler sunucunun saatine göre işler.</p>
+  </div>
+</div>
+
+<section class="program-serit" id="program-serit" aria-label="Bugünkü program durumu">
+  <p class="serit-ana">
+    <svg class="simge" aria-hidden="true"><use href="#s-takvim"/></svg>
+    <span><strong>{{ serit.bugun }}</strong> · <span data-alan="simdi">{{ serit.simdi }}</span></span>
+    <span class="not">Sunucu saati {{ serit.sunucu_saat }}</span>
+  </p>
+  <div class="serit-rozetler">
+    {% if serit.kilit == 'acik' %}<span class="rozet" data-durum="acik"><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>Program kilidi açık</span>
+    {% elif serit.kilit == 'durduruldu' %}<span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Program kilidi durduruldu · bitiş {{ serit.durduruldu_bitis }}</span>
+    {% else %}<span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-kapali"/></svg>Program kilidi kapalı</span>{% endif %}
+    {% if serit.uyari_sayisi %}<a class="rozet" data-durum="sorun" href="/program/uyarilar"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ serit.uyari_sayisi }} boş ders uyarısı</a>{% endif %}
+    {% if serit.kilit == 'acik' %}
+    <details class="acilir durdur-menu">
+      <summary class="dugme">Program kilidini durdur<svg class="simge" aria-hidden="true"><use href="#s-asagi"/></svg></summary>
+      <form method="post" action="/program/istisna" class="acilir-ic">
+        <input type="hidden" name="donus" value="{{ donus_yolu }}">
+        <p class="not">Bütün tahtalarda; program kaynaklı kilitli tahtalar hemen açılır.</p>
+        <p class="dugme-satiri"><button name="sure" value="1sa">1 saat</button><button name="sure" value="bugun">Bugün</button></p>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+</section>
+{% if not serit.ders_saati_var %}
+<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Ders saatleri tanımlı değil — önce zil saatlerini girin.</p>
+{% endif %}
+
+<nav class="sekmeler" aria-label="Program bölümleri">
+  <a href="/program?bolum=zil" {% if bolum == 'zil' %}aria-current="page"{% endif %}>Zil saatleri</a>
+  <a href="/program?bolum=derslik" {% if bolum == 'derslik' %}aria-current="page"{% endif %}>Derslik programları</a>
+  <a href="/program?bolum=kurallar" {% if bolum == 'kurallar' %}aria-current="page"{% endif %}>Kurallar</a>
+  <a href="/program?bolum=istisnalar" {% if bolum == 'istisnalar' %}aria-current="page"{% endif %}>İstisnalar</a>
+  <a href="/program/uyarilar" {% if bolum == 'uyarilar' %}aria-current="page"{% endif %}>Uyarılar{% if serit.uyari_sayisi %} <span class="sayi-rozet">{{ serit.uyari_sayisi }}</span>{% endif %}</a>
+</nav>

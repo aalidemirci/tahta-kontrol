@@ -116,6 +116,54 @@ GOCLER = [
         yol TEXT NOT NULL,
         PRIMARY KEY (acil_id, tahta_id));
     """,
+    # 0.4.0 — ders programı, zil saatleri, program kilidi, boş ders uyarısı
+    """
+    CREATE TABLE ders_saati (
+        gun INTEGER NOT NULL CHECK (gun BETWEEN 0 AND 6),
+        devre TEXT NOT NULL,
+        devre_adi TEXT NOT NULL,
+        ders_no INTEGER NOT NULL CHECK (ders_no BETWEEN 1 AND 20),
+        baslangic TEXT NOT NULL,
+        bitis TEXT NOT NULL,
+        PRIMARY KEY (gun, devre, ders_no));
+    -- Derslik programı: bu tahtada bu ders saatinde ders VAR (öğretmen ve ders adı tutulmaz).
+    CREATE TABLE tahta_ders (
+        tahta_id INTEGER NOT NULL REFERENCES tahta(id),
+        gun INTEGER NOT NULL CHECK (gun BETWEEN 0 AND 6),
+        devre TEXT NOT NULL,
+        ders_no INTEGER NOT NULL,
+        sube TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (tahta_id, gun, devre, ders_no));
+    CREATE TABLE program_istisna (
+        id INTEGER PRIMARY KEY,
+        bas INTEGER NOT NULL,
+        bit INTEGER NOT NULL,
+        tahta_ids TEXT NOT NULL DEFAULT '',
+        neden TEXT NOT NULL DEFAULT '',
+        olusturan TEXT NOT NULL,
+        olusturma INTEGER NOT NULL,
+        iptal INTEGER);
+    CREATE INDEX program_istisna_aralik ON program_istisna (bit);
+    CREATE TABLE program_isaret (
+        tahta_id INTEGER NOT NULL,
+        anahtar TEXT NOT NULL,
+        zaman INTEGER NOT NULL,
+        PRIMARY KEY (tahta_id, anahtar));
+    CREATE TABLE bos_ders_uyari (
+        id INTEGER PRIMARY KEY,
+        tahta_id INTEGER NOT NULL REFERENCES tahta(id),
+        tarih TEXT NOT NULL,
+        devre TEXT NOT NULL,
+        ders_no INTEGER NOT NULL,
+        ders_bas INTEGER NOT NULL,
+        neden TEXT NOT NULL,
+        olusturma INTEGER NOT NULL,
+        cozulme INTEGER,
+        goruldu_kullanici TEXT,
+        goruldu_zaman INTEGER,
+        UNIQUE (tahta_id, tarih, devre, ders_no));
+    ALTER TABLE tahta ADD COLUMN program_muaf INTEGER NOT NULL DEFAULT 0;
+    """,
 ]
 GOC_ONCESI_KALAN = 3
 

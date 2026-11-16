@@ -2,7 +2,8 @@
    Sayfa kancalarına göre bölümler: onay (tehlikeli işlem dialogu), pano (canlı durum,
    seçim, süzgeç, duyurucu, acil rozetleri), menu (açılır grupların kapanışı), sayac,
    duyuru formu (koşullu alanlar, hedef önizlemesi), acil (tür, şablon, teslim sayacı),
-   yazdir, acil şablonları, ayarlar (renk önizlemesi, logo), kopyala, dogrulama.
+   yazdir, acil şablonları, ayarlar (renk önizlemesi, logo), kopyala, dogrulama,
+   program (pano şeridi ve kart rozetleri pano bölümünde; tahta ızgarasında "Tümünü işaretle").
    Her bölüm JS kapalıyken de çalışan sayfayı yalnız iyileştirir.
    Metin her zaman textContent ile yazılır; innerHTML kullanılmaz. */
 (function () {
@@ -69,6 +70,11 @@
       ad: "eylem", deger: "varsayilan", evet: "Örneklere dön",
       metin: "Düzenlediğiniz bütün acil şablonu metinleri silinir.",
       baslik: function () { return "Şablonlar örneklere döndürülsün mü?"; }
+    },
+    zil_sil: {
+      ad: "eylem", deger: "sil", evet: "Zil saatlerini sil",
+      metin: "Ders saatleri ve takvim silinir; program kilidi kapatılır ve program kaynaklı kilitli tahtalar açılır. Derslik programları kalır.",
+      baslik: function () { return "Zil saatleri silinsin mi?"; }
     }
   };
   var pano = null; // pano bölümü kurulunca doldurulur
@@ -154,7 +160,31 @@
     duyuru: "duyuru gösteriyor", sorun: "ekran yardımcısını yitirdi"
   };
 
-  function durumHesapla(t, acilSuruyor) {
+  // Program kilidi rozeti: "Teneffüs kilidi · 10:40" (neden ve açılış /api/durum'daki tahta.program'dan).
+  var PROGRAM_KILIT_ADI = { "Teneffüs": "Teneffüs kilidi", "Öğle arası": "Öğle arası kilidi" };
+  function programRozetleri(t, programKilidiAcik) {
+    var p = t.program || {};
+    var ek = [];
+    // Kapalı (çevrimdışı) tahta boş dersin en sık nedenidir; rozet o durumda da çizilir.
+    if (p.bos_ders) ek.push({ d: "sorun", m: "Boş ders: " + p.bos_ders, s: "s-sorun" });
+    if (p.muaf) ek.push({ d: "bilgi", m: "Programdan muaf", s: "s-bilgi" });
+    // Sürümü eski ajanda "Güncelleme var" rozeti bu metne döner (guncelMetni); ayrı rozet yalnız o yoksa.
+    if (programAjaniEski(t, programKilidiAcik) && t.guncel) {
+      ek.push({ d: "bilgi", m: "Ajan güncellenmeli", s: "s-guncel" });
+    }
+    return ek;
+  }
+  function programAjaniEski(t, programKilidiAcik) {
+    return !!(programKilidiAcik && t.cevrimici && t.surum && t.program && t.program.program_yetenegi === false);
+  }
+  function kilitMetni(t) {
+    var p = t.program || {};
+    if (p.kilit_kaynak !== "program") return METIN.kilitli;
+    var ad = PROGRAM_KILIT_ADI[p.neden] || "Program kilidi";
+    return p.acilis ? ad + " · " + p.acilis : ad;
+  }
+
+  function durumHesapla(t, acilSuruyor, programKilidiAcik) {
     var birincil;
     if (!t.cevrimici) birincil = "cevrimdisi";
     else if (!t.ekran_bagli) birincil = "sorun";
@@ -173,6 +203,9 @@
     return {
       birincil: birincil,
       rozetler: rozetler,
+      kilitMetni: kilitMetni(t),
+      guncelMetni: programAjaniEski(t, programKilidiAcik) ? "Ajan güncellenmeli" : METIN.guncelleme,
+      ek: programRozetleri(t, programKilidiAcik).slice(0, 2),
       oturum: t.cevrimici ? (t.oturum || "") : "",
       alt: "Son görülme: " + t.son_gorulme + (t.surum ? " · ajan " + t.surum : "")
     };
@@ -202,6 +235,8 @@
     var suzgec = "hepsi";
     var sonBasari = Date.now();
     var acilSuruyor = !!panoVeri.acil;
+    var programKilidiAcik = !!panoVeri.program_kilidi;
+    var programSeridi = $("pano-program");
 
     /* Duyurucu: yalnız değişimi, en çok 5 sn'de bir, birikenleri tek cümlede söyler. */
     var kuyruk = [];
@@ -251,7 +286,11 @@
       kart.classList.toggle("cevrimdisi", h.birincil === "cevrimdisi");
       var alan = kart.querySelector('[data-alan="rozetler"]');
       alan.textContent = "";
-      h.rozetler.forEach(function (d) { alan.appendChild(rozet(RENK[d] || d, METIN[d], SIMGE[d])); });
+      h.rozetler.forEach(function (d) {
+        var m = d === "kilitli" ? h.kilitMetni : d === "guncelleme" ? h.guncelMetni : METIN[d];
+        alan.appendChild(rozet(RENK[d] || d, m, SIMGE[d]));
+      });
+      h.ek.forEach(function (r) { alan.appendChild(rozet(r.d, r.m, r.s)); });
       kart.querySelector('[data-alan="oturum"]').textContent = h.oturum;
       kart.querySelector('[data-alan="alt"]').textContent = h.alt;
     }
@@ -263,7 +302,7 @@
         var kart = kartlar.get(id);
         sonVeri.set(id, t);
         if (!kart) { bilinmeyen = true; return; }
-        var h = durumHesapla(t, acilSuruyor);
+        var h = durumHesapla(t, acilSuruyor, programKilidiAcik);
         var imza = JSON.stringify(h);
         if (imzalar.get(id) !== imza) {
           kartiYaz(kart, h);
@@ -278,6 +317,36 @@
       if (bilinmeyen) yenileGoster();
       ozetGuncelle();
       suzgecUygula();
+    }
+
+    /* Program şeridi: şu anki ders, program kilidi rozeti, boş ders uyarısı sayısı. */
+    var KILIT_ROZETI = {
+      acik: ["acik", "s-kilit", function () { return "Program kilidi açık"; }],
+      durduruldu: ["uyari", "s-onay", function (p) { return "Program kilidi durduruldu · bitiş " + (p.durduruldu_bitis || ""); }],
+      kapali: ["bilgi", "s-kapali", function () { return "Program kilidi kapalı"; }]
+    };
+    var sonSerit = "";
+    function seritYaz(p) {
+      if (!programSeridi || !p) return;
+      var imza = JSON.stringify([p.simdi, p.kilit, p.durduruldu_bitis, p.uyari_sayisi]);
+      if (imza === sonSerit) return;
+      sonSerit = imza;
+      var simdi = programSeridi.querySelector('[data-alan="simdi"]');
+      if (simdi) simdi.textContent = p.simdi || "";
+      var kilit = programSeridi.querySelector('[data-alan="kilit"]');
+      var k = KILIT_ROZETI[p.kilit] || KILIT_ROZETI.kapali;
+      if (kilit) {
+        kilit.textContent = "";
+        kilit.appendChild(rozet(k[0], k[2](p), k[1]));
+      }
+      var uyari = programSeridi.querySelector('[data-alan="uyari"]');
+      if (uyari) {
+        uyari.hidden = !p.uyari_sayisi;
+        uyari.querySelector("span").textContent = p.uyari_sayisi + " boş ders uyarısı";
+      }
+      var durdur = programSeridi.querySelector('[data-alan="durdur"]');
+      // Açık menü kullanıcı seçim yaparken kapanmasın: yalnız kapalıyken gizlenir.
+      if (durdur && !durdur.open) durdur.hidden = p.kilit !== "acik";
     }
 
     function ozetGuncelle() {
@@ -401,6 +470,10 @@
         if (!v) return;
         sonBasari = Date.now();
         acilSuruyor = !!v.acil;
+        if (v.program) {
+          programKilidiAcik = v.program.kilit !== "kapali";
+          seritYaz(v.program);
+        }
         ciz(v.tahtalar || [], false);
         if (typeof v.bekleyen === "number" && v.bekleyen !== (panoVeri.bekleyen || 0)) yenileGoster();
         canliYaz(true);
@@ -568,7 +641,8 @@
 
   /* ---- menu: açılır gruplar (<details>) — JS'siz de çalışır; burada yalnız kapanış --- */
   function menuKur() {
-    var gruplar = Array.prototype.slice.call(document.querySelectorAll("details.menu-grup"));
+    // Program şeridindeki "Program kilidini durdur" açılır menüsü de aynı biçimde kapanır.
+    var gruplar = Array.prototype.slice.call(document.querySelectorAll("details.menu-grup, details.durdur-menu"));
     if (!gruplar.length) return;
     function kapat(haric) {
       gruplar.forEach(function (g) { if (g !== haric) g.open = false; });
@@ -577,7 +651,8 @@
       g.addEventListener("toggle", function () { if (g.open) kapat(g); });
     });
     document.addEventListener("click", function (olay) {
-      if (!olay.target.closest || !olay.target.closest("details.menu-grup")) kapat(null);
+      var icinde = olay.target.closest && olay.target.closest("details.menu-grup, details.durdur-menu");
+      kapat(icinde || null);
     });
     document.addEventListener("keydown", function (olay) {
       if (olay.key !== "Escape") return;
@@ -806,7 +881,25 @@
     });
   }
 
+  /* ---- program ızgarası: "Tümünü işaretle" / "Temizle" (tahta sayfası) ----------- */
+  function izgaraKur() {
+    var form = $("tahta-program");
+    if (!form) return;
+    var araclar = form.querySelector(".izgara-araclari");
+    if (!araclar) return;
+    araclar.hidden = false;
+    araclar.addEventListener("click", function (olay) {
+      var d = olay.target.closest("button[data-izgara]");
+      if (!d) return;
+      var isaretle = d.getAttribute("data-izgara") === "hepsi";
+      Array.prototype.forEach.call(form.querySelectorAll('table.secimli input[type="checkbox"]'), function (k) {
+        k.checked = isaretle;
+      });
+    });
+  }
+
   panoKur();
+  izgaraKur();
   menuKur();
   sayacKur();
   duyuruFormuKur();

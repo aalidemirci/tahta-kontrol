@@ -94,6 +94,88 @@
 </form>
 {% endif %}
 
+{# Program kutusu (Aşama 3): haftalık derslik ızgarası, muafiyet, bu tahtanın istisnaları.
+   Alan adları sözleşmedir: d_{gun}_{devre}_{no}=1, sube_{gun}_{devre}_{no}, program_muaf=1. #}
+{% if t.durum == 'onayli' %}
+<section class="kutu" id="program" aria-labelledby="program-baslik">
+  <div class="kutu-bas">
+    <h2 id="program-baslik">Program</h2>
+    <p class="dugme-satiri sag"><a class="dugme" href="/program?bolum=derslik">Bütün derslik programları</a></p>
+  </div>
+  <dl class="ozellikler">
+    <dt>Şu an</dt><dd>{{ program.durum_metni }}</dd>
+    <dt>Haftalık dersli saat</dt><dd>{% if program.dersli_sayisi %}{{ program.dersli_sayisi }} / {{ program.toplam_ders }}{% else %}Program yok (tahta yalnız teneffüste kilitlenir; boş ders uyarısı üretilmez){% endif %}</dd>
+    {% if program.muaf %}<dt>Program kilidi</dt><dd><span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Programdan muaf</span></dd>{% endif %}
+    {% if not program.program_yetenegi %}<dt>Ajan</dt><dd><span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Program kilidi için ajan güncellenmeli</span></dd>{% endif %}
+    {% if program.yetim_sayisi %}<dt>Uyarı</dt><dd>{{ program.yetim_sayisi }} işaret artık olmayan ders saatine ait; yok sayılır.</dd>{% endif %}
+  </dl>
+  {% if kullanici.rol == 'yonetici' %}
+  <form method="post" action="/tahta/{{ t.id }}/program" id="tahta-program" class="izgara-formu">
+    <label class="satir"><input type="checkbox" name="program_muaf" value="1" {% if program.muaf %}checked{% endif %}> Program kilidi bu tahtaya uygulanmaz (ör. kütüphane, öğretmenler odası)</label>
+    {% if program.izgaralar %}
+    <p class="ipucu">Bu derslikte ders olan saatleri işaretleyin; şube isteğe bağlıdır (ör. 9/A) ve yalnız panelde görünür.</p>
+    <p class="dugme-satiri izgara-araclari" hidden>
+      <button type="button" data-izgara="hepsi">Tümünü işaretle</button>
+      <button type="button" data-izgara="temizle">Temizle</button>
+    </p>
+    {% for iz in program.izgaralar %}
+    <div class="tablo-kap izgara-kap" role="region" tabindex="0" aria-labelledby="tahta-devre-{{ loop.index }}">
+    <table class="izgara-program secimli">
+      <caption id="tahta-devre-{{ loop.index }}">{{ iz.devre_adi }}</caption>
+      <thead><tr><th scope="col">Ders</th>{% for g in iz.gun_adlari %}<th scope="col">{{ g }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for s in iz.satirlar %}<tr>
+        <th scope="row">{{ s.no }}. ders</th>
+        {% for h in s.hucreler %}
+        {% if h %}<td data-etiket="{{ gun_adlari[h.gun] }}"><label class="hucre"><input type="checkbox" name="{{ h.alan }}" value="1" {% if h.var %}checked{% endif %}><span class="saat">{{ h.bas }}</span><span class="gizli">{{ iz.devre_adi }} {{ gun_adlari[h.gun] }} {{ s.no }}. ders</span></label><input type="text" class="sube" name="{{ h.sube_alan }}" value="{{ h.sube }}" maxlength="20" placeholder="şube" aria-label="{{ gun_adlari[h.gun] }} {{ s.no }}. ders şubesi"></td>
+        {% else %}<td class="bos-hucre" data-etiket="{{ iz.gun_adlari[loop.index0] }}">—</td>{% endif %}
+        {% endfor %}
+      </tr>{% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="bos-not">Ders saatleri tanımlı değil; önce <a href="/program">Program</a> sayfasından zil saatlerini girin.</p>
+    {% endif %}
+    <p class="dugme-satiri"><button class="ana">Programı kaydet</button></p>
+  </form>
+  {% elif program.izgaralar %}
+  {% for iz in program.izgaralar %}
+  <div class="tablo-kap izgara-kap" role="region" tabindex="0" aria-labelledby="tahta-devre-{{ loop.index }}">
+  <table class="izgara-program">
+    <caption id="tahta-devre-{{ loop.index }}">{{ iz.devre_adi }}</caption>
+    <thead><tr><th scope="col">Ders</th>{% for g in iz.gun_adlari %}<th scope="col">{{ g }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for s in iz.satirlar %}<tr>
+      <th scope="row">{{ s.no }}. ders</th>
+      {% for h in s.hucreler %}
+      {% if h and h.var %}<td class="dolu-hucre" data-etiket="{{ gun_adlari[h.gun] }}"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg> Ders{% if h.sube %} · {{ h.sube }}{% endif %}</td>
+      {% else %}<td class="bos-hucre" data-etiket="{{ iz.gun_adlari[loop.index0] }}">—</td>{% endif %}
+      {% endfor %}
+    </tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <h3>Bu tahtanın istisnaları</h3>
+  {% if program.istisnalar %}
+  <ul class="istisna-listesi">
+    {% for i in program.istisnalar %}<li><span class="rozet" data-durum="{{ 'uyari' if i.durum == 'etkin' else 'onay' }}">{{ i.durum_adi }}</span> {{ i.aralik }} · {{ i.kapsam }}{% if i.neden %} · {{ i.neden }}{% endif %}
+      {% if i.iptal_edilebilir %}<form method="post" action="/program/istisna/{{ i.id }}/iptal" class="satir-ici"><input type="hidden" name="donus" value="/tahta/{{ t.id }}#program"><button>İptal et</button></form>{% endif %}</li>{% endfor %}
+  </ul>
+  {% else %}<p class="not">Etkin ya da ileri tarihli istisna yok.</p>{% endif %}
+  <form method="post" action="/program/istisna" class="dugme-satiri">
+    <input type="hidden" name="tahta" value="{{ t.id }}">
+    <input type="hidden" name="donus" value="/tahta/{{ t.id }}#program">
+    <button name="sure" value="1sa">Bu tahtada 1 saat durdur</button>
+    <button name="sure" value="bugun">Bu tahtada bugün durdur</button>
+  </form>
+</section>
+{% endif %}
+
 <h2 id="tani-baslik">Saha tanılaması</h2>
 {% if tani %}
 <p class="not">Rapor zamanı: {{ ham.tani_zamani | zaman }} · ajan {{ tani.ajan_surumu }}</p>

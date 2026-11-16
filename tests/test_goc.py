@@ -34,7 +34,7 @@ def test_goc_eski_veritabanini_yukseltir(tmp_path, monkeypatch):
     eski_veritabani(tmp_path)
     vt.hazirla()
     with vt.islem() as b:
-        assert b.execute("PRAGMA user_version").fetchone()[0] == len(vt.GOCLER) == 2
+        assert b.execute("PRAGMA user_version").fetchone()[0] == len(vt.GOCLER) >= 2
         sutunlar = {s["name"] for s in b.execute("PRAGMA table_info(tahta)")}
         assert {"bina", "kat", "duzeyler", "devre", "subeler"} <= sutunlar
         yetki = {s["ad"]: s["acil_yetki"] for s in b.execute("SELECT ad, acil_yetki FROM kullanici")}

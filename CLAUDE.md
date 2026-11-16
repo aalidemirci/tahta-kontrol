@@ -6,11 +6,13 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.3.0, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
-  (0.1.1: kurulum, kilit, duyuru, kapatma, güncelleme çalıştı); 0.2.0'ın okul kimliği
-  ve 0.3.0'ın duyuru planları, hedef grupları ve acil durum/tatbikat yayını yalnız
-  Debian 12 kabında ve tarayıcıda denendi; gerçek bir ETAP tahtasında henüz denenmedi.
-- Yol haritası `docs/tasarim.md` §12; kullanıcıya sorulacaklar §13 "Açık sorular".
+- Durum: **0.4.0, saha denemesi sürümü.** Pardus 25 (XFCE) masaüstünde denendi
+  (0.1.1: kurulum, kilit, duyuru, kapatma, güncelleme çalıştı); 0.2.0'ın okul kimliği,
+  0.3.0'ın duyuru planları, hedef grupları ve acil durum/tatbikat yayını ve 0.4.0'ın ders
+  programı/program kilidi yalnız Debian 12 kabında ve tarayıcıda denendi; gerçek bir ETAP
+  tahtasında henüz denenmedi.
+- Ders programı ve program kilidi `docs/tasarim.md` §12; yol haritası §13; kullanıcıya
+  sorulacaklar §14 "Açık sorular"; doğrulanacak dayanaklar §15.
 
 ## Komutlar (PowerShell 5.1; `&&` yok)
 
@@ -36,6 +38,10 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   panel_duyuru.py   duyuru/plan uçları, /api/hedef-onizleme   (web.py'den `kaydet(uygulama, y)` ile)
   panel_tahtalar.py gruplar, /tahtalar.csv ve CSV içe aktarma
   panel_acil.py     /acil: başlatma, bitirme, rapor
+  panel_program.py  /program (sekmeler: zil, derslik, kurallar, istisnalar), /program/uyarilar, /tahta/{id}/program
+  sablonlar/    program.html, uyarilar.html ve ortak başları _program_bas.html (şerit + sekmeler)
+  program.py    zil saatleri, Okul Zili okuma, takvim (plan_hesapla/gun_plani), derslik CSV, kilit aralıkları (saf)
+  program_is.py program zamanlayıcısı (kilit, açma yedeği, boş ders uyarısı, bakım), istisnalar, özetler
   komut.py      KOMUT_OMRU, KOMUT_ADI, komut_ekle (duyuru komutu ömrü açıkça ister)
   duyuru.py     tek yayın yolu duyuru_yayimla, plan zamanlayıcısı, kaçırma kuralı, durdurma
   zamanlama.py  plan takvimi (saf işlevler; Europe/Istanbul)
@@ -52,8 +58,9 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   statik/       stil.css (tek dosya, katmanlı), panel.js (tek dosya, kütüphanesiz), isaret.svg (nötr ürün işareti)
   ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh
 tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
-  servis.py     yönetici yetkili sistem servisi: sunucu döngüsü, komutlar, acil durumu, yerel soket
-  ekran.py      oturumda çalışan kilit/duyuru/kapatma/acil penceresi (GTK3), üst bantta logo ve okul adı
+  servis.py     yönetici yetkili sistem servisi: sunucu döngüsü, komutlar, acil durumu, süreli program kilidi, yerel soket
+  ekran.py      oturumda çalışan kilit/duyuru/kapatma/acil penceresi (GTK3), üst bantta logo ve okul adı;
+                program kilidinde "Teneffüs · Tahta 10:40'ta açılır." satırı (saat_eki sunucudakiyle aynı)
   ayar.py       yapılandırma, varsayılan tahta paleti, logonun servis tarafında saklanması
   sistem.py     işletim sistemine dokunan HER ŞEY (yeni platform = bu dosya)
   tani.py       saha tanılaması (denetim listesi)
@@ -94,6 +101,15 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
    acil durumuna dokunmaz, `null` gelirse temizler; yetenekleri `durum.yetenekler` ile bildirir.
 11. **Her duyuru gösterimi `duyuru.duyuru_yayimla` ile çıkar** (pano, plan, yeniden gönder,
    sonraki aşamalar `uygulama.state.duyuru_yayimla`). Göç `GOCLER`'in sonuna tek öğe eklenir.
+12. **Program kilidi süreli ve kaynaklıdır.** Ajanda `kilit_kaynak` = `idare` (panel, süresiz)
+   ya da `program` (süre tahtanın monotonik saatiyle sayılır, en çok 8 saat; sunucu kapalı olsa
+   da süre dolunca açılır). Program kilidi idare kilidine uygulanmaz, program açması idare
+   kilidini açmaz (`(True, "...; uygulanmadı.")`); idare kilidi program kilidini ezer. Program
+   kilidi yeniden başlatmada **geri yüklenmez**. Tahta ekranında yalnız neden ve açılış saati
+   yazar; şube, ders, öğretmen yazılmaz. Derslik programında öğretmen ve ders adı tutulmaz.
+13. **Boş ders uyarısı personel verisi gibi korunur:** işlem kaydına yazılmaz (yalnız `#id`),
+   dışa aktarılmaz, tahtada görünmez, 30 gün sonra `secure_delete` + WAL budamayla silinir.
+   Panel metni "dersin işlenmediği anlamına gelmez" notunu taşır; arayüzde mevzuat atfı yoktur.
 
 ## Bilinen tuzaklar
 
@@ -133,6 +149,21 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği, build.ps1
   `tema.varsayilan()["tahta"]`; tema formülü değişirse ikisi birlikte değişir (test eder).
 - **Logo ekran yardımcısına soketle gider:** dosya root'a aittir (0600); yardımcı okuyamaz.
   Logo bozuk ya da inmemişse ekran logosuz çalışır; bunu "hata" diye düşürme.
+- **Eski ajana program komutu verilmez:** program kaynaklı `kilitle`/`kilit_ac` yalnız
+  `durum.yetenekler` içinde `program_kilidi` bildiren tahtaya gider. 0.3.x ajanı `kilitle`'nin
+  verisini yok sayıp süresiz kilitler, sonraki `kilit_ac` idarenin kilidini de açardı (16.11.2026).
+- **Program kilidinin süresi komut tahtaya inerken hesaplanır** (`web.py`, `bitis_sunucu` →
+  `sure_sn`; 30 sn'den azsa komut `iptal`). Panelde açılış saati `son_gorulme + kilit_kalan`
+  dakikaya yuvarlanarak gösterilir (ajan kalan süreyi aşağı yuvarlar; 09:10 yerine 09:09 çıkıyordu).
+- **Saatten sonra gelen ek** (`'ta/'da/'te/'de`) saatin okunuşundan seçilir: `program.saat_eki`
+  ve `ekran.saat_eki` aynı tablodur (test bütün saatleri karşılaştırır). "10:40'da" yanlıştır.
+- **`<details>` içindeki form alanları:** yeni tarayıcılarda içerik `::details-content` sözde
+  öğesindedir ve `box-sizing` zincirini koparır; `stil.css` sıfırlama katmanında ayrıca
+  `::details-content { box-sizing: inherit }` vardır. Yoksa açılır formlardaki alanlar kutudan taşar.
+- **Sunucunun ajan paketi süreç başında bir kez üretilir:** ajan kodunu değiştirdikten sonra Docker
+  denemesinde paketi yeniden indirmek için deneme sunucusu yeniden başlatılır.
+- **Deneme sunucusunda giriş hız sınırı** (adres başına 5 dk'da 10): betik her adımda yeniden giriş
+  yapmasın; oturum çerezini saklayıp yeniden kullansın.
 - **Deneme betiklerinde saat:** Git Bash'te `TZ=Europe/Istanbul date` UTC verir; saati Python ile hesapla.
 - **İlk kurulum yalnız 127.0.0.1'den yapılır;** ağdaki biri yönetici hesabını kapamasın.
 - **Docker'da deneme:** `debian:12` + `python3-gi gir1.2-gtk-3.0 xvfb openbox imagemagick`;

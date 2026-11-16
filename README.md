@@ -3,7 +3,7 @@
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.3.0, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
+> **Durum: 0.4.0, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
 > gerçek bir Pardus ETAP tahtasında henüz denenmedi. Okul genelinde kullanmadan
 > önce tek tahtada deneyin (`docs/saha-denemesi.md`).
 
@@ -39,8 +39,23 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
 - Duyuru ve acil metninde T.C. kimlik numarasına benzeyen sayı reddedilir
   (tahta herkese açık ekrandır).
 
-Planlananlar: ders programına bağlı otomatik kilit, sınav duyurusu ve sınav
-yoklaması, ders yoklaması (`docs/tasarim.md`, yol haritası).
+0.4.0 ile:
+
+- **Zil saatleri ve ders programı:** ders saatleri ve takvim Okul Zili'nin
+  yapılandırmasından ya da yedeğinden alınır (Okul Zili'ne hiçbir şey yazılmaz);
+  Okul Zili'si olmayan okul elle girer. Hangi derslikte hangi saatte ders olduğu CSV
+  ile ya da tahta sayfasındaki haftalık tabloyla girilir; öğretmen ve ders adı
+  alınmaz.
+- **Programa bağlı kilit** (varsayılan kapalı): teneffüste ve dersliğin boş olduğu
+  saatlerde tahta kilitlenir, derse girilecek saatte sunucu kapalı olsa bile
+  kendiliğinden açılır; ekranda yalnız neden ve açılış saati yazar. Tahta bazında
+  muafiyet, tarih aralıklı istisna ve "1 saat / bugün durdur" vardır.
+- **Boş ders uyarısı** (varsayılan kapalı): programında ders olan tahta ders
+  başladıktan sonra kapalı ya da kilitli kalırsa panelde uyarı; uyarılar dışa
+  aktarılmaz ve 30 gün sonra silinir.
+
+Planlananlar: sınav duyurusu ve sınav yoklaması, ders yoklaması
+(`docs/tasarim.md`, yol haritası).
 
 ## Çalıştırma (geliştirme)
 

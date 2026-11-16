@@ -1,6 +1,6 @@
 # Tahta Kontrol — tasarım
 
-Sürüm 0.3.0 · 16.11.2026
+Sürüm 0.4.0 · 16.11.2026
 
 ## 1. Amaç ve kapsam
 
@@ -64,8 +64,13 @@ Sunucu iki kapı açar: `127.0.0.1:8787` (şifresiz, yalnız sunucu bilgisayarı
 - Açma yolları: panelden; tahtada okul genelinde ortak kilit koduyla (özeti
   tahtada durur, sunucu kapalıyken de çalışır; 5 hatalı denemede 60 sn bekleme);
   sunucuya ulaşılamıyorsa kodsuz düğmeyle.
-- Ortak kod sınıfın önünde girilir ve görülebilir; kalıcı çözüm ders programına
-  bağlı otomatik açma ve yalnız yoklama anında öğretmen PIN'idir (sonraki aşama).
+- Ortak kod sınıfın önünde girilir ve görülebilir; 0.4.0'dan beri teneffüs kilidi
+  derse girilecek saatte kendiliğinden açılır (§12), böylece kod daha az girilir.
+  Yoklama anında öğretmen PIN'i sonraki aşamadır.
+- **Kilidin kaynağı:** panelden verilen kilit "idare" kilididir ve süresizdir; ders
+  programından gelen kilit "program" kilididir ve süresi tahtada sayılır (§12).
+  İdare kilidi program kilidini ezer; program kilidi ve program açması idare kilidine
+  dokunmaz.
 
 ## 6. Duyuru
 
@@ -243,14 +248,73 @@ seçimde korunur.
 - **GTK'da iki stil sağlayıcısı:** ölçüler bir kez yüklenir, renkler tema
   değişince aynı sağlayıcıya yeniden yüklenir (pencere yeniden açılmaz).
 
-## 12. Yol haritası
+## 12. Ders programı ve program kilidi
+
+Panelde **Program** sayfası (menüde Duyurular'dan sonra) sekmelidir: Zil saatleri ·
+Derslik programları · Kurallar · İstisnalar · Uyarılar. Üstte bugünün şeridi (bugün,
+şu anki ders ya da teneffüs, sunucu saati, program kilidinin durumu, boş ders uyarısı
+sayısı) durur; aynı şerit pano başında da görünür. Program sunucu saatine
+(Europe/Istanbul) göre işler; tahta saatine güvenilmez.
+
+- **Zil saatleri.** Okul Zili'nin `ayarlar.json` dosyası ya da `.okulzili` yedeği
+  yüklenir; Okul Zili sunucu bilgisayarında kuruluysa tek düğmeyle sabit yolundan salt
+  okunur alınır. Yalnız ders saatleri ve takvim (öğretim dönemi, ara tatiller, resmî
+  tatiller, tarih kuralları) alınır; ses, okul adı, cihaz alanları okunmaz. Önizlemeden
+  sonra onaylanır. Okul Zili'si olmayan okul ders akışından (ilk ders, süre, teneffüs,
+  öğle arası) tablo üretir ve tablodan düzeltir; takvimi olmayan okulda tatiller İstisna
+  olarak girilir. Okul Zili'ne hiçbir şey yazılmaz.
+- **Derslik programı.** Hangi tahtada hangi gün hangi ders saatinde ders **olduğu**;
+  öğretmen ve ders adı alınmaz (KVKK: amaçla sınırlı veri — kilit ve uyarı için dersliğin
+  dolu olup olmadığı yeter). CSV ile topluca (önizlemeli; eşleşmeyen derslikler ve hatalı
+  satırlar listelenir, dosyada geçmeyen tahtaya dokunulmaz) ya da tahta sayfasındaki
+  haftalık ızgarayla girilir. Şube isteğe bağlıdır, yalnız panelde görünür. Programı
+  girilmemiş tahta yalnız teneffüste kilitlenir ve boş ders uyarısı üretmez.
+- **Program kilidi** (varsayılan kapalı). Teneffüste, öğle arasında ve (istenirse)
+  dersliğin boş olduğu ders saatlerinde ders bitiminden `gecikme` dakika sonra tahtaya
+  bir kez kilit gider; aralığın bitimine 3 dakikadan az kaldıysa gitmez. Kilit **süreli**
+  verilir: süre sunucuda, komut tahtaya inerken hesaplanır; tahta kendi monotonik
+  saatiyle sayar ve derse girilecek saatte **sunucu kapalı olsa da** kendiliğinden açılır
+  (kural 3; ayrıca 90 sn sonra kodsuz açma düğmesi aynen sürer). Kilit ekranında yalnız
+  neden ve açılış saati yazar ("Teneffüs · Tahta 10:40'ta açılır."); şube, ders,
+  öğretmen yazılmaz. Öğretmen ortak kodla açarsa o aralıkta yeniden kilitlenmez.
+  Yeniden başlatılan tahtada program kilidi geri yüklenmez (süresi bilinmez; açık
+  kalmak döngüsel kilit/açmadan iyidir). Komut ömrü 120 sn'dir.
+- **Yetenek.** Program kilidi yalnız `durum.yetenekler` içinde `program_kilidi` bildiren
+  tahtaya verilir. Eski ajan `kilitle`'nin verisini bilmez, süresiz kilitler ve sonraki
+  açma idarenin kilidini de açardı. Panelde böyle tahtalar "Ajan güncellenmeli" diye
+  görünür.
+- **Askı.** Program kilidi şu durumlarda verilmez ve program kaynaklı kilitli tahtaya hemen
+  açma gider: tahta muafsa (kütüphane, öğretmenler odası), istisna aralığındaysa, Okul
+  Zili'nde planlanmış sınav penceresindeyse, gün tatilse, acil yayın sürüyorsa, kural
+  kapatılınca ya da zil saatleri silinince. İstisna tarih-saat aralıklıdır (bütün ya da
+  seçili tahtalar, en çok 400 gün); pano ve Program şeridinde "1 saat / bugün durdur"
+  kısayolu vardır. İstisnayı idareci de ekleyip iptal edebilir; kuralları, zil saatlerini
+  ve derslik programını yalnız yönetici değiştirir.
+- **Açma yedeği.** Asıl açma tahtadaki süredir; sunucu, aralığı bittiği hâlde program
+  kaynaklı kilitli görünen tahtaya en çok 5 dakikada bir açma komutu verir (saat kayması
+  ve istisna için).
+- **Boş ders uyarısı** (varsayılan kapalı). Derslik programında dersi olan tahta, ders
+  başladıktan sonra eşik süre (5–30 dk) boyunca kesintisiz kapalı, program kilidinde ya da
+  oturumsuz kalırsa panelde uyarı çıkar; idarenin bilerek kilitlediği tahta uyarı vermez.
+  Tahta sonra kullanılırsa uyarı silinmez, "10:14'te kullanılmaya başlandı" diye kapanır.
+  Uyarı tahtanın kullanılıp kullanılmadığını gösterir, dersin işlenip işlenmediğini değil;
+  öğretmen adı tutulmaz, işlem kaydına yazılmaz, dışa aktarılmaz, tahtada görünmez ve 30
+  gün sonra silinir (silmede `secure_delete` ve WAL budama). Sunucu yeniden başlarsa o
+  dersin uyarısı geç ya da hiç üretilmez (yanlış uyarı yerine eksik uyarı).
+- **Sonraya bırakılanlar** (göç gerektirmez): ortak hesapta oturum temizliği (açık
+  pencereleri kapatma, tarayıcı oturum verisini silme, indirilenleri karantinaya alma) ve
+  boş ders uyarısında "tahtaya dokunulmamışsa da uyar" ölçütü. Pencere yöneticisi, tarayıcı
+  profil yolları ve merkezi yönetimin tepkisi ETAP'ta doğrulanmadan güvenle yazılamaz;
+  geri dönüşsüz veri kaybı riski taşır.
+
+## 13. Yol haritası
 
 | Aşama | İçerik | Durum |
 |---|---|---|
 | 0–1 | Sunucu, ajan, kayıt, pano, kilit, duyuru, kapatma, tanılama, güncelleme, otomatik kapatma | 0.1.2 — ETAP'ta denenecek |
 | 1.5 | Görünüm ve okul kimliği: okul logosu ve renkleri, yeni panel ve tahta ekranı tasarımı | 0.2.0 — ETAP'ta denenecek |
 | 2 | Duyuru zamanlama ve hedef grupları (bina, kat, düzey, devre, gruplar, CSV), acil durum ve tatbikat yayını | 0.3.0 — Debian 12 kabında denendi; ETAP'ta denenecek |
-| 3 | Ders programı ve zil saatleri (Okul Zili'nden), programa bağlı otomatik kilit/açma, boş geçen ders uyarısı, oturum temizliği | — |
+| 3 | Ders programı ve zil saatleri (Okul Zili'nden ya da elle), derslik programı, programa bağlı otomatik kilit/açma, istisnalar, boş geçen ders uyarısı | 0.4.0 — Debian 12 kabında denendi; ETAP'ta denenecek. Oturum temizliği sonraya (§12) |
 | 4 | Kelebek sınav duyurusu ve sınav kipi (Kelebek Sınav verisinden, maskeli liste), sınav yoklaması | — |
 | 5 | Ders yoklaması (öğretmen PIN'i, e-Okul'a giriş için icmal) | — |
 
@@ -262,7 +326,7 @@ Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" v
 tahtalara alan ata", plan formunda "sonraki 3 gösterim" canlı önizlemesi, çakışan
 plan uyarısı.
 
-## 13. Açık sorular
+## 14. Açık sorular
 
 Yanıt gelene kadar bu belgedeki karar geçerlidir.
 
@@ -288,7 +352,31 @@ Yanıt gelene kadar bu belgedeki karar geçerlidir.
    yazılamayacağı iş güvenliği uzmanı ve sivil savunma sorumlusunun kararıdır;
    yazılım bu iddiada bulunmaz.
 
-## 14. Doğrulanacak dayanaklar
+Ders programı ve program kilidi (0.4.0):
+
+10. **Teneffüs kilidi gecikmesi** 2 dakika seçildi. Öğretmen dersi uzatırsa kodla açar;
+    2 dakika uygun mu?
+11. **Dersi olmayan saatte kilit** varsayılan açık. Boş saatte tahtanın öğretmence bireysel
+    çalışma için kullanılması okulda olağan mı? Olağansa varsayılan kapatılır.
+12. **Boş ders uyarısı** personel denetimi gibi algılanabilir. Açılmadan önce öğretmenler
+    kurulunda ya da yazılı bilgilendirmeyle duyurulmalı mı, okulun aydınlatma metnine
+    eklenmeli mi? 30 günlük saklama uygun mu? (Dayanak §15'te doğrulanacak.)
+13. **Derslik programı kaynağı:** okulda ders programı hangi programla hazırlanıyor
+    (e-Okul, bir ders dağıtım programı, Excel)? Dışa aktardığı dosyanın uydurma verili bir
+    örneği paylaşılırsa ikinci bir içe aktarma biçimi eklenebilir; şimdilik yalnız kendi
+    CSV biçimimiz var.
+14. **Sınav pencereleri:** Okul Zili'nde planlanmış sınav sırasında program kilidi askıya
+    alınıyor. Sınav sırasında tahtaların kilitli kalması mı istenir? (Aşama 4 sınav kipi.)
+15. **Kurum içi karar:** teneffüste tahtaların kilitlenmesine ilişkin öğretmenler kurulu ya
+    da okul yönetimi kararı var mı/gerekli mi? Varsa arayüzde ona atıf yapılabilir;
+    yazılım hiçbir mevzuat maddesine dayanak olarak atıf yapmıyor.
+16. **Oturum temizliği** (sonraya bırakıldı): `ogrenci` hesabı tahtada kullanılıyor mu;
+    tarayıcı geçmişi ve kayıtlı parolalar da silinsin mi (Firefox'ta geçmiş yer imleriyle
+    aynı dosyadadır)? ETAP'taki tarayıcılar ve profil yolları sahada görülmeden yazılmayacak.
+17. **Program kilidi süresi tahtada en çok 8 saat** sayılır. Gün boyu dersi olmayan
+    dersliklerde bu, tahtanın öğleden sonra kendiliğinden açılması demektir; uygun mu?
+
+## 15. Doğrulanacak dayanaklar
 
 Arayüzde hiçbir mevzuat maddesine atıf yapılmaz. Belgeye dayanak olarak yazılmadan
 önce metni yerelde doğrulanması gerekenler:
@@ -297,3 +385,8 @@ Arayüzde hiçbir mevzuat maddesine atıf yapılmaz. Belgeye dayanak olarak yaz�
 - Yazılımın acil durum yayınının acil durum planında "uyarı sistemi" sayılıp
   sayılamayacağı (soru 9).
 - Tatbikat verisinin MEBBİS İSG modülüne girilecek biçimi (soru 6).
+- Boş ders uyarısı için aydınlatma gerekip gerekmediği (KVKK md. 10) ve 30 günlük
+  saklamanın okulun kişisel veri saklama ve imha politikasıyla uyumu (soru 12).
+- Etkileşimli tahtaların kullanımına ilişkin MEB/YEĞİTEK düzenlemesi (varsa). Teneffüs
+  kilidi bir okul yönetimi tedbiridir; öğrencinin kendi bilişim aracıyla ilgili disiplin
+  hükmü okulun tahtası için dayanak gösterilmez (soru 15).

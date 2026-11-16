@@ -24,7 +24,24 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.datastructures import UploadFile
 
-from . import __version__, acil, ayar, duyuru, guvenlik, hedef, marka, metin, paket, tema, vt, wol, zamanlama
+from . import (
+    __version__,
+    acil,
+    ayar,
+    duyuru,
+    guvenlik,
+    hedef,
+    marka,
+    metin,
+    paket,
+    panel_program,
+    program_is,
+    tema,
+    vt,
+    wol,
+    zamanlama,
+)
+from . import program as program_mod
 from .komut import KOMUT_ADI, KOMUT_DURUMU, KOMUT_OMRU, komut_ekle  # noqa: F401  (KOMUT_OMRU burada da anılır)
 
 gunluk = logging.getLogger("tahta-sunucu")
@@ -39,6 +56,7 @@ DEVRELER = hedef.DEVRELER
 MENU = [
     {"ad": "Pano", "yol": "/", "esler": ["/", "/tahta/"]},
     {"ad": "Duyurular", "yol": "/duyurular", "esler": ["/duyurular"]},
+    {"ad": "Program", "yol": "/program", "esler": ["/program"]},
     {
         "ad": "Tahtalar",
         "alt": [
@@ -256,11 +274,14 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         for tahta_id in set(idler):
             uyandir(tahta_id)
 
-    def tahta_gorunumu(satir, acil_gorenler: set[int] | None = None, gruplar: dict | None = None) -> dict:
+    def tahta_gorunumu(
+        satir, acil_gorenler: set[int] | None = None, gruplar: dict | None = None, bos_dersler: dict | None = None
+    ) -> dict:
         """Pano kartı ve /api/durum için tahta özeti.
 
         acil_gorenler: süren acil yayını ekrana almış tahtaların kimlikleri (yoksa None).
         gruplar: tahta kimliği → grup kimlikleri (pano ilk verisi için; yoksa boş liste).
+        bos_dersler: tahta kimliği → "3. ders (kapalı)" (program_is.bos_ders_metinleri).
         """
         durum = json.loads(satir["durum_json"] or "{}")
         cevrimici = bool(satir["son_gorulme"]) and (vt.simdi() - satir["son_gorulme"]) < ayar.CEVRIMICI_ESIK_SN
@@ -292,6 +313,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             "surum": satir["surum"],
             "guncel": satir["surum"] == paket.ajan_paketi().surum,
             "ip": satir["ip"],
+            "program": program_is.tahta_program(satir, (bos_dersler or {}).get(satir["id"])),
         }
 
     # ---- güvenlik katmanı ----------------------------------------------------
@@ -426,7 +448,10 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             kacirilan = b.execute(
                 "SELECT COUNT(*) FROM duyuru WHERE durum = 'kacirildi' AND olusturma > ?", (vt.simdi() - 86400,)
             ).fetchone()[0]
-        tahtalar = [tahta_gorunumu(s, gorenler, uyelik) for s in satirlar]
+            simdi_dt = datetime.fromtimestamp(vt.simdi(), ISTANBUL)
+            program_ozeti = program_is.program_ozeti(b, simdi_dt)
+            bos_dersler = program_is.bos_ders_metinleri(b, simdi_dt)
+        tahtalar = [tahta_gorunumu(s, gorenler, uyelik, bos_dersler) for s in satirlar]
         return sayfa(
             istek,
             "pano.html",
@@ -436,6 +461,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             kilit_kodu_var=kilit_kodu_var,
             kapatma=kapatma,
             kacirilan_sayisi=kacirilan,
+            program=program_ozeti,
         )
 
     def acil_gorenler(b) -> set[int] | None:
@@ -459,13 +485,17 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             bekleyen = b.execute("SELECT COUNT(*) FROM tahta WHERE durum = 'bekliyor'").fetchone()[0]
             ozet = acil_ozeti(b)
             gorenler = acil_gorenler(b)
+            simdi_dt = datetime.fromtimestamp(vt.simdi(), ISTANBUL)
+            program_ozeti = program_is.program_ozeti(b, simdi_dt)
+            bos_dersler = program_is.bos_ders_metinleri(b, simdi_dt)
         if ozet:
             ozet["teslim"] = len(gorenler or ())
             ozet["hedef"] = len(satirlar)
         return {
-            "tahtalar": [tahta_gorunumu(s, gorenler) for s in satirlar],
+            "tahtalar": [tahta_gorunumu(s, gorenler, None, bos_dersler) for s in satirlar],
             "bekleyen": bekleyen,
             "acil": ozet,
+            "program": program_ozeti,
         }
 
     @uygulama.post("/islem")
@@ -562,6 +592,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             gruplar = b.execute("SELECT id, ad FROM tahta_grubu ORDER BY ad COLLATE NOCASE").fetchall()
             uyelik = grup_uyelikleri(b)
             binalar = mevcut_binalar(b)
+            program_baglami = panel_program.tahta_program_baglami(b, satir)
         tani = json.loads(satir["tani_json"]) if satir["tani_json"] else None
         durum = json.loads(satir["durum_json"] or "{}")
         return sayfa(
@@ -575,6 +606,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             durum=durum,
             gruplar=gruplar,
             binalar=binalar,
+            program=program_baglami,
+            gun_adlari=program_mod.GUN_ADLARI,
         )
 
     def mevcut_binalar(b) -> list[str]:
@@ -636,6 +669,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             if eylem == "sil":
                 b.execute("UPDATE tahta SET durum = 'iptal', anahtar_ozet = '' WHERE id = ?", (tahta_id,))
                 b.execute("DELETE FROM tahta_grubu_uye WHERE tahta_id = ?", (tahta_id,))
+                b.execute("DELETE FROM tahta_ders WHERE tahta_id = ?", (tahta_id,))  # K34
+                b.execute("DELETE FROM program_isaret WHERE tahta_id = ?", (tahta_id,))
                 vt.kayit_dus(b, k["ad"], "Tahta kaldırıldı", satir["ad"], istemci_ip(istek))
                 return yonlendir("/", f"{satir['ad']} kaldırıldı. Tahtadaki ajan artık sunucuya bağlanamaz.")
             if not ad:
@@ -1254,6 +1289,16 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                         continue
                     if s["tur"] == "duyuru":  # tahtanın saatine güvenilmez; kalan süre burada hesaplanır
                         veri["sure_sn"] = max(5, int(veri.pop("bitis_sunucu", vt.simdi() + 60)) - vt.simdi())
+                    if s["tur"] == "kilitle" and veri.get("kaynak") == "program":
+                        # Program kilidinin süresi de inerken hesaplanır; aralık geçtiyse komut düşer.
+                        kalan = int(veri.pop("bitis_sunucu", 0)) - vt.simdi()
+                        if kalan < 30:
+                            b.execute(
+                                "UPDATE komut SET durum = 'iptal', tamamlanma = ?, sonuc = ? WHERE id = ?",
+                                (vt.simdi(), "Kilit aralığı geçti; gönderilmedi.", s["id"]),
+                            )
+                            continue
+                        veri["sure_sn"] = kalan
                     cikti.append({"id": s["id"], "tur": s["tur"], "veri": veri})
                     b.execute("UPDATE komut SET durum = 'gonderildi' WHERE id = ?", (s["id"],))
                 return cikti
@@ -1364,6 +1409,19 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         with vt.islem() as b:
             return 1 if acil.aktif(b, an) else 0
 
+    # ---- ders programı (Aşama 3) ------------------------------------------------------------
+    program_isleyici = program_is.ProgramZamanlayici()
+
+    def program_zamanlayici(simdi: datetime | None = None) -> list[int]:
+        """Program kilidi, açma yedeği, boş ders uyarısı, bakım (§5.5); uyandırılan tahtaları döndürür."""
+        simdi = simdi or datetime.fromtimestamp(vt.simdi(), ISTANBUL)
+        with vt.islem() as b:
+            idler = program_isleyici.calistir(b, simdi)
+        if program_isleyici.wal_budanacak:
+            program_is.bos_ders_imha_sonrasi()
+        uyandir_hepsi(idler)
+        return idler
+
     def yayimla(b, **kw) -> tuple[int | None, list[int]]:
         """Sonraki aşamalar için tek yayın yolu (duyuru.duyuru_yayimla); uyandırmayı çağıran yapar."""
         return duyuru.duyuru_yayimla(b, **kw)
@@ -1389,8 +1447,12 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
     panel_duyuru.kaydet(uygulama, y)
     panel_tahtalar.kaydet(uygulama, y)
     panel_acil.kaydet(uygulama, y)
+    panel_program.kaydet(uygulama, y)
 
     uygulama.state.zamanlayici = zamanlayici
+    uygulama.state.program_zamanlayici = program_zamanlayici
+    # Sonraki aşamalar (A4 sınav penceresi) buraya kanca(b, tahta_id, an_epoch) -> bool ekler.
+    uygulama.state.program_askida_kancalari = program_isleyici.askida_kancalari
     uygulama.state.duyuru_zamanlayici = duyuru_zamanlayici
     uygulama.state.acil_denetim = acil_denetim
     uygulama.state.duyuru_yayimla = yayimla
@@ -1399,5 +1461,6 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         ("acil_denetim", acil_denetim),
         ("otomatik_kapatma", zamanlayici),
         ("duyuru_planlari", duyuru_zamanlayici),
+        ("program", program_zamanlayici),
     ]
     return uygulama

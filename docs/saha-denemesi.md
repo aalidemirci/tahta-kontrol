@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.3.0)
+# Saha denemesi kılavuzu (0.4.0)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -20,13 +20,16 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Panelin yeni tasarımı: açık/koyu görünüm, dar ekran, onay penceresi, logo yükleme | Chromium (geliştirme bilgisayarı) | Çalıştı |
 | Acil yayın ve tatbikat (0.3.0): kilitliyken üstte görünme, bitince kilidin dönmesi, acil bitince kalan süreli duyurunun dönmesi, acil sürerken uyarılı kapatmanın atlanması, sunucu kapalıyken 90 sn sonra "yayını kapat" düğmesi; düğmenin gönderdiği yerel iletiyle acilin ve kilidin kalkması (dokunma benzetilmedi) | Debian 12 kabı + sanal ekran (1920×1080), gerçek paket | Çalıştı |
 | Duyuru planları, hedef önizlemesi, gruplar, CSV önizleme, acil sayfası ve rapor, açılır menü | Chromium (geliştirme bilgisayarı), açık/koyu, dar ekran | Çalıştı |
+| Program kilidi (0.4.0): zil saatleri elle, derslik ızgarası, zamanlayıcının verdiği süreli kilidin tahtaya inmesi; kilit ekranında "Bu saatte bu derslikte ders yok · Tahta 04:45'te açılır." (kodlu ve kodsuz); idare kilidinin program kilidini ezmesi; mevcut kilit, duyuru ve kapatma ekranlarının bozulmadığı | Debian 12 kabı + sanal ekran (1920×1080), gerçek paket | Çalıştı |
+| Program sayfası sekmeleri, pano şeridi ve "Program kilidini durdur" menüsü, tahta ızgarası, uyarılar, zil silme onay penceresi, dar ekran | Chromium (geliştirme bilgisayarı) | Çalıştı |
+| Program kilidinin süre dolunca sunucusuz açılması, kodla açma, yeniden başlatmada geri yüklenmemesi | Birim testleri (kapta süre beklenmedi) | Geçti |
 | **Gerçek ETAP tahtası** | — | **Denenmedi** |
 | Kurulum dosyasının başka bir bilgisayara kurulması | — | Denenmedi |
 | Gerçek kapatma / yeniden başlatma / uzaktan açma | — | Denenmedi (kapta benzetim) |
 
 ## 1. Sunucuyu kurun
 
-1. `dist\cikti\tahta-kontrol-0.3.0-windows-kurulum.exe` dosyasını sunucu olacak
+1. `dist\cikti\tahta-kontrol-0.4.0-windows-kurulum.exe` dosyasını sunucu olacak
    idari bilgisayara kurun (yönetici izni ister; güvenlik duvarında 8788 kapısını açar).
 2. Açılan pencerede **Paneli aç** deyin; ilk kurulumda okul adını ve yönetici
    hesabını oluşturun.
@@ -102,6 +105,30 @@ kullanın. Ekran görüntüleri depoya konmaz.
 | D2 | Sunucu bilgisayarı planlı saatte uykuda | Uyanınca süre içindeyse kalan süreyle; değilse "Kaçırıldı" ve panoda not | |
 | D3 | Okulun bütün tahtalarına bina/kat/düzey/devre doldurma (CSV ile) | Yönetici için kabul edilebilir süre; Türkçe Excel'de dosya bozulmadan açılıp kaydediliyor mu | |
 
+### 3.2 Ders programı ve program kilidi (0.4.0)
+
+Hazırlık: Program → Zil saatleri'nden Okul Zili dosyasını alın (ya da elle girin); denenecek
+tahtanın sayfasındaki ızgarada o günün derslerini işaretleyin; Program → Kurallar'da program
+kilidini açın. Önce öğretmenlere haber verin; boş ders uyarısını denemede açmayın ya da yalnız
+deneme tahtası programlı olsun.
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| P1 | Okul Zili'nin gerçek `ayarlar.json`'u (ya da `.okulzili` yedeği) | Önizlemede okulun bütün günleri ve dersleri doğru; ikili eğitimde iki devre ayrı tablo; uyarılar anlaşılır | |
+| P2 | Teneffüs başladıktan 2 dk sonra | Tahta kilitlenir; ekranda "Teneffüs · Tahta SS:DD'de açılır." | |
+| P3 | Derse girilecek saatte | Tahta kendiliğinden açılır (panelden bir şey yapılmadan) | |
+| P4 | Teneffüste sunucu programını kapatın | Ders saatinde tahta yine kendiliğinden açılır; 90 sn sonra "Kilidi aç" düğmesi de çıkar | |
+| P5 | Teneffüs kilidini öğretmen kodla açar | O teneffüs boyunca yeniden kilitlenmez | |
+| P6 | Teneffüste tahtayı yeniden başlatın | Açılınca kilitsiz kalır (bilinçli) | |
+| P7 | Panelden "Kilitle" (idare kilidi), sonra teneffüs | Kilit idarenin kilidi olarak kalır; ders saatinde açılmaz | |
+| P8 | Pano → "Program kilidini durdur → 1 saat" | Program kaynaklı kilitli tahtalar birkaç saniyede açılır; bir saat kilit gelmez | |
+| P9 | Kütüphane tahtasını muaf yapın | Hiç program kilidi gelmez | |
+| P10 | Derslik programı CSV'si (Türkçe Excel'de doldurulup kaydedilmiş) | Önizlemede derslikler eşleşir; "Eşleşmeyen derslikler" doğru | |
+| P11 | Boş ders uyarısı açık; programlı tahta derste kapalı kalsın (eşik 10 dk) | Panoda "1 boş ders uyarısı", kartta "Boş ders: N. ders (kapalı)"; tahta açılınca "…'ta kullanılmaya başlandı" | |
+| P12 | Kilit ekranı sınıfın arkasından | Neden ve açılış saati okunur; ekranda şube, ders, öğretmen yok | |
+| P13 | Okul Zili'nde planlanmış sınav günü | Sınav penceresinde program kilidi gelmez | |
+| P14 | Sunucu bilgisayarının saati (Ayarlar/Program şeridi) | Okul zili ile aynı dakikada | |
+
 ## 4. Otomatik giriş denemesi (elle)
 
 Yazılım otomatik girişi ayarlamaz. Tanılama raporundaki "Giriş ekranı ve
@@ -128,6 +155,16 @@ ve güncellemeden sonra duruyor mu.
 - Pencereye eklenen stil sınıfı (`window.acil`) ETAP'taki GTK 3.24 temasında zemini boyar.
 - Türkçe Excel CSV'yi `;` ile ve ANSI (cp1254) ya da UTF-8 olarak kaydeder; ikisi de okunur.
 - Sunucu bilgisayarının saati doğru ve Europe/Istanbul; planlar bu saatle işler.
+- Program kilidi (0.4.0): tahtanın monotonik saati teneffüs boyunca düzgün işler (uyku/askıya
+  alma tahtada kapalı); kilit sürerken tahta uykuya geçerse açılış gecikebilir.
+- Okul Zili'nin gerçek dosyalarındaki ders etiketleri ("3. ders", "2-3. ders bloğu",
+  ikili eğitimde "Sabah · …") yalnız Okul Zili kodundan ve uydurma örnekten çıkarıldı;
+  gerçek bir okulun dosyasıyla denenmedi.
+- Okul Zili'nin "tören" kuralları ders saatini değiştirmez; değiştiren gün için okul
+  "tarihe özel program" kullanıyor.
+- Teneffüs kilidi dokunmatik hareketlerle aşılamaz (0.1.x deneme 5 ile aynı varsayım).
+- 200 MB'a yakın `.okulzili` yedeğinin yüklenmesi sunucu bilgisayarında bellek/disk sorunu
+  çıkarmaz (dosya geçici olarak tutulur, kalıcı yazılmaz).
 
 ## 6. Sorun olursa
 

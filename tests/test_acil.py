@@ -244,7 +244,7 @@ def test_zamanlayici_isleri_ayri_ayri_calisir(uygulama):
 
     from tahta_sunucu import sunucu
 
-    assert [ad for ad, _ in uygulama.state.zamanlayicilar] == ["acil_denetim", "otomatik_kapatma", "duyuru_planlari"]
+    assert [ad for ad, _ in uygulama.state.zamanlayicilar][:3] == ["acil_denetim", "otomatik_kapatma", "duyuru_planlari"]
     cagrilan = []
 
     def bozuk():

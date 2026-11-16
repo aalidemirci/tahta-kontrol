@@ -35,6 +35,7 @@ STIL_OLCU = b"""
 #saat { font-size: 150px; font-weight: 700; }
 #tarih { font-size: 30px; }
 #kilit-yazi { font-size: 40px; font-weight: 600; margin-top: 24px; }
+#program-bilgi { font-size: 32px; font-weight: 600; }
 #bilgi { font-size: 24px; }
 #kod { font-size: 56px; letter-spacing: 12px; }
 #duyuru-baslik { font-size: 72px; font-weight: 700; }
@@ -107,6 +108,7 @@ def renk_stili(palet: dict) -> str:
         "#logo-kutu { background-color: #ffffff; }\n"
         f"#bant-sag, #tarih, #kapatma-neden {{ color: {p['soluk']}; }}\n"
         f"#bilgi {{ color: {p['bilgi']}; }}\n"
+        f"#program-bilgi {{ color: {p['metin']}; }}\n"
         f"#duyuru-baslik {{ color: {p['vurgu']}; }}\n"
         "#kapatma-baslik { color: #fca5a5; }\n"
         f"button {{ background-color: {p['dugme']}; border-color: {p['dugme_kenar']}; }}\n"
@@ -116,6 +118,42 @@ def renk_stili(palet: dict) -> str:
         f"#ana-dugme label {{ color: {p['ana_metin']}; }}\n"
         + ACIL_RENKLERI
     )
+
+
+# Saatin okunuşundaki son sözcüğün bulunma eki: 10:40 "kırk" → 'ta, 10:30 "otuz" → 'da.
+# tahta_sunucu/program.py::saat_eki ile aynıdır (ajan sunucu paketini içe aktarmaz).
+_BIRLER_EKI = {0: "", 1: "de", 2: "de", 3: "te", 4: "te", 5: "te", 6: "da", 7: "de", 8: "de", 9: "da"}
+_ONLAR_EKI = {1: "da", 2: "de", 3: "da", 4: "ta", 5: "de"}
+
+
+def saat_eki(saat: str) -> str:
+    """'SS:DD' saatine Türkçe bulunma ekini ekler: '10:40' → "10:40'ta", '11:00' → "11:00'de"."""
+    try:
+        ss, dd = (int(p) for p in saat.split(":"))
+    except ValueError:
+        return saat
+    sayi = dd if dd else ss
+    if sayi == 0:
+        ek = "da"  # sıfır
+    elif sayi % 10:
+        ek = _BIRLER_EKI[sayi % 10]
+    else:
+        ek = _ONLAR_EKI.get(sayi // 10, "de")
+    return f"{saat}'{ek}"
+
+
+def program_bilgisi(durum: dict) -> str:
+    """Program kilidinde kilit sayfasındaki satır: "Teneffüs · Tahta 10:40'ta açılır."
+
+    Yalnız neden ve açılış saati yazılır; şube, ders, öğretmen yazılmaz (kural 6).
+    """
+    if durum.get("kilit_kaynak") != "program":
+        return ""
+    neden = str(durum.get("kilit_neden") or "Teneffüs")
+    acilis = str(durum.get("kilit_acilis") or "")
+    if not acilis:
+        return f"{neden} · Tahta ders saatinde kendiliğinden açılır."
+    return f"{neden} · Tahta {saat_eki(acilis)} açılır."
 
 
 def logo_olcusu(en: int, boy: int) -> tuple[int, int]:
@@ -315,9 +353,12 @@ def calistir() -> int:
             self.saat = self._etiket("saat")
             self.tarih = self._etiket("tarih")
             self.kilit_yazi = self._etiket("kilit-yazi", "Bu tahta kilitlidir")
+            # Program kilidinde neden ve açılış saati; idare kilidinde boş ve gizli.
+            self.program_bilgi = self._etiket("program-bilgi")
+            self.program_bilgi.set_max_width_chars(36)
             self.bilgi = self._etiket("bilgi")
             self.bilgi.set_max_width_chars(40)
-            for parca in (self.saat, self.tarih, self.kilit_yazi, self.bilgi):
+            for parca in (self.saat, self.tarih, self.kilit_yazi, self.program_bilgi, self.bilgi):
                 sol.pack_start(parca, False, False, 0)
             govde.pack_start(sol, False, False, 0)
 
@@ -595,8 +636,14 @@ def calistir() -> int:
                     self.bilgi.set_text(f"Kod art arda hatalı girildi. {bekleme} saniye bekleyin.")
                 elif kod_var:
                     self.bilgi.set_text("Açmak için kilit kodunu girin.")
+                elif durum.get("kilit_kaynak") == "program":
+                    self.bilgi.set_text("Okul idaresi de açabilir.")
                 else:
                     self.bilgi.set_text("Kilit okul idaresince açılır.")
+                program = program_bilgisi(durum)
+                # Uzun neden ("Bu saatte bu derslikte ders yok") saatin ortasından bölünmesin: iki satır.
+                self.program_bilgi.set_text(program.replace(" · ", "\n", 1) if len(program) > 40 else program)
+                self.program_bilgi.set_visible(bool(program))
                 self.kod_kutusu.set_visible(kod_var and not bekleme and not cevrimdisi)
                 self.cevrimdisi_dugmesi.set_visible(cevrimdisi)
                 self.yigin.set_visible_child_name("kilit")

@@ -1,0 +1,46 @@
+{% extends "taban.html" %}
+{% block baslik %}Boş ders uyarıları · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Bağlam: uyarilar[{id,saat,tahta_id,tahta,derslik,ders,durum,neden,sonuc,goruldu}], serit, bolum,
+   tarih (YYYY-AA-GG), tarih_metni (gg.aa.yyyy), en_eski, bugun.
+   Dışa aktarma ve yazdırma görünümü bilerek yoktur (uyarılar personel verisi gibi korunur). #}
+{% set NEDEN_RENGI = {'kapali': 'cevrimdisi', 'kilitli': 'kilitli', 'oturumsuz': 'bilgi', 'bosta': 'bilgi'} %}
+{% set NEDEN_SIMGESI = {'kapali': 's-kapali', 'kilitli': 's-kilit', 'oturumsuz': 's-bilgi', 'bosta': 's-bilgi'} %}
+{% include "_program_bas.html" %}
+
+<p class="bant kvkk-not"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Bu uyarı tahtanın kullanılıp kullanılmadığını gösterir; öğretmen adı tutulmaz ve uyarılar 30 gün sonra silinir. Tahtanın kapalı olması dersin işlenmediği anlamına gelmez. Bu kayıtlar personel değerlendirmesinde kanıt olarak kullanılmak üzere tasarlanmamıştır.</p>
+
+<div class="arac-cubugu">
+  <h2 id="uyari-baslik" class="arac-baslik">Boş ders uyarıları · {{ tarih_metni }}</h2>
+  <form method="get" action="/program/uyarilar" class="tarih-sec">
+    <label for="u-tarih" class="gizli">Tarih</label>
+    <input id="u-tarih" type="date" name="tarih" value="{{ tarih }}" min="{{ en_eski }}" max="{{ bugun }}" required>
+    <button>Göster</button>
+    {% if tarih != bugun %}<a class="dugme" href="/program/uyarilar">Bugün</a>{% endif %}
+  </form>
+</div>
+{% if not serit.bos_ders_etkin %}<p class="not">Boş ders uyarısı şu an kapalı; Kurallar bölümünden açılır. Eski uyarılar 30 gün görünür.</p>{% endif %}
+
+{% if uyarilar %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="uyari-baslik">
+<table>
+  <thead><tr><th scope="col">Saat</th><th scope="col">Tahta</th><th scope="col">Derslik</th><th scope="col">Ders</th><th scope="col">Durum</th><th scope="col">Sonuç</th><th scope="col">Görüldü</th></tr></thead>
+  <tbody>
+  {% for u in uyarilar %}
+  <tr>
+    <td data-etiket="Saat">{{ u.saat }}</td>
+    <td data-etiket="Tahta"><a href="/tahta/{{ u.tahta_id }}">{{ u.tahta }}</a></td>
+    <td data-etiket="Derslik">{{ u.derslik or '—' }}</td>
+    <td data-etiket="Ders">{{ u.ders }}</td>
+    <td data-etiket="Durum"><span class="rozet" data-durum="{{ NEDEN_RENGI.get(u.neden, 'bilgi') }}"><svg class="simge" aria-hidden="true"><use href="#{{ NEDEN_SIMGESI.get(u.neden, 's-bilgi') }}"/></svg>{{ u.durum }}</span></td>
+    <td data-etiket="Sonuç">{{ u.sonuc }}</td>
+    <td data-etiket="Görüldü">{% if u.goruldu %}<span class="not"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg> {{ u.goruldu }}</span>{% else %}<form method="post" action="/program/uyarilar/{{ u.id }}/goruldu" class="satir-ici"><button>Görüldü</button></form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="bos-not">Bu tarihte boş ders uyarısı yok.</p>
+{% endif %}
+{% endblock %}

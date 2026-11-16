@@ -29,9 +29,13 @@ KOD_DENEME_SINIRI = 5
 KOD_BEKLEME_SN = 60
 LOGO_YENIDEN_DENEME_SN = 60
 # Sunucunun bu ajana uygulayabileceği yetenekler (sürüm karşılaştırması yerine).
-YETENEKLER = ["acil", "duyuru_id"]
+YETENEKLER = ["acil", "duyuru_id", "program_kilidi"]
 ACIL_TURLERI = {"acil": "acil durum", "tatbikat": "tatbikat"}
 ACIL_EN_UZUN_SN = 7200  # sunucu ne derse desin acil yayın tahtada en çok 2 saat kalır (kural 3)
+# Program kilidi (teneffüs / boş ders saati) tahtada SÜRELİ tutulur ve süresi tahtanın kendi
+# monotonic saatiyle sayılır: sunucu çökse de derse girilecek saatte tahta kendiliğinden açılır.
+PROGRAM_KILIDI_EN_UZUN_SN = 8 * 3600
+PROGRAM_NEDENLERI = ("Teneffüs", "Öğle arası", "Bu saatte bu derslikte ders yok")
 
 
 class Servis:
@@ -40,6 +44,18 @@ class Servis:
         self.dur = threading.Event()
         kayitli = ayar.durum_oku()
         self.kilitli = bool(kayitli.get("kilitli", False))
+        # Kilidin kaynağı: "idare" (panelden, süresiz) ya da "program" (süreli). Kaynaksız eski
+        # kayıt idare kilidi sayılır. Program kilidi yeniden başlatmada GERİ YÜKLENMEZ: monotonic
+        # saat sıfırlandığı için süresi bilinmez; tahta açık kalır (kural 3).
+        self.kilit_kaynak = None
+        self.kilit_bitis = None  # time.monotonic() zamanı; yalnız program kilidinde
+        self.kilit_neden = ""
+        self.kilit_acilis = ""
+        if self.kilitli:
+            if kayitli.get("kilit_kaynak") == "program":
+                self.kilitli = False
+            else:
+                self.kilit_kaynak = "idare"
         self.duyuru = None  # {"id","baslik","metin","bitis","kapatilabilir"}; id = sunucudaki duyuru_id ya da None
         self.kapatma = None  # {"bitis","neden"}: uyarılı kapatma geri sayımı
         # Acil yayın: sunucunun her yanıtta verdiği DURUM (ayar.acil). Yalnız bellekte tutulur;
@@ -84,6 +100,7 @@ class Servis:
         ayar.durum_yaz(
             {
                 "kilitli": self.kilitli,
+                "kilit_kaynak": self.kilit_kaynak if self.kilitli else None,
                 "okul_adi": self.okul_adi,
                 "kilit_kodu": self.kilit_kodu,
                 "tema": self.tema,
@@ -91,6 +108,24 @@ class Servis:
                 "tahta": self.tahta_bilgi,
             }
         )
+
+    def _kilit_birak(self):
+        """Kilidi ve kaynak bilgisini temizler (çağıran self.kilit'i tutar)."""
+        self.kilitli = False
+        self.kilit_kaynak = None
+        self.kilit_bitis = None
+        self.kilit_neden = ""
+        self.kilit_acilis = ""
+
+    def _program_kilidi(self) -> bool:
+        return self.kilitli and self.kilit_kaynak == "program"
+
+    def kilit_kalan(self) -> int | None:
+        """Program kilidinin kalan saniyesi; program kilidi yoksa None."""
+        with self.kilit:
+            if not self._program_kilidi() or self.kilit_bitis is None:
+                return None
+            return max(0, int(self.kilit_bitis - time.monotonic()))
 
     def gorunum(self) -> dict:
         with self.kilit:
@@ -100,10 +135,16 @@ class Servis:
             acil = self.acil
             if acil and acil["bitis"] <= time.time():
                 self.acil = acil = None
+            program = self._program_kilidi()
             return {
                 "tur": "durum",
                 "surum": __version__,
                 "kilitli": self.kilitli,
+                # Program kilidinde ekranda yalnız neden ve açılış saati görünür (şube, ders,
+                # öğretmen yazılmaz; tahta herkese açık ekrandır).
+                "kilit_kaynak": self.kilit_kaynak if self.kilitli else None,
+                "kilit_neden": self.kilit_neden if program else "",
+                "kilit_acilis": self.kilit_acilis if program else "",
                 "duyuru": (
                     {
                         "baslik": duyuru["baslik"],
@@ -177,8 +218,14 @@ class Servis:
         with self.kilit:
             acil = self.acil
             acil_id = acil["id"] if acil and acil["bitis"] > time.time() else None
+        with self.kilit:
+            kaynak = self.kilit_kaynak if self.kilitli else None
+            neden = self.kilit_neden if self._program_kilidi() else ""
         return {
             "kilitli": self.kilitli,
+            "kilit_kaynak": kaynak,
+            "kilit_kalan": self.kilit_kalan(),
+            "kilit_neden": neden,  # bilgi: "Teneffüs" | "Öğle arası" | "Bu saatte bu derslikte ders yok" | ""
             "duyuru_var": self.duyuru is not None,
             "kapatma_bekliyor": self.kapatma is not None,
             "yetenekler": list(YETENEKLER),
@@ -216,7 +263,7 @@ class Servis:
                         self.olaylar.append("Kilit sunucuya ulaşılamadığı için tahtadan açıldı.")
                     if self.acil:
                         self.olaylar.append("Acil yayın sunucuya ulaşılamadığı için tahtadan kapatıldı.")
-                    self.kilitli = False
+                    self._kilit_birak()
                     self.acil = None
                     self._kaydet()
                 self.yayinla()
@@ -246,9 +293,12 @@ class Servis:
                     "sha256", kod.encode("utf-8"), bytes.fromhex(beklenen["tuz"]), int(beklenen["tur"])
                 ).hex()
                 if hmac.compare_digest(ozet, beklenen["ozet"]):
-                    self.kilitli = False
+                    program = self._program_kilidi()
+                    self._kilit_birak()
                     self.hatali_deneme = 0
-                    self.olaylar.append("Kilit tahtadan kodla açıldı.")
+                    self.olaylar.append(
+                        "Program kilidi tahtadan kodla açıldı." if program else "Kilit tahtadan kodla açıldı."
+                    )
                     self._kaydet()
                 else:
                     self.hatali_deneme += 1
@@ -264,14 +314,23 @@ class Servis:
         tur = komut.get("tur")
         veri = komut.get("veri") or {}
         if tur == "kilitle":
+            if veri.get("kaynak") == "program":
+                return self._program_kilitle(veri)
             with self.kilit:
+                # İdare kilidi süresizdir; program kilidinin üstüne gelirse onu ezer.
+                self._kilit_birak()
                 self.kilitli = True
+                self.kilit_kaynak = "idare"
                 self._kaydet()
             self.yayinla()
             return True, self._ekran_notu("Kilitlendi.")
         if tur == "kilit_ac":
             with self.kilit:
-                self.kilitli = False
+                if veri.get("kaynak") == "program" and not self._program_kilidi():
+                    # Program açması idarenin elle koyduğu kilide dokunmaz.
+                    neden = "İdare kilidi var" if self.kilitli else "Program kilidi yok"
+                    return True, f"{neden}; uygulanmadı."
+                self._kilit_birak()
                 self._kaydet()
             self.yayinla()
             return True, "Kilit açıldı."
@@ -332,6 +391,31 @@ class Servis:
             threading.Timer(3.0, lambda: gunluk.info("%s: %s", tur, islev())).start()
             return True, "Komut alındı; üç saniye içinde uygulanacak."
         return False, f"Bilinmeyen komut: {tur}"
+
+    def _program_kilitle(self, veri: dict) -> tuple[bool, str]:
+        """Süreli program kilidi. İdare kilidinin üstüne uygulanmaz (bilinçli atlama)."""
+        try:
+            sure = int(veri.get("sure_sn") or 0)
+        except (TypeError, ValueError):
+            sure = 0
+        if sure <= 0:
+            return True, "Kilit süresi geçmiş; uygulanmadı."
+        sure = min(sure, PROGRAM_KILIDI_EN_UZUN_SN)
+        neden = str(veri.get("neden") or "")
+        neden = neden if neden in PROGRAM_NEDENLERI else "Teneffüs"
+        acilis = str(veri.get("acilis") or "")
+        acilis = acilis if _saat_gecerli(acilis) else ""
+        with self.kilit:
+            if self.kilitli and self.kilit_kaynak != "program":
+                return True, "Zaten idare kilidinde; uygulanmadı."
+            self.kilitli = True
+            self.kilit_kaynak = "program"
+            self.kilit_bitis = time.monotonic() + sure
+            self.kilit_neden = neden
+            self.kilit_acilis = acilis
+            self._kaydet()
+        self.yayinla()
+        return True, self._ekran_notu(f"Program kilidi: {neden}, {sure // 60} dk.")
 
     def _ekran_notu(self, metin: str) -> str:
         with self.kilit:
@@ -523,6 +607,21 @@ class Servis:
                 with self.kilit:
                     self.sonuclar.append({"komut_id": komut.get("id"), "basarili": basarili, "cikti": cikti})
 
+    def _program_suresi_denetle(self) -> bool:
+        """Süresi dolan program kilidini SUNUCUDAN BAĞIMSIZ açar; açtıysa True."""
+        with self.kilit:
+            doldu = (
+                self._program_kilidi() and self.kilit_bitis is not None and time.monotonic() >= self.kilit_bitis
+            )
+            if doldu:
+                self._kilit_birak()
+                self.olaylar.append("Program kilidi süresi doldu; tahta açıldı.")
+                self._kaydet()
+        if doldu:
+            self.yayinla()
+            self.bildir()
+        return doldu
+
     def _bekci(self):
         """Çevrimdışı geçişini ve duyuru süresinin dolmasını ekranlara yansıtır."""
         while not self.dur.wait(1):
@@ -533,6 +632,7 @@ class Servis:
             if suresi_doldu:
                 gunluk.info("Uyarı süresi doldu, kapatılıyor: %s", sistem.kapat())
                 self.yayinla()
+            self._program_suresi_denetle()
             with self.kilit:
                 # Acil yayın süresi dolunca (sunucuya ulaşılamasa da) tahta kendiliğinden bırakır.
                 acil_bitti = self.acil is not None and self.acil["bitis"] <= time.time()
@@ -603,6 +703,13 @@ class Servis:
 
 def _kisa(deger) -> str:
     return str(deger or "").strip()[:60]
+
+
+def _saat_gecerli(deger: str) -> bool:
+    """'SS:DD' (00:00–23:59) biçimini doğrular."""
+    if len(deger) != 5 or deger[2] != ":" or not (deger[:2].isdigit() and deger[3:].isdigit()):
+        return False
+    return int(deger[:2]) < 24 and int(deger[3:]) < 60
 
 
 def _acil_coz(deger) -> dict | None:
