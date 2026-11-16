@@ -6,7 +6,10 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.9.0, saha denemesi sürümü** (0.9.0: gerçek ETAP tahtasındaki ilk saha bulguları G1–G3 —
+- Durum: **0.10.0, saha denemesi sürümü** (0.10.0: Okul Zili'ne bağlı olmayan zil düzenleyicisi —
+  adlandırılmış çizelgeler, haftalık düzen, tarihe özel çizelge, günü önizle, CSV; ders programını içe
+  aktarma sihirbazı — aSc XML "deneme", şablon CSV/XLSX, yapay zekâ istemi, önceki programlar; yalnız
+  sunucu, ajan değişmedi; tasarım §12.2–12.3; 0.9.0: gerçek ETAP tahtasındaki ilk saha bulguları G1–G3 —
   kurulum ve otomatik giriş betikleri yönetici yetkisini kendileri alır (sudo → pkexec → su, öğretmen
   oturumunda etapadmin parolası sorulur), tahtada yüzer düğme (Kilitle/Kapat/Yeniden başlat/Arıza/
   Yoklama; Ayarlar › Tahtadaki yüzer düğme), açılışta kilit (oturum açılınca ya da tahta açılınca sunucuya
@@ -55,7 +58,12 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   panel_duyuru.py   duyuru/plan uçları, /api/hedef-onizleme   (web.py'den `kaydet(uygulama, y)` ile)
   panel_tahtalar.py gruplar, /tahtalar.csv ve CSV içe aktarma
   panel_acil.py     /acil: başlatma, bitirme, rapor
-  panel_program.py  /program (sekmeler: zil, derslik, kurallar, istisnalar), /program/uyarilar, /tahta/{id}/program
+  panel_program.py  /program (sekmeler: zil, derslik, kurallar, istisnalar), /program/uyarilar, /tahta/{id}/program;
+                    zil_baglami (zil sekmesinin çizelge kısmı), Okul Zili'nden al → cizelge.okulzili_yaz
+  panel_cizelge.py  zil düzenleyici (0.10.0): /program/cizelge[/{id}[/hizli|kopyala|sil|csv]], /program/haftalik,
+                    /program/tarihli[/{id}/sil], /program/gun (günü önizle); Etki: bugünkü plan değişirse açma
+  panel_aktar.py    ders programı içe aktarma sihirbazı (0.10.0): /program/aktar[/asc|tablo|esle|onayla|sablon.csv|
+                    mevcut.csv|istem.txt], /program/gecmis[/{id}/geri-yukle]; eski /program/derslik/yukle|onayla → 303
   panel_sinav.py    /sinavlar, /sinav/{id} (künye, eşleştirme, durum, uzatma, kip kaldırma, kodlar, şube
                     duyurusu, salon yoklaması, icmal), /api/sinav/{id}, /ajan/sinav/{kod,yoklama}
   panel_yoklama.py  /yoklama (günlük ızgara, kayıt/düzeltme, panelden gir, icmal + .csv, e-Okul işareti),
@@ -69,6 +77,8 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   envanter.py   ajanın gönderdiği envanteri saklar/gösterir, donanım kimliği değişimi, CSV
   ariza.py      arıza kayıtları: kategoriler, durum geçişleri, hareketler, tahtadan alma (yerel_id tekrarsız)
   sablonlar/    program.html, uyarilar.html ve ortak başları _program_bas.html (şerit + sekmeler);
+                cizelge.html, program_gun.html, _zaman_cizgisi.html (SVG + liste makrosu), program_aktar.html,
+                program_gecmis.html (0.10.0);
                 sinavlar.html, sinav.html, sinav_yoklama.html, sinav_kodlar.html, sinav_icmal.html, _sinav.html;
                 yoklama*.html, ogretmenler.html, ogretmen_pusula.html, ogrenciler.html, ogrenci_onizleme.html
                 ve ortak başları _yoklama_bas.html (sekmeler + KVKK notu);
@@ -80,8 +90,15 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   sinav.py      sınav iş mantığı: R5 ayrıştırma, içe aktarma, eşleşme önerisi, süreler/evreler, ayar.sinav,
                 gözetmen kapısı (bellekte), yoklama, şube duyurusu, icmal, saklama temizliği
   xlsx.py       yalnız standart kitaplıkla .xlsx okuyucu (zip/DOCTYPE sınırları; A5 de kullanır)
+  guvenli_xml.py  DTD/varlık reddi (expat; defusedxml yok) ve windows-1254 → UTF-8 (xlsx.py ve aSc okuyucu)
+  cizelge.py    zil çizelgeleri (0.10.0, saf + birkaç b yardımcısı): taslak ↔ form/veritabanı, dogrula, numarala,
+                hizli_uret, araliklar, zaman_cizgisi (SVG ölçüleri + liste), gunlere_bol, haftalik_yaz (ders_saati
+                TÜRETİLMİŞ tablodur, elle yazılmaz), tarihli_kural, numara_kaymasi, okulzili_yaz, ilk_tasima, CSV
+  program_aktar.py  ders programı içe aktarma (0.10.0): asc_oku (izinli öznitelikler; öğretmen/ders adı okunmaz),
+                tablo_oku (v2, v1 uyumlu), yz_metni_temizle, esle, fark, uygula, program_surum (10), geri_yukle
   maske.py      tek maskeleme tanımı: kalabalik("Ah*** Yı****"), no_son("47"), sinif_etiketi("Ayşe Y.")
-  program.py    zil saatleri, Okul Zili okuma, takvim (plan_hesapla/gun_plani), derslik CSV, kilit aralıkları (saf);
+  program.py    zil saatleri, Okul Zili okuma, takvim (plan_hesapla yalnız burada; dışarıdan gun_plani(b, tarih)),
+                kilit aralıkları (saf); derslik CSV okuması program_aktar.tablo_oku'ya devredilir;
                 ikili eğitim: devre_turleri (sabah/öğle eşlemesi), tahta_devreleri (programdan devre)
   dugme.py      tahtadaki yüzer düğme (0.9.0): ayar.tahta_dugmesi → ajana ayar.dugme {acik, islemler}
   acilis_kilidi.py  açılışta kilit (0.9.0): yeni durum.oturum_no + oturum_yasi_sn ≤ 120 → bir kez "kilitle"
@@ -258,6 +275,16 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    (`test_kurucu_tasima_kodlari_python_ile_ayni`). `hizmet.py` modül düzeyinde pywin32 içe aktarmaz.
 
 ## Bilinen tuzaklar
+
+- **`ders_saati` türetilmiş tablodur (0.10.0):** haftalık düzen ve çizelgelerden `cizelge.haftalik_yaz`
+  ile yeniden yazılır; ona doğrudan INSERT yazan kod (eski `/program/zil/elle`) taşımadan sonra silinir.
+  Testlerde zil kurmak için `yardimci.zil_kur` / `zil_elle` kullanılır. Günün planı yalnız
+  `program.gun_plani(b, tarih)` ile alınır (`plan_hesapla(` program.py dışında geçmez; test eder).
+- **Çizelge formu yeniden çizilirken boş satırlar taslağa girmez** (`cizelge.taslak_formdan`) ve yeni
+  boş satırların kimliği gönderilen en büyük kimlikten sonra başlar: JS aralıklı kimlik (r40) verir;
+  sayıyla başlatılan kimlik var olan satırla çakışıp iki alanı aynı adla gönderiyordu (16.11.2026).
+- **Bölüm içi ileti:** Zil sekmesinde `?yer=haftalik|cizelgeler|tarihli#ileti`; ileti o bölümde çizilir
+  ve odaklanır (yalnız `#bolum` parçasıyla yönlenince sayfa başındaki ileti ekran dışında kalıyordu).
 
 - **GtkButton.set_label etiketi yeniden kurar:** ortalama (`set_justify`) ve kısaltma kaybolur;
   yoklama düğmesinin metni değişince `ekran._ogrenci_etiketi` ile yeniden verilir (16.11.2026, Docker).

@@ -352,17 +352,17 @@ Derslik programları · Kurallar · İstisnalar · Uyarılar. Üstte bugünün �
 sayısı) durur; aynı şerit pano başında da görünür. Program sunucu saatine
 (Europe/Istanbul) göre işler; tahta saatine güvenilmez.
 
-- **Zil saatleri.** Okul Zili'nin `ayarlar.json` dosyası ya da `.okulzili` yedeği
-  yüklenir; Okul Zili sunucu bilgisayarında kuruluysa tek düğmeyle sabit yolundan salt
-  okunur alınır. Yalnız ders saatleri ve takvim (öğretim dönemi, ara tatiller, resmî
-  tatiller, tarih kuralları) alınır; ses, okul adı, cihaz alanları okunmaz. Önizlemeden
-  sonra onaylanır. Okul Zili'si olmayan okul ders akışından (ilk ders, süre, teneffüs,
-  öğle arası) tablo üretir ve tablodan düzeltir; takvimi olmayan okulda tatiller İstisna
-  olarak girilir. Okul Zili'ne hiçbir şey yazılmaz.
+- **Zil saatleri.** 0.10.0'dan beri Tahta Kontrol'ün kendi zil düzenleyicisi vardır (§12.2):
+  adlandırılmış çizelgeler, haftalık düzen ve tarihe özel çizelgeler; Okul Zili gerekmez. Okul
+  Zili kullanan okul `ayarlar.json` dosyasını ya da `.okulzili` yedeğini yükler (Okul Zili sunucu
+  bilgisayarında kuruluysa tek düğmeyle sabit yolundan salt okunur alınır); yalnız ders saatleri ve
+  takvim (öğretim dönemi, ara tatiller, resmî tatiller, tarih kuralları) alınır, ses, okul adı,
+  cihaz alanları okunmaz; önizlemeden sonra onaylanınca Okul Zili kaynaklı çizelgeler ve haftalık
+  düzen kurulur, elle oluşturulan çizelgeler kalır. Okul Zili'ne hiçbir şey yazılmaz.
 - **Derslik programı.** Hangi tahtada hangi gün hangi ders saatinde ders **olduğu**;
   öğretmen ve ders adı alınmaz (KVKK: amaçla sınırlı veri — kilit ve uyarı için dersliğin
-  dolu olup olmadığı yeter). CSV ile topluca (önizlemeli; eşleşmeyen derslikler ve hatalı
-  satırlar listelenir, dosyada geçmeyen tahtaya dokunulmaz) ya da tahta sayfasındaki
+  dolu olup olmadığı yeter). 0.10.0'dan beri içe aktarma sihirbazıyla (§12.3: aSc XML, şablon
+  CSV/XLSX, yapay zekâ çıktısı; önizlemeli, eşlemeli, geri alınabilir) ya da tahta sayfasındaki
   haftalık ızgarayla girilir. Şube isteğe bağlıdır, yalnız panelde görünür. Programı
   girilmemiş tahta yalnız teneffüste kilitlenir ve boş ders uyarısı üretmez.
 - **İkili eğitim** (16.11.2026 kararı). Sabahçı ve öğlenci devre ayrı zil çizelgesidir
@@ -486,6 +486,79 @@ Silme değil, oturum kapatmadır: amaç sonraki kullanıcının önceki oturuma 
   güncellenmeli"); eski sunucu yeni ajana bu komutu hiç vermez. Eski ekran yardımcısı uyarıyı
   göstermez ama servis sürüm farkında yardımcıyı yeniden başlatır; pencere yanıtı 15 sn içinde
   gelmezse o adım "atlandı" olur.
+
+### 12.2 Zil düzenleyici (0.10.0)
+
+Okul Zili'nin "gün programı + oturum + tarih kuralı" üçlüsü Tahta Kontrol'de **çizelge + devre +
+haftalık düzen + tarihe özel çizelge** olarak tutulur (GOCLER 8. öğe, `user_version` 8: `zil_cizelgesi`, `zil_cizelge_ders`,
+`zil_haftalik`, `zil_tarihli`). Zil sesi, öğrenci zili, blok düzeni, tören ve anons alınmaz: Tahta
+Kontrol zil çalmaz, yalnız ders aralığını bilmesi gerekir.
+
+- **Çizelge** adlandırılmış bir günün ders akışıdır ("Normal gün", "Cuma", "Kısa gün"); bir ya da iki
+  devre (`normal`, ya da `sabah` + `ogle`; taşınan özel kimlikler korunur). Ders numarası elle
+  girilmez, devre içinde başlangıç saatine göre kendiliğinden verilir. Teneffüs ve öğle arası satır
+  değildir, iki dersin arasındaki boşluktur (≤ 20 dk teneffüs). Gerekçe: "Pzt–Per aynı, Cuma farklı"
+  en sık durumdur; tek çizelgeyi düzeltmek atandığı bütün günleri düzeltir.
+- **`ders_saati` türetilmiş tablodur:** haftalık düzen ya da bir çizelge her değiştiğinde atanan
+  çizelgelerden yeniden yazılır. Böylece derslik programı, tahta ızgarası, kilit, yoklama ve boş ders
+  uyarısı değişmeden çalışır. Mevcut zil saatleri yükseltmede bir kez çizelgelere taşınır (aynı
+  imzalı günler tek çizelge, "Ders saatleri · Pzt–Per"); taşıma sonrası `ders_saati` birebir aynıdır.
+- **Düzenleme:** "Hızlı oluştur" (ilk ders, ders sayısı, süre, teneffüs, uzun ara) satırları üretir
+  ama kaydetmez; öğle devresinin ilk dersi boşsa sabahın son dersinden 20 dk sonrası (5'e yuvarlanır)
+  önerilir. Tablo satır satır düzeltilir; JS'siz de çalışır (her devre sonunda 3 boş satır, sıralama
+  sunucuda), JS varken "Ders ekle"/"Araya ekle" ve canlı numara/ara hesabı vardır. Hata ya da taslak
+  yönlendirmeyle kaybolmaz: sayfa girilen değerlerle yeniden çizilir. Devreler arası saat çakışması
+  **uyarıdır**, kaydı engellemez (aynı devre içindeki çakışma hatadır).
+- **Günün planı (öncelik):** takvim tatili (Okul Zili `tatil` kuralı, dönem dışı, ara/resmî tatil) >
+  **tarihe özel çizelge** > Okul Zili'nin diğer tarih kuralları > haftalık düzen. Tatil hiçbir zaman
+  yerel kayıtla ezilmez (uzun "şu tarihten itibaren" aralığı resmî tatili derse çevirmesin). Tek giriş
+  noktası `program.gun_plani(b, tarih)`. Tarihe özel çizelgeyi yalnız yönetici ekler; aynı günlere
+  düşen iki yerel kayıt olmaz. Takvimi olmayan okul tatilleri "Ders yok" tarihe özel çizelge olarak girer.
+- **Yürürlük hemen:** kayıt işlemi bitince `ders_saati` yeniden yazılır, zamanlayıcı en geç 20 sn içinde
+  yeni planla çalışır. Bugünün planı değiştiyse ve okul saatindeysek program kaynaklı kilitli tahtalar
+  hemen açılır, sonraki aralıktan itibaren yeni saatlerle kilitlenir. İleri tarihli değişiklik için
+  tarihe özel çizelge vardır (bekleyen sürüm tutulmaz).
+- **Numara kayması:** kullanılan bir çizelgede bir devrenin ders sayısı değişiyor ve o devrede derslik
+  programı varsa kayıt ayrıca onay ister ("Anladım, kaydet"); artık olmayan ders saatine bağlı derslik
+  programı satırları bugünkü yetim mekanizmasıyla görünür. Yoklama kayıtları değiştirilmez.
+- **Önizleme:** günün zaman çizgisi sunucuda çizilen satır içi SVG'dir (konumlar öznitelikle, CSP'ye
+  uygun); asıl erişilebilir biçim yanındaki metin listesidir. "Günü önizle" herhangi bir tarihin
+  planını ve kaynağını gösterir. Çizelgeler CSV olarak dışa/içe aktarılır (içe aktarım taslaktır).
+- **Ajan değişmez:** tahta yalnız süreli `kilitle`/`kilit_ac` alır; komut biçimi ve yetenekler aynıdır.
+- **Devre uyuşmazlığı (0.10.0 düzeltmesi):** günün çizelgesindeki devreler derslik programındaki devrelerle
+  hiç kesişmiyorsa (ör. ikili okulda "Tek devre" ile yapılmış kısa gün) derslik programı o güne uygulanamaz;
+  tahta programsız sayılır (yalnız teneffüs kilidi, boş saat kilidi ve boş ders uyarısı yok). Eskiden tahta
+  ders sürerken bütün gün "ders yok" diye kilitleniyordu. Tarihe özel çizelge eklenirken uyarı çıkar.
+- **Haftalık düzen boşken** tarihe özel çizelge yine o günün planını verir; kilit, açılışta kilit ve
+  temizlik de `gun_plani`'yi okur (eskiden `ders_saati` boşsa erken dönülüyordu).
+- **Telafi (bilinen sınır):** tarihe özel çizelge derslik programını **kendi hafta gününden** eşler
+  (`program_gunu` = takvim günü). Cumartesi'ye "Pazartesi telafisi" girilirse zil saatleri gelir ama
+  Pazartesi'nin derslik programı uygulanmaz (tahtalar programsız sayılır, açık kalır). Telafi için Okul
+  Zili'nin telafi kuralı ya da program istisnası kullanılır; `zil_tarihli`'ye isteğe bağlı "hangi günün
+  derslik programı" sütunu sonraki sürüme bırakıldı.
+
+### 12.3 Ders programını içe aktarma (0.10.0)
+
+Program › Derslik programları › "Ders programını içe aktar" sihirbazı (yalnız yönetici; önce zil
+saatleri tanımlı olmalı). Adımlar: kaynak → eşleme → önizleme ve onay. GOCLER 9. öğe (`user_version` 9): `program_eslesme`
+(hatırlanan eşlemeler), `program_surum` (geri alma).
+
+- **Kaynaklar:** aSc Timetables XML ("deneme": gerçek bir dosyayla doğrulanmadı; yalnız sınıf, derslik,
+  gün, ders saati öznitelikleri okunur, öğretmen ve ders adı bölümleri hiç okunmaz; DTD/varlık reddi,
+  boyut/derinlik sınırları, `guvenli_xml.py`), Tahta Kontrol şablonu (CSV/XLSX/XLS, sürüm 2: derslik
+  boşsa şubenin tahtası), **yapay zekâ ile dönüştür** (hazır istem + KVKK uyarısı; kullanıcı kendi
+  aracında çalıştırır, Tahta Kontrol hiçbir dış hizmete bağlanmaz; çıktı güvenilmeyen girdi sayılır)
+  ve elle giriş (tahta sayfası). **e-Okul kaynağı yoktur:** Haftalık Ders Dağıtım Modülü'nün dışa
+  aktarma biçimi doğrulanamadı; örnek gelmeden ayrıştırıcı yazılmaz.
+- **Eşleme:** derslik → tahta, sınıf → şube, aSc ders saati → (devre, ders no), şube → tahta; onayda
+  hatırlanır. İkili eğitimde dosyanın devresi saatlerden ya da soruyla belirlenir.
+- **Kapsam:** onayda yalnız içe aktarımda geçen (tahta, devre) çiftlerinin satırları değişir; sabahçı
+  programı yüklemek öğlenci satırlarını silmez. Dosyada geçmeyen tahtalar ancak işaretlenirse temizlenir.
+  Hatalı satırlar atlanır; satırların çoğu okunamadıysa ek onay istenir.
+- **Geri alma:** her onaydan ve geri yüklemeden önce bütün derslik programı saklanır (en yeni 10 sürüm,
+  yalnız tahta·gün·devre·ders·şube); "Önceki programlar"dan geri yüklenir. İşlem kaydına yalnız biçim
+  ve sayılar yazılır. Eski `/program/derslik/yukle` ve `/onayla` uçları sihirbaza yönlendirir; bir
+  sürüm sonra silinir.
 
 ## 13. Sınav kipi ve sınav yoklaması
 
@@ -934,6 +1007,7 @@ hizmet olarak çalışması henüz yönetici yetkili bir denemede doğrulanmadı
 | 6A | Altyapı çekirdeği: şifreli yedek ve geri yükleme, sunucu adres listesi (`tahta-ajan sunucu`), tahta envanteri, arıza bildirimi (panel + tahtadaki "Arıza bildir" penceresi) | 0.7.0 — Debian 12 kabında ve tarayıcıda denendi; ETAP'ta denenecek (§15) |
 | 6B | Sunucunun Windows hizmeti olarak çalışması (oturum açılmadan başlar, Yerel Hizmet hesabı, veri ProgramData'ya kurucuda kopyalanır, durum penceresi) | 0.8.0 (K8, §15.6) — birim testleriyle ve hizmet kipi uçbirimde denendi; gerçek hizmet kurulumu yönetici yetkili denemede doğrulanacak. Ajan paketi imzası sonraya |
 | K | 16.11.2026 kararları (§17): ikili eğitim denetimi ve düzeltmeleri (yoklama önerisi, devre süzgeci, sınav şube duyurusu, ızgara/icmalde devre adı), öğretim yılı sonuna kadar saklama, acil yayını bütün idarecilere açma, yardımcı kayıt metinleri, boş ders uyarısı varsayılan açık + rapor; gün sonu oturum temizliği (K7, §12.1) | 0.8.0 — testlerle ve tarayıcıda denendi; oturum temizliği Debian 12 kabında (Xvfb + openbox, sahte profil) denendi; ETAP'ta denenecek |
+| 3B | Zil düzenleyici (çizelgeler, haftalık düzen, tarihe özel çizelge, günü önizle, CSV; Okul Zili'nden alma aynı yapıya yazar) ve ders programını içe aktarma sihirbazı (aSc XML deneme, şablon CSV/XLSX, yapay zekâ istemi, önceki programlar) | 0.10.0 (§12.2–12.3) — testlerle ve tarayıcıda uydurma veriyle denendi; gerçek aSc dosyası ve okulun gerçek zil saatleriyle denenecek. e-Okul kaynağı örnek dosya gelince |
 
 Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" ve "Seçili
 tahtalara alan ata", plan formunda "sonraki 3 gösterim" canlı önizlemesi, çakışan
@@ -1002,10 +1076,11 @@ Ders programı ve program kilidi (0.4.0):
     2 dakika uygun mu?
 11. **Dersi olmayan saatte kilit** varsayılan açık. Boş saatte tahtanın öğretmence bireysel
     çalışma için kullanılması okulda olağan mı? Olağansa varsayılan kapatılır.
-13. **Derslik programı kaynağı:** okulda ders programı hangi programla hazırlanıyor
-    (e-Okul, bir ders dağıtım programı, Excel)? Dışa aktardığı dosyanın uydurma verili bir
-    örneği paylaşılırsa ikinci bir içe aktarma biçimi eklenebilir; şimdilik yalnız kendi
-    CSV biçimimiz var.
+13. **Derslik programı kaynağı:** (0.10.0'da kısmen karşılandı: aSc XML, şablon CSV/XLSX ve yapay
+    zekâ yolu, §12.3.) Okulda program aSc'de mi, 2026–2027'den beri e-Okul Haftalık Ders Dağıtım
+    Modülü'nde mi hazırlanıyor? e-Okul'dan alınabilen dosyanın (Excel/PDF) kişi adları silinmiş bir
+    örneği ve aSc XML'in (öğretmenleri "Ö1, Ö2…" diye adlandırılmış kopyadan) bir örneği gelirse aSc
+    okuyucusunun "deneme" etiketi kalkar ve e-Okul ayrıştırıcısı yazılabilir.
 14. **Sınav pencereleri:** Okul Zili'nde planlanmış sınav sırasında program kilidi askıya
     alınıyor. Sınav sırasında tahtaların kilitli kalması mı istenir? (0.5.0'da Tahta Kontrol'ün
     kendi sınav kipi bu soruyu karşıladı: sınav penceresindeki tahta sınav ekranında kilitlidir.)
@@ -1014,6 +1089,21 @@ Ders programı ve program kilidi (0.4.0):
     yazılım hiçbir mevzuat maddesine dayanak olarak atıf yapmıyor.
 17. **Program kilidi süresi tahtada en çok 8 saat** sayılır. Gün boyu dersi olmayan
     dersliklerde bu, tahtanın öğleden sonra kendiliğinden açılması demektir; uygun mu?
+
+Zil düzenleyici ve ders programı içe aktarma (0.10.0; yanıt gelene kadar karar geçerli):
+
+54. **Tarihe özel çizelgeyi idareci de ekleyebilsin mi?** Karar: yalnız yönetici; idareci İstisna ile
+    program kilidini durdurabilir.
+55. **Sabahçı ve öğlenci devrenin dersleri zamanda çakışıyor mu?** Karar: çakışma uyarıdır, kaydı
+    engellemez; çakışan aralıkta teneffüs kilidi verilmez.
+56. **Yarıyıl ortasında saat değişikliği** için "şu tarihten itibaren" tarihe özel çizelge yeterli mi,
+    yoksa haftalık düzenin ileri bir tarihte kendiliğinden değişmesi mi isteniyor? Karar: tarihe özel çizelge.
+57. **Tahta Kontrol'de girilen tarihe özel çizelge Okul Zili'nin tarih kurallarından önce gelsin mi?**
+    Karar: evet (tatiller hariç; tatil her zaman üstte).
+58. **Birleşik derste** (iki şube tek derslikte) tahtaya hangi şube yazılsın? Karar: düzey sırasındaki
+    ilk şube + uyarı. **İki haftada bir** yapılan dersler her hafta dolu sayılır; yeterli mi?
+59. **Yapay zekâ aracı:** kurumun izin verdiği bir araç var mı? Panelde araç adı geçmez, yalnız genel
+    KVKK uyarısı durur.
 
 Sınav kipi ve sınav yoklaması (0.5.0):
 

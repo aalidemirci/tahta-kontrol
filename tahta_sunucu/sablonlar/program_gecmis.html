@@ -1,0 +1,32 @@
+{% extends "taban.html" %}
+{% block baslik %}Önceki programlar · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Bağlam: gecmis (program_aktar.surum_listesi), onay_surumu (None ya da {..., "metin"}: geri yükleme onayı).
+   Geri yükleme JS'siz iki adımdır: ilk POST onay sayfasını çizer, gizli "onay" alanı 1 olan ikinci POST uygular. #}
+<div class="sayfa-bas"><div class="bas-yazi">
+  <p><a class="geri" href="/program?bolum=derslik">Derslik programları</a></p>
+  <h1>Önceki programlar</h1>
+  <p>Her içe aktarmadan ve geri yüklemeden önce bütün derslik programı saklanır (en çok 10 sürüm).</p>
+</div></div>
+{% if onay_surumu %}
+<section class="kutu onizleme-kutu" aria-labelledby="geri-onay">
+  <h2 id="geri-onay">Geri yüklensin mi?</h2>
+  <p>{{ onay_surumu.metin }} Mevcut program önce ayrı bir sürüm olarak saklanır.</p>
+  <form method="post" action="/program/gecmis/{{ onay_surumu.id }}/geri-yukle" class="dugme-satiri">
+    <input type="hidden" name="onay" value="1">
+    <button class="tehlike-dolu">Geri yükle</button> <a class="dugme" href="/program?bolum=derslik">Vazgeç</a>
+  </form>
+</section>
+{% endif %}
+{% if gecmis %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="gecmis-baslik">
+<table>
+  <caption id="gecmis-baslik">Önceki derslik programları</caption>
+  <thead><tr><th scope="col">Tarih</th><th scope="col">Kullanıcı</th><th scope="col">Neden</th><th scope="col">Tahta</th><th scope="col">Satır</th><th scope="col"><span class="gizli">İşlem</span></th></tr></thead>
+  <tbody>{% for g in gecmis %}<tr><th scope="row" class="tarih-hucre">{{ g.zaman_metni }}</th><td data-etiket="Kullanıcı">{{ g.kullanici }}</td><td data-etiket="Neden">{{ g.neden_adi }}{% if g.bicim_adi %} · {{ g.bicim_adi }}{% endif %}</td>
+    <td data-etiket="Tahta" class="sayi-hucre">{{ g.tahta_sayisi }}</td><td data-etiket="Satır" class="sayi-hucre">{{ g.satir_sayisi }}</td>
+    <td data-etiket="İşlem"><form method="post" action="/program/gecmis/{{ g.id }}/geri-yukle" class="satir-ici"><button>Geri yükle</button></form></td></tr>{% endfor %}</tbody>
+</table>
+</div>
+{% else %}<p class="bos-not">Önceki program yok.</p>{% endif %}
+{% endblock %}

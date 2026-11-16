@@ -22,6 +22,7 @@ from yardimci import (
     sorgu,
     tahta_ekle,
     yeni_ajan_durumu,
+    zil_elle,
 )
 
 SINAVLI = ["acil", "duyuru_id", "program_kilidi", "sinav"]
@@ -486,7 +487,7 @@ def test_program_zamanlayicisi_sinav_penceresinde_ve_oncesinde_kilit_vermez(orta
 
     elle = {"eylem": "uret", "devre_adi": "Normal", "ilk_ders": "08:20", "ders_sayisi": "8", "ders_dk": "40",
             "teneffus_dk": "10", "ogle_sonra": "4", "ogle_dk": "45", "gunler": ["0", "1", "2", "3", "4"]}  # fmt: skip
-    assert ileti(panel.post("/program/zil/elle", data=elle)) == "Zil saatleri kaydedildi."
+    assert zil_elle(elle) == "Zil saatleri kaydedildi."
     kural = {"pk_etkin": "1", "pk_gecikme_dk": "2", "pk_bos_saatte": "1", "bd_esik_dk": "10", "bd_etkin": "1"}
     assert ileti(panel.post("/program/kurallar", data=kural)) == "Kurallar kaydedildi."
     yayinla(ortam)  # sınav 10:00; giriş penceresi 09:50; program engeli 09:40'tan itibaren

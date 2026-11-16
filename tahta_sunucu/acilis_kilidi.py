@@ -90,10 +90,7 @@ def program_karari(b, tahta, simdi: datetime) -> dict | None:
     an = int(simdi.timestamp())
     if program_is.istisnada(program_is.etkin_istisnalar(b, an), tahta["id"]):
         return None
-    saatler = program.ders_saatleri_oku(b)
-    if not saatler:
-        return None
-    plan = program.plan_hesapla(simdi.date(), saatler, vt.ayar_al(b, "zil_takvimi"))
+    plan = program.gun_plani(b, simdi.date())  # haftalık düzen boşken tarihe özel çizelge de plan verir
     if not plan["dersler"] or program_is.sinav_penceresinde(plan, simdi):
         return None
     gun_bit = max(int(d[4].timestamp()) for d in plan["dersler"])

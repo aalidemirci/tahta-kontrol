@@ -1981,18 +1981,30 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         altyapi_verisi=altyapi_verisi,
         tarih_yaz=tarih_yaz,
     )
-    from . import panel_acil, panel_altyapi, panel_duyuru, panel_sinav, panel_tahtalar
+    from . import (
+        panel_acil,
+        panel_aktar,
+        panel_altyapi,
+        panel_cizelge,
+        panel_duyuru,
+        panel_sinav,
+        panel_tahtalar,
+    )
 
     panel_duyuru.kaydet(uygulama, y)
     panel_tahtalar.kaydet(uygulama, y)
     panel_acil.kaydet(uygulama, y)
     panel_program.kaydet(uygulama, y)
+    panel_cizelge.kaydet(uygulama, y)
+    panel_aktar.kaydet(uygulama, y)
     panel_sinav.kaydet(uygulama, y)
     panel_yoklama.kaydet(uygulama, y)
     panel_altyapi.kaydet(uygulama, y)
 
     uygulama.state.zamanlayici = zamanlayici
     uygulama.state.program_zamanlayici = program_zamanlayici
+    # 0.10.0: zil düzenleyici bugünkü saatleri değiştirince bellekteki boş ders sürelerini sıfırlar.
+    uygulama.state.program_isleyici = program_isleyici
     uygulama.state.temizlik_zamanlayici = temizlik_zamanlayici
     # Sonraki aşamalar (A4 sınav penceresi) buraya kanca(b, tahta_id, an_epoch) -> bool ekler.
     uygulama.state.program_askida_kancalari = program_isleyici.askida_kancalari

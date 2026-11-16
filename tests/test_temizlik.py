@@ -6,7 +6,19 @@ Saat `saat` fikstürüyle sabittir (pazartesi 16.11.2026). Bütün veriler UYDUR
 from __future__ import annotations
 
 import pytest
-from yardimci import PAROLA, an, bekle, gir, ileti, kimlik, kullanici_ekle, kur_ve_gir, sorgu, tahta_ekle
+from yardimci import (
+    PAROLA,
+    an,
+    bekle,
+    gir,
+    ileti,
+    kimlik,
+    kullanici_ekle,
+    kur_ve_gir,
+    sorgu,
+    tahta_ekle,
+    zil_elle,
+)
 
 from tahta_sunucu import vt
 
@@ -98,8 +110,8 @@ def test_temizlik_ikili_egitimde_gun_sonu_son_devrenin_sonu(uygulama, panel, oku
     gunler = ["0", "1", "2", "3", "4"]
     sabah = {"eylem": "uret", "devre_adi": "Sabah", "ilk_ders": "07:30", "ders_sayisi": "6", "ders_dk": "40",
              "teneffus_dk": "10", "ogle_sonra": "0", "ogle_dk": "0", "gunler": gunler}  # fmt: skip
-    assert ileti(panel.post("/program/zil/elle", data=sabah)) == "Zil saatleri kaydedildi."
-    assert ileti(panel.post("/program/zil/elle", data={**sabah, "devre_adi": "Öğleden sonra", "ilk_ders": "13:00"})) \
+    assert zil_elle(sabah) == "Zil saatleri kaydedildi."
+    assert zil_elle({**sabah, "devre_adi": "Öğleden sonra", "ilk_ders": "13:00"}) \
         == "Zil saatleri kaydedildi."  # fmt: skip
     ayarla(panel, tm_zaman="gun_sonu")
     assert calistir(uygulama, saat, an(16, 12, 30, 10)) == []  # sabah devresinin sonu (12:20 + 10) gün sonu değildir

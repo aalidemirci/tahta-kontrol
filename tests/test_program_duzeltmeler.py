@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 from test_program_panel import ELLE, calistir, ders_isaretle, durum, hazirla, program_komutlari
-from yardimci import an, bekle, ileti, kimlik, sorgu, tahta_ekle
+from yardimci import an, bekle, ileti, kimlik, sorgu, tahta_ekle, zil_elle
 
 KOK = Path(__file__).resolve().parent.parent
 
@@ -18,7 +18,7 @@ def test_yalniz_yetim_satiri_kalan_tahta_programsiz_sayilir(uygulama, panel, tah
     t = kimlik(tahta_ekle(panel, tahta, "T-1", durum()))
     ders_isaretle(panel, t, [1, 2, 3, 4, 5, 6, 7, 8])
     # Zil saatleri başka devre kimliğiyle yeniden alınır; eski "normal" satırları yetim kalır.
-    assert ileti(panel.post("/program/zil/elle", data={**ELLE, "devre_adi": "Sabah"})) == "Zil saatleri kaydedildi."
+    assert zil_elle({**ELLE, "devre_adi": "Sabah"}) == "Zil saatleri kaydedildi."
     from tahta_sunucu import vt
 
     with vt.islem() as b:
@@ -69,7 +69,7 @@ def test_suresi_gecen_onizleme_zamanlayicida_silinir(uygulama, panel, tahta, saa
     hazirla(panel, kilit=False)
     saat.ayarla(an(16, 9, 0))
     csv = "derslik;gun;ders\nUydurma Ad;Pazartesi;1\n"
-    panel.post("/program/derslik/yukle", files={"dosya": ("p.csv", csv.encode("utf-8"), "text/csv")})
+    panel.post("/program/aktar/tablo", files={"dosya": ("p.csv", csv.encode("utf-8"), "text/csv")})
     from tahta_sunucu import vt
 
     with vt.islem() as b:
@@ -86,7 +86,7 @@ def test_suresi_gecen_onizleme_zamanlayicida_silinir(uygulama, panel, tahta, saa
 def test_content_length_olmayan_yukleme_reddedilir(uygulama, panel, saat):
     hazirla(panel, kilit=False)
     govde = b'--x\r\nContent-Disposition: form-data; name="dosya"; filename="a.csv"\r\n\r\nderslik;gun;ders\r\n--x--\r\n'
-    for yol in ("/program/derslik/yukle", "/program/zil/yukle"):
+    for yol in ("/program/aktar/tablo", "/program/aktar/asc", "/program/zil/yukle"):
         yanit = panel.post(
             yol, content=iter([govde]), headers={"content-type": "multipart/form-data; boundary=x"}
         )  # parça parça (chunked) gövde: Content-Length yok

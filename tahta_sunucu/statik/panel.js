@@ -76,9 +76,15 @@
       baslik: function () { return "Şablonlar örneklere döndürülsün mü?"; }
     },
     zil_sil: {
-      ad: "eylem", deger: "sil", evet: "Zil saatlerini sil",
-      metin: "Ders saatleri ve takvim silinir; program kilidi kapatılır ve program kaynaklı kilitli tahtalar açılır. Derslik programları kalır.",
-      baslik: function () { return "Zil saatleri silinsin mi?"; }
+      ad: "eylem", deger: "sil", evet: "Zil düzenini sil",
+      metin: "Bütün çizelgeler, haftalık düzen, tarihe özel çizelgeler ve takvim silinir; program kilidi kapatılır ve program kaynaklı kilitli tahtalar açılır. Derslik programları kalır.",
+      baslik: function () { return "Bütün zil düzeni silinsin mi?"; }
+    },
+    /* Zil düzenleyici (0.10.0): yalnız kullanılmayan çizelgede görünür */
+    cizelge_sil: {
+      ad: "eylem", deger: "sil", evet: "Çizelgeyi sil",
+      metin: "Çizelge ve satırları silinir. Hiçbir günde kullanılmadığı için ders saatleri değişmez.",
+      baslik: function (n, ad) { return (ad ? "“" + ad + "” çizelgesi" : "Bu çizelge") + " silinsin mi?"; }
     },
     /* Sınav (Aşama 4) */
     sinav_bitir: {
@@ -694,6 +700,7 @@
     var kutu = hedef.closest("details");
     if (kutu) kutu.open = true;
     hedef.focus();
+    if (typeof hedef.select === "function") { hedef.select(); return; } // textarea (aktarma istemi)
     var secim = window.getSelection();
     var aralik = document.createRange();
     aralik.selectNodeContents(hedef);
@@ -721,7 +728,7 @@
       }
       d.addEventListener("click", function () {
         if (!pano) { elle(); return; }
-        navigator.clipboard.writeText(hedef.textContent).then(function () {
+        navigator.clipboard.writeText(typeof hedef.value === "string" ? hedef.value : hedef.textContent).then(function () {
           d.textContent = "Kopyalandı";
           bildir("");
           clearTimeout(zaman);
@@ -1248,7 +1255,202 @@
     });
   }
 
+  /* ---- cizelge (0.10.0 zil düzenleyici): form#cizelge-formu ---------------------------------------
+     JS'siz sayfa tam işlevlidir (boş satırlar, sıralama ve numaralama sunucuda). Burada: boş satırlar gizlenir,
+     "Ders ekle" ve "Araya ekle" <template id="cizelge-satir">'dan satır çoğaltır, numara ve "Sonraki ara" yazdıkça
+     yeniden hesaplanır (sunucuyla aynı ≤ 20 dk teneffüs eşiği), "Sil" işaretli satır .silinecek olur. Hızlı oluştur
+     gönderilirken düzenleme tablosundaki kaydedilmemiş satırlar da gider (sunucu o taslağı temel alır). */
+  var TENEFFUS_ESIGI_DK = 20;
+  function dakika(s) {
+    var m = /^(\d{1,2}):(\d{2})/.exec(s || "");
+    if (!m) return null;
+    var h = parseInt(m[1], 10), d = parseInt(m[2], 10);
+    return h < 24 && d < 60 ? h * 60 + d : null;
+  }
+  function saatYaz(dk) {
+    if (dk === null || dk < 0 || dk >= 24 * 60) return "";
+    var h = Math.floor(dk / 60), d = dk % 60;
+    return (h < 10 ? "0" : "") + h + ":" + (d < 10 ? "0" : "") + d;
+  }
+  function araMetni(dk) {
+    if (dk === null) return "—";
+    if (dk <= 0) return "Ara yok";
+    return (dk <= TENEFFUS_ESIGI_DK ? "Teneffüs " : "Öğle arası ") + dk + " dk";
+  }
+  function cizelgeKur() {
+    var form = $("cizelge-formu");
+    var sablon = $("cizelge-satir");
+    if (!form || !sablon || !("content" in sablon)) return;
+    var duyuru = $("cizelge-duyuru");
+    form.classList.add("js-cizelge");
+    var sira = 0;
+    Array.prototype.forEach.call(form.querySelectorAll('input[name="satir"]'), function (g) {
+      var n = parseInt((g.value || "").replace(/^r/, ""), 10);
+      if (!isNaN(n) && n >= sira) sira = n + 1;
+    });
+
+    function duyur(metin) {
+      if (!duyuru) return;
+      duyuru.textContent = "";
+      setTimeout(function () { duyuru.textContent = metin; }, 50);
+    }
+    function satirBilgisi(tr) {
+      var bas = tr.querySelector('input[type="time"][name$="_bas"]');
+      var bit = tr.querySelector('input[type="time"][name$="_bit"]');
+      var sil = tr.querySelector('input[type="checkbox"][name$="_sil"]');
+      return { tr: tr, bas: bas, bit: bit, b: dakika(bas && bas.value), s: dakika(bit && bit.value), silinecek: !!(sil && sil.checked) };
+    }
+    function gecerliler(kap) {
+      return Array.prototype.map.call(kap.querySelectorAll("tbody tr"), satirBilgisi).filter(function (x) {
+        return !x.silinecek && x.b !== null && x.s !== null && x.s > x.b;
+      }).sort(function (a, b) { return a.b - b.b; });
+    }
+    function yenile(kap) {
+      var adi = kap.getAttribute("data-devre-adi") || "";
+      var liste = gecerliler(kap);
+      var numara = new Map();
+      liste.forEach(function (x, i) { numara.set(x.tr, i); });
+      Array.prototype.forEach.call(kap.querySelectorAll("tbody tr"), function (tr) {
+        var x = satirBilgisi(tr);
+        var i = numara.has(tr) ? numara.get(tr) : -1;
+        var noYeri = tr.querySelector("[data-no]");
+        var ara = tr.querySelector("td.ara");
+        var etiket = adi + " " + (i >= 0 ? (i + 1) + ". ders" : "yeni ders");
+        if (noYeri) noYeri.textContent = i >= 0 ? (i + 1) + ". ders" : (x.silinecek ? "Silinecek" : "Yeni");
+        if (x.bas) x.bas.setAttribute("aria-label", etiket + " başlangıç");
+        if (x.bit) x.bit.setAttribute("aria-label", etiket + " bitiş");
+        var sil = tr.querySelector('input[type="checkbox"][name$="_sil"]');
+        if (sil) sil.setAttribute("aria-label", adi + " " + (i >= 0 ? (i + 1) + ". dersi" : "bu satırı") + " sil");
+        var araya = tr.querySelector("button[data-araya]");
+        if (araya) araya.setAttribute("aria-label", adi + " " + (i >= 0 ? (i + 1) + ". dersten" : "bu satırdan") + " sonra araya ekle");
+        tr.classList.toggle("silinecek", x.silinecek);
+        if (ara) {
+          var dk = i >= 0 && i + 1 < liste.length ? liste[i + 1].b - x.s : null;
+          ara.textContent = i >= 0 ? araMetni(dk) : "";
+          if (dk !== null && dk > TENEFFUS_ESIGI_DK) ara.setAttribute("data-tur", "ogle");
+          else ara.removeAttribute("data-tur");
+        }
+      });
+      var baslik = kap.querySelector("caption");
+      if (baslik) baslik.textContent = adi + " · " + liste.length + " ders";
+    }
+    function arayaDugmesi(tr) {
+      var td = document.createElement("td");
+      td.className = "araya-hucre";
+      var d = document.createElement("button");
+      d.type = "button";
+      d.className = "araya";
+      d.setAttribute("data-araya", "");
+      d.textContent = "Araya ekle";
+      td.appendChild(d);
+      tr.appendChild(td);
+    }
+    function yeniSatir(kap, sonra, bas, bit) {
+      var devre = kap.getAttribute("data-devre");
+      var tr = sablon.content.firstElementChild.cloneNode(true);
+      var r = "r" + (sira++);
+      tr.querySelector('input[name="satir"]').value = r;
+      var dv = tr.querySelector('[data-alan="devre"]');
+      dv.name = r + "_devre";
+      dv.value = devre;
+      ["bas", "bit", "sil"].forEach(function (a) {
+        var g = tr.querySelector('[data-alan="' + a + '"]');
+        g.name = r + "_" + a;
+        if (a !== "sil") g.id = r + "_" + a;
+      });
+      tr.querySelector('[data-alan="bas"]').value = bas || "";
+      tr.querySelector('[data-alan="bit"]').value = bit || "";
+      arayaDugmesi(tr);
+      var govde = kap.querySelector("tbody");
+      if (sonra && sonra.nextSibling) govde.insertBefore(tr, sonra.nextSibling);
+      else if (sonra) govde.appendChild(tr);
+      else {
+        var bos = govde.querySelector("tr[data-bos]");
+        govde.insertBefore(tr, bos);
+      }
+      yenile(kap);
+      var ilk = tr.querySelector('input[type="time"]');
+      if (ilk) ilk.focus();
+      duyur((kap.getAttribute("data-devre-adi") || "") + ": yeni ders satırı eklendi.");
+    }
+    function dersEkle(kap) {
+      var liste = gecerliler(kap);
+      var bas = null, sure = 40, ara = 10;
+      if (liste.length) {
+        var son = liste[liste.length - 1];
+        sure = son.s - son.b;
+        if (liste.length > 1) {
+          var onceki = liste[liste.length - 2];
+          var g = son.b - onceki.s;
+          if (g >= 0 && g <= TENEFFUS_ESIGI_DK) ara = g;
+        }
+        bas = son.s + ara;
+      } else if (kap.getAttribute("data-devre") === "ogle") {
+        var sabah = form.querySelector('.devre-tablosu[data-devre="sabah"]');
+        var sl = sabah ? gecerliler(sabah) : [];
+        if (sl.length) bas = Math.ceil((sl[sl.length - 1].s + 20) / 5) * 5;
+      }
+      var b = bas === null ? "" : saatYaz(bas);
+      yeniSatir(kap, null, b, b ? saatYaz(bas + sure) : "");
+    }
+    function arayaEkle(kap, tr) {
+      var x = satirBilgisi(tr);
+      var liste = gecerliler(kap);
+      var i = liste.map(function (y) { return y.tr; }).indexOf(tr);
+      var sonraki = i >= 0 && i + 1 < liste.length ? liste[i + 1] : null;
+      var bas = x.s, bit = sonraki ? sonraki.b : null;
+      if (bas === null || bit === null || bit <= bas) { bas = null; bit = null; }
+      yeniSatir(kap, tr, saatYaz(bas), saatYaz(bit));
+    }
+
+    Array.prototype.forEach.call(form.querySelectorAll(".devre-tablosu"), function (kap) {
+      var bas = kap.querySelector("thead tr");
+      if (bas) {
+        var th = document.createElement("th");
+        th.scope = "col";
+        var g = document.createElement("span");
+        g.className = "gizli";
+        g.textContent = "Araya ekle";
+        th.appendChild(g);
+        bas.appendChild(th);
+      }
+      Array.prototype.forEach.call(kap.querySelectorAll("tbody tr"), function (tr) {
+        if (tr.hasAttribute("data-bos")) { tr.appendChild(document.createElement("td")); return; }
+        arayaDugmesi(tr);
+      });
+      var dugmeler = kap.querySelector(".devre-dugmeleri");
+      if (dugmeler) dugmeler.hidden = false;
+      kap.addEventListener("click", function (olay) {
+        var d = olay.target.closest("button");
+        if (!d || !kap.contains(d)) return;
+        if (d.hasAttribute("data-ders-ekle")) dersEkle(kap);
+        else if (d.hasAttribute("data-araya")) arayaEkle(kap, d.closest("tr"));
+      });
+      kap.addEventListener("input", function () { yenile(kap); });
+      kap.addEventListener("change", function () { yenile(kap); });
+      yenile(kap);
+    });
+
+    // Hızlı oluştur: kaydedilmemiş düzenleme tablosu da gönderilsin (sunucu "satir" alanı varsa formu temel alır).
+    var hizli = $("hizli-formu");
+    if (hizli) {
+      hizli.addEventListener("submit", function () {
+        Array.prototype.forEach.call(hizli.querySelectorAll("input[data-kopya]"), function (g) { g.remove(); });
+        new FormData(form).forEach(function (deger, ad) {
+          if (ad === "eylem" || ad === "onay_numara" || typeof deger !== "string") return;
+          var g = document.createElement("input");
+          g.type = "hidden";
+          g.name = ad;
+          g.value = deger;
+          g.setAttribute("data-kopya", "");
+          hizli.appendChild(g);
+        });
+      });
+    }
+  }
+
   panoKur();
+  cizelgeKur();
   siralamaKur();
   sinavKur();
   yoklamaSayaciKur();

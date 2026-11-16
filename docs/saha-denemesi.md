@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.9.0)
+# Saha denemesi kılavuzu (0.10.0)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -44,6 +44,9 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | pkexec yolu: `DISPLAY` varken pkexec'in denenmesi; polkit'in "Authenticating as: etapadmin" demesi; kimlik doğrulama kapta "No session for cookie" ile düştüğünde (logind oturumu yok) ve yanlış parolada `su`'ya geçilmesi | Aynı kap, dbus + polkitd elle | Mantık doğrulandı; **başarılı pkexec denenmedi** (gerçek masaüstü gerekir) |
 | Ayarlar › Tahtadaki yüzer düğme, tahta sayfası notu, "Tahta ekle" yönergesi (0.9.0) | Deneme sunucusu (8797), tarayıcı | Çalıştı |
 | Açılışta kilit (0.9.0, G2): sunucu açıkken oturum kapat/aç ve servis + oturumun birlikte yeniden başlatılması sonrası kilitlenme; kodla açılan tahtanın aynı oturumda 35 sn boyunca açık kalması; yalnız servis yeniden başlayınca yeniden kilitlenmemesi; `etapadmin` oturumunun kilitlenmemesi; sunucu kapalıyken açılan oturumun açık kalması ve sunucu 120 sn'den sonra dönünce de açık kalması; kilit kodu yokken uygulanmaması; panel kilidinin sunucusuz servis yeniden başlatmasında korunması | Debian 12 kabı (gerçek 0.9.0 paketi, Xvfb + openbox, 1366x768 ve 1920x1080), deneme sunucusu 8798 | Çalıştı (kapta "tahta yeniden başlatma" servis ile oturumun birlikte yeniden başlatılmasıdır; çekirdek ve `boot_id` değişmez) |
+| Zil düzenleyici (0.10.0): 0.9.0 veritabanının yükseltmede çizelgelere taşınması; yeni çizelge (tek ve ikili), hızlı oluştur (kaydetmeden taslak; kaydedilmemiş satırlar da gider), "Araya ekle"/"Ders ekle", silme işareti, hatalı saatte 422 + alan iletisi, numara kaymasında "Anladım, kaydet", haftalık düzen, tarihe özel çizelge (Sürüyor rozeti), günü önizle, kullanılmayan çizelgeyi onaylı silme, idareci salt okunur görünüm, 375 px dar ekran (yatay kaydırma yok), koyu tema | Deneme sunucusu (8797, ayrı veri klasörü, uydurma veri), Chromium | Çalıştı |
+| Ders programı içe aktarma (0.10.0): yapay zekâ çıktısı yapıştırma (açıklama ve kod bloğu atıldı), şube → tahta eşlemesi, önizleme (tahta başına +/−/~), onay, "Önceki programlar"; aSc XML ve geri yükleme yalnız testlerde (uydurma XML) | Deneme sunucusu (8797), Chromium; birim testleri | Çalıştı |
+| **Gerçek aSc Timetables XML dosyası**, okulun gerçek zil saatleriyle taşıma | — | **Denenmedi** (§3.9) |
 | **Gerçek ETAP tahtası** | — | İlk deneme 16.11.2026 (0.8.0): bulgular G1–G3, `docs/tasarim.md` §5.1 |
 | Kurulum dosyasının başka bir bilgisayara kurulması | — | Denenmedi |
 | Gerçek kapatma / yeniden başlatma / uzaktan açma | — | Denenmedi (kapta benzetim) |
@@ -345,6 +348,30 @@ denemelerde benzetimi açın (§3.6.1 hazırlığı).
 | Y15 | `etapadmin` ve kişisel hesap oturumunda | Aynı düğme ve işlemler | |
 | Y16 | Ayarlar'da düğmeyi kapat | Birkaç saniyede tahtadan kalkar | |
 
+### 3.9 Zil düzenleyici ve ders programı içe aktarma (0.10.0)
+
+Hazırlık: sunucuyu 0.10.0'a yükseltmeden önce Yedekler'den şifreli yedek alın (göç öncesi kopya ayrıca
+`goc-oncesi` klasörüne kendiliğinden alınır). Ajan değişmedi; tahtalar sürüm numarası yüzünden güncellenir,
+davranış aynıdır. Bu denemeler ders saatlerini **hemen** değiştirir: ilk denemeleri ders dışı saatte yapın.
+Panelden ya da yazılımdan çıkan sayılar dışında gerçek veri, ekran görüntüsü depoya girmez (`saha/`).
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| Z1 | Yükseltmeden sonra Program › Zil saatleri | Mevcut saatler "Ders saatleri · Pzt–Per" gibi çizelgelere taşınmış; haftalık düzen eski günlerle aynı; Derslik programları ve tahta ızgarası değişmemiş; İşlem kaydında "Zil saatleri çizelgelere taşındı · N çizelge · M gün" | |
+| Z2 | "Yeni çizelge" (Tek devre), Hızlı oluştur'da okulun saatleri, Kaydet; haftalık düzende bir güne ata | Bugünün ders akışı ve "Günü önizle" o günün yeni saatlerini gösterir; Okul Zili açık değilken de çalışır | |
+| Z3 | İkili eğitim: "Yeni çizelge" (İkili), öğle devresinin ilk dersini boş bırakıp Hızlı oluştur | Öğle başlangıcı sabahın son dersinden 20 dk sonrası (5'e yuvarlanmış); gerçek okulda uygun mu? Çakışan saatlerde sarı uyarı, kayıt yine yapılır | |
+| Z4 | Bir dersin saatini 1 dk kaydırıp ders içinde (program kilidi açık, bir tahta program kilidinde) kaydet | "Bugünkü ders saatleri değişti; program kilitli tahtalar açıldı…"; tahta birkaç saniyede açılır, sonraki teneffüste yeni saatle kilitlenir | |
+| Z5 | Kullanılan çizelgeden bir ders sil (derslik programı yüklü) | Kayıt "Anladım, kaydet" onayı ister; onaylanınca "artık olmayan … ders saati var" bandı; Derslik programları sekmesinde yetim sayısı | |
+| Z6 | Tarihe özel çizelge: sınav haftası (Kısa gün), tek günlük tatil ("Ders yok"), takvimdeki bir resmî tatili kapsayan uzun aralık | Günü önizle kaynağı "… (tarihe özel çizelge)"; resmî tatil yine "Tatil"; program kilidi o günlerde kısa günün saatleriyle çalışır | |
+| Z7 | Okul Zili kullanılıyorsa: "Okul Zili'nden al", önizleme, onay | Okul Zili kaynaklı çizelgeler kurulur; elle çizelgeler kalır ama haftalık düzenden düşer; Okul Zili'nin tarih kuralları listede salt okunur | |
+| Z8 | Okul bilgisayarlarındaki tarayıcıda saat alanları | 24 saat (SS:DD) görünür; AM/PM görünürse not edin | |
+| Z9 | İdareci hesabıyla aynı sayfalar | Görür, değiştiremez ("Zil saatlerini yalnız yönetici değiştirir.") | |
+| P1 | aSc'de programın bir **kopyasını** açıp öğretmenleri "Ö1, Ö2…" diye yeniden adlandırın; Dosya › Dışa Aktar › aSc TimeTables XML; sihirbaza yükleyin | Eşleme ekranında derslikler/sınıflar/ders saatleri; önizlemede şube ve ders sayıları asıl programla aynı; öğretmen ve ders adı hiçbir yerde (önizleme, işlem kaydı) görünmez. Türkçe menü adını, kodlamayı (UTF-8 mi?) ve günlerin Pazartesi'den başlayıp başlamadığını not edin | |
+| P2 | Blok (2 saatlik) ders, bölünmüş grup, dersliksiz ders (beden eğitimi), laboratuvar içeren dosya | Blok ders iki ders saatine yazılır; dersliksiz dersler "hiçbir tahtaya yazılmadı" listesinde | |
+| P3 | İkili eğitimde sabahçı ve öğlenci programı (tek dosya ya da iki dosya) | Saatlerden devre bulunur ya da "Bu dosya hangi devrenin programı?" sorulur; sabahçı programı öğlenci satırlarını silmez | |
+| P4 | Mevcut programı indir → Excel'de bir şubeyi değiştir → şablon olarak geri yükle | Önizlemede yalnız o değişiklik (~); onay; "Önceki programlar"dan geri yükleme eski hâle döndürür | |
+| P5 | Yapay zekâ ile dönüştür: istemi kopyala, okulun dağıttığı programla (kişi adları silinmiş) kurumun izin verdiği araçta çalıştır, çıktıyı yapıştır | Önizlemede şube başına ders sayıları asıl programla karşılaştırılır; hatalı satırlar listelenir | |
+
 ### 3.7 Windows hizmeti (K8, 0.8.0)
 
 Hazırlık: bu denemeler yönetici yetkisi ister ve **önce deneme bilgisayarında** yapılmalıdır.
@@ -424,6 +451,22 @@ ve güncellemeden sonra duruyor mu.
   - Tahtanın monotonik saatinin sınav boyunca düzgün işlemesi (uyku/askıya alma kapalı).
   - Sınav ekranının ETAP'ın pencere yöneticisinde EBA içeriği ya da tam ekran videonun
     üstüne çıkması (Debian 12 + openbox'ta çıktı).
+  - Zil düzenleyici ve ders programı içe aktarma (0.10.0; yalnız testlerde ve deneme sunucusunda uydurma veriyle):
+    - aSc XML: kart başına bir ders saati (blok derste kart sayısı), `days` maskesinin Pazartesi'den başlaması,
+      `class@classroomids`'in sınıfın kendi dersliği olması, dosyanın UTF-8 ve `DOCTYPE`'sız olması, Türkçe
+      menü adı ("Dosya › Dışa Aktar › aSc TimeTables XML") gerçek dosyayla doğrulanmadı; sihirbazda "Sınanıyor" notu durur.
+    - e-Okul Haftalık Ders Dağıtım Modülü'nün dışa aktarma biçimi bilinmiyor; e-Okul kaynağı yoktur.
+    - Gün ortasında saat değişikliğinden sonra program kilitli ETAP tahtasının hemen açılıp sonraki teneffüste
+      yeni saatle kilitlenmesi yalnız testlerde (komut düzeyinde) doğrulandı.
+    - Sabahçı/öğlenci devre geçişinde 20 dakikalık öneri ve çakışmanın yalnız uyarı olması okulun gerçek
+      saatlerine uyar mı (`docs/tasarim.md` §17, soru 55).
+    - `type=time` alanları okulun tarayıcısında 24 saat gösterir (Türkçe yerel ayarda beklenen).
+    - Okulun gerçek 0.9.0 veritabanında taşımanın beklenen çizelgeleri ürettiği (yalnız sayılarla bakılacak).
+    - Tarihe özel çizelge derslik programını kendi hafta gününden eşler: Cumartesi telafisinde Pazartesi'nin
+      derslik programı uygulanmaz (tahtalar açık kalır). Telafi için Okul Zili telafi kuralı kullanılır.
+    - Tarihe özel çizelgenin devreleri derslik programındakilerle hiç uyuşmuyorsa (ikili okulda "Tek devre"
+      kısa gün) o gün derslik programı uygulanmaz; ekleme sırasında uyarı çıkar. Okulda gerçekten
+      sabah/öğle ayrı kısa gün çizelgesi yapılıp yapılmadığı denenmeli (Z6).
   - Dayanaklar: KVKK md. 12 ve sınav kurallarındaki "ilk ve son 10 dakika" kuralı
     doğrulanacaklar listesindedir (`docs/tasarim.md` §18); arayüzde atıf yoktur.
 - Ders yoklaması (0.6.0):

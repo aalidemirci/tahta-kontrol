@@ -1,9 +1,14 @@
 {% extends "taban.html" %}
 {% block baslik %}Program · Tahta Kontrol{% endblock %}
+{# Zil sekmesindeki bölümlerin iletisi (?yer=haftalik|cizelgeler|tarihli#ileti) kendi bölümünde çizilir ve odaklanır. #}
+{% block mesaj_yeri %}{% if mesaj and not (bolum == 'zil' and ileti_yeri in ('haftalik', 'cizelgeler', 'tarihli')) %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}
-{# Bağlam (panel_program.program_sayfasi): bolum, yonetici, serit, gun_adlari, zil, elle, onizleme,
-   derslik, kurallar, istisnalar, tahtalar, neden_en_uzun, bugun. Bölümler sayfa içi sekmedir
-   (ortak sözlük §4); yalnız seçili bölüm çizilir. Yönetici olmayana salt okunur. #}
+{# Bağlam (panel_program.program_sayfasi): bolum, yonetici, serit, gun_adlari, zil (+ panel_program.zil_baglami
+   alanları: bugun, cizelgeler, secenekler, haftalik, haftalik_uyarilari, tarihliler, okulzili_kurallari…), onizleme,
+   derslik (tahtalar, yetim_sayisi, gecmis), kurallar, istisnalar, tahtalar, neden_en_uzun, bugun. Bölümler sayfa
+   içi sekmedir (ortak sözlük §4); yalnız seçili bölüm çizilir. Yönetici olmayana salt okunur.
+   Zil bölümü: Bugün · Haftalık düzen · Çizelgeler · Tarihe özel çizelgeler · Okul Zili'nden al (zil düzenleyici §5.1). #}
+{% from "_zaman_cizgisi.html" import zaman_cizgisi as zc_ciz %}
 {% macro zil_tablosu(iz, kimlik, duzenle=false) %}
 <div class="tablo-kap izgara-kap" role="region" tabindex="0" aria-labelledby="{{ kimlik }}">
 <table class="izgara-program">
@@ -44,73 +49,166 @@
     <button name="eylem" value="onayla" class="ana" {% if not onizleme.onaylanabilir %}disabled{% endif %}>Onayla ve kaydet</button>
     <button name="eylem" value="vazgec">Vazgeç</button>
   </form>
-  <p class="not">Onaylanınca mevcut zil saatleri ve takvim bunlarla değişir.</p>
+  <p class="not">Onaylanınca Okul Zili kaynaklı çizelgeler ve haftalık düzen bunlarla değişir; elle oluşturulan çizelgeler kalır.</p>
 </section>
 {% endif %}
 
-<section class="kutu" aria-labelledby="zil-baslik">
-  <h2 id="zil-baslik">Zil saatleri</h2>
-  {% if zil.kaynak %}<p class="not"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg> {{ zil.kaynak.metin }}</p>{% endif %}
+<section class="kutu" aria-labelledby="bugun-akis">
+  <h2 id="bugun-akis">Bugünün ders akışı</h2>
+  <p class="kaynak-satiri"><svg class="simge" aria-hidden="true"><use href="#s-takvim"/></svg><span>{{ zil.bugun.tarih_metni }} · {{ zil.bugun.kaynak }}</span></p>
+  {% if zil.bugun.tatil %}<p class="bant" role="status"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Tatil: {{ zil.bugun.tatil }}</p>
+  {% else %}{{ zc_ciz(zil.bugun.zaman_cizgisi, 'bugun-akis') }}{% endif %}
+  {% if zil.bugun.tum_gun_sinav %}<p class="not">Bütün gün planlı sınav.</p>{% endif %}
+  {% for s in zil.bugun.sinavlar %}<p class="not">Sınav: {{ s }}</p>{% endfor %}
   {% if zil.degismis %}<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Okul Zili'ndeki program değişmiş görünüyor; yeniden alın.</p>{% endif %}
-  {% for iz in zil.izgaralar %}{{ zil_tablosu(iz, 'zil-devre-' ~ loop.index) }}
-  {% else %}<p class="bos-not">Ders saati yok.{% if yonetici %} Okul Zili'nden alın ya da aşağıdan elle girin.{% endif %}</p>{% endfor %}
-  {% if zil.takvim_ozeti %}<p class="not">{{ zil.takvim_ozeti }}</p>
-  {% elif zil.satir_sayisi %}<p class="not">Takvim yok: resmî tatillerde de ders var sayılır; tatilleri İstisna olarak ekleyin.</p>{% endif %}
-  {% if zil.satir_sayisi %}<p class="not">Tören kuralları ders saatini değiştirmez; değişen bir gün için Okul Zili'nde “tarihe özel program” kullanın.</p>{% endif %}
+  <div class="kutu-alt">
+    <form method="get" action="/program/gun" class="satir-form">
+      <div><label for="onizle-tarih">Başka bir günü önizle</label>
+        <input type="date" id="onizle-tarih" name="tarih" value="{{ bugun }}"></div>
+      <button>Günü önizle</button>
+    </form>
+    {% if zil.takvim_ozeti %}<p class="not">{{ zil.takvim_ozeti }}</p>
+    {% elif zil.satir_sayisi %}<p class="not">Takvim yok: resmî tatillerde de ders var sayılır. Tatilleri “Ders yok” tarihe özel çizelge olarak ekleyin.</p>{% endif %}
+  </div>
+  {% if zil.kaynak %}<p class="not"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg> {{ zil.kaynak.metin }}</p>{% endif %}
+</section>
+
+<section class="kutu" aria-labelledby="haftalik">
+  <h2 id="haftalik">Haftalık düzen</h2>
+  {% if mesaj and ileti_yeri == 'haftalik' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <p class="ipucu">Her hafta gününe bir çizelge ya da “Ders yok”. Kaydettiğiniz anda yürürlüğe girer.</p>
+  <form method="post" action="/program/haftalik">
+    <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="haftalik-baslik">
+    <table class="haftalik-tablo">
+      <caption id="haftalik-baslik" class="gizli">Haftanın günlerine atanan çizelgeler</caption>
+      <thead><tr><th scope="col">Gün</th><th scope="col">Çizelge</th><th scope="col">Özet</th></tr></thead>
+      <tbody>
+      {% for h in zil.haftalik %}
+      <tr><th scope="row">{{ h.gun_adi }}</th>
+        <td data-etiket="Çizelge">{% if yonetici %}<select name="gun_{{ h.gun }}" aria-label="{{ h.gun_adi }} çizelgesi"><option value="">Ders yok</option>{% for cid, cad in zil.secenekler %}<option value="{{ cid }}"{% if cid == h.cizelge_id %} selected{% endif %}>{{ cad }}</option>{% endfor %}</select>
+            {%- else %}{% for cid, cad in zil.secenekler if cid == h.cizelge_id %}{{ cad }}{% else %}Ders yok{% endfor %}{% endif %}</td>
+        <td data-etiket="Özet" class="ozet-hucre">{{ h.ozet }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% for u in zil.haftalik_uyarilari %}<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ u }}</p>{% endfor %}
+    {% if yonetici %}<p class="dugme-satiri"><button class="ana">Haftalık düzeni kaydet</button></p>{% endif %}
+  </form>
+</section>
+
+<section class="kutu" aria-labelledby="cizelgeler">
+  <h2 id="cizelgeler">Çizelgeler</h2>
+  {% if mesaj and ileti_yeri == 'cizelgeler' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <p class="ipucu">Bir günün ders akışı: “Normal gün”, “Cuma”, “Kısa gün”… Bir çizelgeyi düzeltmek, atandığı bütün günleri düzeltir.</p>
+  {% if zil.cizelgeler %}
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="cizelge-tablo-baslik">
+  <table>
+    <caption id="cizelge-tablo-baslik" class="gizli">Çizelgeler</caption>
+    <thead><tr><th scope="col">Ad</th><th scope="col">Devreler</th><th scope="col">Saat aralığı</th><th scope="col">Kullanıldığı yer</th><th scope="col">Kaynak</th><th scope="col"><span class="gizli">İşlem</span></th></tr></thead>
+    <tbody>
+    {% for c in zil.cizelgeler %}
+    <tr>
+      <th scope="row"><a href="/program/cizelge/{{ c.id }}">{{ c.ad }}</a></th><td data-etiket="Devreler">{{ c.devreler }}</td><td data-etiket="Saat aralığı" class="tarih-hucre">{{ c.saat_araligi }}</td>
+      <td data-etiket="Kullanıldığı yer">{% if c.silinebilir %}<span class="not">{{ c.kullanim }}</span>{% else %}{{ c.kullanim }}{% endif %}</td><td data-etiket="Kaynak">{{ c.kaynak_metni }}</td>
+      <td data-etiket="İşlem"><div class="islemler"><a class="dugme" href="/program/cizelge/{{ c.id }}">{{ 'Düzenle' if yonetici else 'Göster' }}<span class="gizli">: {{ c.ad }}</span></a>
+        {% if yonetici %}<form method="post" action="/program/cizelge/{{ c.id }}/kopyala"><button>Kopyala<span class="gizli">: {{ c.ad }}</span></button></form>{% endif %}
+        <a class="dugme" href="/program/cizelge/{{ c.id }}/csv" download>CSV<span class="gizli">: {{ c.ad }}</span></a>
+        {% if yonetici and c.silinebilir %}<form method="post" action="/program/cizelge/{{ c.id }}/sil" id="cizelge-sil-{{ c.id }}"><button type="button" class="tehlike" data-onay="cizelge_sil" data-onay-ad="{{ c.ad }}" aria-haspopup="dialog">Sil…<span class="gizli"> {{ c.ad }}</span></button></form>{% endif %}</div></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="bos-not">Çizelge yok.{% if yonetici %} Aşağıdan bir çizelge oluşturun ya da Okul Zili'nden alın.{% endif %}</p>{% endif %}
+  {% if yonetici %}
+  <form method="post" action="/program/cizelge" class="ekle-formu">
+    <h3>Yeni çizelge</h3>
+    <p class="ipucu">Varsayılan saatlerle oluşturulur (tek devre: 08:20'den 8 ders; ikili: sabah 07:40'tan 6 ders + öğleden sonra 6 ders); sonra düzenlersiniz.</p>
+    <div class="satir-alanlari">
+      <div class="alan"><label for="yeni-cizelge-ad">Ad</label>
+        <input type="text" id="yeni-cizelge-ad" name="ad" maxlength="{{ zil.ad_en_uzun }}" required placeholder="ör. Normal gün"></div>
+      <fieldset class="secim-grubu"><legend>Devre düzeni</legend>
+        <div class="dugme-secim">
+          <label><input type="radio" name="duzen" value="tek" checked> Tek devre</label>
+          <label><input type="radio" name="duzen" value="ikili"> İkili eğitim (sabah ve öğleden sonra)</label>
+        </div>
+      </fieldset>
+      <p class="dugme-satiri"><button class="ana">Oluştur</button></p>
+    </div>
+  </form>
+  {% endif %}
+</section>
+
+<section class="kutu" aria-labelledby="tarihli">
+  <h2 id="tarihli">Tarihe özel çizelgeler</h2>
+  {% if mesaj and ileti_yeri == 'tarihli' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <p class="ipucu">Sınav haftası, kısa gün, tatil ya da “şu tarihten itibaren yeni saatler”: seçili tarihlerde haftalık düzenin yerine geçer. Okul Zili takvimindeki tatiller her zaman önce gelir.</p>
+  {% if zil.tarihliler %}
+  {% set TARIHLI_RENGI = {'suruyor': 'uyari', 'ileride': 'onay', 'bitti': 'bilgi'} %}
+  {% set TARIHLI_SIMGESI = {'suruyor': 's-acik', 'ileride': 's-onay', 'bitti': 's-tamam'} %}
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="tarihli-tablo-baslik">
+  <table>
+    <caption id="tarihli-tablo-baslik" class="gizli">Tarihe özel çizelgeler</caption>
+    <thead><tr><th scope="col">Ad</th><th scope="col">Aralık</th><th scope="col">Günler</th><th scope="col">Çizelge</th><th scope="col">Durum</th>{% if yonetici %}<th scope="col"><span class="gizli">İşlem</span></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for t in zil.tarihliler %}
+    <tr><th scope="row" class="kirp">{{ t.ad }}</th><td data-etiket="Aralık" class="tarih-hucre">{{ t.aralik }}</td><td data-etiket="Günler">{{ t.gunler }}</td>
+      <td data-etiket="Çizelge">{{ t.cizelge }}</td>
+      <td data-etiket="Durum"><span class="rozet" data-durum="{{ TARIHLI_RENGI[t.durum] }}"><svg class="simge" aria-hidden="true"><use href="#{{ TARIHLI_SIMGESI[t.durum] }}"/></svg>{{ t.durum_adi }}</span></td>
+      {% if yonetici %}<td data-etiket="İşlem"><form method="post" action="/program/tarihli/{{ t.id }}/sil" class="satir-ici"><button>Sil<span class="gizli"> {{ t.ad }}</span></button></form></td>{% endif %}</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="bos-not">Tarihe özel çizelge yok.</p>{% endif %}
+  {% if zil.okulzili_kurallari %}
+  <h3>Okul Zili'nden gelen tarih kuralları</h3>
+  <p class="ipucu">Salt okunur; Okul Zili'nde değiştirilir. Buradaki tarihe özel çizelgeler bunlardan önce gelir (tatiller hariç).</p>
+  <ul class="okulzili-kurallari">{% for k in zil.okulzili_kurallari %}<li>{{ k.ad }} · {{ k.tur }}{% if k.aralik %} · {{ k.aralik }}{% endif %}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if yonetici %}
+  {# tarihli_form: hatalı gönderimden sonra (422) girilen değerler; yoksa varsayılanlar. #}
+  {% set tf = tarihli_form if tarihli_form is defined and tarihli_form else none %}
+  <form method="post" action="/program/tarihli" class="ekle-formu">
+    <h3>Tarihe özel çizelge ekle</h3>
+    <div class="alan-cifti">
+      <div class="alan"><label for="t-ad">Ad</label>
+        <input type="text" id="t-ad" name="ad" maxlength="{{ zil.tarihli_ad_en_uzun }}" required aria-describedby="t-ad-ipucu" placeholder="ör. Deneme sınavı haftası"{% if tf %} value="{{ tf.ad }}"{% endif %}>
+        <p class="ipucu" id="t-ad-ipucu">Öğrenci ya da kişi adı yazmayın.</p></div>
+      <div class="alan"><label for="t-cizelge">Çizelge</label>
+        <select id="t-cizelge" name="cizelge">{% for cid, cad in zil.secenekler %}<option value="{{ cid }}"{% if tf and tf.cizelge == cid|string %} selected{% endif %}>{{ cad }}</option>{% endfor %}<option value=""{% if tf and tf.cizelge == '' %} selected{% endif %}>Ders yok (tatil)</option></select>
+        <p class="ipucu">Devreleri derslik programındakilerle aynı olan bir çizelge seçin (ikili eğitimde sabah ve öğleden sonra); yoksa o günlerde derslik programı uygulanmaz.</p></div>
+      <div class="alan"><label for="t-bas">Başlangıç tarihi</label><input type="date" id="t-bas" name="bas" value="{{ tf.bas if tf else bugun }}" required{% if tf and tf.hata_tarih %} aria-invalid="true" aria-describedby="ileti"{% endif %}></div>
+      <div class="alan"><label for="t-bit">Bitiş tarihi</label><input type="date" id="t-bit" name="bit" value="{{ tf.bit if tf else bugun }}" required aria-describedby="t-bit-ipucu{% if tf and tf.hata_tarih %} ileti{% endif %}"{% if tf and tf.hata_tarih %} aria-invalid="true"{% endif %}>
+        <p class="ipucu" id="t-bit-ipucu">Tek gün için başlangıçla aynı.</p></div>
+    </div>
+    <fieldset class="secim-grubu"><legend>Günler</legend>
+      <div class="gunler">{% for g in gun_adlari %}<label><input type="checkbox" name="gunler" value="{{ loop.index0 }}"{% if loop.index0 in (tf.gunler if tf else zil.varsayilan_gunler) %} checked{% endif %}> <span aria-hidden="true">{{ gun_kisa[loop.index0] }}</span><span class="gizli">{{ g }}</span></label>{% endfor %}</div>
+    </fieldset>
+    <p class="dugme-satiri"><button class="ana">Ekle</button></p>
+  </form>
+  {% endif %}
 </section>
 
 {% if yonetici %}
 <section class="kutu" aria-labelledby="zil-al-baslik">
-  <h2 id="zil-al-baslik">Zil saatlerini al ya da değiştir</h2>
-  <div class="iki-sutun">
-    <div>
-      <h3>Okul Zili'nden</h3>
-      <p class="ipucu">Okul Zili'nin <span class="kod">ayarlar.json</span> dosyası ya da <span class="kod">.okulzili</span> yedeği. Yalnız ders saatleri ve takvim okunur; sesler ve okul adı alınmaz.</p>
-      {% if zil.yerel_var %}
-      <form method="post" action="/program/zil/yerel" class="dugme-satiri"><button class="ana">Bu bilgisayardaki Okul Zili'nden al</button></form>
-      <p class="ipucu">ya da dosya seçin:</p>
-      {% endif %}
-      <form method="post" action="/program/zil/yukle" enctype="multipart/form-data">
-        <label for="zil-dosya">Okul Zili dosyası</label>
-        <input type="file" id="zil-dosya" name="dosya" accept=".json,.okulzili,.zip" required>
-        <p class="dugme-satiri"><button {% if not zil.yerel_var %}class="ana"{% endif %}>Yükle ve önizle</button></p>
-      </form>
-    </div>
-    <div>
-      <h3>Okul Zili yoksa: elle</h3>
-      <p class="ipucu">Ders akışından tablo üretilir; seçili günlerde o devrenin saatleri yeniden yazılır. Sonra tablodan düzeltebilirsiniz.</p>
-      <details class="acilir" {% if not zil.satir_sayisi %}open{% endif %}>
-        <summary class="dugme">Elle gir</summary>
-        <form method="post" action="/program/zil/elle" class="acilir-ic">
-          <div class="alan-cifti">
-            <div><label for="e-devre">Devre adı</label><input type="text" id="e-devre" name="devre_adi" value="{{ elle.devre_adi }}" maxlength="40" required></div>
-            <div><label for="e-ilk">İlk ders</label><input id="e-ilk" type="time" name="ilk_ders" value="{{ elle.ilk_ders }}" required></div>
-            <div><label for="e-sayi">Ders sayısı (1–20)</label><input id="e-sayi" type="number" name="ders_sayisi" min="1" max="20" value="{{ elle.ders_sayisi }}" required></div>
-            <div><label for="e-sure">Ders süresi (dk)</label><input id="e-sure" type="number" name="ders_dk" min="10" max="120" value="{{ elle.ders_dk }}" required></div>
-            <div><label for="e-ten">Teneffüs (dk)</label><input id="e-ten" type="number" name="teneffus_dk" min="0" max="60" value="{{ elle.teneffus_dk }}" required></div>
-            <div><label for="e-ogle">Öğle arası kaçıncı dersten sonra</label><input id="e-ogle" type="number" name="ogle_sonra" min="0" max="19" value="{{ elle.ogle_sonra }}" aria-describedby="e-ogle-ipucu"><p class="ipucu" id="e-ogle-ipucu">0 = öğle arası yok</p></div>
-            <div><label for="e-ogle-dk">Öğle arası (dk)</label><input id="e-ogle-dk" type="number" name="ogle_dk" min="0" max="180" value="{{ elle.ogle_dk }}"></div>
-          </div>
-          <fieldset class="secim-grubu"><legend>Uygulanacak günler</legend>
-            <div class="gunler">{% for g in gun_adlari %}<label><input type="checkbox" name="gunler" value="{{ loop.index0 }}" {% if loop.index0 in elle.gunler %}checked{% endif %}> <span aria-hidden="true">{{ gun_kisa[loop.index0] }}</span><span class="gizli">{{ g }}</span></label>{% endfor %}</div>
-          </fieldset>
-          <p class="dugme-satiri"><button name="eylem" value="uret" class="ana">Üret</button></p>
-        </form>
-      </details>
-    </div>
-  </div>
-
-  {% if zil.izgaralar %}
-  <details class="acilir duzelt">
-    <summary class="dugme">Tablodaki saatleri düzelt</summary>
-    <form method="post" action="/program/zil/elle" class="acilir-ic">
-      <p class="ipucu">Başlangıç ve bitişi değiştirip kaydedin. Okul Zili'nden alınan program “elle düzenlendi” diye işaretlenir.</p>
-      {% for iz in zil.izgaralar %}{{ zil_tablosu(iz, 'duzelt-devre-' ~ loop.index, true) }}{% endfor %}
-      <p class="dugme-satiri"><button name="eylem" value="kaydet" class="ana">Saatleri kaydet</button></p>
+  <h2 id="zil-al-baslik">Okul Zili'nden al</h2>
+  <p class="ipucu">Okul Zili'nin <span class="kod">ayarlar.json</span> dosyası ya da <span class="kod">.okulzili</span> yedeği. Yalnız ders saatleri ve takvim okunur; sesler ve okul adı alınmaz. Önce önizleme gösterilir. Onaylanınca Okul Zili kaynaklı çizelgeler ve haftalık düzen bunlarla değişir; elle oluşturulan çizelgeler kalır.</p>
+  <div class="satir-alanlari">
+    {% if zil.yerel_var %}
+    <form method="post" action="/program/zil/yerel" class="dugme-satiri"><button class="ana">Bu bilgisayardaki Okul Zili'nden al</button></form>
+    {% endif %}
+    <form method="post" action="/program/zil/yukle" enctype="multipart/form-data" class="satir-alanlari">
+      <div class="alan"><label for="zil-dosya">{% if zil.yerel_var %}ya da dosya seçin{% else %}Okul Zili dosyası{% endif %}</label>
+        <input type="file" id="zil-dosya" name="dosya" accept=".json,.okulzili,.zip" required></div>
+      <p class="dugme-satiri"><button {% if not zil.yerel_var %}class="ana"{% endif %}>Yükle ve önizle</button></p>
     </form>
-  </details>
-  <form method="post" action="/program/zil/sil" id="zil-sil" class="dugme-satiri">
-    <button type="button" class="tehlike" data-onay="zil_sil" aria-haspopup="dialog">Zil saatlerini sil…</button>
+  </div>
+  {% if zil.satir_sayisi or zil.cizelgeler %}
+  <form method="post" action="/program/zil/sil" id="zil-sil" class="kutu-alt">
+    <p class="not">Bütün çizelgeleri, haftalık düzeni, tarihe özel çizelgeleri ve takvimi siler. Derslik programları kalır.</p>
+    <button type="button" class="tehlike" data-onay="zil_sil" aria-haspopup="dialog">Bütün zil düzenini sil…</button>
   </form>
   {% endif %}
 </section>
@@ -118,43 +216,13 @@
 
 {% elif bolum == 'derslik' %}
 {# ---- Derslik programları ------------------------------------------------------------ #}
-{% if onizleme and onizleme.tur == 'derslik' %}
-<section class="kutu onizleme-kutu" aria-labelledby="derslik-onizleme">
-  <h2 id="derslik-onizleme">Önizleme: derslik programı</h2>
-  <p><strong>{{ onizleme.eslesen | length }} tahta eşleşti.</strong> Yalnız eşleşen tahtaların programı değişir; dosyada geçmeyen tahtalara dokunulmaz.</p>
-  {% if onizleme.eslesen %}<ul class="onizleme-ozet">{% for e in onizleme.eslesen %}<li>{{ e.ad }}{% if e.derslik %} · {{ e.derslik }}{% endif %}: {{ e.satir }} ders saati</li>{% endfor %}</ul>{% endif %}
-  {% if onizleme.eslesmeyen %}<div class="bant uyari"><strong>Eşleşmeyen derslikler:</strong> {{ onizleme.eslesmeyen | join(', ') }}<br><span class="not">Tahtanın “Derslik” alanı ya da adıyla birebir aynı olmalı (büyük/küçük harf fark etmez).</span></div>{% endif %}
-  {% if onizleme.hatalar %}
-  <div class="bant hata"><strong>Hatalı satırlar ({{ onizleme.hata_sayisi }}){% if onizleme.hata_sayisi > onizleme.hatalar | length %}, ilk {{ onizleme.hatalar | length }} gösteriliyor{% endif %}:</strong>
-    <ul>{% for h in onizleme.hatalar %}<li>{{ h }}</li>{% endfor %}</ul></div>
-  {% endif %}
-  {% if onizleme.uyarilar %}<div class="bant"><ul>{% for u in onizleme.uyarilar %}<li>{{ u }}</li>{% endfor %}</ul></div>{% endif %}
-  <form method="post" action="/program/derslik/onayla" class="dugme-satiri">
-    <input type="hidden" name="onizleme" value="{{ onizleme.kimlik }}">
-    <button name="eylem" value="onayla" class="ana" {% if not onizleme.onaylanabilir %}disabled{% endif %}>Onayla ve uygula</button>
-    <button name="eylem" value="vazgec">Vazgeç</button>
-  </form>
-</section>
-{% endif %}
-
 <section class="kutu" aria-labelledby="derslik-baslik">
   <h2 id="derslik-baslik">Derslik programları</h2>
   <p>Hangi tahtada hangi gün hangi ders saatinde ders olduğu. Öğretmen ve ders adı alınmaz; şube isteğe bağlıdır ve yalnız panelde görünür.</p>
   {% if yonetici %}
-  <div class="iki-sutun derslik-yukle">
-    <div>
-      <h3>1. Örnek dosyayı indirin</h3>
-      <p class="ipucu">Sütunlar: derslik; gun; ders; devre; sube. Ders “3”, “1-4” ya da “1,2,5” olabilir. Excel'de doldurup CSV olarak kaydedin.</p>
-      <p class="dugme-satiri"><a class="dugme" href="/program/derslik/ornek.csv">Örnek dosyayı indir</a></p>
-    </div>
-    <form method="post" action="/program/derslik/yukle" enctype="multipart/form-data">
-      <h3>2. Doldurup yükleyin</h3>
-      <label for="derslik-dosya">Derslik programı (CSV, en çok 1 MB)</label>
-      <input type="file" id="derslik-dosya" name="dosya" accept=".csv,text/csv" required>
-      <p class="dugme-satiri"><button class="ana">Yükle ve önizle</button></p>
-    </form>
-  </div>
-  <p class="not">Tek tahta için tahta sayfasındaki haftalık ızgarayı kullanın.</p>
+  <p class="dugme-satiri"><a class="dugme ana" href="/program/aktar?yeni=1">Ders programını içe aktar</a>
+    <a class="dugme" href="/program/aktar/mevcut.csv" download>Mevcut programı indir</a></p>
+  <p class="not">aSc Timetables XML, Tahta Kontrol şablonu (CSV/Excel) ya da yapay zekâ ile dönüştürülmüş program. Tek tahta için tahta sayfasındaki haftalık ızgarayı kullanın.</p>
   {% endif %}
 </section>
 
@@ -184,6 +252,23 @@
 <p class="not">Program yok: tahta yalnız teneffüste kilitlenir, boş ders uyarısı üretilmez.</p>
 {% else %}
 <p class="bos-not">Onaylı tahta yok.</p>
+{% endif %}
+
+{% if yonetici %}
+<section class="kutu" aria-labelledby="onceki-programlar">
+  <h2 id="onceki-programlar">Önceki programlar</h2>
+  {% if derslik.gecmis %}
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="gecmis-tablo-baslik">
+  <table>
+    <caption id="gecmis-tablo-baslik" class="gizli">Önceki derslik programları (en çok 10)</caption>
+    <thead><tr><th scope="col">Tarih</th><th scope="col">Kullanıcı</th><th scope="col">Neden</th><th scope="col">Tahta</th><th scope="col">Satır</th><th scope="col"><span class="gizli">İşlem</span></th></tr></thead>
+    <tbody>{% for g in derslik.gecmis %}<tr><th scope="row" class="tarih-hucre">{{ g.zaman_metni }}</th><td data-etiket="Kullanıcı">{{ g.kullanici }}</td><td data-etiket="Neden">{{ g.neden_adi }}{% if g.bicim_adi %} · {{ g.bicim_adi }}{% endif %}</td>
+      <td data-etiket="Tahta" class="sayi-hucre">{{ g.tahta_sayisi }}</td><td data-etiket="Satır" class="sayi-hucre">{{ g.satir_sayisi }}</td>
+      <td data-etiket="İşlem"><form method="post" action="/program/gecmis/{{ g.id }}/geri-yukle" class="satir-ici"><button>Geri yükle</button></form></td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% else %}<p class="bos-not">Önceki program yok; her içe aktarmadan önce mevcut program burada saklanır.</p>{% endif %}
+</section>
 {% endif %}
 
 {% elif bolum == 'kurallar' %}

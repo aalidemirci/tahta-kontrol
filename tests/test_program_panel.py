@@ -21,6 +21,7 @@ from yardimci import (
     kur_ve_gir,
     sorgu,
     tahta_ekle,
+    zil_elle,
 )
 
 ORNEK = Path(__file__).parent / "ornek" / "okulzili-ornek.json"
@@ -37,7 +38,7 @@ def durum(**ek) -> dict:
 
 def hazirla(panel, kilit=True, bos=False, **kural) -> None:
     kur_ve_gir(panel)
-    assert ileti(panel.post("/program/zil/elle", data=ELLE)) == "Zil saatleri kaydedildi."
+    assert zil_elle(ELLE) == "Zil saatleri kaydedildi."
     form = {"pk_gecikme_dk": "2", "pk_bos_saatte": "1", "bd_esik_dk": "10", **kural}
     if kilit:
         form["pk_etkin"] = "1"
@@ -323,7 +324,7 @@ def test_api_durum_program_alanlari(uygulama, panel, tahta, saat):
     kur_ve_gir(panel)
     ozet = panel.get("/api/durum").json()["program"]
     assert ozet["simdi"] == "Ders saatleri tanımlı değil" and ozet["kilit"] == "kapali" and not ozet["ders_saati_var"]
-    panel.post("/program/zil/elle", data=ELLE)
+    zil_elle(ELLE)
     saat.ayarla(an(16, 9, 20))
     tahta_ekle(panel, tahta, "T-1", durum())
     yanit = panel.get("/api/durum").json()
@@ -365,7 +366,7 @@ def test_onizleme_baska_kullanici_ya_da_suresi_gecmis_onaylanamaz(uygulama, pane
     panel.post("/program/zil/yukle", files={"dosya": ("ayarlar.json", ORNEK.read_bytes(), "application/json")})
     with vt.islem() as b:
         kimlik_ = vt.ayar_al(b, "program_onizleme")["kimlik"]
-    assert ileti(panel.post("/program/zil/onayla", data={"onizleme": kimlik_})) == "Zil saatleri kaydedildi."
+    assert ileti(panel.post("/program/zil/onayla", data={"onizleme": kimlik_})).startswith("Zil saatleri kaydedildi.")
     with vt.islem() as b:
         assert len(b.execute("SELECT * FROM ders_saati").fetchall()) == 3
         kaynak = vt.ayar_al(b, "zil_kaynagi")
@@ -408,7 +409,11 @@ def test_idareci_zil_ve_kural_degistiremez_istisna_ekleyebilir(uygulama, panel, 
     kullanici_ekle(panel, "idareci1")
     gir(panel, "idareci1")
     for yol, veri in (
-        ("/program/zil/elle", ELLE),
+        ("/program/haftalik", {"gun_0": ""}),
+        ("/program/cizelge", {"ad": "X"}),
+        ("/program/tarihli", {"ad": "X"}),
+        ("/program/aktar/esle", {"onizleme": "x"}),
+        ("/program/aktar/onayla", {"onizleme": "x"}),
         ("/program/zil/sil", {}),
         ("/program/kurallar", {"pk_etkin": "1"}),
         ("/program/derslik/onayla", {"onizleme": "x"}),
@@ -420,7 +425,7 @@ def test_idareci_zil_ve_kural_degistiremez_istisna_ekleyebilir(uygulama, panel, 
         assert "yönetici yetkisi" in ileti(panel.post(yol, data=veri)), yol
     assert "yönetici yetkisi" in ileti(panel.post("/program/zil/yukle", files={"dosya": ("a.json", b"{}", "application/json")}))
     assert "yönetici yetkisi" in ileti(panel.post("/program/derslik/yukle", files={"dosya": ("a.csv", b"x", "text/csv")}))
-    assert len(sorgu("SELECT * FROM kayit WHERE islem = 'Yetkisiz işlem reddedildi'")) == 10
+    assert len(sorgu("SELECT * FROM kayit WHERE islem = 'Yetkisiz işlem reddedildi'")) == 14
     assert "durduruldu" in ileti(panel.post("/program/istisna", data={"sure": "1sa", "donus": "/"}))
     assert panel.post("/program/istisna", data={"sure": "1sa", "donus": "//kotu.example"}).headers["location"].startswith("/program")
     sayfa = panel.get("/program").text
@@ -436,18 +441,21 @@ def test_derslik_csv_yukleme_onizleme_ve_onay(uygulama, panel, tahta, saat):
     t2 = kimlik(tahta_ekle(panel, tahta, "T-2", durum()))
     panel.post(f"/tahta/{t1}/kaydet", data={"ad": "T-1", "derslik": "Z-04", "eylem": "kaydet"})
     ders_isaretle(panel, t2, [1, 2, 3])  # dosyada geçmeyen tahtaya dokunulmaz
-    ornek = panel.get("/program/derslik/ornek.csv")
-    assert ornek.status_code == 200 and ornek.content.startswith(b"\xef\xbb\xbfderslik;gun;ders;devre;sube")
+    ornek = panel.get("/program/aktar/sablon.csv")  # 0.10.0: içe aktarma sihirbazı
+    assert ornek.status_code == 200 and ornek.content.startswith(b"\xef\xbb\xbfsube;gun;ders;devre;derslik")
+    assert panel.get("/program/derslik/ornek.csv").status_code == 200  # eski örnek bağlantısı kalır
     csv = "derslik;gun;ders;sube;ogretmen\nZ-04;Pazartesi;1-4;9/A;Uydurma Ad\nZ-04;Salı;2;;\nYok;Pzt;1;;\n"
-    yanit = panel.post("/program/derslik/yukle", files={"dosya": ("p.csv", csv.encode("utf-8"), "text/csv")})
-    assert yanit.headers["location"] == "/program?bolum=derslik&onizleme=1"
+    eski = panel.post("/program/derslik/yukle", files={"dosya": ("p.csv", csv.encode("utf-8"), "text/csv")})
+    assert eski.headers["location"].startswith("/program/aktar?")  # eski uç sihirbaza yönlendirir
+    yanit = panel.post("/program/aktar/tablo", files={"dosya": ("p.csv", csv.encode("utf-8"), "text/csv")})
+    assert yanit.headers["location"] == "/program/aktar?adim=esleme"  # "Yok" dersliği eşleşmedi
     sayfa = panel.get(yanit.headers["location"]).text
-    assert "Eşleşmeyen derslikler:</strong> Yok" in sayfa and "Uydurma" not in sayfa
+    assert "Yok" in sayfa and "Uydurma" not in sayfa
     from tahta_sunucu import vt
 
     with vt.islem() as b:
         kimlik_ = vt.ayar_al(b, "program_onizleme")["kimlik"]
-    assert "1 tahtaya" in ileti(panel.post("/program/derslik/onayla", data={"onizleme": kimlik_}))
+    assert "1 tahtanın programı güncellendi" in ileti(panel.post("/program/aktar/onayla", data={"onizleme": kimlik_}))
     assert len(sorgu("SELECT * FROM tahta_ders WHERE tahta_id = ?", t1)) == 5
     assert sorgu("SELECT sube FROM tahta_ders WHERE tahta_id = ? AND ders_no = 1", t1)[0]["sube"] == "9/A"
     assert len(sorgu("SELECT * FROM tahta_ders WHERE tahta_id = ?", t2)) == 3

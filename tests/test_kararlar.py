@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from yardimci import an, gir, ileti, kimlik, kullanici_ekle, kur_ve_gir, sorgu, tahta_ekle
+from yardimci import an, gir, ileti, kimlik, kullanici_ekle, kur_ve_gir, sorgu, tahta_ekle, zil_elle
 
 from tahta_sunucu import vt
 
@@ -98,9 +98,9 @@ def test_saklama_notlari_arayuzde_tarihe_gore_yazilir(panel, tahta, saat):
 def test_goc_acil_yetkisini_herkese_verir_ve_gun_sayili_saklamayi_kaldirir(tmp_path, monkeypatch):
     monkeypatch.setenv("TAHTA_VERI_DIZINI", str(tmp_path))
     b = sqlite3.connect(tmp_path / "tahta-kontrol.db")
-    for sira in range(len(vt.GOCLER) - 1):  # 0.7.x şeması
+    for sira in range(6):  # 0.7.x şeması (0.8.0 göçü 7. öğedir)
         b.executescript(vt.GOCLER[sira])
-    b.execute(f"PRAGMA user_version = {len(vt.GOCLER) - 1}")
+    b.execute("PRAGMA user_version = 6")
     b.execute("INSERT INTO kullanici (ad, gorunen_ad, parola_ozet, rol, olusturma, acil_yetki) VALUES ('i1', 'I', 'x', 'idareci', 1, 0)")
     b.execute("INSERT INTO ayar VALUES ('yoklama', ?)", (json.dumps({"etkin": True, "maske": "ad_soyadbas", "saklama_gun": 60}),))
     b.execute("INSERT INTO ayar VALUES ('bos_ders_uyarisi', ?)", (json.dumps({"etkin": False, "esik_dk": 10}),))
@@ -148,7 +148,7 @@ def uyari_ekle(tahta_id: int, tarih: str, ders_no: int, neden: str = "kapali", g
 
 def test_bos_ders_raporu_tarih_araligi_tahta_ve_ders_suzgeci_kisi_adi_yok(panel, tahta, saat):
     kur_ve_gir(panel)
-    panel.post("/program/zil/elle", data={"eylem": "uret", "devre_adi": "Normal", "ilk_ders": "08:20", "ders_sayisi": "8",
+    zil_elle({"eylem": "uret", "devre_adi": "Normal", "ilk_ders": "08:20", "ders_sayisi": "8",
                                           "ders_dk": "40", "teneffus_dk": "10", "ogle_sonra": "4", "ogle_dk": "45",
                                           "gunler": ["0", "1", "2", "3", "4"]})  # fmt: skip
     t1 = kimlik(tahta_ekle(panel, tahta, "Z-04"))

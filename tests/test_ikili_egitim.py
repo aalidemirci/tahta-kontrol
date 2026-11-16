@@ -15,7 +15,7 @@ import json
 import re
 
 import pytest
-from yardimci import an, ileti, kimlik, kur_ve_gir, sorgu, tahta_ekle
+from yardimci import an, ileti, kimlik, kur_ve_gir, sorgu, tahta_ekle, zil_elle
 
 from tahta_sunucu import vt
 from tahta_sunucu import yoklama as yk
@@ -47,8 +47,8 @@ def program_formu(dersler: dict[str, tuple[range, str]]) -> dict:
 @pytest.fixture()
 def okul(panel, tahta, saat):
     kur_ve_gir(panel)
-    assert ileti(panel.post("/program/zil/elle", data=SABAH)) == "Zil saatleri kaydedildi."
-    assert ileti(panel.post("/program/zil/elle", data=OGLE)) == "Zil saatleri kaydedildi."
+    assert zil_elle(SABAH) == "Zil saatleri kaydedildi."
+    assert zil_elle(OGLE) == "Zil saatleri kaydedildi."
     form = {"pk_etkin": "1", "pk_gecikme_dk": "2", "pk_bos_saatte": "1", "bd_etkin": "1", "bd_esik_dk": "10"}
     assert ileti(panel.post("/program/kurallar", data=form)) == "Kurallar kaydedildi."
     saat.ayarla(an(16, 7, 0))
@@ -226,7 +226,7 @@ def test_tek_devreli_okulda_devre_turetilmez(panel, tahta, saat):
     from tahta_sunucu import program
 
     kur_ve_gir(panel)
-    panel.post("/program/zil/elle", data={**SABAH, "devre_adi": "Normal"})
+    zil_elle({**SABAH, "devre_adi": "Normal"})
     with vt.islem() as b:
         assert program.devre_turleri(program.ders_saatleri_oku(b)) == {}
         assert program.tahta_devreleri(b) == {}
@@ -305,7 +305,7 @@ def test_bos_ders_raporu_ders_suzgeci_devreleri_karistirmaz(uygulama, panel, oku
 def test_tek_devreli_okul_davranisi_degismez(uygulama, panel, tahta, saat):
     """Tek devreli okulda şerit devre adı yazmaz, ızgarada devre etiketi çıkmaz, kilit eski gibi çalışır."""
     kur_ve_gir(panel)
-    panel.post("/program/zil/elle", data={**SABAH, "devre_adi": "Normal", "ilk_ders": "08:20"})
+    zil_elle({**SABAH, "devre_adi": "Normal", "ilk_ders": "08:20"})
     panel.post("/program/kurallar", data={"pk_etkin": "1", "pk_gecikme_dk": "2", "pk_bos_saatte": "1", "bd_esik_dk": "10"})
     saat.ayarla(an(16, 8, 0))
     t = kimlik(tahta_ekle(panel, tahta, "T-1", durum(), subeler="9/A"))

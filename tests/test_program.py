@@ -198,18 +198,18 @@ def test_resmi_tatiller_okul_zili_ile_ayni():
     assert [(a, g) for a, g, _ in program.RESMI_TATILLER] == [(1, 1), (4, 23), (5, 1), (5, 19), (7, 15), (8, 30), (10, 29)]
 
 
-# 12
+# 12 (0.10.0: elle üretim cizelge.hizli_uret'e taşındı; zil düzenleyici testleri test_cizelge.py'de)
 def test_elle_zil_uretimi_ve_dogrulama():
-    from tahta_sunucu import program
+    from tahta_sunucu import cizelge, program
 
-    satirlar = program.elle_uret({"devre_adi": "Normal", "ilk_ders": "08:20", "ders_sayisi": "8", "ders_dk": "40",
-                                  "teneffus_dk": "10", "ogle_sonra": "4", "ogle_dk": "45", "gunler": ["0", "4"]})  # fmt: skip
-    pzt = [(s[3], s[4], s[5]) for s in satirlar if s[0] == 0]
+    taslak = cizelge.varsayilan_taslak("Normal gün", "tek")
+    pzt = [(s[2], s[3], s[4]) for s in cizelge.numarala(taslak)]
     assert pzt[3] == (4, "10:50", "11:30") and pzt[4] == (5, "12:15", "12:55") and len(pzt) == 8
-    assert {s[0] for s in satirlar} == {0, 4} and {s[1] for s in satirlar} == {"normal"}
-    with pytest.raises(ValueError, match="gece yarısı"):
-        program.elle_uret({"ilk_ders": "22:00", "ders_sayisi": "5", "ders_dk": "40", "teneffus_dk": "10",
-                           "ogle_sonra": "0", "ogle_dk": "0", "gunler": ["0"]})  # fmt: skip
+    assert {s[0] for s in cizelge.numarala(taslak)} == {"normal"}
+    p = {"normal_uret": "1", "normal_ilk": "22:00", "normal_sayi": "5", "normal_ders_dk": "40", "normal_teneffus_dk": "10",
+         "normal_uzun_sonra": "0", "normal_uzun_dk": "0"}  # fmt: skip
+    _, hatalar = cizelge.hizli_uret(p, taslak)
+    assert hatalar and "gece yarısını" in hatalar[0]
     hatalar: list[str] = []
     program.dogrula([(0, "normal", "Normal", 1, "08:20", "09:00"), (0, "normal", "Normal", 2, "08:50", "09:30")], hatalar, [])
     assert hatalar and "çakışıyor" in hatalar[0]
@@ -223,10 +223,12 @@ def test_elle_zil_uretimi_ve_dogrulama():
 
 
 def test_kilit_araliklari_ve_nedenler():
+    from yardimci import zil_satirlari
+
     from tahta_sunucu import program
 
-    saatler = program.elle_uret({"ilk_ders": "08:20", "ders_sayisi": "6", "ders_dk": "40", "teneffus_dk": "10",
-                                 "ogle_sonra": "4", "ogle_dk": "45", "gunler": ["0"]})  # fmt: skip
+    saatler = zil_satirlari({"ilk_ders": "08:20", "ders_sayisi": "6", "ders_dk": "40", "teneffus_dk": "10",
+                             "ogle_sonra": "4", "ogle_dk": "45", "gunler": ["0"]})  # fmt: skip
     plan = program.plan_hesapla(date(2026, 11, 16), saatler, None)
     ts = {d[2]: (int(d[3].timestamp()), int(d[4].timestamp())) for d in plan["dersler"]}
     hepsi = program.kilit_araliklari(plan, list(ts.values()))

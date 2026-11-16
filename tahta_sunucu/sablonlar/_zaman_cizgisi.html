@@ -1,0 +1,39 @@
+{# Günün zaman çizgisi (zil düzenleyici §5.5). Girdi: cizelge.zaman_cizgisi() sözlüğü ve görünür başlığın kimliği.
+   ASIL biçim metin listesidir (ol.zaman-listesi); SVG yalnız görseldir (role=img, aria-labelledby = başlık + açıklama).
+   Konum ve genişlik SVG öznitelikleriyle verilir; satır içi stil özniteliği YOK (CSP). Renkler stil.css'te .zc-* sınıflarıyla;
+   renk tek başına anlam taşımaz (lejant ve liste metni). Çakışma deseni her SVG'nin kendi <pattern>'idir (kimlik başlıktan). #}
+{% macro zaman_cizgisi(zc, baslik_id) %}
+{% if zc.bos %}
+<p class="bos-not">Ders yok.</p>
+{% else %}
+<figure class="zaman-cizgisi">
+  <svg viewBox="0 0 {{ zc.genislik }} {{ zc.yukseklik }}" role="img" aria-labelledby="{{ baslik_id }} {{ baslik_id }}-zc-ozet" focusable="false">
+    <defs><pattern id="{{ baslik_id }}-zc-desen" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="zc-desen-zemin" width="8" height="8"/><rect class="zc-desen-cizgi" width="3" height="8"/></pattern></defs>
+    {% for s in zc.seritler %}
+      <rect class="zc-serit" x="0" y="{{ s.y }}" width="{{ zc.genislik }}" height="{{ s.yukseklik }}"/>
+      {% for a in s.aralar %}<rect class="{{ 'zc-teneffus' if a.tur == 'teneffus' else 'zc-ogle' }}" x="{{ a.x }}" y="{{ s.y }}" width="{{ a.w }}" height="{{ s.yukseklik }}"/>{% endfor %}
+      {% for d in s.dersler %}<rect class="zc-ders" x="{{ d.x }}" y="{{ s.y }}" width="{{ d.w }}" height="{{ s.yukseklik }}" rx="2"/>{% if d.w >= 24 %}<text class="zc-no" x="{{ d.x + d.w // 2 }}" y="{{ s.y + 14 }}" text-anchor="middle">{{ d.no }}</text>{% endif %}{% endfor %}
+    {% endfor %}
+    {% for c in zc.cakismalar %}<rect class="zc-cakisma" fill="url(#{{ baslik_id }}-zc-desen)" x="{{ c.x }}" y="0" width="{{ c.w }}" height="{{ zc.yukseklik - 20 }}"/>{% endfor %}
+    {% for t in zc.saatler %}<line class="zc-centik" x1="{{ t.x }}" x2="{{ t.x }}" y1="{{ zc.yukseklik - 22 }}" y2="{{ zc.yukseklik - 16 }}"/><text class="zc-saat" x="{{ t.x }}" y="{{ zc.yukseklik - 3 }}" text-anchor="{{ 'start' if t.x < 20 else ('end' if t.x > zc.genislik - 20 else 'middle') }}">{{ t.metin }}</text>{% endfor %}
+  </svg>
+  <figcaption class="zc-lejant" id="{{ baslik_id }}-zc-ozet">
+    <span>{{ zc.bas }}–{{ zc.bit }}</span>
+    {% if zc.seritler | length > 1 %}<span>Şeritler yukarıdan aşağı: {{ zc.seritler | map(attribute='ad') | join(', ') }}</span>{% endif %}
+    <span class="zc-anahtar"><span class="zc-ornek zc-ornek-ders" aria-hidden="true"></span>Ders</span>
+    <span class="zc-anahtar"><span class="zc-ornek zc-ornek-teneffus" aria-hidden="true"></span>Teneffüs</span>
+    <span class="zc-anahtar"><span class="zc-ornek zc-ornek-ogle" aria-hidden="true"></span>Öğle arası</span>
+    {% if zc.cakismalar %}<span class="zc-anahtar"><span class="zc-ornek zc-ornek-cakisma" aria-hidden="true"></span>Devreler çakışıyor</span>{% endif %}
+  </figcaption>
+</figure>
+{% if zc.cakisma_metinleri %}<ul class="zc-cakisma-listesi">{% for m in zc.cakisma_metinleri %}<li><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ m }}.</li>{% endfor %}</ul>{% endif %}
+<div class="zaman-listeleri">
+{% for l in zc.listeler %}
+<div class="zaman-listesi-kap">
+{% if zc.listeler | length > 1 %}<h3>{{ l.ad }}</h3>{% endif %}
+<ol class="zaman-listesi">{% for o in (l.ogeler or l.satirlar) %}{% if o is mapping %}<li data-tur="{{ o.tur }}">{{ o.metin }}</li>{% else %}<li>{{ o }}</li>{% endif %}{% endfor %}</ol>
+</div>
+{% endfor %}
+</div>
+{% endif %}
+{% endmacro %}

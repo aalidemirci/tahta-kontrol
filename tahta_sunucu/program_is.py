@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from . import acil, ayar, program, saklama, vt
 from .komut import komut_ekle
@@ -159,7 +159,34 @@ def dersli_dersler(plan: dict, tahta_id: int, gunluk_: dict, programli: set[int]
     if tahta_id not in programli or not bos_saatte_kilitle:
         return list(plan["dersler"])
     satirlar = gunluk_.get(tahta_id, {})
+    # Günün çizelgesi derslik programıyla aynı devreleri kullanmıyorsa (ör. ikili düzende "Tek devre" ile
+    # yapılmış tarihe özel çizelge) program o güne uygulanamaz: tahta programsız sayılır, açık kalır
+    # (ders sürerken bütün gün kilitlenmesin; kural 3'ün ruhu).
+    plan_devreler = {d[0] for d in plan["dersler"]}
+    gun_devreler = {devre for satir in gunluk_.values() for devre, _no in satir}
+    if plan_devreler and gun_devreler and not (plan_devreler & gun_devreler):
+        return list(plan["dersler"])
+    if satirlar and not (plan_devreler & {devre for devre, _no in satirlar}):
+        return list(plan["dersler"])
     return [d for d in plan["dersler"] if (d[0], d[2]) in satirlar]
+
+
+def devre_uyusmazligi(b, cizelge_devreleri: dict[str, str], gunler) -> str | None:
+    """Tarihe özel çizelgenin devreleri, seçilen günlerdeki derslik programının devreleriyle hiç kesişmiyorsa
+    uyarı metni; kesişiyorsa ya da biri boşsa None. (O gün `dersli_dersler` programı uygulamaz.)"""
+    gunler = list(gunler)
+    if not cizelge_devreleri or not gunler:
+        return None
+    soru = ",".join("?" * len(gunler))
+    prog = {s["devre"] for s in b.execute(f"SELECT DISTINCT devre FROM tahta_ders WHERE gun IN ({soru})", gunler)}
+    if not prog or set(cizelge_devreleri) & prog:
+        return None
+    c_adlar = ", ".join(sorted(cizelge_devreleri.values()))
+    p_adlar = ", ".join(sorted(program.devre_adi_varsayilan(d) for d in prog))
+    return (
+        f"Uyarı: bu çizelgede {c_adlar} devresi var; derslik programları {p_adlar} devresinde. "
+        "Bu günlerde derslik programı uygulanmaz: tahtalar boş saatte kilitlenmez, yalnız teneffüslerde kilitlenir."
+    )
 
 
 def _ts(an: datetime) -> int:
@@ -204,16 +231,22 @@ class ProgramZamanlayici:
         self.kilit_engel_kancalari: list = []
         self.wal_budanacak = False
 
+    def bugun_degisti(self) -> None:
+        """Bugünün ders saatleri değişti (zil düzenleyici §6.3): eski saate göre başlamış boş ders süreleri
+        yeni derse sayılmasın."""
+        self.bos_baslangic.clear()
+
     def calistir(self, b, simdi: datetime) -> list[int]:
         an = _ts(simdi)
         # Uyarı silindiyse çağıran, işlem bittikten sonra WAL'ı budar (bos_ders_imha_sonrasi).
         self.wal_budanacak = self.bakim(b, simdi)
         onizleme_temizle(b, an)
         saatler = program.ders_saatleri_oku(b)
-        if not saatler:
+        # Haftalık düzen boş olsa da tarihe özel çizelge o günün planını verebilir (tek giriş noktası gun_plani).
+        plan = program.gun_plani(b, simdi.date(), saatler)
+        if not saatler and not plan["dersler"]:
             self.bos_baslangic.clear()
             return []
-        plan = program.plan_hesapla(simdi.date(), saatler, vt.ayar_al(b, "zil_takvimi"))
         tarih = simdi.date().isoformat()
         kural = program.ayar_kilit(b)
         bos = program.ayar_bos_ders(b)
@@ -336,6 +369,11 @@ class ProgramZamanlayici:
         b.execute(
             "DELETE FROM program_istisna WHERE COALESCE(iptal, bit) < ?", (an - program.ISTISNA_SAKLAMA_GUN * 86400,)
         )
+        # 0.10.0: geçmişte biten tarihe özel çizelgeler istisnayla aynı süre sonra silinir.
+        b.execute(
+            "DELETE FROM zil_tarihli WHERE bit < ?",
+            ((simdi.date() - timedelta(days=program.ISTISNA_SAKLAMA_GUN)).isoformat(),),
+        )
         return bool(silinen)
 
 
@@ -372,8 +410,8 @@ def program_ozeti(b, simdi: datetime) -> dict:
     if genel:
         son = datetime.fromtimestamp(max(s["bit"] for s in genel), ISTANBUL)
         durduruldu_bitis = son.strftime("%H:%M") if son.date() == simdi.date() else son.strftime("%d.%m.%Y %H:%M")
-    if saatler:
-        plan = program.plan_hesapla(simdi.date(), saatler, vt.ayar_al(b, "zil_takvimi"))
+    plan = program.gun_plani(b, simdi.date(), saatler)
+    if saatler or plan["dersler"]:
         durum = program.simdiki_durum(plan, simdi)
         simdi_metni, simdi_tur, kaynak = durum["metin"], durum["tur"], plan["kaynak"]
     else:
@@ -385,7 +423,7 @@ def program_ozeti(b, simdi: datetime) -> dict:
         "bugun": tarih_metni(simdi.date()),
         "simdi": simdi_metni,
         "simdi_tur": simdi_tur,
-        "ders_saati_var": bool(saatler),
+        "ders_saati_var": bool(saatler or plan["dersler"]),
         "kilit": ("durduruldu" if genel else "acik") if kural.get("etkin") else "kapali",
         "askida": bool(genel),
         "durduruldu_bitis": durduruldu_bitis,
@@ -398,10 +436,7 @@ def program_ozeti(b, simdi: datetime) -> dict:
 
 def bos_ders_metinleri(b, simdi: datetime) -> dict[int, str]:
     """Şu anki dersinde çözülmemiş boş ders uyarısı olan tahtalar: {tahta_id: "3. ders (kapalı)"}."""
-    saatler = program.ders_saatleri_oku(b)
-    if not saatler:
-        return {}
-    plan = program.plan_hesapla(simdi.date(), saatler, vt.ayar_al(b, "zil_takvimi"))
+    plan = program.gun_plani(b, simdi.date())
     simdiki = {(d[0], d[2]) for d in plan["dersler"] if d[3] <= simdi < d[4]}
     sonuc = {}
     for s in b.execute(

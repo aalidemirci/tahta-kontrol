@@ -99,3 +99,51 @@ def plan_formu(**alanlar) -> dict:
 
 def komut_verisi(satir) -> dict:
     return json.loads(satir["veri_json"])
+
+
+# ---- zil saatleri (0.10.0: /program/zil/elle kaldırıldı; testler zil düzenini doğrudan kurar) ----------------
+def zil_satirlari(form: dict) -> list[tuple]:
+    """Eski "elle giriş" formundan haftalık satırlar [(gun, devre, devre_adi, no, bas, bit)] (yalnız testler için).
+
+    form: devre_adi, ilk_ders, ders_sayisi, ders_dk, teneffus_dk, ogle_sonra (0 = yok), ogle_dk, gunler."""
+    from tahta_sunucu import program
+
+    devre_adi = form.get("devre_adi") or "Normal"
+    devre = program.devre_kimligi(devre_adi)
+    imlec = program.dk(form["ilk_ders"])
+    ogle_sonra, ogle_dk = int(form.get("ogle_sonra") or 0), int(form.get("ogle_dk") or 0)
+    satirlar = []
+    for no in range(1, int(form["ders_sayisi"]) + 1):
+        bitis = imlec + int(form["ders_dk"])
+        for gun in sorted({int(g) for g in form["gunler"]}):
+            satirlar.append((gun, devre, devre_adi, no, program.saat_metni(imlec), program.saat_metni(bitis)))
+        imlec = bitis + (ogle_dk if ogle_sonra and no == ogle_sonra else int(form["teneffus_dk"]))
+    return satirlar
+
+
+def zil_kur(satirlar) -> None:
+    """Haftalık satırlardan zil düzenini kurar: çizelgeler + haftalık düzen + ders_saati (ilk taşımayla aynı yol)."""
+    from tahta_sunucu import cizelge, vt
+
+    with vt.islem() as b:
+        b.execute("DELETE FROM zil_haftalik")
+        b.execute("DELETE FROM zil_cizelgesi WHERE id NOT IN (SELECT cizelge_id FROM zil_tarihli WHERE cizelge_id IS NOT NULL)")
+        b.execute("DELETE FROM ders_saati")
+        b.executemany("INSERT INTO ders_saati (gun, devre, devre_adi, ders_no, baslangic, bitis) VALUES (?, ?, ?, ?, ?, ?)",
+                      list(satirlar))  # fmt: skip
+        vt.ayar_yaz(b, "zil_tasima_bekliyor", True)
+        cizelge.ilk_tasima(b)
+        cizelge.haftalik_yaz(b)
+
+
+def zil_elle(form: dict) -> str:
+    """Eski `/program/zil/elle` (eylem=uret) karşılığı: seçili günlerde o devrenin satırları yeniden yazılır."""
+    from tahta_sunucu import program, vt
+
+    yeni = zil_satirlari(form)
+    devre = yeni[0][1]
+    gunler = {s[0] for s in yeni}
+    with vt.islem() as b:
+        eski = [s for s in program.ders_saatleri_oku(b) if not (s[1] == devre and s[0] in gunler)]
+    zil_kur(eski + yeni)
+    return "Zil saatleri kaydedildi."

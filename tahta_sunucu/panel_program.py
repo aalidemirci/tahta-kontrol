@@ -21,13 +21,11 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, Response
 from starlette.datastructures import UploadFile
 
-from . import guvenlik, hedef, metin, program, program_is, saklama, vt, zamanlama
+from . import cizelge, guvenlik, hedef, metin, program, program_is, saklama, vt, zamanlama
 
 gunluk = logging.getLogger("tahta-sunucu")
 ISTANBUL = program.ISTANBUL
 BOLUMLER = ("zil", "derslik", "kurallar", "istisnalar")
-ELLE_VARSAYILAN = {"devre_adi": "Normal", "ilk_ders": "08:20", "ders_sayisi": 8, "ders_dk": 40, "teneffus_dk": 10,
-                   "ogle_sonra": 4, "ogle_dk": 45, "gunler": [0, 1, 2, 3, 4]}  # fmt: skip
 
 
 def okulzili_yerel_yolu() -> Path:
@@ -161,6 +159,64 @@ async def bellekte_form(istek: Request, sinir: int, *, max_files: int = 1, max_f
     return await ayristirici.parse()
 
 
+def zil_baglami(b, simdi: datetime, yonetici: bool) -> dict:
+    """program.html zil bölümünün çizelge kısmı (0.10.0, zil düzenleyici §5.1); `zil` bağlamına eklenir.
+
+    {"bugun": panel_cizelge.gun_baglami(bugün), "cizelgeler": [{"id","ad","devreler","saat_araligi","kullanim",
+    "kaynak_metni","silinebilir"}] (ada göre), "secenekler": [(id, ad)], "haftalik": [{"gun","gun_adi","cizelge_id","ozet"}],
+    "haftalik_uyarilari": [metin], "tarihliler": [{"id","ad","aralik","gunler","cizelge","durum","durum_adi"}],
+    "okulzili_kurallari": [{"ad","tur","aralik"}], "varsayilan_gunler", "tarihli_ad_en_uzun", "ad_en_uzun", "yonetici"}.
+    """
+    from . import panel_cizelge
+
+    bugun = simdi.date()
+    cizelgeler = []
+    satirlar = b.execute("SELECT * FROM zil_cizelgesi").fetchall()
+    for s in sorted(satirlar, key=lambda s: metin.tr_sirala_anahtari(s["ad"])):
+        dersler = cizelge.cizelge_dersleri(b, s["id"])
+        bilgi = cizelge.kullanim_bilgisi(b, s["id"], bugun)
+        kaynak = cizelge.KAYNAK_ADI.get(s["kaynak"], s["kaynak"])
+        if s["kaynak"] == "okulzili" and s["guncelleme"]:
+            kaynak += " · elle düzenlendi"
+        cizelgeler.append({
+            "id": s["id"], "ad": s["ad"], "devreler": cizelge.devre_ozeti(dersler) if dersler else "Ders yok",
+            "saat_araligi": cizelge.saat_araligi(dersler), "kullanim": bilgi["metin"], "kaynak_metni": kaynak,
+            "silinebilir": not bilgi["kullaniliyor"],
+        })  # fmt: skip
+    ozetler = {c["id"]: f"{c['devreler']} · {c['saat_araligi']}" for c in cizelgeler}
+    haftalik = cizelge.haftalik_oku(b)
+    adlar = {c["id"]: c["ad"] for c in cizelgeler}
+    tarihliler = []
+    for s in b.execute("SELECT * FROM zil_tarihli ORDER BY bas DESC, id DESC LIMIT 200"):
+        durum = cizelge.tarihli_durumu(s, bugun)
+        tarihliler.append({
+            "id": s["id"], "ad": s["ad"], "aralik": cizelge.aralik_metni(s["bas"], s["bit"]),
+            "gunler": cizelge.gun_araligi(cizelge.gunler_coz(s["gunler"])),
+            "cizelge": adlar.get(s["cizelge_id"], "—") if s["cizelge_id"] else "Ders yok",
+            "durum": durum, "durum_adi": cizelge.TARIHLI_DURUMU[durum],
+        })  # fmt: skip
+    takvim = vt.ayar_al(b, "zil_takvimi") or {}
+    kurallar = [
+        {"ad": k.get("ad", ""), "tur": program.KURAL_ADI.get(k.get("tur"), k.get("tur")),
+         "aralik": cizelge.aralik_metni(k["bas"], k["bit"]) if k.get("bas") and k.get("bit") else ""}
+        for k in (takvim.get("kurallar") or []) if isinstance(k, dict)
+    ]  # fmt: skip
+    return {
+        "bugun": panel_cizelge.gun_baglami(b, bugun),
+        "cizelgeler": cizelgeler,
+        "secenekler": [(c["id"], c["ad"]) for c in cizelgeler],
+        "haftalik": [{"gun": g, "gun_adi": program.GUN_ADLARI[g], "cizelge_id": haftalik.get(g),
+                      "ozet": ozetler.get(haftalik.get(g), "Ders yok")} for g in range(7)],  # fmt: skip
+        "haftalik_uyarilari": panel_cizelge.haftalik_uyarilari(b),
+        "tarihliler": tarihliler,
+        "okulzili_kurallari": kurallar,
+        "varsayilan_gunler": [0, 1, 2, 3, 4],
+        "tarihli_ad_en_uzun": cizelge.TARIHLI_AD_EN_UZUN,
+        "ad_en_uzun": cizelge.AD_EN_UZUN,
+        "yonetici": yonetici,
+    }
+
+
 def tahta_program_baglami(b, tahta) -> dict:
     """tahta.html'in `program` bağlamı (bkz. modül sonundaki sözleşme)."""
     saatler = program.ders_saatleri_oku(b)
@@ -183,7 +239,7 @@ def tahta_program_baglami(b, tahta) -> dict:
         durum_metni += f", {program.saat_eki(bilgi['acilis'])} açılır" if bilgi["acilis"] else ""
     else:
         simdi = simdi_dt()
-        ders = program.simdiki_ders(b, tahta, simdi) if saatler else None
+        ders = program.simdiki_ders(b, tahta, simdi)
         if not ders:
             durum_metni = "Program kilidi yok"
         else:
@@ -209,36 +265,46 @@ def tahta_program_baglami(b, tahta) -> dict:
     }
 
 
+def yetki_reddi(y, istek: Request, k, islem: str, donus: str = "/program"):
+    """Yönetici değilse kayda düşürüp reddeder (oturum yoksa girişe); yöneticiyse None.
+
+    Zil saatleri, derslik programı, program kuralları ve ders programı içe aktarma yalnız yöneticinindir
+    (ortak sözlük §3); idarecinin denemesi "Yetkisiz işlem reddedildi" olarak işlem kaydına düşer."""
+    if not k:
+        return y.yonlendir("/giris")
+    if k["rol"] != "yonetici":
+        with vt.islem() as b:
+            vt.kayit_dus(b, k["ad"], "Yetkisiz işlem reddedildi", islem, y.istemci_ip(istek))
+        return y.yonlendir(donus, "Bu işlem için yönetici yetkisi gerekir.", hata=True)
+    return None
+
+
+def onizleme_yaz(b, tur: str, veri: dict, k) -> str:
+    """İçe aktarma önizlemesi (`ayar.program_onizleme`; kişisel veri içermez, 30 dk, kullanıcıya bağlı belirteç)."""
+    kimlik = guvenlik.belirtec()
+    vt.ayar_yaz(
+        b,
+        "program_onizleme",
+        {"kimlik": kimlik, "tur": tur, "bitis": vt.simdi() + program.ONIZLEME_OMRU_SN, "kullanici": k["ad"], "veri": veri},
+    )
+    return kimlik
+
+
+def onizleme_al(b, tur: str, kimlik: str, k) -> dict | None:
+    kayit = vt.ayar_al(b, "program_onizleme")
+    if not isinstance(kayit, dict) or kayit.get("tur") != tur or not kimlik:
+        return None
+    if not hmac.compare_digest(str(kayit.get("kimlik", "")), str(kimlik)) or kayit.get("kullanici") != k["ad"]:
+        return None
+    if int(kayit.get("bitis") or 0) <= vt.simdi():
+        vt.ayar_yaz(b, "program_onizleme", None)
+        return None
+    return kayit
+
+
 def kaydet(uygulama, y) -> None:
     def yetkisiz(istek: Request, k, islem: str, donus: str = "/program"):
-        """Yönetici değilse kayda düşürüp reddeder; yöneticiyse None."""
-        if not k:
-            return y.yonlendir("/giris")
-        if k["rol"] != "yonetici":
-            with vt.islem() as b:
-                vt.kayit_dus(b, k["ad"], "Yetkisiz işlem reddedildi", islem, y.istemci_ip(istek))
-            return y.yonlendir(donus, "Bu işlem için yönetici yetkisi gerekir.", hata=True)
-        return None
-
-    def onizleme_yaz(b, tur: str, veri: dict, k) -> str:
-        kimlik = guvenlik.belirtec()
-        vt.ayar_yaz(
-            b,
-            "program_onizleme",
-            {"kimlik": kimlik, "tur": tur, "bitis": vt.simdi() + program.ONIZLEME_OMRU_SN, "kullanici": k["ad"], "veri": veri},
-        )
-        return kimlik
-
-    def onizleme_al(b, tur: str, kimlik: str, k) -> dict | None:
-        kayit = vt.ayar_al(b, "program_onizleme")
-        if not isinstance(kayit, dict) or kayit.get("tur") != tur or not kimlik:
-            return None
-        if not hmac.compare_digest(str(kayit.get("kimlik", "")), str(kimlik)) or kayit.get("kullanici") != k["ad"]:
-            return None
-        if int(kayit.get("bitis") or 0) <= vt.simdi():
-            vt.ayar_yaz(b, "program_onizleme", None)
-            return None
-        return kayit
+        return yetki_reddi(y, istek, k, islem, donus)
 
     def uyandir_hepsi(idler) -> None:
         y.uyandir_hepsi(idler)
@@ -249,6 +315,11 @@ def kaydet(uygulama, y) -> None:
         k = y.kullanici(istek)
         if not k:
             return y.yonlendir("/giris")
+        return program_ciz(istek, k)
+
+    def program_ciz(istek: Request, k, durum_kodu: int = 200, **ek) -> HTMLResponse:
+        """program.html'i çizer. Hatalı bir form yönlendirmeden yeniden çizilirken (422) `ek` ile ileti ve
+        girilen değerler verilir (ör. tarihli_form); bölüm sorgudan, yoksa "zil"."""
         bolum = istek.query_params.get("bolum", "zil")
         bolum = bolum if bolum in BOLUMLER else "zil"
         simdi = simdi_dt()
@@ -288,6 +359,10 @@ def kaydet(uygulama, y) -> None:
             istisnalar = istisna_gorunumu(
                 b, b.execute("SELECT * FROM program_istisna ORDER BY bas DESC LIMIT 200").fetchall(), an
             )
+            zil_ek = zil_baglami(b, simdi, yonetici) if bolum == "zil" else {}
+            from . import program_aktar
+
+            gecmis = program_aktar.surum_listesi(b) if bolum == "derslik" and yonetici else []
         derslik_tahtalari = [
             {"id": t["id"], "ad": t["ad"], "derslik": t["derslik"], "dersli": sayilar.get(t["id"], [0, 0])[0],
              "toplam": len(saatler), "muaf": bool(t["program_muaf"]), "programli": sayilar.get(t["id"], [0, 0])[0] > 0}  # fmt: skip
@@ -297,6 +372,8 @@ def kaydet(uygulama, y) -> None:
             istek,
             "program.html",
             k,
+            durum_kodu=durum_kodu,
+            **ek,
             bolum=bolum,
             yonetici=yonetici,
             serit=serit,
@@ -309,12 +386,13 @@ def kaydet(uygulama, y) -> None:
                 "takvim_ozeti": program.takvim_ozeti(takvim) if takvim else "",
                 "takvim_var": bool(takvim and takvim.get("ogretim")),
                 "satir_sayisi": len(saatler),
+                **zil_ek,
             },
-            elle=ELLE_VARSAYILAN,
             onizleme=onizleme,
             derslik={
                 "tahtalar": derslik_tahtalari,
                 "yetim_sayisi": sum(1 for v in sayilar.values() if v[1]),
+                "gecmis": gecmis,
             },
             kurallar={
                 "program_kilidi": kural,
@@ -328,6 +406,8 @@ def kaydet(uygulama, y) -> None:
             neden_en_uzun=program.ISTISNA_NEDEN_EN_UZUN,
             bugun=simdi.date().isoformat(),
         )
+
+    uygulama.state.program_ciz = program_ciz
 
     # ---- zil saatleri ------------------------------------------------------------------------
     def zil_onizlemesi(b, k, cozum: dict, kaynak: dict) -> str:
@@ -433,82 +513,22 @@ def kaydet(uygulama, y) -> None:
             veri = kayit["veri"]
             if veri["hatalar"]:
                 return y.yonlendir(donus + "&onizleme=1", "Önizlemedeki hatalar giderilmeden kaydedilemez.", hata=True)
-            b.execute("DELETE FROM ders_saati")
-            for gun, devre, devre_adi, no, bas, bit in veri["dersler"]:
-                b.execute(
-                    "INSERT INTO ders_saati (gun, devre, devre_adi, ders_no, baslangic, bitis) VALUES (?, ?, ?, ?, ?, ?)",
-                    (gun, devre, devre_adi, no, bas, bit),
-                )
+            from .panel_cizelge import Etki
+
+            etki = Etki(b)
+            cizelge_sayisi = cizelge.okulzili_yaz(b, veri, k)
             vt.ayar_yaz(b, "zil_takvimi", veri["takvim"])
             vt.ayar_yaz(b, "zil_kaynagi", {**veri["kaynak"], "yukleme": vt.simdi(), "yukleyen": k["ad"], "duzenlendi": False})
             vt.ayar_yaz(b, "program_onizleme", None)
             vt.kayit_dus(
                 b, k["ad"], "Zil saatleri kaydedildi",
-                f"Okul Zili · {len(veri['dersler'])} ders saati · {len(veri['takvim'].get('kurallar') or [])} tarih kuralı",
+                f"Okul Zili · {len(veri['dersler'])} ders saati · {len(veri['takvim'].get('kurallar') or [])} tarih kuralı"
+                f" · {cizelge_sayisi} çizelge",
                 y.istemci_ip(istek),
             )  # fmt: skip
-        return y.yonlendir(donus, "Zil saatleri kaydedildi.")
-
-    @uygulama.post("/program/zil/elle")
-    async def zil_elle(istek: Request):
-        k = y.kullanici(istek)
-        engel = yetkisiz(istek, k, "Zil saatleri elle giriş")
-        if engel:
-            return engel
-        form = await istek.form()
-        donus = "/program?bolum=zil"
-        eylem = str(form.get("eylem", ""))
-        with vt.islem() as b:
-            saatler = program.ders_saatleri_oku(b)
-            if eylem == "uret":
-                try:
-                    yeni = program.elle_uret({**{a: form.get(a) for a in ELLE_VARSAYILAN if a != "gunler"},
-                                              "gunler": form.getlist("gunler")})  # fmt: skip
-                except ValueError as hata:
-                    return y.yonlendir(donus, str(hata), hata=True)
-                devre = yeni[0][1]
-                gunler = sorted({s[0] for s in yeni})
-                kalan = [s for s in saatler if not (s[1] == devre and s[0] in gunler)]
-                ayrinti = f"{yeni[0][2]} · {len({s[3] for s in yeni})} ders · {', '.join(zamanlama.GUN_KISA[g] for g in gunler)}"
-                islem_adi = "Zil saatleri elle üretildi"
-            elif eylem == "kaydet":
-                kalan, yeni = [], []
-                for gun, devre, devre_adi, no, bas, bit in saatler:
-                    anahtar = f"s_{gun}_{devre}_{no}"
-                    yb = program.saat_dogrula(form.get(f"{anahtar}_bas", bas))
-                    ys = program.saat_dogrula(form.get(f"{anahtar}_bit", bit))
-                    if not yb or not ys:
-                        return y.yonlendir(donus, f"{program.GUN_ADLARI[gun]} {no}. ders: saat SS:DD biçiminde olmalı.", hata=True)
-                    if program.dk(ys) <= program.dk(yb):
-                        return y.yonlendir(donus, f"{program.GUN_ADLARI[gun]} {no}. ders: bitiş başlangıçtan sonra olmalı.", hata=True)
-                    yeni.append((gun, devre, devre_adi, no, yb, ys))
-                gunler = []
-                ayrinti = f"{len(yeni)} ders saati"
-                islem_adi = "Zil saatleri elle düzenlendi"
-            else:
-                return y.yonlendir(donus, "Bilinmeyen işlem.", hata=True)
-            hatalar: list[str] = []
-            program.dogrula(kalan + yeni, hatalar, [])
-            if hatalar:
-                return y.yonlendir(donus, hatalar[0], hata=True)
-            if eylem == "uret":
-                for gun in gunler:
-                    b.execute("DELETE FROM ders_saati WHERE gun = ? AND devre = ?", (gun, devre))
-            else:
-                b.execute("DELETE FROM ders_saati")
-            for s in yeni:
-                b.execute(
-                    "INSERT INTO ders_saati (gun, devre, devre_adi, ders_no, baslangic, bitis) VALUES (?, ?, ?, ?, ?, ?)", s
-                )
-            kaynak = vt.ayar_al(b, "zil_kaynagi")
-            if isinstance(kaynak, dict) and kaynak.get("tur") == "okulzili":
-                kaynak["duzenlendi"] = True
-            else:
-                kaynak = {"tur": "elle", "dosya_ozet": "", "dosya_yolu": "", "dosya_zamani": None,
-                          "yukleme": vt.simdi(), "yukleyen": k["ad"], "duzenlendi": False}  # fmt: skip
-            vt.ayar_yaz(b, "zil_kaynagi", kaynak)
-            vt.kayit_dus(b, k["ad"], islem_adi, ayrinti, y.istemci_ip(istek))
-        return y.yonlendir(donus, "Zil saatleri kaydedildi.")
+            iletiler = etki.bitir(b, k)
+        uygulama.state.zil_etki_sonrasi(etki)
+        return y.yonlendir(donus, " ".join(["Zil saatleri kaydedildi.", *iletiler]))
 
     @uygulama.post("/program/zil/sil")
     async def zil_sil(istek: Request):
@@ -517,6 +537,11 @@ def kaydet(uygulama, y) -> None:
         if engel:
             return engel
         with vt.islem() as b:
+            # 0.10.0: bütün zil düzeni (çizelgeler, haftalık düzen, tarihe özel çizelgeler) ve takvim silinir;
+            # derslik programları kalır (yetim olarak görünür).
+            b.execute("DELETE FROM zil_tarihli")
+            b.execute("DELETE FROM zil_haftalik")
+            b.execute("DELETE FROM zil_cizelgesi")
             b.execute("DELETE FROM ders_saati")
             vt.ayar_yaz(b, "zil_takvimi", None)
             vt.ayar_yaz(b, "zil_kaynagi", None)
@@ -524,9 +549,12 @@ def kaydet(uygulama, y) -> None:
             kural["etkin"] = False  # programsız kilit olmaz (K30)
             vt.ayar_yaz(b, "program_kilidi", kural)
             uyandir = program_is.askiya_alma_acmasi(b, None, k["ad"])
-            vt.kayit_dus(b, k["ad"], "Zil saatleri silindi", "Program kilidi kapatıldı.", y.istemci_ip(istek))
+            vt.kayit_dus(b, k["ad"], "Zil düzeni silindi", "Program kilidi kapatıldı.", y.istemci_ip(istek))
+        isleyici = getattr(uygulama.state, "program_isleyici", None)
+        if isleyici is not None:
+            isleyici.bugun_degisti()
         uyandir_hepsi(uyandir)
-        return y.yonlendir("/program?bolum=zil", "Zil saatleri silindi; program kilidi kapatıldı.")
+        return y.yonlendir("/program?bolum=zil", "Zil düzeni silindi; program kilidi kapatıldı.")
 
     # ---- derslik programları ----------------------------------------------------------------
     @uygulama.get("/program/derslik/ornek.csv")
@@ -541,44 +569,15 @@ def kaydet(uygulama, y) -> None:
             headers={"Content-Disposition": 'attachment; filename="derslik-programi-ornek.csv"'},
         )
 
+    # 0.10.0: derslik programı CSV yüklemesi içe aktarma sihirbazına taşındı (`panel_aktar`). Eski uçlar yetki
+    # denetiminden sonra sihirbaza yönlendirir; bir sürüm sonra silinir.
     @uygulama.post("/program/derslik/yukle")
     async def derslik_yukle(istek: Request):
         k = y.kullanici(istek)
         engel = yetkisiz(istek, k, "Derslik programı yükleme")
         if engel:
             return engel
-        donus = "/program?bolum=derslik"
-        uzunluk = govde_uzunlugu(istek)
-        if uzunluk is None:
-            return y.yonlendir(donus, "Dosya okunamadı.", hata=True)
-        if uzunluk > program.CSV_EN_COK_BAYT + 64 * 1024:
-            return y.yonlendir(donus, "Dosya en çok 1 MB olabilir.", hata=True)
-        try:
-            form = await istek.form(max_files=1, max_fields=5)
-        except Exception:
-            return y.yonlendir(donus, "Dosya okunamadı ya da 1 MB'tan büyük.", hata=True)
-        try:
-            dosya = form.get("dosya")
-            if not isinstance(dosya, UploadFile) or not dosya.filename:
-                return y.yonlendir(donus, "CSV dosyası seçilmedi.", hata=True)
-            bayt = await dosya.read(program.CSV_EN_COK_BAYT + 1)
-        finally:
-            await form.close()
-        if not bayt.strip():
-            return y.yonlendir(donus, "CSV dosyası boş.", hata=True)
-        with vt.islem() as b:
-            tahtalar = [dict(t) for t in b.execute("SELECT id, ad, derslik FROM tahta WHERE durum != 'iptal'")]
-            try:
-                cozum = program.derslik_csv_oku(bayt, program.ders_saatleri_oku(b), tahtalar)
-            except ValueError as hata:
-                return y.yonlendir(donus, str(hata), hata=True)
-            onizleme_yaz(b, "derslik", {**cozum, "tahtalar": {str(a): v for a, v in cozum["tahtalar"].items()}}, k)
-            vt.kayit_dus(
-                b, k["ad"], "Derslik programı önizlendi",
-                f"{len(cozum['eslesen'])} tahta eşleşti, {len(cozum['eslesmeyen'])} derslik eşleşmedi, {cozum['hata_sayisi']} hatalı satır",
-                y.istemci_ip(istek),
-            )  # fmt: skip
-        return y.yonlendir("/program?bolum=derslik&onizleme=1")
+        return y.yonlendir("/program/aktar", "Derslik programı artık “Ders programını içe aktar” sihirbazıyla yüklenir.")
 
     @uygulama.post("/program/derslik/onayla")
     async def derslik_onayla(istek: Request):
@@ -586,32 +585,7 @@ def kaydet(uygulama, y) -> None:
         engel = yetkisiz(istek, k, "Derslik programı onaylama")
         if engel:
             return engel
-        form = await istek.form()
-        donus = "/program?bolum=derslik"
-        with vt.islem() as b:
-            kayit = onizleme_al(b, "derslik", str(form.get("onizleme", "")), k)
-            if form.get("eylem") == "vazgec":
-                if kayit:
-                    vt.ayar_yaz(b, "program_onizleme", None)
-                return y.yonlendir(donus, "Önizleme kapatıldı; derslik programları değişmedi.")
-            if not kayit:
-                return y.yonlendir(donus, "Önizlemenin süresi geçmiş ya da başka bir kullanıcıya ait. Dosyayı yeniden yükleyin.", hata=True)
-            gecerli = {t["id"] for t in b.execute("SELECT id FROM tahta WHERE durum != 'iptal'")}
-            sayi = 0
-            for tahta_id, satirlar in kayit["veri"]["tahtalar"].items():
-                tahta_id = int(tahta_id)
-                if tahta_id not in gecerli:
-                    continue
-                sayi += 1
-                b.execute("DELETE FROM tahta_ders WHERE tahta_id = ?", (tahta_id,))
-                for gun, devre, no, sube in satirlar:
-                    b.execute(
-                        "INSERT OR REPLACE INTO tahta_ders (tahta_id, gun, devre, ders_no, sube) VALUES (?, ?, ?, ?, ?)",
-                        (tahta_id, gun, devre, no, sube),
-                    )
-            vt.ayar_yaz(b, "program_onizleme", None)
-            vt.kayit_dus(b, k["ad"], "Derslik programı içe aktarıldı", f"{sayi} tahta", y.istemci_ip(istek))
-        return y.yonlendir(donus, f"Derslik programı {sayi} tahtaya uygulandı.")
+        return y.yonlendir("/program/aktar", "Derslik programı artık “Ders programını içe aktar” sihirbazıyla yüklenir.")
 
     @uygulama.post("/program/derslik/yetim-temizle")
     async def derslik_yetim(istek: Request):

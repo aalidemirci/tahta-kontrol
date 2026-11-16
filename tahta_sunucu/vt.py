@@ -337,6 +337,59 @@ GOCLER = [
     CREATE INDEX bos_ders_uyari_tarih ON bos_ders_uyari (tarih);
     ALTER TABLE bos_ders_uyari ADD COLUMN sube TEXT;
     """,
+    # 0.10.0 — zil düzenleyici: adlandırılmış çizelgeler, haftalık düzen, tarihe özel çizelgeler.
+    # ders_saati bundan sonra türetilmiş tablodur (cizelge.haftalik_yaz); elle yazılmaz. Mevcut ders_saati
+    # verisi açılışta bir kez çizelgelere taşınır (cizelge.ilk_tasima; bayrak `zil_tasima_bekliyor`).
+    """
+    CREATE TABLE zil_cizelgesi (
+        id INTEGER PRIMARY KEY,
+        ad TEXT NOT NULL UNIQUE COLLATE NOCASE,          -- 1–40 karakter
+        kaynak TEXT NOT NULL DEFAULT 'elle',             -- 'elle' | 'okulzili' | 'tasima'
+        olusturan TEXT NOT NULL, olusturma INTEGER NOT NULL,
+        guncelleyen TEXT NOT NULL DEFAULT '', guncelleme INTEGER);
+    CREATE TABLE zil_cizelge_ders (
+        cizelge_id INTEGER NOT NULL REFERENCES zil_cizelgesi(id) ON DELETE CASCADE,
+        devre TEXT NOT NULL,
+        devre_adi TEXT NOT NULL,
+        ders_no INTEGER NOT NULL CHECK (ders_no BETWEEN 1 AND 20),
+        baslangic TEXT NOT NULL,
+        bitis TEXT NOT NULL,
+        PRIMARY KEY (cizelge_id, devre, ders_no));
+    CREATE TABLE zil_haftalik (
+        gun INTEGER PRIMARY KEY CHECK (gun BETWEEN 0 AND 6),
+        cizelge_id INTEGER REFERENCES zil_cizelgesi(id));   -- satır yok ya da NULL = ders yok
+    CREATE TABLE zil_tarihli (
+        id INTEGER PRIMARY KEY,
+        ad TEXT NOT NULL,                                -- 1–60 karakter, T.C. denetimi
+        bas TEXT NOT NULL, bit TEXT NOT NULL,            -- ISO tarih, bit >= bas, en çok 366 gün
+        gunler TEXT NOT NULL,                            -- '0,1,2,3,4' (virgüllü, sıralı)
+        cizelge_id INTEGER REFERENCES zil_cizelgesi(id), -- NULL = ders yok
+        olusturan TEXT NOT NULL, olusturma INTEGER NOT NULL);
+    CREATE INDEX zil_tarihli_bit ON zil_tarihli (bit);
+    INSERT INTO ayar (anahtar, deger)
+        SELECT 'zil_tasima_bekliyor', 'true' WHERE EXISTS (SELECT 1 FROM ders_saati);
+    """,
+    # 0.10.0 — ders programı içe aktarma: hatırlanan eşlemeler ve geri alma için önceki programlar
+    # (öğretmen, ders adı ve kişi verisi YOK; yalnız tahta, gün, devre, ders no ve şube).
+    """
+    CREATE TABLE program_eslesme (
+        kaynak TEXT NOT NULL,                   -- 'asc' | 'tablo' (CSV/XLSX/yapay zekâ ortak)
+        tur TEXT NOT NULL,                      -- 'derslik' | 'sinif' | 'saat' | 'sube'
+        anahtar TEXT NOT NULL,                  -- katlanmış ad ya da 'period|starttime'
+        tahta_id INTEGER REFERENCES tahta(id) ON DELETE CASCADE,  -- derslik/sube: NULL = atla
+        deger TEXT NOT NULL DEFAULT '',         -- sinif: kanonik şube ('' = şubesiz); saat: 'devre|ders_no' ya da 'yok'
+        guncelleme INTEGER NOT NULL,
+        PRIMARY KEY (kaynak, tur, anahtar));
+    CREATE TABLE program_surum (
+        id INTEGER PRIMARY KEY,
+        zaman INTEGER NOT NULL,
+        kullanici TEXT NOT NULL,
+        neden TEXT NOT NULL,                    -- 'aktarim' | 'geri_yukleme'
+        bicim TEXT NOT NULL DEFAULT '',         -- 'asc' | 'csv' | 'xlsx' | 'xls' | 'yz' | ''
+        satir_sayisi INTEGER NOT NULL,
+        tahta_sayisi INTEGER NOT NULL,
+        veri_json TEXT NOT NULL);               -- [[tahta_id, gun, devre, ders_no, sube], ...]
+    """,
 ]
 GOC_ONCESI_KALAN = 3
 # Göç (ve göç öncesi kopya), yedek alma ve geri yükleme aynı anda çalışmaz (A6 K-B2).
@@ -431,6 +484,17 @@ def _hazirla() -> None:
         for sira in range(surum, len(GOCLER)):
             # Her göç tek işlemdir: yarıda kalırsa sürüm numarası da eski kalır.
             baglanti.executescript(f"BEGIN;\n{GOCLER[sira]}\nPRAGMA user_version = {sira + 1};\nCOMMIT;")
+        # 0.10.0: eski ders_saati verisi çizelgelere bir kez taşınır (yarıda kalırsa sonraki açılışta yeniden).
+        if baglanti.execute("SELECT 1 FROM ayar WHERE anahtar = 'zil_tasima_bekliyor'").fetchone():
+            from . import cizelge  # içe aktarma döngüsü olmasın diye burada
+
+            try:
+                baglanti.execute("BEGIN")
+                cizelge.ilk_tasima(baglanti)
+                baglanti.commit()
+            except BaseException:
+                baglanti.rollback()
+                raise
     except BaseException:
         if baglanti.in_transaction:
             baglanti.rollback()

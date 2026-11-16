@@ -1,0 +1,159 @@
+{% extends "taban.html" %}
+{% from "_zaman_cizgisi.html" import zaman_cizgisi as zc_ciz %}
+{% block baslik %}{{ cizelge.ad }} · Zil çizelgesi · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Bağlam: panel_cizelge.cizelge_baglami (cizelge, form_ad, devreler, eksik_devreler, taslak_mi, taslak_bandi, bant,
+   hatalar, uyarilar, hizli, hizli_acik, numara_onayi, onay_numara, zaman_cizgisi, yonetici, csv_adresi).
+   Alan adları SÖZLEŞMEDİR (cizelge.taslak_formdan): satir (r0, r1…), {r}_devre, {r}_bas, {r}_bit, {r}_sil=1, devre,
+   yeni_devre, eylem=kaydet|devre_ekle, onay_numara=1. JS'siz tam işlevli: her devre sonunda 3 boş satır, sıralama ve
+   numaralama sunucuda. panel.js `cizelge` bölümü (kanca form#cizelge-formu) boş satırları gizler, "Ders ekle" /
+   "Araya ekle" düğmelerini ekler (<template id="cizelge-satir">), numara ve "Sonraki ara"yı yazdıkça yeniden hesaplar. #}
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <p><a class="geri" href="/program?bolum=zil#cizelgeler">Zil saatleri</a></p>
+    <h1>{{ cizelge.ad }}</h1>
+    <p>Kullanıldığı yer: {{ cizelge.kullanim }} · Kaynak: {{ cizelge.kaynak_metni }}</p>
+  </div>
+</div>
+
+{% if taslak_bandi %}<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>{{ taslak_bandi }}{% if bant %} {{ bant }}{% endif %}</p>
+{% elif bant %}<p class="bant" role="status">{{ bant }}</p>{% endif %}
+{% if hatalar %}
+<div class="bant hata" role="alert" id="cizelge-hatalar"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>
+  <div><strong>{{ hatalar_basligi or "Kaydedilemedi; şunları düzeltin:" }}</strong>
+  <ul>{% for h in hatalar %}<li>{% if h.alan %}<a href="#{{ h.alan }}">{{ h.metin }}</a>{% else %}{{ h.metin }}{% endif %}</li>{% endfor %}</ul></div>
+</div>
+{% endif %}
+{% if uyarilar %}<div class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><div><strong>Uyarılar</strong> <span class="not">(kaydı engellemez)</span><ul>{% for u in uyarilar %}<li>{{ u }}</li>{% endfor %}</ul></div></div>{% endif %}
+
+<section class="kutu" aria-labelledby="zc-baslik">
+  <h2 id="zc-baslik">Günün akışı{% if taslak_mi %} (taslak){% endif %}</h2>
+  {{ zc_ciz(zaman_cizgisi, 'zc-baslik') }}
+</section>
+
+{% if not yonetici %}
+<p class="bant" role="status"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Zil saatlerini yalnız yönetici değiştirir.</p>
+<section class="kutu salt-okunur" aria-labelledby="dersler-baslik">
+  <h2 id="dersler-baslik">Dersler</h2>
+  <div class="devre-tablolari">
+  {% for d in devreler %}
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="okunur-{{ d.devre }}">
+  <table class="cizelge-tablo"><caption id="okunur-{{ d.devre }}">{{ d.devre_adi }} · {{ d.ders_sayisi }} ders</caption>
+    <thead><tr><th scope="col">Ders</th><th scope="col">Başlangıç</th><th scope="col">Bitiş</th><th scope="col">Sonraki ara</th></tr></thead>
+    <tbody>{% for s in d.satirlar if s.no %}<tr><th scope="row">{{ s.no }}. ders</th><td data-etiket="Başlangıç">{{ s.bas }}</td><td data-etiket="Bitiş">{{ s.bit }}</td><td class="ara" data-etiket="Sonraki ara">{{ s.sonraki_ara }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if yonetici %}
+<form method="post" action="/program/cizelge/{{ cizelge.id }}" id="cizelge-formu" class="kutu" aria-labelledby="duzenle-baslik">
+  <h2 id="duzenle-baslik">Ders saatleri</h2>
+  <div class="alan ad-alani">
+    <label for="cizelge-ad">Çizelge adı</label>
+    <input type="text" id="cizelge-ad" name="ad" value="{{ form_ad }}" maxlength="40" required{% for h in hatalar if h.alan == 'cizelge-ad' %} aria-invalid="true"{% endfor %}>
+  </div>
+  <p class="ipucu">Dersler başlangıç saatine göre kendiliğinden numaralanır; teneffüs ve öğle arası iki dersin arasındaki boşluktur (20 dakikaya kadar teneffüs). Bir devrenin bütün derslerini silerseniz devre çizelgeden kalkar.</p>
+  <div class="devre-tablolari">
+  {% for d in devreler %}
+  <div class="devre-tablosu" data-devre="{{ d.devre }}" data-devre-adi="{{ d.devre_adi }}">
+  <input type="hidden" name="devre" value="{{ d.devre }}">
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="devre-{{ d.devre }}">
+  <table class="cizelge-tablo">
+    <caption id="devre-{{ d.devre }}">{{ d.devre_adi }} · {{ d.ders_sayisi }} ders</caption>
+    <thead><tr><th scope="col">Ders</th><th scope="col">Başlangıç</th><th scope="col">Bitiş</th><th scope="col">Sonraki ara</th><th scope="col">Sil</th></tr></thead>
+    <tbody>
+    {% for s in d.satirlar %}
+    {% set etiket = d.devre_adi ~ ' ' ~ (s.no ~ '. ders' if s.no else 'yeni ders') %}
+    <tr{% if s.sil %} class="silinecek"{% endif %}{% if s.bos %} data-bos="1"{% endif %}>
+      <th scope="row"><span data-no>{% if s.no %}{{ s.no }}. ders{% else %}Yeni{% endif %}</span>
+        <input type="hidden" name="satir" value="{{ s.r }}"><input type="hidden" name="{{ s.r }}_devre" value="{{ d.devre }}"></th>
+      <td data-etiket="Başlangıç"><input type="time" id="{{ s.r }}_bas" name="{{ s.r }}_bas" value="{{ s.bas }}" aria-label="{{ etiket }} başlangıç"{% if s.hata_bas %} aria-invalid="true" aria-describedby="{{ s.r }}_bas-hata"{% endif %}>
+        {%- if s.hata_bas %}<p class="hata-ileti goster" id="{{ s.r }}_bas-hata">{{ s.hata_bas }}</p>{% endif %}</td>
+      <td data-etiket="Bitiş"><input type="time" id="{{ s.r }}_bit" name="{{ s.r }}_bit" value="{{ s.bit }}" aria-label="{{ etiket }} bitiş"{% if s.hata_bit %} aria-invalid="true" aria-describedby="{{ s.r }}_bit-hata"{% endif %}>
+        {%- if s.hata_bit %}<p class="hata-ileti goster" id="{{ s.r }}_bit-hata">{{ s.hata_bit }}</p>{% endif %}</td>
+      <td class="ara" data-etiket="Sonraki ara"{% if s.sonraki_ara and s.sonraki_ara.startswith('Öğle') %} data-tur="ogle"{% endif %}>{{ s.sonraki_ara or '—' }}</td>
+      <td class="sil-hucre" data-etiket="Sil">{% if not s.bos %}<input type="checkbox" name="{{ s.r }}_sil" value="1"{% if s.sil %} checked{% endif %} aria-label="{{ d.devre_adi }} {{ s.no ~ '. dersi' if s.no else 'bu satırı' }} sil">{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="ipucu bos-satir-ipucu">Yeni ders için boş satırları doldurun; boş satırlar yok sayılır. Araya ders eklemek için de boş satıra saat yazmak yeter.</p>
+  <p class="devre-dugmeleri" hidden><button type="button" data-ders-ekle>Ders ekle<span class="gizli"> ({{ d.devre_adi }})</span></button></p>
+  </div>
+  {% endfor %}
+  </div>
+  {% if numara_onayi %}
+  <div class="bant uyari numara-onayi" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>
+    <div><p>{{ numara_onayi.metin }}</p>
+    <label class="satir"><input type="checkbox" name="onay_numara" value="1"{% if onay_numara %} checked{% endif %}> Anladım, kaydet</label></div></div>
+  {% endif %}
+  <div class="cizelge-formu-alt">
+    <p class="dugme-satiri"><button class="ana" name="eylem" value="kaydet">Kaydet</button> <a class="dugme" href="/program/cizelge/{{ cizelge.id }}">Vazgeç</a></p>
+    {% if eksik_devreler %}
+    <div class="devre-ekle">
+      <div><label for="yeni-devre">Devre ekle</label>
+        <select id="yeni-devre" name="yeni_devre">{% for dv, a in eksik_devreler %}<option value="{{ dv }}">{{ a }}</option>{% endfor %}</select></div>
+      <button name="eylem" value="devre_ekle" formnovalidate>Devre ekle</button>
+    </div>
+    {% endif %}
+  </div>
+  <p class="gizli" id="cizelge-duyuru" aria-live="polite"></p>
+</form>
+<template id="cizelge-satir"><tr data-yeni="1">
+  <th scope="row"><span data-no>Yeni</span><input type="hidden" name="satir"><input type="hidden" data-alan="devre"></th>
+  <td data-etiket="Başlangıç"><input type="time" data-alan="bas"></td>
+  <td data-etiket="Bitiş"><input type="time" data-alan="bit"></td>
+  <td class="ara" data-etiket="Sonraki ara">—</td>
+  <td class="sil-hucre" data-etiket="Sil"><input type="checkbox" value="1" data-alan="sil"></td>
+</tr></template>
+{% endif %}
+
+<div class="yardimci-kutular">
+{% if yonetici %}
+<details class="acilir"{% if hizli_acik %} open{% endif %}>
+  <summary class="dugme">Hızlı oluştur</summary>
+  <form method="post" action="/program/cizelge/{{ cizelge.id }}/hizli" class="acilir-ic" id="hizli-formu">
+    <p class="ipucu">Satırları ilk ders, ders sayısı ve sürelerden üretir. Kaydetmez: tablo üretilen saatlerle dolar, gözden geçirip Kaydet'e basarsınız.</p>
+    <div class="hizli-devreler">
+    {% for h in hizli %}
+    <fieldset><legend>{{ h.devre_adi }}</legend>
+      <label class="satir"><input type="checkbox" name="{{ h.devre }}_uret" value="1"{% if h.uret %} checked{% endif %}> Bu devreyi yeniden oluştur</label>
+      <div class="alan-cifti">
+        <div><label for="h-{{ h.devre }}-ilk">İlk ders</label><input type="time" id="h-{{ h.devre }}-ilk"{% if ("h-" ~ h.devre ~ "-ilk") in hizli_hatali %} aria-invalid="true"{% endif %} name="{{ h.devre }}_ilk" value="{{ h.ilk }}"{% if h.devre == 'ogle' %} aria-describedby="h-ogle-ipucu"{% endif %}>
+          {% if h.devre == 'ogle' %}<p class="ipucu" id="h-ogle-ipucu">Boş bırakılırsa sabahın son dersinden 20 dk sonrası önerilir.</p>{% endif %}</div>
+        <div><label for="h-{{ h.devre }}-sayi">Ders sayısı (1–20)</label><input type="number" id="h-{{ h.devre }}-sayi"{% if ("h-" ~ h.devre ~ "-sayi") in hizli_hatali %} aria-invalid="true"{% endif %} name="{{ h.devre }}_sayi" min="1" max="20" value="{{ h.sayi }}"></div>
+        <div><label for="h-{{ h.devre }}-sure">Ders süresi (dk)</label><input type="number" id="h-{{ h.devre }}-sure"{% if ("h-" ~ h.devre ~ "-sure") in hizli_hatali %} aria-invalid="true"{% endif %} name="{{ h.devre }}_ders_dk" min="10" max="180" value="{{ h.ders_dk }}"></div>
+        <div><label for="h-{{ h.devre }}-ten">Teneffüs (dk)</label><input type="number" id="h-{{ h.devre }}-ten"{% if ("h-" ~ h.devre ~ "-ten") in hizli_hatali %} aria-invalid="true"{% endif %} name="{{ h.devre }}_teneffus_dk" min="0" max="60" value="{{ h.teneffus_dk }}"></div>
+        <div><label for="h-{{ h.devre }}-us">Uzun ara kaçıncı dersten sonra (0 = yok)</label><input type="number" id="h-{{ h.devre }}-us"{% if ("h-" ~ h.devre ~ "-us") in hizli_hatali %} aria-invalid="true"{% endif %} name="{{ h.devre }}_uzun_sonra" min="0" max="19" value="{{ h.uzun_sonra }}"></div>
+        <div><label for="h-{{ h.devre }}-ud">Uzun ara (dk)</label><input type="number" id="h-{{ h.devre }}-ud"{% if ("h-" ~ h.devre ~ "-ud") in hizli_hatali %} aria-invalid="true"{% endif %} name="{{ h.devre }}_uzun_dk" min="0" max="180" value="{{ h.uzun_dk }}"></div>
+      </div>
+    </fieldset>
+    {% else %}<p class="not">Çizelgede devre yok; önce “Devre ekle” ile bir devre ekleyin.</p>
+    {% endfor %}
+    </div>
+    <p class="dugme-satiri"><button class="ana">Oluştur</button></p>
+  </form>
+</details>
+{% endif %}
+
+<details class="acilir">
+  <summary class="dugme">CSV</summary>
+  <div class="acilir-ic">
+    <p class="dugme-satiri"><a class="dugme" href="{{ csv_adresi }}" download>CSV olarak indir</a></p>
+    <p class="ipucu">Sütunlar: devre; ders; baslangic; bitis. Başka bir bilgisayara ya da okula taşımak için.</p>
+    {% if yonetici %}
+    <form method="post" action="{{ csv_adresi }}" enctype="multipart/form-data">
+      <label for="cizelge-csv">CSV'den doldur (en çok 64 KB)</label>
+      <input type="file" id="cizelge-csv" name="dosya" accept=".csv,text/csv" required aria-describedby="cizelge-csv-ipucu">
+      <p class="ipucu" id="cizelge-csv-ipucu">Tablo dosyadaki satırlarla dolar; kaydetmek için Kaydet'e basarsınız.</p>
+      <p class="dugme-satiri"><button>CSV'den doldur</button></p>
+    </form>
+    {% endif %}
+  </div>
+</details>
+</div>
+
+{% endblock %}

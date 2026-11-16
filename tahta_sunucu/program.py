@@ -430,7 +430,7 @@ def okulzili_yapisindan(yapi: dict, surum: int = 7) -> dict:
         takvim["kurallar"].append(yeni)
     if toren:
         uyarilar.append(
-            f"{toren} tören kuralı yok sayıldı (ders saatini değiştirmez; değiştiriyorsa Okul Zili'nde 'tarihe özel program' kullanın)."
+            f"{toren} tören kuralı yok sayıldı (ders saatini değiştirmez; o gün saatler değişiyorsa Zil saatleri › Tarihe özel çizelgeler bölümünden ekleyin)."
         )
     takvim["devre_adlari"] = {**adlar, **{d[1]: d[2] for d in dersler}}
     return {
@@ -466,49 +466,6 @@ def takvim_ozeti(takvim: dict | None) -> str:
 
 def _gay(iso: str) -> str:
     return date.fromisoformat(iso).strftime("%d.%m.%Y")
-
-
-# ---- elle giriş -------------------------------------------------------------------------------
-def elle_uret(p: dict) -> list[tuple]:
-    """Ders akışı parametrelerinden haftalık satırlar [(gun, devre, devre_adi, no, bas, bit)].
-
-    p: devre_adi, ilk_ders (SS:DD), ders_sayisi (1–20), ders_dk (10–120), teneffus_dk (0–60),
-    ogle_sonra (0 = yok, 1..ders_sayisi-1), ogle_dk (0–180), gunler (0–6 listesi).
-    Hatalıysa kullanıcıya gösterilecek iletiyle ValueError.
-    """
-    devre_adi = " ".join(str(p.get("devre_adi") or "Normal").split())[:40] or "Normal"
-    ilk = saat_dogrula(p.get("ilk_ders"))
-    if not ilk:
-        raise ValueError("İlk ders saati SS:DD biçiminde olmalı (ör. 08:20).")
-
-    def sayi(ad: str, alt: int, ust: int, aciklama: str) -> int:
-        try:
-            deger = int(str(p.get(ad, "")).strip())
-        except ValueError:
-            raise ValueError(f"{aciklama} {alt}–{ust} arasında bir sayı olmalı.") from None
-        if not alt <= deger <= ust:
-            raise ValueError(f"{aciklama} {alt}–{ust} arasında olmalı.")
-        return deger
-
-    ders_sayisi = sayi("ders_sayisi", 1, 20, "Ders sayısı")
-    ders_dk = sayi("ders_dk", 10, 120, "Ders süresi (dk)")
-    teneffus = sayi("teneffus_dk", 0, 60, "Teneffüs (dk)")
-    ogle_sonra = sayi("ogle_sonra", 0, 19, "Öğle arası sırası")
-    ogle_dk = sayi("ogle_dk", 0, 180, "Öğle arası (dk)")
-    gunler = sorted({int(g) for g in p.get("gunler") or [] if str(g).isdigit() and 0 <= int(g) <= 6})
-    if not gunler:
-        raise ValueError("En az bir gün seçin.")
-    devre = devre_kimligi(devre_adi)
-    satirlar = []
-    an = dk(ilk)
-    for no in range(1, ders_sayisi + 1):
-        bitis = an + ders_dk
-        if bitis >= 24 * 60:
-            raise ValueError("Dersler gece yarısını geçiyor; ilk ders saatini ya da ders sayısını değiştirin.")
-        for gun in gunler:
-            satirlar.append((gun, devre, devre_adi, no, saat_metni(an), saat_metni(bitis)))
-        an = bitis + (ogle_dk if ogle_sonra and no == ogle_sonra else teneffus)
-    return satirlar
 
 
 # ---- takvim: günün planı ------------------------------------------------------------------
@@ -548,13 +505,40 @@ def ogretim_gunu(takvim: dict, gun: date) -> bool:
     return not donemler or any(_icinde(gun, b, s) for b, s in donemler)
 
 
-def plan_hesapla(gun: date, saatler: list[tuple], takvim: dict | None) -> dict:
+def takvim_suz(takvim: dict | None, gun: date, ham: list) -> tuple[list, str | None]:
+    """Haftalık (ya da tarihe özel çizelge) derslerini takvimden geçirir: öğretim dönemi dışı, ara tatil,
+    resmî tatil ve arife sonrası düşer. Döndürür (kalan dersler [(devre, no, bas, bit)], tatil adı|None)."""
+    takvim = takvim or {}
+    tatil = None
+    if not takvim.get("ogretim"):
+        return ham, None
+    if not ogretim_gunu(takvim, gun):
+        return [], ("Öğretim dönemi dışında" if ham else None)
+    suzulen = []
+    for d in ham:
+        ad = tatil_adi(takvim, an_dt(gun, d[2]))
+        if ad:
+            tatil = tatil or ad
+        else:
+            suzulen.append(d)
+    if suzulen:
+        tatil = None  # gün kısmen ders günü (ör. arife sabahı)
+    return suzulen, tatil
+
+
+def plan_hesapla(gun: date, saatler: list[tuple], takvim: dict | None, yerel: dict | None = None) -> dict:
     """Bir günün planı (saf işlev).
 
-    saatler: haftalık satırlar [(gun, devre, devre_adi, no, bas, bit)]; takvim: `zil_takvimi`.
+    saatler: haftalık satırlar [(gun, devre, devre_adi, no, bas, bit)]; takvim: `zil_takvimi`;
+    yerel: o günü kapsayan Tahta Kontrol tarihe özel çizelgesi {"ad", "dersler": [(devre, devre_adi, no, bas, bit)],
+    "ders_yok": bool} ya da None.
     Döndürür: {"tatil": ad|None, "dersler": [(devre, devre_adi, no, bas_dt, bit_dt)],
     "sinav": [(bas_dt, bit_dt)], "tum_gun_sinav": bool, "program_gunu": 0..6, "kaynak": metin}.
     `program_gunu`: derslik programının hangi haftanın gününe göre eşleneceği (telafide hedef gün).
+
+    Öncelik (0.10.0, zil düzenleyici §3.4): 1) Okul Zili `tatil` kuralı ve takvim tatilleri — yerel kayıtla
+    ezilmez; 2) tarihe özel çizelge (dersleri haftalık yolla aynı takvim süzgecinden geçer; "Ders yok" = tatil);
+    3) Okul Zili'nin diğer tarih kuralları; 4) haftalık düzen. Planlı sınav pencereleri her durumda eklenir.
     """
     takvim = takvim or {}
     adlar = dict(takvim.get("devre_adlari") or {})
@@ -572,8 +556,21 @@ def plan_hesapla(gun: date, saatler: list[tuple], takvim: dict | None) -> dict:
     )
     tatil = None
     program_gunu = gun.weekday()
-    kaynak = "Haftalık program"
-    if temel:
+    kaynak = "Haftalık düzen"
+    tatil_kurali = next((k for k in temel if k["tur"] == "tatil"), None)
+    if yerel is not None:
+        if tatil_kurali:
+            ham, tatil = [], tatil_kurali.get("ad") or "Tatil"
+            kaynak = f"{tatil_kurali.get('ad')} ({KURAL_ADI['tatil']})"
+        else:
+            kaynak = f"{yerel.get('ad')} (tarihe özel çizelge)"
+            if yerel.get("ders_yok"):
+                ham, tatil = [], yerel.get("ad") or "Tatil"
+            else:
+                for d in yerel.get("dersler") or []:
+                    adlar[d[0]] = d[1]
+                ham, tatil = takvim_suz(takvim, gun, [(d[0], int(d[2]), d[3], d[4]) for d in yerel.get("dersler") or []])
+    elif temel:
         kazanan = temel[0]
         kaynak = f"{kazanan.get('ad')} ({KURAL_ADI.get(kazanan['tur'], kazanan['tur'])})"
         if kazanan["tur"] == "tatil":
@@ -584,22 +581,7 @@ def plan_hesapla(gun: date, saatler: list[tuple], takvim: dict | None) -> dict:
         else:
             ham = [tuple(d) for d in kazanan.get("dersler") or []]
     else:
-        ham = haftalik(gun.weekday())
-        if takvim.get("ogretim"):
-            if not ogretim_gunu(takvim, gun):
-                tatil = "Öğretim dönemi dışında" if ham else None
-                ham = []
-            else:
-                suzulen = []
-                for d in ham:
-                    ad = tatil_adi(takvim, an_dt(gun, d[2]))
-                    if ad:
-                        tatil = tatil or ad
-                    else:
-                        suzulen.append(d)
-                if suzulen:
-                    tatil = None  # gün kısmen ders günü (ör. arife sabahı)
-                ham = suzulen
+        ham, tatil = takvim_suz(takvim, gun, haftalik(gun.weekday()))
     dersler = sorted(
         ((d, adlar.get(d) or devre_adi_varsayilan(d), int(n), an_dt(gun, b), an_dt(gun, s)) for d, n, b, s in ham),
         key=lambda x: (x[3], x[0], x[2]),
@@ -689,8 +671,6 @@ _GUNLER = {
     "pazartesi": 0, "pzt": 0, "pts": 0, "sali": 1, "sal": 1, "carsamba": 2, "car": 2, "crs": 2,
     "persembe": 3, "per": 3, "prs": 3, "cuma": 4, "cum": 4, "cumartesi": 5, "cmt": 5, "pazar": 6, "paz": 6,
 }  # fmt: skip
-_CSV_BASLIK = {"derslik": "derslik", "gun": "gun", "ders": "ders", "devre": "devre", "oturum": "devre",
-               "sube": "sube"}  # fmt: skip
 
 
 def gun_coz(deger) -> int | None:
@@ -720,122 +700,36 @@ def ders_nolari_coz(deger) -> list[int] | None:
 
 
 def derslik_csv_oku(bayt: bytes, saatler: list[tuple], tahtalar: list[dict]) -> dict:
-    """Derslik programı CSV'sini çözer; veritabanına yazmaz.
+    """Derslik programı CSV'sini (v1 biçimi; v2 de okunur) çözer; veritabanına yazmaz. 0.10.0'dan beri tek
+    ayrıştırıcı `program_aktar.tablo_oku`'dur; bu işlev onun sonucunu eski biçimde döndürür (geriye uyum).
 
     saatler: ders_saati satırları; tahtalar: [{"id","ad","derslik"}] (onaylı/bekleyen, kaldırılmamış).
     Döndürür: {"tahtalar": {id: [[gun, devre, no, sube], ...]}, "eslesen": [{"id","ad","derslik","satir"}],
     "eslesmeyen": [ad], "hatalar": ["12. satır: …"] (ilk 50), "hata_sayisi", "uyarilar", "yok_sayilan": [başlık],
     "satir_sayisi"}. Dosya okunamazsa ValueError.
     """
+    from . import program_aktar
+
     if not saatler:
         raise ValueError("Önce zil saatlerini girin; derslik programı ders saatlerine göre okunur.")
     basliklar, satirlar = metin.csv_oku(bayt, CSV_EN_COK_BAYT, CSV_EN_COK_SATIR)
-    konum: dict[str, int] = {}
-    yok_sayilan = []
-    for sira, baslik in enumerate(basliklar):
-        alan = _CSV_BASLIK.get(metin.katla(baslik).replace("_", " "))
-        if alan and alan not in konum:
-            konum[alan] = sira
-        elif baslik.strip():
-            yok_sayilan.append(baslik.strip()[:40])
-    eksik = [a for a in ("derslik", "gun", "ders") if a not in konum]
-    if eksik:
-        raise ValueError("Dosyada şu sütunlar yok: " + ", ".join(eksik) + ". Örnek dosyayı indirip doldurun.")
-    gun_devreleri: dict[int, dict[str, str]] = {}
-    nolar: set[tuple[int, str, int]] = set()
-    for s in saatler:
-        gun_devreleri.setdefault(s[0], {})[s[1]] = s[2]
-        nolar.add((s[0], s[1], s[3]))
-    derslige: dict[str, list[dict]] = {}
-    ada: dict[str, list[dict]] = {}
-    for t in tahtalar:
-        if t.get("derslik"):
-            derslige.setdefault(metin.derslik_anahtari(t["derslik"]), []).append(t)
-        ada.setdefault(metin.derslik_anahtari(t["ad"]), []).append(t)
-    hatalar: list[str] = []
-    uyarilar: list[str] = []
-    eslesmeyen: dict[str, str] = {}
-    sonuc: dict[int, dict[tuple[int, str, int], str]] = {}
-    eslesen: dict[int, dict] = {}
-    cift_uyarildi: set[str] = set()
-    tekrar = 0
-    for sira, satir in enumerate(satirlar, start=2):
-        def hucre(alan: str, satir=satir) -> str:
-            return metin.csv_hucre_coz(satir[konum[alan]]).strip() if alan in konum else ""
-
-        derslik = hucre("derslik")
-        if not derslik:
-            hatalar.append(f"{sira}. satır: derslik boş.")
-            continue
-        gun = gun_coz(hucre("gun"))
-        if gun is None:
-            hatalar.append(f"{sira}. satır: gün anlaşılamadı.")
-            continue
-        dersler = ders_nolari_coz(hucre("ders"))
-        if not dersler:
-            hatalar.append(f"{sira}. satır: ders numarası anlaşılamadı (ör. 3, 1-4 ya da 1,2,5).")
-            continue
-        devreler = gun_devreleri.get(gun, {})
-        if not devreler:
-            hatalar.append(f"{sira}. satır: {GUN_ADLARI[gun]} için ders saati tanımlı değil.")
-            continue
-        ham_devre = hucre("devre")
-        if ham_devre:
-            k = metin.katla(ham_devre)
-            devre = next((d for d, a in devreler.items() if metin.katla(d) == k or metin.katla(a) == k), None)
-            if devre is None:
-                hatalar.append(f"{sira}. satır: '{ham_devre[:30]}' devresi {GUN_ADLARI[gun]} günü tanımlı değil.")
-                continue
-        elif len(devreler) == 1:
-            devre = next(iter(devreler))
-        else:
-            hatalar.append(f"{sira}. satır: bu gün iki devreli; devre (oturum) sütununu doldurun.")
-            continue
-        olmayan = [n for n in dersler if (gun, devre, n) not in nolar]
-        if olmayan:
-            hatalar.append(f"{sira}. satır: {GUN_ADLARI[gun]} günü {', '.join(map(str, olmayan))}. ders tanımlı değil.")
-            continue
-        sube = ""
-        ham_sube = hucre("sube")
-        if ham_sube:
-            sube = metin.sube_duzelt(ham_sube) or ""
-            if not sube or len(sube) > SUBE_EN_UZUN:
-                uyarilar.append(f"{sira}. satır: şube '{ham_sube[:20]}' anlaşılamadı; boş bırakıldı.")
-                sube = ""
-        anahtar = metin.derslik_anahtari(derslik)
-        hedefler = derslige.get(anahtar) or ada.get(anahtar) or []
-        if not hedefler:
-            eslesmeyen.setdefault(anahtar, derslik[:60])
-            continue
-        if len(hedefler) > 1 and anahtar not in cift_uyarildi:
-            cift_uyarildi.add(anahtar)
-            uyarilar.append(
-                f"Aynı dersliğe bağlı {len(hedefler)} tahta: {', '.join(t['ad'] for t in hedefler)} (ikisine de uygulanacak)."
-            )
-        for t in hedefler:
-            kayit = sonuc.setdefault(t["id"], {})
-            eslesen.setdefault(t["id"], {"id": t["id"], "ad": t["ad"], "derslik": t.get("derslik", ""), "satir": 0})
-            for n in dersler:
-                if (gun, devre, n) in kayit:
-                    tekrar += 1
-                kayit[(gun, devre, n)] = sube
-    if tekrar:
-        uyarilar.append(f"{tekrar} ders saati dosyada birden çok kez geçiyor; son satır geçerli sayıldı.")
-    if yok_sayilan:
-        uyarilar.append("Şu sütunlar yok sayıldı (okunmaz ve saklanmaz): " + ", ".join(yok_sayilan))
-    tahtalar_sonuc = {}
-    for tahta_id, kayit in sonuc.items():
-        tahtalar_sonuc[tahta_id] = [[g, d, n, s] for (g, d, n), s in sorted(kayit.items())]
-        eslesen[tahta_id]["satir"] = len(kayit)
+    okunan = program_aktar.tablo_oku([basliklar, *satirlar], saatler)
+    cozum = program_aktar.esle({"kaynak": "tablo", "ara": okunan["ara"], "bilgi": okunan["bilgi"]}, saatler,
+                               [{**t, "subeler": t.get("subeler", "")} for t in tahtalar], {}, {})  # fmt: skip
+    adlar = {t["id"]: t for t in tahtalar}
+    eslesen = [{"id": i, "ad": adlar[i]["ad"], "derslik": adlar[i].get("derslik", ""), "satir": len(k)}
+               for i, k in cozum["satirlar"].items()]  # fmt: skip
+    hatalar = okunan["hatalar"] + cozum["hatalar"]
     return {
-        "tahtalar": tahtalar_sonuc,
-        "eslesen": sorted(eslesen.values(), key=lambda e: metin.tr_sirala_anahtari(e["ad"])),
-        "eslesmeyen": sorted(eslesmeyen.values(), key=metin.tr_sirala_anahtari),
+        "tahtalar": {i: [[g, d, n, s] for (g, d, n), s in sorted(k.items())] for i, k in cozum["satirlar"].items()},
+        "eslesen": sorted(eslesen, key=lambda e: metin.tr_sirala_anahtari(e["ad"])),
+        "eslesmeyen": sorted((e["ad"] for e in cozum["eslesme"]["derslik"] if e["durum"] == "eslesmedi"),
+                             key=metin.tr_sirala_anahtari),  # fmt: skip
         "hatalar": hatalar[:HATA_GOSTERIM],
-        "hata_sayisi": len(hatalar),
-        "uyarilar": uyarilar,
-        "yok_sayilan": yok_sayilan,
-        "satir_sayisi": len(satirlar),
+        "hata_sayisi": okunan["hata_sayisi"] + cozum["hata_sayisi"],
+        "uyarilar": okunan["uyarilar"] + cozum["uyarilar"],
+        "yok_sayilan": okunan["yok_sayilan"],
+        "satir_sayisi": okunan["satir_sayisi"],
     }
 
 
@@ -908,11 +802,23 @@ def ders_saatleri_oku(b) -> list[tuple]:
     ]
 
 
-def gun_plani(b, tarih: date) -> dict:
-    """Veritabanındaki ders saatleri ve `zil_takvimi` ile günün planı (bkz. plan_hesapla)."""
-    from . import vt
+def gun_plani(b, tarih: date, saatler: list[tuple] | None = None) -> dict:
+    """Günün planının TEK giriş noktası (bkz. plan_hesapla): `ders_saati`, `zil_takvimi` ve tarihe özel
+    çizelgeleri (`zil_tarihli`) okur. `saatler` verilirse `ders_saati` yeniden okunmaz (aynı turda iki kez
+    okunmasın diye). Haftalık düzenden gelen günün kaynağına çizelge adı eklenir ("Haftalık düzen · Normal gün")."""
+    from . import cizelge, vt
 
-    return plan_hesapla(tarih, ders_saatleri_oku(b), vt.ayar_al(b, "zil_takvimi"))
+    if saatler is None:
+        saatler = ders_saatleri_oku(b)
+    plan = plan_hesapla(tarih, saatler, vt.ayar_al(b, "zil_takvimi"), cizelge.tarihli_kural(b, tarih))
+    if plan["kaynak"] == "Haftalık düzen" and plan["dersler"]:
+        satir = b.execute(
+            "SELECT c.ad FROM zil_haftalik h JOIN zil_cizelgesi c ON c.id = h.cizelge_id WHERE h.gun = ?",
+            (tarih.weekday(),),
+        ).fetchone()
+        if satir:
+            plan["kaynak"] = f"Haftalık düzen · {satir['ad']}"
+    return plan
 
 
 def simdiki_ders(b, tahta, an: datetime) -> dict | None:

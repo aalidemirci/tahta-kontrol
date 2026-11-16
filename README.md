@@ -141,6 +141,27 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
   kapatılabilir.
 - Kilitli tahtanın kilidi yeniden başlatmada ve oturum değişince korunur.
 
+0.10.0 ile:
+
+- **Zil saatleri düzenleyicisi (Okul Zili gerekmez):** adlandırılmış zil çizelgeleri ("Normal gün",
+  "Cuma", "Kısa gün"…), tek devre ya da ikili eğitim; "Hızlı oluştur" ilk ders, ders sayısı ve
+  sürelerden satırları üretir, sonra satır satır düzeltilir, araya ders eklenir ya da silinir;
+  ders numaraları kendiliğinden verilir. Haftalık düzende her güne bir çizelge (ya da "Ders yok")
+  atanır. Sınav haftası, kısa gün, tatil ya da "şu tarihten itibaren yeni saatler" için tarihe özel
+  çizelge eklenir; Okul Zili takvimindeki tatiller her zaman önce gelir. Günün ders akışı zaman
+  çizgisiyle ve metin listesiyle önizlenir, herhangi bir tarih "Günü önizle" ile denetlenir.
+  Çizelgeler CSV olarak dışa ve içe aktarılır. Okul Zili'nden alma sürer ve aynı yapıya yazar;
+  mevcut zil saatleri yükseltmede kendiliğinden çizelgelere taşınır. Değişiklik kaydedildiği anda
+  yürürlüğe girer; ders numarası kayan çizelgede derslik programları için ayrıca onay istenir.
+- **Ders programını içe aktarma sihirbazı:** aSc Timetables XML (deneme etiketli; gerçek bir dosyayla
+  henüz doğrulanmadı), Tahta Kontrol şablonu (CSV, XLSX, XLS) ve "yapay zekâ ile dönüştür"
+  (hazır istem; Tahta Kontrol hiçbir dış hizmete bağlanmaz, yapay zekâ aracını kullanıcı kendisi
+  çalıştırır ve çıktıyı yapıştırır). Derslik, sınıf ve ders saati eşlemesi hatırlanır; önizleme
+  eklenecek, silinecek ve değişecek ders saatlerini tahta tahta gösterir. Öğretmen ve ders adı
+  okunmaz, saklanmaz. Her içe aktarmadan önce bütün derslik programı saklanır; son 10 sürüm
+  "Önceki programlar"dan geri yüklenir. e-Okul'un ders programı çıktısı, biçimi doğrulanamadığı için
+  okunmaz (yapay zekâ yolu ya da şablonla aktarılır).
+
 ## Çalıştırma (geliştirme)
 
 Python 3.12 ve [uv](https://docs.astral.sh/uv/) gerekir.

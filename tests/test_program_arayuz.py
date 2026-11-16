@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 
 import pytest
-from test_program_panel import ELLE, calistir, durum, hazirla
+from test_program_panel import calistir, durum, hazirla
 from yardimci import an, bekle, gir, kimlik, kullanici_ekle, kur_ve_gir, tahta_ekle
 
 
@@ -35,8 +35,9 @@ def test_menu_sirasi_ortak_sozluge_uyar(uygulama, panel):
 @pytest.mark.parametrize(
     "bolum, beklenen",
     [
-        ("zil", ['data-onay="zil_sil"', "08:20–09:00", 'action="/program/zil/yukle"', 'name="s_0_normal_1_bas"']),
-        ("derslik", ['href="/program/derslik/ornek.csv"', 'action="/program/derslik/yukle"', "Program yok"]),
+        ("zil", ['data-onay="zil_sil"', "08:20–09:00", 'action="/program/zil/yukle"', 'action="/program/haftalik"',
+                 'action="/program/cizelge"', 'action="/program/tarihli"', 'action="/program/gun"']),
+        ("derslik", ['href="/program/aktar?yeni=1"', 'href="/program/aktar/mevcut.csv"', "Program yok", "Önceki programlar"]),
         ("kurallar", ['name="pk_etkin"', "Kuralları kaydet", "öğretmen adı tutulmaz"]),
         ("istisnalar", ['name="bas_tarih"', 'value="1sa"', "Öğrenci ya da kişi adı yazmayın."]),
     ],
@@ -145,8 +146,12 @@ def test_program_kilidi_ajan_ile_uctan_uca(uygulama, panel, tahta, saat, tmp_pat
 
 
 def test_elle_uretim_formu_alanlari_sunucuyla_uyumlu(uygulama, panel):
-    """Şablondaki elle giriş formunun alan adları sunucunun beklediği adlarla aynıdır."""
+    """0.10.0: çizelge sayfasındaki hızlı oluştur formunun alan adları sunucunun beklediği adlarla aynıdır."""
+    from tahta_sunucu import cizelge
+
     kur_ve_gir(panel)
-    sayfa = panel.get("/program").text
-    for ad in ELLE:
-        assert f'name="{ad}"' in sayfa or (ad == "eylem" and 'value="uret"' in sayfa), ad
+    yer = panel.post("/program/cizelge", data={"ad": "Normal gün", "duzen": "tek"}).headers["location"]
+    sayfa = panel.get(yer).text
+    for alan in cizelge.HIZLI_ALANLAR:
+        assert f'name="normal_{alan}"' in sayfa, alan
+    assert 'name="normal_uret"' in sayfa and 'action="/program/cizelge/1/hizli"' in sayfa

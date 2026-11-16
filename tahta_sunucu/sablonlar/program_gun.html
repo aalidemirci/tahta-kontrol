@@ -1,0 +1,26 @@
+{% extends "taban.html" %}
+{% from "_zaman_cizgisi.html" import zaman_cizgisi as zc_ciz %}
+{% block baslik %}{{ gun.tarih_metni }} · Program · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# "Günü önizle" (zil düzenleyici §5.5). Bağlam: gun (panel_cizelge.gun_baglami: tarih, tarih_metni, kaynak, tatil,
+   zaman_cizgisi, sinavlar, tum_gun_sinav, ders_var), serit, bolum='zil', yonetici. Kilit tahta başına olduğundan
+   burada "program kilidi bu gün…" cümlesi yoktur. #}
+{% include "_program_bas.html" %}
+<section class="kutu" aria-labelledby="gun-baslik">
+  <p><a class="geri" href="/program?bolum=zil">Zil saatleri</a></p>
+  <h2 id="gun-baslik">{{ gun.tarih_metni }}</h2>
+  <p class="kaynak-satiri"><svg class="simge" aria-hidden="true"><use href="#s-takvim"/></svg><span>{{ gun.kaynak }}</span></p>
+  {% if gun.tatil %}<p class="bant" role="status"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Tatil: {{ gun.tatil }}</p>
+  {% else %}{{ zc_ciz(gun.zaman_cizgisi, 'gun-baslik') }}{% endif %}
+  {% if gun.tum_gun_sinav %}<p class="not">Bütün gün planlı sınav.</p>{% endif %}
+  {% for s in gun.sinavlar %}<p class="not">Sınav: {{ s }}</p>{% endfor %}
+  <div class="kutu-alt">
+    <form method="get" action="/program/gun" class="satir-form">
+      <div><label for="gun-tarih">Başka bir gün</label>
+        <input type="date" id="gun-tarih" name="tarih" value="{{ gun.tarih }}"></div>
+      <button>Günü önizle</button>
+    </form>
+    <p class="not">Öncelik: takvim tatili, tarihe özel çizelge, Okul Zili tarih kuralı, haftalık düzen.</p>
+  </div>
+</section>
+{% endblock %}

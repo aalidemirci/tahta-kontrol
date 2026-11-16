@@ -91,10 +91,7 @@ def gunun_zamanlari(b, gun: date, ayar_: dict | None = None) -> list[tuple[datet
             for s in sorted(kural.get("saatler") or [])
             if isinstance(s, str) and SAAT_DESENI.fullmatch(s)
         ]
-    saatler = program.ders_saatleri_oku(b)
-    if not saatler:
-        return []
-    plan = program.plan_hesapla(gun, saatler, vt.ayar_al(b, "zil_takvimi"))
+    plan = program.gun_plani(b, gun)  # haftalık düzen boşken tarihe özel çizelge de plan verir
     if not plan["dersler"]:
         return []
     son = max(d[4] for d in plan["dersler"]) + timedelta(minutes=GUN_SONU_DK)

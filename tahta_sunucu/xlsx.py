@@ -14,7 +14,8 @@ import re
 import zipfile
 import zlib
 from xml.etree import ElementTree as ET
-from xml.parsers import expat
+
+from . import guvenli_xml
 
 UYE_SINIRI = 200
 ACILMIS_SINIR = 50 * 1024 * 1024
@@ -51,38 +52,12 @@ def _uye_oku(zf: zipfile.ZipFile, ad: str, kalan: list[int]) -> bytes:
     return veri
 
 
-GUVENSIZ = "Dosya güvenli olmayan XML içeriyor."
+GUVENSIZ = guvenli_xml.GUVENSIZ
 
 
 def _dtd_reddet(veri: bytes) -> None:
-    """DOCTYPE/ENTITY bildirimini kodlamadan bağımsız reddeder.
-
-    Bayt araması UTF-16 gibi kodlamalarla atlatılabildiği için belge önce expat'ten,
-    DTD işleyicileri hata atacak biçimde geçirilir. Ayrıca yalnız UTF-8 kabul edilir.
-    """
-    if veri.startswith((b"\xff\xfe", b"\xfe\xff")) or b"\x00" in veri:
-        raise ValueError(GUVENSIZ)
-    bildirim = re.match(rb"\s*<\?xml[^>]*encoding\s*=\s*[\"']([^\"']+)", veri.removeprefix(b"\xef\xbb\xbf"))
-    if bildirim and bildirim.group(1).lower().replace(b"_", b"-") not in (b"utf-8", b"utf8"):
-        raise ValueError(GUVENSIZ)
-    if re.search(rb"<!DOCTYPE|<!ENTITY", veri, re.I):
-        raise ValueError(GUVENSIZ)
-
-    class _Dtd(Exception):
-        pass
-
-    def reddet(*_):
-        raise _Dtd
-
-    ayristirici = expat.ParserCreate()
-    ayristirici.StartDoctypeDeclHandler = reddet
-    ayristirici.EntityDeclHandler = reddet
-    try:
-        ayristirici.Parse(veri, True)
-    except _Dtd as hata:
-        raise ValueError(GUVENSIZ) from hata
-    except expat.ExpatError as hata:
-        raise ValueError(OKUNAMADI) from hata
+    """DOCTYPE/ENTITY bildirimini kodlamadan bağımsız reddeder (ortak denetim: `guvenli_xml.dtd_reddet`)."""
+    guvenli_xml.dtd_reddet(veri, OKUNAMADI, GUVENSIZ)
 
 
 def _xml(veri: bytes):

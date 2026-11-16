@@ -53,8 +53,11 @@ def sube_duzelt(s) -> str | None:
 
     Harf Türkçe büyük harfle yazılır ("10/I" ile "10/İ" ayrı şubedir). Tanınmazsa None.
     """
-    ham = " ".join(str(s or "").strip().split())
-    eslesme = _SUBE.match(tr_kucuk(ham))
+    ham = tr_kucuk(" ".join(str(s or "").strip().split()))
+    # 0.10.0 (program aktarma §3.4): sondaki "şubesi"/"şube" sözcüğü atılır, "sınıfı" eki "sınıf" sayılır
+    # ("9. Sınıf A Şubesi" → "9/A", "9A Şubesi" → "9/A"); önceden kabul edilen yazımların sonucu değişmez.
+    ham = re.sub(r"\s*\bşube(?:si)?$", "", ham).replace("sınıfı", "sınıf").replace("sinifi", "sinif")
+    eslesme = _SUBE.match(ham)
     if not eslesme:
         return None
     duzey, harf = eslesme.groups()
