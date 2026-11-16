@@ -26,12 +26,17 @@
 
 <h2>Tahtada yapılacaklar</h2>
 <div class="kutu">
-  <p>Tahtada yönetici hesabıyla (<span class="kod">etapadmin</span>) oturum açın ve uçbirimde şu iki komutu çalıştırın:</p>
+  <p>Tahtada uçbirimi açın ve şu iki komutu çalıştırın:</p>
   <div class="komut-kap">
     <pre class="komut" id="kur-komutu">wget --no-check-certificate -O tahta-kur.sh {{ adres }}/kur
-sudo bash tahta-kur.sh {{ kod or 'ESLESTIRME_KODU' }}</pre>
+bash tahta-kur.sh {{ kod or 'ESLESTIRME_KODU' }}</pre>
     <button type="button" class="kopyala" data-kopyala="kur-komutu" hidden>Kopyala</button>
   </div>
+  <p class="not" id="kur-yetki">Kurulum yönetici yetkisi ister. En kolayı yönetici hesabıyla (<span class="kod">etapadmin</span>) oturum
+     açıp çalıştırmaktır; betik o zaman <span class="kod">etapadmin</span> parolasını sorar. Öğretmen oturumundaysanız da çalışır: betik
+     yönetici parolasını (<span class="kod">etapadmin</span>) bir pencerede ya da uçbirimde sorar; öğretmen parolası işe yaramaz.
+     Komutun başına <span class="kod">sudo</span> yazmayın (öğretmen hesabında “sudoers dosyasında değil” hatası verir).
+     Parola hiçbir yere kaydedilmez.</p>
   <p class="not"><span class="kod">wget</span> yoksa aynı dosyayı tahtanın tarayıcısında <span class="kod">{{ adres }}/kur</span> adresini açarak indirebilirsiniz
      (tarayıcı sertifika uyarısı verir; “Gelişmiş → devam et”). Dosya İndirilenler klasörüne iner.</p>
   <p>Betik sunucunun kimliğini parmak iziyle denetler. Ekranda yazan parmak izinin başı şununla aynı olmalı:</p>
@@ -44,7 +49,7 @@ sudo bash tahta-kur.sh {{ kod or 'ESLESTIRME_KODU' }}</pre>
 <div class="kutu">
   <p><a class="dugme" href="/kur/usb.zip">USB kurulum paketini indir</a></p>
   <p class="not">Zip dosyasını bir USB belleğe açın, tahtaya takın, uçbirimi o klasörde açıp
-     <span class="kod">sudo bash tahta-kur.sh {{ kod or 'ESLESTIRME_KODU' }}</span> komutunu çalıştırın.
+     <span class="kod">bash tahta-kur.sh {{ kod or 'ESLESTIRME_KODU' }}</span> komutunu çalıştırın (yönetici parolası yukarıdaki gibi sorulur).
      Tahtanın yine de sunucuya ağdan erişebilmesi gerekir.</p>
   <p class="not">Ajan paketi: {{ paket.dosya_adi }} · sha256 <span class="kod">{{ paket.sha256[:16] }}…</span></p>
 </div>

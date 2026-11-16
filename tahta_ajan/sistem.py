@@ -88,15 +88,27 @@ def _etkin_oturum_ham() -> dict | None:
         if not parcalar:
             continue
         kod2, ayrinti = calistir(
-            ["loginctl", "show-session", parcalar[0], "-p", "Type", "-p", "Active", "-p", "Name", "-p", "Class"],
+            ["loginctl", "show-session", parcalar[0], "-p", "Type", "-p", "Active", "-p", "Name", "-p", "Class", "-p", "User"],
             5,
         )
         if kod2 != 0:
             continue
         alan = dict(s.split("=", 1) for s in ayrinti.splitlines() if "=" in s)
         if alan.get("Active") == "yes" and alan.get("Class") == "user" and alan.get("Type") in ("x11", "wayland"):
-            return {"ad": alan.get("Name", ""), "tur": alan.get("Type", "")}
+            return {"ad": alan.get("Name", ""), "tur": alan.get("Type", ""), "uid": alan.get("User", "")}
     return None
+
+
+def etkin_oturum_uid() -> int | None:
+    """Etkin grafik oturumun sayısal kullanıcı kimliği; bilinmiyorsa (loginctl yok, oturum yok) None.
+
+    Yerel soketten gelen yüzer düğme isteği ve oturum başlangıcı yalnız bu kimlikle bağlanan ekran
+    yardımcısından kabul edilir (arka plandaki başka bir oturum ya da süreç tahtayı kapatamasın)."""
+    ham = _etkin_oturum_ham()
+    try:
+        return int(ham["uid"]) if ham and ham.get("uid") not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
 
 
 def etkin_oturum() -> dict:
@@ -362,6 +374,45 @@ def acik_sure() -> int:
         except (OSError, ValueError):
             pass
     return int(time.monotonic())
+
+
+def acik_sure_tam() -> float | None:
+    """Açılıştan beri geçen saniye (/proc/uptime, tahta saatinden bağımsız). Okunamazsa None."""
+    if not LINUX:
+        return None
+    try:
+        with open("/proc/uptime", encoding="ascii") as dosya:
+            return float(dosya.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def surec_baslangici(stat_yolu: str = "/proc/self/stat") -> float | None:
+    """Bu sürecin açılıştan kaç saniye sonra başladığı (/proc/self/stat 22. alan).
+
+    Açılışta kilit (0.9.0) için oturumun başlangıcıdır: ekran yardımcısı oturum açılınca başlar. execv ile
+    kendini yeniden başlatan yardımcıda (güncelleme) değer korunur; böylece güncelleme oturumu "yeni" saymaz.
+    """
+    if not LINUX:
+        return None
+    try:
+        with open(stat_yolu, encoding="ascii", errors="replace") as dosya:
+            metin = dosya.read()
+        alanlar = metin[metin.rindex(")") + 2 :].split()
+        return round(int(alanlar[19]) / os.sysconf("SC_CLK_TCK"), 2)
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def acilis_kimligi() -> str:
+    """Bu açılışın kimliği (/proc/sys/kernel/random/boot_id); yeniden başlatmada değişir. Okunamazsa ""."""
+    if not LINUX:
+        return ""
+    try:
+        with open("/proc/sys/kernel/random/boot_id", encoding="ascii") as dosya:
+            return dosya.read().strip()[:64]
+    except OSError:
+        return ""
 
 
 def _guc_komutu(eylem: str) -> tuple[bool, str]:

@@ -579,14 +579,16 @@ class Baglanti:
         self.kilit = threading.Lock()
         self.merhaba = {}
 
-    def gonder(self, mesaj: dict):
+    def gonder(self, mesaj: dict) -> bool:
+        """Servise satır yollar; servis bağlı değilse ya da yazılamadıysa False."""
         with self.kilit:
             if self.soket is None:
-                return
+                return False
             try:
                 self.soket.sendall((json.dumps(mesaj, ensure_ascii=False) + "\n").encode("utf-8"))
+                return True
             except OSError:
-                pass
+                return False
 
     def calis(self):
         while True:
@@ -622,10 +624,49 @@ def _ortam_bilgisi() -> dict:
         "oturum_turu": os.environ.get("XDG_SESSION_TYPE", ""),
         "masaustu": os.environ.get("XDG_CURRENT_DESKTOP", ""),
         "wayland": bool(os.environ.get("WAYLAND_DISPLAY")),
+        # Açılışta kilit (0.9.0): yardımcının başladığı an (açılıştan saniye); servis oturumun yaşını bundan bulur.
+        "oturum_baslangic": sistem.surec_baslangici(),
     }
 
 
+def tek_ornek_yolu(ortam: dict | None = None) -> str | None:
+    """Aynı oturumda (aynı kullanıcı + aynı ekran) tek yardımcı çalışsın diye kilit dosyasının yolu.
+
+    Yalnız kullanıcıya özel XDG_RUNTIME_DIR kullanılır (/run/user/UID, 0700): /tmp'de başka bir hesap
+    aynı adlı dosyayı önceden açıp kilit ekranını engelleyemesin. Dizin yoksa tek örnek denetimi yapılmaz.
+    """
+    ortam = os.environ if ortam is None else ortam
+    dizin = ortam.get("XDG_RUNTIME_DIR") or ""
+    if not dizin or not os.path.isdir(dizin):
+        return None
+    ekran_adi = re.sub(r"[^A-Za-z0-9_.-]", "_", ortam.get("WAYLAND_DISPLAY") or ortam.get("DISPLAY") or "yok")[:40]
+    return os.path.join(dizin, f"tahta-ekran-{ekran_adi}.kilit")
+
+
+def _tek_ornek_al():
+    """Kilidi alır ve dosyayı açık tutar (süreç bitince çekirdek bırakır; eski dosya sorun değildir).
+    Başka bir yardımcı tutuyorsa None döner. Denetim yapılamıyorsa (dizin yok, fcntl yok) True."""
+    yol = tek_ornek_yolu()
+    if yol is None:
+        return True
+    try:
+        import fcntl
+
+        dosya = open(yol, "a")  # noqa: SIM115 — süreç boyunca açık kalır
+        fcntl.flock(dosya.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return dosya
+    except BlockingIOError:
+        return None
+    except (OSError, ImportError):
+        return True
+
+
 def calistir() -> int:
+    tek = _tek_ornek_al()
+    if tek is None:
+        # Bu oturumda yardımcı zaten çalışıyor (otomatik başlatma + elle başlatma): ikinci pencere/düğme açılmaz.
+        print("Ekran yardımcısı bu oturumda zaten çalışıyor.", file=sys.stderr)
+        return 0
     try:
         import gi
 
@@ -641,6 +682,18 @@ def calistir() -> int:
         print(f"Ekran kitaplığı yüklenemedi: {hata}", file=sys.stderr)
         baglanti.calis()
         return 2
+    # Otomatik başlatma görüntü sunucusu hazır olmadan çalışırsa (oturum açılışında yarış) hemen
+    # çökmeden bir süre beklenir; yardımcı hiç başlamazsa kilit yeni oturumda geri gelmezdi (G2).
+    for _ in range(30):
+        if Gdk.Screen.get_default() is not None:
+            break
+        sonuc = Gtk.init_check(sys.argv)
+        if (sonuc[0] if isinstance(sonuc, tuple) else sonuc) and Gdk.Screen.get_default() is not None:
+            break
+        time.sleep(2)
+    if Gdk.Screen.get_default() is None:
+        print("Görüntü sunucusuna bağlanılamadı (DISPLAY).", file=sys.stderr)
+        return 3
 
     class Ekran:
         def __init__(self):
@@ -756,9 +809,18 @@ def calistir() -> int:
             self.baglanti = Baglanti(
                 lambda m: GLib.idle_add(self._mesaj, m), lambda: GLib.idle_add(self._koptu)
             )
+            # Yüzer düğme (0.9.0, G3): kurulamazsa ekran düğmesiz çalışır (kilit ve duyuru etkilenmez).
+            self.yuzer = None
+            try:
+                from . import yuzer
+
+                self.yuzer = yuzer.kur(self)
+            except Exception as hata:
+                print(f"Yüzer düğme kurulamadı: {type(hata).__name__}: {hata}", file=sys.stderr)
             self.baglanti.merhaba = dict(
-                _ortam_bilgisi(), arayuz="gtk3", genislik=geometri[0], yukseklik=geometri[1]
-            )
+                _ortam_bilgisi(), arayuz="gtk3", genislik=geometri[0], yukseklik=geometri[1],
+                dugme=self.yuzer is not None, bilesik=bool(ekran.is_composited()),
+            )  # fmt: skip
             threading.Thread(target=self.baglanti.calis, daemon=True).start()
             GLib.timeout_add(1000, self._saniye)
 
@@ -821,6 +883,8 @@ def calistir() -> int:
             self._ekran_denetle()
             if self.gorunur:
                 self._tam_ekran()
+            if getattr(self, "yuzer", None) is not None:
+                self.yuzer.ekran_degisti()
             if self.ekran_en:
                 self.baglanti.gonder({"tur": "ekran_durumu", "genislik": self.ekran_en, "yukseklik": self.ekran_boy,
                                       "klavye_kilidi": self.klavye_kilidi})  # fmt: skip
@@ -1869,6 +1933,8 @@ def calistir() -> int:
                     self.baglanti.gonder(dict(sonuc, tur="pencere_sonucu"))
 
                 threading.Thread(target=_kapat, daemon=True).start()
+            if mesaj.get("tur") == "dugme_sonuc" and self.yuzer is not None:
+                self.yuzer.sonuc(mesaj)
             if mesaj.get("tur") == "marka":
                 self._marka(mesaj)
                 if self.durum:
@@ -1945,8 +2011,9 @@ def calistir() -> int:
             simdi = time.localtime()
             self.saat.set_text(time.strftime("%H:%M", simdi))
             self.tarih.set_text(f"{simdi.tm_mday} {AYLAR[simdi.tm_mon - 1]} {simdi.tm_year} {GUNLER[simdi.tm_wday]}")
-            # Servis 10 saniyedir yoksa pencere kapanır (kilit rehin tutmaz).
-            if self.kopma_zamani and time.time() - self.kopma_zamani > 10 and self.gorunur:
+            # Servis 10 saniyedir yoksa pencere kapanır (kilit rehin tutmaz); masaüstündeyken de eski durum
+            # silinir ki yüzer düğme gizlensin (servis yokken "Kilitle" sessizce hiçbir şey yapmasın).
+            if self.kopma_zamani and time.time() - self.kopma_zamani > 10 and (self.gorunur or self.durum is not None):
                 self.durum = None
                 self._ciz()
             if self.durum and self.durum.get("kapatma"):
@@ -2012,6 +2079,12 @@ def calistir() -> int:
             return True
 
         def _ciz(self):
+            self._sayfayi_ciz()
+            # Yüzer düğme yalnız tam ekran sayfa yokken (ana pencere gizliyken) görünür.
+            if self.yuzer is not None:
+                self.yuzer.guncelle(self.durum, self.gorunur)
+
+        def _sayfayi_ciz(self):
             durum = self.durum or {}
             duyuru = durum.get("duyuru")
             kapatma = durum.get("kapatma")
@@ -2116,6 +2189,10 @@ def calistir() -> int:
                 self._gizle()
 
         def _goster(self, kilit: bool):
+            # Yüzer düğmenin menüsü dokunmayı tutuyorsa (grab) önce bırakılır; yoksa sonraki ungrab
+            # bu pencerenin klavye kilidini de bırakırdı.
+            if self.yuzer is not None:
+                self.yuzer.gizle()
             ilk = not self.gorunur
             self.gorunur = True
             self._ekran_denetle()

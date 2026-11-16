@@ -125,6 +125,22 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
   sertifikası kurulumda kopyalanır; tahtalara ajan yeniden kurulmaz (`docs/saha-denemesi.md`
   §1.1). Gerçek hizmet kurulumu henüz yönetici yetkili bir denemede doğrulanmadı.
 
+0.9.0 ile (ilk gerçek tahta denemesinin bulguları):
+
+- **Tahtadaki yüzer düğme:** köşede küçük, soluk, parmakla taşınabilen bir düğme; dokununca
+  Kilitle, Kapat, Yeniden başlat, Arıza bildir ve Yoklama al. Kapatma ve yeniden başlatma
+  10 saniyelik onay ister; tahtadan kilitleme sunucu kapalıyken de çalışır. Hangi işlemlerin
+  görüneceği Ayarlar'dan seçilir; her işlem işlem kaydına düşer (kullanıcı adı gönderilmez).
+- **Kurulum öğretmen oturumunda da yapılabilir:** kurulum betiği yönetici yetkisini kendisi
+  alır ve yönetici hesabının parolasını sorar (başına `sudo` yazılmaz).
+- **Açılışta kilit:** tahta açılınca ya da oturum açılınca, sunucuya ulaşabiliyorsa tahta
+  kendiliğinden kilitlenir ve öğretmen kilit koduyla açar; sunucuya ulaşılamıyorsa açık başlar
+  (ders bölünmez). Yönetici (etapadmin) oturumu ve program kilidinin yönettiği ders saatleri
+  hariçtir; program kilidi açıksa ders dışında (ilk dersten önce, teneffüste) verilen kilit bir
+  sonraki dersin başında kendiliğinden açılır. Kilit kodu belirlenmemişse uygulanmaz. Ayarlar'dan
+  kapatılabilir.
+- Kilitli tahtanın kilidi yeniden başlatmada ve oturum değişince korunur.
+
 ## Çalıştırma (geliştirme)
 
 Python 3.12 ve [uv](https://docs.astral.sh/uv/) gerekir.

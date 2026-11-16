@@ -34,7 +34,27 @@ RAKAMLAR = "0123456789"  # str.isdigit() "²" gibi karakterleri de kabul eder
 KOD_BEKLEME_SN = 60
 LOGO_YENIDEN_DENEME_SN = 60
 # Sunucunun bu ajana uygulayabileceği yetenekler (sürüm karşılaştırması yerine).
-YETENEKLER = ["acil", "duyuru_id", "program_kilidi", "sinav", "yoklama", "adres_listesi", "envanter", "ariza", "temizlik"]
+YETENEKLER = [
+    "acil", "duyuru_id", "program_kilidi", "sinav", "yoklama", "adres_listesi", "envanter", "ariza", "temizlik",
+    "dugme", "acilis_kilidi",
+]  # fmt: skip
+# Yüzer düğme (0.9.0, G3). Ayar sunucudan (`ayar.dugme`) gelir ve durum.json'da saklanır (sır değil): sunucu
+# kapalıyken servis yeniden başlasa da düğme görünür ve tahtadan kilitlenebilir. Ekrandan gelen her işlem
+# burada ayara göre yeniden doğrulanır (yerel soketi herhangi bir yerel süreç açabilir).
+DUGME_ISLEMLERI = ("kilitle", "kapat", "yeniden_baslat", "ariza", "yoklama")
+# Olay metinleri sunucudaki tahta_sunucu/dugme.py OLAY_* ile aynıdır (ajan sunucu paketini içe aktarmaz).
+DUGME_OLAYLARI = {
+    "kilitle": "Tahtadan kilitlendi",
+    "kapat": "Tahtadan kapatıldı",
+    "yeniden_baslat": "Tahtadan yeniden başlatıldı",
+}
+DUGME_GUC_GECIKME_SN = 3  # olay sunucuya gitsin diye kapatma/yeniden başlatma bu kadar sonra uygulanır
+ILETI_DUGME_AYAR = "Bu işlem tahtadan yapılamıyor (okul ayarı)."
+ILETI_DUGME_KOD_YOK = "Kilit kodu belirlenmemiş; tahta yalnız panelden kilitlenir."
+ILETI_DUGME_SINAV = "Sınav sürüyor; işlem yapılamaz."
+ILETI_DUGME_ACIL = "Acil yayın sürüyor; işlem yapılamaz."
+ILETI_DUGME_KILITLI = "Tahta kilitliyken bu işlem yapılamaz."
+ILETI_DUGME_YETKI = "Bu istek ekrandaki oturumdan gelmedi; işlem yapılmadı."
 # Oturum temizliği (K7, 0.8.0): kullanılan tahtada uyarı süresi ve ekran yardımcısının pencere yanıtı.
 TEMIZLIK_UYARI_SN = 60
 TEMIZLIK_PENCERE_BEKLEME_SN = 15
@@ -141,6 +161,14 @@ class Servis:
         self.yoklama_etkin = None
         # Ağ isteği atan işler ayrı iş parçacığında çalışır (ekran beklemez); testler eşzamanlı yapar.
         self.arka_plan = lambda is_: threading.Thread(target=is_, daemon=True).start()
+        self.zamanla = lambda sn, is_: threading.Timer(sn, is_).start()
+        # Yüzer düğme ayarı: None = sunucu hiç bildirmedi (eski sunucu) → düğme yok.
+        self.dugme = _dugme_coz(kayitli.get("dugme"))
+        # Açılışta kilit (0.9.0): oturumun kimliği ve başlangıcı (açılıştan saniye). Kararı SUNUCU verir:
+        # yeni oturum_no görünce ve oturum genç ise "kilitle" komutu iner; sunucuya ulaşılamazsa tahta açık
+        # kalır (kural 3). Hesap adı değil, rastgele kimlik. Aynı açılışta servis yeniden başlarsa korunur.
+        self.acilis = sistem.acilis_kimligi()
+        self.oturum = _oturum_coz(kayitli.get("oturum"), self.acilis)
         self.okul_adi = kayitli.get("okul_adi", "")
         self.kilit_kodu = kayitli.get("kilit_kodu")  # {"tuz","ozet","tur"} ya da None
         # Açılışta sunucuya ulaşmak için süre tanınır; yoksa kilit ilk saniyede kodsuz açılabilirdi.
@@ -207,6 +235,8 @@ class Servis:
                 "logo_sha256": self.logo_sha,
                 "tahta": self.tahta_bilgi,
                 "ariza_kuyrugu": self.ariza_kuyrugu,
+                "dugme": self.dugme,
+                "oturum": dict(self.oturum, acilis=self.acilis) if self.oturum else None,
             }
         )
 
@@ -975,7 +1005,126 @@ class Servis:
                 "logo_sha256": self.logo_sha,
                 "tahta_adi": self.tahta_bilgi["ad"],
                 "derslik": self.tahta_bilgi["derslik"],
+                # Yüzer düğme (G3): görünecek işlemler; kilit kodu özeti GİTMEZ, yalnız var/yok sonucu.
+                "dugme": self._dugme_gorunumu(),
             }
+
+    def _oturum_gor(self, baslangic):
+        """Ekran yardımcısı bağlandı: başlangıcı bilinen oturumdan yeniyse yeni oturum kimliği üretilir.
+
+        Aynı yardımcının yeniden bağlanması (servis yeniden başladı, soket koptu) ya da güncellemede execv ile
+        kendini yeniden başlatması aynı başlangıcı bildirir: oturum değişmez. Eski yardımcı alanı göndermez:
+        oturum açılmaz (açılışta kilit uygulanmaz)."""
+        if isinstance(baslangic, bool) or not isinstance(baslangic, (int, float)) or not 0 <= baslangic < 10**9:
+            return
+        baslangic = round(float(baslangic), 2)
+        # Gelecekteki bir başlangıç kabul edilmez: büyük bir değer sonraki gerçek oturumları "eski" gösterip
+        # açılışta kilidi o açılış boyunca kapatırdı (0.9.0 incelemesi).
+        simdi = sistem.acik_sure_tam()
+        if simdi is not None and baslangic > simdi + 2:
+            gunluk.warning("Oturum başlangıcı reddedildi: açılış sayacından ileride.")
+            return
+        with self.kilit:
+            if self.oturum is not None and baslangic <= self.oturum["baslangic"] + 1:
+                return
+            self.oturum = {"no": secrets.token_hex(6), "baslangic": baslangic}
+            self._kaydet()
+        gunluk.info("Yeni oturum (açılıştan %s sn sonra başladı).", int(baslangic))
+
+    def oturum_ozeti(self) -> dict:
+        with self.kilit:
+            oturum = self.oturum
+        if oturum is None:
+            return {"oturum_no": None, "oturum_yasi_sn": None}
+        simdi = sistem.acik_sure_tam()
+        yas = None if simdi is None else max(0, int(simdi - oturum["baslangic"]))
+        return {"oturum_no": oturum["no"], "oturum_yasi_sn": yas}
+
+    def _dugme_gorunumu(self) -> dict:
+        """Ekrana giden düğme görünümü (çağıran kilidi tutar ya da yalnız okur)."""
+        d = self.dugme
+        if not d or not d["acik"]:
+            return {"acik": False, "islemler": [], "kilitle_kullanilabilir": False}
+        return {"acik": True, "islemler": list(d["islemler"]), "kilitle_kullanilabilir": bool(self.kilit_kodu)}
+
+    def dugme_tani_metni(self) -> str:
+        """Tanılama satırı "Yüzer düğme": ayar ve bağlı yardımcıların desteği (hesap adı yok)."""
+        with self.kilit:
+            d = self.dugme
+            yardimcilar = [e["bilgi"] for e in self.ekranlar.values() if e["bilgi"].get("arayuz") not in GORUNMEZ_ARAYUZ]
+            kod = bool(self.kilit_kodu)
+        if d is None:
+            ayar_metni = "sunucu ayar göndermedi (eski sunucu ya da henüz bağlanmadı); düğme gösterilmez"
+        elif not d["acik"]:
+            ayar_metni = "kapalı (Ayarlar)"
+        else:
+            ayar_metni = "açık · " + ", ".join(d["islemler"])
+            if "kilitle" in d["islemler"] and not kod:
+                ayar_metni += " · Kilitle soluk (kilit kodu yok)"
+        destek = sum(1 for b in yardimcilar if b.get("dugme"))
+        bilesik = sum(1 for b in yardimcilar if b.get("bilesik"))
+        return f"{ayar_metni} · ekran yardımcısı: {len(yardimcilar)} bağlı, {destek} düğmeli, {bilesik} bileşikli masaüstü"
+
+    def kilit_tani_metni(self) -> str:
+        """Tanılama satırı "Kilit durumu kalıcılığı" için servisin bellekteki kilit durumu."""
+        with self.kilit:
+            metin = "kilitli (" + ("program" if self._program_kilidi() else "idare") + ")" if self.kilitli else "açık"
+        # Açılışta kilit (0.9.0): sunucu yeni oturumu bu yaşla görür; 120 sn'den yaşlıysa kilitlemez.
+        yas = self.oturum_ozeti()["oturum_yasi_sn"]
+        return metin + (" · oturum yok (yardımcı bu açılışta bağlanmadı)" if yas is None else f" · oturum {yas} sn önce başladı")
+
+    def _etkin_oturumdan(self, no: int) -> bool:
+        """Bağlantı ekrandaki oturumun görünür ekran yardımcısı mı? Kısa ömürlü komut istemcisi (`arayuz: komut`)
+        ve arka plandaki başka bir hesabın süreci değildir. Kullanıcı kimliği çekirdekten okunur; etkin oturumun
+        ya da bağlantının kimliği bilinemiyorsa (loginctl yok) denetim gevşer, düğme yine çalışır."""
+        with self.kilit:
+            ekran = self.ekranlar.get(no)
+            if ekran is None or ekran["bilgi"].get("arayuz") in GORUNMEZ_ARAYUZ:
+                return False
+            uid = ekran.get("uid")
+        etkin = sistem.etkin_oturum_uid()
+        return uid is None or etkin is None or uid == etkin
+
+    def dugme_islemi(self, islem: str) -> tuple[bool, str]:
+        """Tahtadaki yüzer düğmeden gelen işlem (G3). Ayara ve tahtanın durumuna göre burada doğrulanır.
+
+        Kilitle: idare kilidinin aynısıdır (süresiz, panelde "Kilitli"); kodla, panelden ya da sunucuya
+        CEVRIMDISI_SN ulaşılamazsa kodsuz açılır. Kilit kodu yoksa kilitlemez: tahta panelden açılana dek
+        kilitli kalırdı. Kapat / Yeniden başlat: ekrandaki 10 sn onaydan sonra gelir; olay önce bildirilir.
+        Sunucuya hesap adı gitmez, yalnız hesap sınıfı (kural 6).
+        """
+        if islem not in DUGME_OLAYLARI:
+            return False, ILETI_DUGME_AYAR
+        sinif = sistem.etkin_oturum().get("sinif", "") or "bilinmiyor"
+        with self.kilit:
+            d = self.dugme
+            if not d or not d["acik"] or islem not in d["islemler"]:
+                return False, ILETI_DUGME_AYAR
+            if self._sinav_aktif() is not None:
+                return False, ILETI_DUGME_SINAV
+            if self.acil is not None and self.acil["bitis"] > time.time():
+                return False, ILETI_DUGME_ACIL
+            olay = f"{DUGME_OLAYLARI[islem]} (oturum: {sinif})."
+            if self.kilitli:
+                # Düğme kilit ekranında gizlidir; buraya gelen istek ekrandan gelmemiştir. Süreli program
+                # kilidi süresiz idare kilidine çevrilmez, kilitli tahta onaysız kapatılmaz.
+                return (True, "Tahta zaten kilitli.") if islem == "kilitle" else (False, ILETI_DUGME_KILITLI)
+            if islem == "kilitle":
+                if not self.kilit_kodu:
+                    return False, ILETI_DUGME_KOD_YOK
+                self._kilit_birak()
+                self.kilitli = True
+                self.kilit_kaynak = "idare"
+                self._kaydet()
+            self.olaylar.append(olay)
+        gunluk.info("Yüzer düğme: %s", olay)
+        self.yayinla()
+        self.bildir()
+        if islem == "kilitle":
+            return True, "Kilitlendi."
+        islev = sistem.kapat if islem == "kapat" else sistem.yeniden_baslat
+        self.zamanla(DUGME_GUC_GECIKME_SN, lambda: gunluk.info("%s (tahtadan): %s", islem, islev()))
+        return True, "Komut alındı; üç saniye içinde uygulanacak."
 
     def marka_mesaji(self) -> dict:
         """Logo baytlarını ekran yardımcısına taşıyan satır (yardımcı root dosyasını okuyamaz)."""
@@ -1036,6 +1185,8 @@ class Servis:
             "mac": ag.get("mac", ""),
             "platform": sistem.platform_adi(),
             "olaylar": olaylar,
+            # Açılışta kilit (0.9.0): oturum kimliği ve yaşı (açılış sayacıyla; tahta saatine dayanmaz).
+            **self.oturum_ozeti(),
             # A6: bağlanılan adres, kayıtlı adres listesinin özeti, envanter özeti (envanter ancak istenince gider).
             "sunucu_adresi": self._etkin_adres or self.yapi.get("sunucu", ""),
             "adres_listesi_ozet": ayar.adres_listesi_ozet(self.yapi.get("sunucular") or []),
@@ -1048,14 +1199,27 @@ class Servis:
         if tur in ("merhaba", "ekran_durumu"):
             with self.kilit:
                 if no in self.ekranlar:
-                    bilgi = {k: v for k, v in mesaj.items() if k != "tur"}
+                    bilgi = {k: v for k, v in mesaj.items() if k not in ("tur", "oturum_baslangic")}
                     self.ekranlar[no]["bilgi"].update(bilgi)
+            if tur == "merhaba" and mesaj.get("arayuz") not in GORUNMEZ_ARAYUZ and self._etkin_oturumdan(no):
+                self._oturum_gor(mesaj.get("oturum_baslangic"))
             if tur == "merhaba" and mesaj.get("arayuz") != "komut" and mesaj.get("surum") not in (None, __version__):
                 # Güncellemeden sonra eski sürümlü yardımcı kendini yeniden başlatır.
                 self.ekranlar[no]["gonder"]({"tur": "yeniden_baslat"})
             self.bildir()
         elif tur == "kod":
             self._kod_dene(str(mesaj.get("kod", "")))
+        elif tur in ("yerel_kilitle", "yerel_kapat", "yerel_yeniden_baslat"):
+            # Yüzer düğme (G3): ekran yalnız ister; ayar, durum ve isteğin kaynağı burada denetlenir.
+            if self._etkin_oturumdan(no):
+                basarili, metin = self.dugme_islemi(tur[len("yerel_"):])
+            else:
+                basarili, metin = False, ILETI_DUGME_YETKI
+                gunluk.warning("Yüzer düğme isteği reddedildi (no %s): ekrandaki oturumun yardımcısı değil.", no)
+            with self.kilit:
+                hedef = self.ekranlar.get(no)
+            if hedef:
+                hedef["gonder"]({"tur": "dugme_sonuc", "islem": tur[len("yerel_"):], "basarili": basarili, "mesaj": metin})
         elif tur == "cevrimdisi_ac":
             # Tek çevrimdışı düğmesi: yalnız sunucuya ulaşılamıyorken kilidi açar ve acil
             # yayını kapatır (kural 3). Sunucu dönünce yayın sürüyorsa yeniden gelir.
@@ -1361,7 +1525,7 @@ class Servis:
                 ekranlar = [dict(e["bilgi"]) for e in self.ekranlar.values()]
             rapor = tani.topla(
                 parca.hostname or "", parca.port or 443, self.sunucu_saat, ekranlar, self.sinav_tani_metni(),
-                sunucular=ayar.adres_sirasi(self.yapi),
+                sunucular=ayar.adres_sirasi(self.yapi), kilit=self.kilit_tani_metni(), dugme=self.dugme_tani_metni(),
             )
             return True, json.dumps(rapor, ensure_ascii=False)
         if tur == "guncelle":
@@ -1642,6 +1806,11 @@ class Servis:
                 bilgi = {"ad": _kisa(ayarlar["tahta"].get("ad")), "derslik": _kisa(ayarlar["tahta"].get("derslik"))}
                 if bilgi != self.tahta_bilgi:
                     self.tahta_bilgi, degisti = bilgi, True
+            # Yüzer düğme (G3): durum tabanlı. Alan yoksa (eski sunucu) düğme kalkar; yanıt hiç gelmezse
+            # (sunucu kapalı) durum.json'daki son ayar geçerli kalır.
+            dugme = _dugme_coz(ayarlar.get("dugme")) if "dugme" in ayarlar else None
+            if dugme != self.dugme:
+                self.dugme, degisti = dugme, True
         # Adres listesi (A6): durum tabanlı; anahtar yoksa (eski sunucu ya da boş liste) dokunulmaz.
         if "sunucu_adresleri" in ayarlar:
             self._adres_listesi_isle(ayarlar["sunucu_adresleri"])
@@ -1880,6 +2049,12 @@ class Servis:
                     servis._ekran_no += 1
                     no = servis._ekran_no
                     servis.ekranlar[no] = {"gonder": gonder, "bilgi": {"arayuz": "komut"} if komut else {}, "uid": uid}
+                    kilit_metni = "kilitli" if servis.kilitli else "açık"
+                if not komut:
+                    # Saha tanılaması (G2): oturum açılınca yardımcının bağlanıp bağlanmadığı ve o anki kilit
+                    # durumu günlükte görünsün. Yalnız sayısal kullanıcı kimliği yazılır, hesap adı yazılmaz.
+                    arayuz = ilk.get("arayuz") if isinstance(ilk, dict) else None
+                    gunluk.info("Ekran yardımcısı bağlandı (no %s, uid %s, arayüz %s); tahta %s.", no, uid, arayuz, kilit_metni)
                 try:
                     if not komut:
                         # Logo önce gider: yardımcı ilk durumu çizerken logoyu zaten tanır.
@@ -1900,6 +2075,8 @@ class Servis:
                 finally:
                     with servis.kilit:
                         servis.ekranlar.pop(no, None)
+                    if not komut:
+                        gunluk.info("Ekran yardımcısı ayrıldı (no %s).", no)
                     servis.bildir()
 
         class Sunucu(socketserver.ThreadingTCPServer):
@@ -1947,6 +2124,28 @@ def _ariza_kuyrugu_coz(deger) -> list[dict]:
             "tahta_zamani": _sayi(oge.get("tahta_zamani")),
         })  # fmt: skip
     return sonuc[:ARIZA_KUYRUK_EN_COK]
+
+
+def _oturum_coz(deger, acilis: str) -> dict | None:
+    """durum.json'daki oturum: yalnız aynı açılışa aitse geçerlidir (yeniden başlatmada sayaç sıfırlanır)."""
+    if not isinstance(deger, dict) or not acilis or deger.get("acilis") != acilis:
+        return None
+    no, baslangic = deger.get("no"), deger.get("baslangic")
+    if not isinstance(no, str) or not 1 <= len(no) <= 32 or isinstance(baslangic, bool) or not isinstance(baslangic, (int, float)):
+        return None
+    return {"no": no, "baslangic": float(baslangic)}
+
+
+def _dugme_coz(deger) -> dict | None:
+    """`ayar.dugme` (ya da durum.json'daki kopyası): {"acik", "islemler"} — işlemler bilinenlerin sıralı
+    alt kümesi. None → None (ayar yok). Bozuk değer ya da boş liste kapalı sayılır."""
+    if deger is None:
+        return None
+    if not isinstance(deger, dict) or deger.get("acik") is not True or not isinstance(deger.get("islemler"), list):
+        return {"acik": False, "islemler": []}
+    istenen = {str(i) for i in deger["islemler"]}
+    islemler = [i for i in DUGME_ISLEMLERI if i in istenen]
+    return {"acik": bool(islemler), "islemler": islemler}
 
 
 def _saat_gecerli(deger: str) -> bool:

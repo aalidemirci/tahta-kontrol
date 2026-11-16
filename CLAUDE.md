@@ -6,7 +6,12 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.8.0, saha denemesi sürümü** (0.8.0: 16.11.2026 kararları — ikili eğitim, öğretim yılı sonuna
+- Durum: **0.9.0, saha denemesi sürümü** (0.9.0: gerçek ETAP tahtasındaki ilk saha bulguları G1–G3 —
+  kurulum ve otomatik giriş betikleri yönetici yetkisini kendileri alır (sudo → pkexec → su, öğretmen
+  oturumunda etapadmin parolası sorulur), tahtada yüzer düğme (Kilitle/Kapat/Yeniden başlat/Arıza/
+  Yoklama; Ayarlar › Tahtadaki yüzer düğme), açılışta kilit (oturum açılınca ya da tahta açılınca sunucuya
+  ulaşılıyorsa kilitlenir, kararı sunucu verir; Ayarlar › Açılışta kilit); tasarım §5.1;
+  0.8.0: 16.11.2026 kararları — ikili eğitim, öğretim yılı sonuna
   kadar saklama, acil yayını bütün idareciler başlatır, boş ders uyarısı varsayılan açık + rapor, gün sonu
   oturum temizliği (K7, varsayılan kapalı; yalnız Debian 12 kabında denendi), sunucu Windows
   hizmeti (K8; birim testleri ve uçbirimde hizmet kipi, gerçek hizmet kurulumu denenmedi); 0.7.1:
@@ -78,6 +83,9 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   maske.py      tek maskeleme tanımı: kalabalik("Ah*** Yı****"), no_son("47"), sinif_etiketi("Ayşe Y.")
   program.py    zil saatleri, Okul Zili okuma, takvim (plan_hesapla/gun_plani), derslik CSV, kilit aralıkları (saf);
                 ikili eğitim: devre_turleri (sabah/öğle eşlemesi), tahta_devreleri (programdan devre)
+  dugme.py      tahtadaki yüzer düğme (0.9.0): ayar.tahta_dugmesi → ajana ayar.dugme {acik, islemler}
+  acilis_kilidi.py  açılışta kilit (0.9.0): yeni durum.oturum_no + oturum_yasi_sn ≤ 120 → bir kez "kilitle"
+                (program kilidinin yönettiği tahtada ders dışı saatte süreli program kilidi, derste kilit yok)
   temizlik.py   oturum temizliği (K7): ayar.oturum_temizligi (varsayılan kapalı), gün sonu anları
                 (kapatma öncesi / son devrenin sonu / saat), zamanlayıcı (okul geneli işaret program_isaret
                 tahta 0), tahta sayfası özeti; elle uç web.py /tahta/{id}/temizlik
@@ -337,6 +345,21 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
   çalıştırılınca 2 koduyla çıkar (1063); bu beklenen davranıştır.
 - **`pencere` geliştirmede 8787'de sunucu açar:** kurulu sunucu bu bilgisayarda çalışıyorsa önce
   ona bağlanır; denemede `TAHTA_HTTP_PORT`/`TAHTA_HTTPS_PORT`'u değiştirmeden çalıştırma.
+- **`sudo` çağıran hesabın KENDİ parolasını sorar:** `ogretmen` sudo yetkili değildir; öğretmen
+  oturumunda `sudo bash tahta-kur.sh` öğretmen parolasını sorup reddeder (G1, 16.11.2026, gerçek ETAP).
+  `kur.sh` ve `araclar/otomatik-giris.sh` yetkiyi kendileri alır: root → sudo (yetkiliyse) → pkexec
+  (grafik oturum; polkit etapadmin'i sorar) → `su etapadmin` + sudo → "etapadmin oturumunda yapın".
+  Yönergeye `sudo` yazılmaz.
+- **`su -c` komutu yeni oturumda (denetim uçbirimi olmadan) çalıştırır:** içindeki `sudo` parola
+  soramaz ("a terminal is required"); `su --pty` kullanılır, `--pty` yoksa `sudo -S` (Docker'da
+  doğrulandı, 16.11.2026). Kapta polkit kimlik doğrulaması "No session for cookie" ile düşer (logind
+  oturumu yok); pkexec yolu yalnız gerçek masaüstünde sınanır.
+- **Ölü uzun bekleme komut çalar:** ajan yeniden başlayınca eski bağlantının `/ajan/bekle`'si sunucuda
+  25 sn'ye kadar açık kalır; süresi dolunca bekleyen komutu alıp ölü sokete yollardı (açılışta kilit
+  Docker'da hiç inmedi, 16.11.2026). `bekleyenler`'de yerini yenisi alan bekleme komut almaz.
+- **Açılışta kilidin oturum yaşı süreç başlangıcından gelir** (`/proc/self/stat`, `execv`'de korunur):
+  güncellemede kendini yeniden başlatan yardımcı yeni oturum sayılmaz. Docker kapları çekirdeği
+  paylaştığı için `boot_id` ve açılış sayacı kapta "yeniden başlatma" ile değişmez.
 - **Deneme betiklerinde saat:** Git Bash'te `TZ=Europe/Istanbul date` UTC verir; saati Python ile hesapla.
 - **İlk kurulum yalnız 127.0.0.1'den yapılır;** ağdaki biri yönetici hesabını kapamasın.
 - **Docker'da deneme:** `debian:12` + `python3-gi gir1.2-gtk-3.0 xvfb openbox imagemagick`;

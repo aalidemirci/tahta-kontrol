@@ -1,7 +1,7 @@
 {% extends "taban.html" %}
 {% block baslik %}Ayarlar · Tahta Kontrol{% endblock %}
 {# Okul kimliği işlemlerinin iletisi sayfa başında değil, #kimlik bölümünde çizilir (yönlendirme oraya kayar). #}
-{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in ('kimlik', 'acil', 'sinav', 'adresler', 'saklama', 'temizlik') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
+{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in ('kimlik', 'acil', 'sinav', 'adresler', 'saklama', 'temizlik', 'dugme', 'acilis') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}
 <div class="sayfa-bas"><h1>Ayarlar</h1></div>
 {% if saklama_durumu.uyari %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ saklama_durumu.uyari }} <a href="#saklama">Kişisel veri saklama</a></p>{% endif %}
@@ -216,6 +216,51 @@
       {% if temizlik_eski %}{{ temizlik_eski }} tahtada ajan güncellenmeli (eski ajan temizlik yapmaz).{% endif %}
       Tek bir tahtada denemek için tahta sayfasındaki “Şimdi temizle” düğmesini kullanın.</p>
     <p class="dugme-satiri"><button class="ana">Temizlik ayarını kaydet</button></p>
+  </form>
+</section>
+
+{# Açılışta kilit (0.9.0, G2): ayrı form (bolum=acilis_kilidi); yalnız `acilis_kilidi` anahtarını yazar. Varsayılan açık. #}
+<h2 id="acilis-kilidi">Açılışta kilit</h2>
+<section class="kutu" aria-labelledby="acilis-kilidi">
+  {% if mesaj and ileti_yeri == 'acilis' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  {% if acilis_kilidi_acik and dugme_kilit_kodu_yok %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg><strong>Kilit kodu belirlenmedi:</strong> açılışta kilit uygulanmıyor. Kodsuz kilitlenen tahta yalnız panelden açılabilir; kodu <a href="#okul_adi">Okul ve tahta güvenliği</a> bölümünden belirleyin.</p>{% endif %}
+  <p class="ipucu" id="acilis-ipucu">Tahta açılınca ya da tahtada oturum açılınca, tahta sunucuya ulaşabiliyorsa kendiliğinden kilitlenir;
+    öğretmen kilidi kilit koduyla açar. Sunucuya ulaşılamıyorsa tahta açık başlar (ders bölünmez). Aynı oturum bir kez kilitlenir:
+    kodla ya da panelden açılan tahta yeniden kilitlenmez.</p>
+  <form method="post" action="/ayarlar" class="form-dar">
+    <input type="hidden" name="bolum" value="acilis_kilidi">
+    <div class="onay-alani"><label class="satir"><input type="checkbox" name="ak_acik" value="1" {% if acilis_kilidi_acik %}checked{% endif %} aria-describedby="acilis-ipucu"> Tahta açılınca kilitli başlasın</label></div>
+    <p class="not">Uygulanmadığı durumlar: yönetici (etapadmin) oturumu; oturum açıldıktan {{ acilis_en_yasli_sn }} saniye sonra hâlâ
+      sunucuya ulaşılamamışsa (ders başlamış olabilir); acil yayın ve sınav penceresi; program kilidinin yönettiği tahtada
+      ders saatleri içinde (o saatlerde derste açık, teneffüste kilitli kararını program kilidi verir).
+      {% if acilis_eski %}{{ acilis_eski }} tahtada ajan güncellenmeli (eski ajan açılışta kilitlenmez).{% endif %}</p>
+    <p class="dugme-satiri"><button class="ana">Açılış ayarını kaydet</button></p>
+  </form>
+</section>
+
+{# Tahtadaki yüzer düğme (0.9.0, G3): ayrı form (bolum=dugme); yalnız `tahta_dugmesi` anahtarını yazar. Varsayılan açık. #}
+<h2 id="yuzer-dugme">Tahtadaki yüzer düğme</h2>
+<section class="kutu" aria-labelledby="yuzer-dugme">
+  {% if mesaj and ileti_yeri == 'dugme' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <p class="ipucu" id="dugme-ipucu">Tahtanın köşesinde küçük, soluk, parmakla taşınabilen bir düğme durur; dokununca seçilen işlemlerin
+    menüsü açılır. Kilit, duyuru, acil yayın, sınav ve kapatma uyarısı ekranlarında gizlenir. Öğretmen, öğrenci, yönetici (etapadmin)
+    ve kişisel hesap oturumlarında aynı işlemler görünür. Tahtadan yapılan her işlem İşlem kaydına “Tahta olayı” olarak düşer
+    (kullanıcı adı gönderilmez).</p>
+  <form method="post" action="/ayarlar" class="form-dar">
+    <input type="hidden" name="bolum" value="dugme">
+    <div class="onay-alani"><label class="satir"><input type="checkbox" name="dg_acik" value="1" {% if dugme_ayari.acik %}checked{% endif %} aria-describedby="dugme-ipucu"> Tahtalarda yüzer düğmeyi göster</label></div>
+    <fieldset class="olcut">
+      <legend>Menüdeki işlemler</legend>
+      <div class="secenekler">{% for kod, ad in dugme_islemleri.items() %}<label><input type="checkbox" name="dg_{{ kod }}" value="1" {% if dugme_ayari.islemler[kod] %}checked{% endif %}> {{ ad }}</label>{% endfor %}</div>
+    </fieldset>
+    <p class="not">“Kilitle” tahtayı hemen kilitler; sunucu kapalıyken de çalışır. Kilit panelden, kilit koduyla ya da sunucuya
+      90 saniye ulaşılamazsa tahtadan açılır.{% if dugme_kilit_kodu_yok %} <strong>Kilit kodu belirlenmedi:</strong> tahtadan kilitlenen
+      tahta yalnız panelden açılabileceği için tahtada “Kilitle” soluk görünür ve çalışmaz; kodu yukarıdaki
+      <a href="#okul_adi">Okul ve tahta güvenliği</a> bölümünden belirleyin.{% endif %}
+      “Kapat” ve “Yeniden başlat” yanlış dokunuşa karşı 10 saniyelik geri sayımla onay ister.
+      {% if dugme_yoklama_kapali %}“Yoklama al” ders yoklaması kapalıyken görünmez (<a href="#ders-yoklamasi">Ders yoklaması</a>).{% endif %}
+      {% if dugme_eski %}{{ dugme_eski }} tahtada ajan güncellenmeli (eski ajan düğmeyi göstermez).{% endif %}</p>
+    <p class="dugme-satiri"><button class="ana">Düğme ayarını kaydet</button></p>
   </form>
 </section>
 

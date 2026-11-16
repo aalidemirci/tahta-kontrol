@@ -27,8 +27,10 @@ from starlette.datastructures import UploadFile
 from . import (
     __version__,
     acil,
+    acilis_kilidi,
     adresler,
     ayar,
+    dugme,
     duyuru,
     guvenlik,
     hedef,
@@ -363,6 +365,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             "envanter_yetenegi": envanter_mod.YETENEK in yetenekler,
             "ariza_yetenegi": ariza_mod.YETENEK in yetenekler,
             "adres_listesi_yetenegi": ADRES_YETENEGI in yetenekler,
+            "dugme_yetenegi": dugme.YETENEK in yetenekler,
             "bagli_adres": str(durum.get("sunucu_adresi") or "")[:200],
         }
 
@@ -1071,6 +1074,13 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             temizlik_eski = sum(
                 1 for t in b.execute("SELECT * FROM tahta WHERE durum = 'onayli'") if not temizlik_mod.yetenekli(t)
             )
+            dugme_ayari = dugme.ayar_al(b)
+            dugme_eski = sum(1 for t in b.execute("SELECT * FROM tahta WHERE durum = 'onayli'") if not dugme.yetenekli(t))
+            dugme_yoklama_kapali = not yoklama_mod.etkin(b)
+            acilis_kilidi_acik = acilis_kilidi.ayar_al(b)
+            acilis_eski = sum(
+                1 for t in b.execute("SELECT * FROM tahta WHERE durum = 'onayli'") if not acilis_kilidi.yetenekli(t)
+            )
         uretilen = tema.uret(ana, vurgu)
         logo_bilgi = None
         if logo:
@@ -1127,6 +1137,14 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             temizlik_zamani=temizlik_zamani,
             temizlik_zamanlari=temizlik_mod.ZAMANLAR,
             temizlik_eski=temizlik_eski,
+            dugme_ayari=dugme_ayari,
+            dugme_islemleri=dugme.ISLEMLER,
+            dugme_eski=dugme_eski,
+            dugme_yoklama_kapali=dugme_yoklama_kapali,
+            dugme_kilit_kodu_yok=not kilit_kodu_var,
+            acilis_kilidi_acik=acilis_kilidi_acik,
+            acilis_eski=acilis_eski,
+            acilis_en_yasli_sn=acilis_kilidi.EN_YASLI_OTURUM_SN,
         )
 
     def acil_sablonlarini_kaydet(istek: Request, k, form, ip: str):
@@ -1284,6 +1302,40 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             mesaj += " Uyarı: " + ozet["uyari"]
         return yonlendir(adres, mesaj)
 
+    def dugme_ayarini_kaydet(k, form, ip: str):
+        """Ayarlar › Tahtadaki yüzer düğme (bolum=dugme, 0.9.0): yalnız `tahta_dugmesi` anahtarı yazılır.
+
+        Ayar her `/ajan/bekle` yanıtında `ayar.dugme` olarak iner; tahtalar hemen uyandırılır."""
+        yeni = dugme.ayar_coz(form)
+        with vt.islem() as b:
+            onceki = dugme.ayar_al(b)
+            vt.ayar_yaz(b, dugme.AYAR_ANAHTARI, yeni)
+            vt.kayit_dus(b, k["ad"], "Yüzer düğme ayarı kaydedildi", dugme.ozet(yeni), ip)
+        if onceki != yeni:
+            onayli_tahtalari_uyandir()
+        if not yeni["acik"]:
+            mesaj = "Yüzer düğme kapatıldı; tahtalarda görünmez."
+        elif not any(yeni["islemler"].values()):
+            mesaj = "Yüzer düğme ayarı kaydedildi. Hiçbir işlem seçilmediği için düğme tahtalarda görünmez."
+        else:
+            mesaj = "Yüzer düğme ayarı kaydedildi."
+        return yonlendir("/ayarlar?yer=dugme#ileti", mesaj)
+
+    def acilis_kilidi_kaydet(k, form, ip: str):
+        """Ayarlar › Açılışta kilit (bolum=acilis_kilidi, 0.9.0): yalnız `acilis_kilidi` anahtarı yazılır."""
+        yeni = form.get("ak_acik") == "1"
+        with vt.islem() as b:
+            vt.ayar_yaz(b, acilis_kilidi.AYAR_ANAHTARI, yeni)
+            kod_var = bool(vt.ayar_al(b, "kilit_kodu"))
+            vt.kayit_dus(b, k["ad"], "Açılışta kilit ayarı kaydedildi", "açık" if yeni else "kapalı", ip)
+        if not yeni:
+            mesaj = "Açılışta kilit kapatıldı; tahtalar açılınca açık başlar."
+        elif not kod_var:
+            mesaj = "Açılışta kilit açık, ama kilit kodu belirlenmediği için uygulanmaz. Kilit kodunu belirleyin."
+        else:
+            mesaj = "Açılışta kilit açık: tahta açılınca ya da oturum açılınca, sunucuya ulaşabiliyorsa kilitli başlar."
+        return yonlendir("/ayarlar?yer=acilis#ileti", mesaj, hata=yeni and not kod_var)
+
     def adresleri_kaydet(istek: Request, k, form, ip: str):
         """Ayarlar › Sunucu adresleri (bolum=adresler): `sunucu_adresleri` (satır başına bir adres, en çok 5).
 
@@ -1323,6 +1375,10 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             return saklama_kaydet(k, form, istemci_ip(istek))
         if bolum == "temizlik":
             return temizlik_ayarini_kaydet(k, form, istemci_ip(istek))
+        if bolum == "dugme":
+            return dugme_ayarini_kaydet(k, form, istemci_ip(istek))
+        if bolum == "acilis_kilidi":
+            return acilis_kilidi_kaydet(k, form, istemci_ip(istek))
         if bolum != "genel":
             return yonlendir("/ayarlar", "Bilinmeyen ayar bölümü.", hata=True)
         with vt.islem() as b:
@@ -1516,6 +1572,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             "sinav": sinav.tahta_sinavi(b, tahta["id"], vt.simdi()),
             # A5: durum tabanlı, yalnız açık/kapalı (başka yoklama ayarı tahtaya gitmez).
             "yoklama_etkin": yoklama_mod.etkin(b),
+            # 0.9.0 (G3): yüzer düğme, durum tabanlı. Alan yoksa (eski sunucu) ajan düğmeyi göstermez.
+            "dugme": dugme.ajan_gorunumu(b),
         }
         # A6: durum tabanlı adres listesi; boşsa gönderilmez (ajan elindeki listeyi korur).
         liste = adresler.al(b)
@@ -1574,6 +1632,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         except ValueError:
             return JSONResponse({"hata": "Geçersiz istek."}, status_code=400)
         durum = govde.get("durum") if isinstance(govde.get("durum"), dict) else None
+        acilis_komutu = False
         with vt.islem() as b:
             if durum is not None:
                 olaylar = durum.pop("olaylar", []) or []
@@ -1591,8 +1650,14 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
                         tahta["id"],
                     ),
                 )
-                for olay in olaylar[:20]:
-                    vt.kayit_dus(b, f"tahta:{tahta['ad']}", "Tahta olayı", str(olay), istemci_ip(istek))
+                # Olaylar düz metindir (kodla açma, 0.9.0'dan beri tahtadan kilitleme/kapatma da); kullanıcı
+                # adı taşımaz. Uzunluk sınırı: bozuk ya da kötü niyetli bir ajan kaydı şişirmesin.
+                for olay in (olaylar if isinstance(olaylar, list) else [])[:20]:
+                    vt.kayit_dus(b, f"tahta:{tahta['ad']}", "Tahta olayı", str(olay)[:300], istemci_ip(istek))
+                if tahta["durum"] == "onayli":
+                    # 0.9.0: yeni oturumda bir kez "açılışta kilit" (komut aşağıdaki bekleyen_komutlar ile hemen iner).
+                    acilis_komutu = acilis_kilidi.degerlendir(b, tahta, program_is.durum_oku(tahta), durum,
+                                                              datetime.fromtimestamp(vt.simdi(), ISTANBUL)) == "kilitlendi"  # fmt: skip
             else:
                 b.execute("UPDATE tahta SET son_gorulme = ?, ip = ? WHERE id = ?", (vt.simdi(), istemci_ip(istek), tahta["id"]))
             # A6: arıza kuyruğu ve envanter yalnız onaylı tahtadan kabul edilir (onay bekleyende yanıt alanı da yok).
@@ -1649,6 +1714,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             if tahta["durum"] == "onayli" and durum is not None and envanter_mod.YETENEK in acil.yetenekler({"durum_json": json.dumps(durum)}):
                 guncel_env = b.execute("SELECT envanter_json, envanter_ozet FROM tahta WHERE id = ?", (tahta["id"],)).fetchone()
                 ek_yanit["envanter_iste"] = envanter_mod.envanter_iste(guncel_env, durum.get("envanter_ozet"))
+        if acilis_komutu:
+            uyandir(tahta["id"])  # bu istek komut almıyorsa (komut_al=False) bekleyen uzun bekleme alsın
         if tahta["durum"] != "onayli":
             return {"durum": "bekliyor", "ayar": {"sunucu_saat": time.time()}}
         if govde.get("komut_al", True) is False:
@@ -1701,9 +1768,12 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             except TimeoutError:
                 pass
             finally:
-                if bekleyenler.get(tahta["id"], (None, None))[1] is olay:
+                guncel = bekleyenler.get(tahta["id"], (None, None))[1] is olay
+                if guncel:
                     bekleyenler.pop(tahta["id"], None)
-            komutlar = bekleyen_komutlar()
+            # Yerini daha yeni bir uzun bekleme aldıysa bu bağlantı ölüdür (ajan yeniden başladı, tahta yeniden
+            # açıldı): komutları o almaz, yoksa "gönderildi" sayılıp kaybolurlardı (0.9.0 Docker denemesi).
+            komutlar = bekleyen_komutlar() if guncel else []
             with vt.islem() as b:
                 ayarlar_ = ajan_ayari(b, tahta)
         return {"durum": "onayli", "komutlar": komutlar, "ayar": ayarlar_, **ek_yanit}

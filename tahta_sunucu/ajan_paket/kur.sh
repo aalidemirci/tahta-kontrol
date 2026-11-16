@@ -1,6 +1,7 @@
 #!/bin/bash
 # Tahta Kontrol ajani kurulum betigi (surum @SURUM@)
-# Kullanim:  sudo bash tahta-kur.sh ESLESTIRME_KODU
+# Kullanim:  bash tahta-kur.sh ESLESTIRME_KODU
+#   (yonetici degilseniz betik yonetici parolasini kendisi sorar; basina sudo yazmak gerekmez)
 # Iletiler bilerek ASCII tutulur.
 set -euo pipefail
 
@@ -11,13 +12,96 @@ PARMAK_IZI="@PARMAK_IZI@"
 PAKET_SHA256="@PAKET_SHA256@"
 KOD="${1:-}"
 
-if [ "$(id -u)" != "0" ]; then
-    echo "Bu betik yonetici yetkisi ister:  sudo bash $0 ESLESTIRME_KODU"
-    exit 1
-fi
 if [ -z "$KOD" ]; then
-    echo "Eslestirme kodu verilmedi.  Kullanim:  sudo bash $0 ESLESTIRME_KODU"
+    echo "Eslestirme kodu verilmedi.  Kullanim:  bash $0 ESLESTIRME_KODU"
     exit 2
+fi
+
+# ---- Yonetici yetkisi (0.9.0, saha bulgusu G1) ------------------------------
+# "sudo" cagiran hesabin KENDI parolasini sorar; ogretmen hesabi sudo yetkili olmadigi icin
+# ogretmen oturumunda "sudo bash ..." ise yaramaz. Sira:
+#   (a) zaten root ise devam;
+#   (b) cagiran hesap sudo yetkiliyse (etapadmin) sudo: kendi parolasi;
+#   (c) grafik oturumda pkexec: polkit yonetici (etapadmin) parolasini pencerede sorar;
+#   (d) su ile yonetici hesabi (etapadmin varsa o, yoksa root): o hesabin parolasi;
+#   (e) hicbiri olmazsa: etapadmin oturumunda calistirin.
+# Parolayi sudo/pkexec/su kendisi sorar; betik parolayi gormez, hicbir yere yazmaz.
+sudo_yetkili() {
+    command -v sudo >/dev/null 2>&1 || return 1
+    sudo -n true >/dev/null 2>&1 && return 0
+    for grup in $(id -nG 2>/dev/null); do
+        case "$grup" in sudo|admin|wheel) return 0 ;; esac
+    done
+    return 1
+}
+
+yonetici_hesabi() {
+    if [ -n "${TAHTA_YONETICI:-}" ] && id "$TAHTA_YONETICI" >/dev/null 2>&1; then
+        echo "$TAHTA_YONETICI"
+    elif id etapadmin >/dev/null 2>&1; then
+        echo etapadmin
+    else
+        echo root
+    fi
+}
+
+etapadmin_oturumunda() {
+    echo "Yonetici yetkisi alinamadi."
+    echo "Bu islemi etapadmin oturumunda yapin: oturumu kapatip etapadmin ile girin ve"
+    echo "  bash $1 ESLESTIRME_KODU"
+    echo "komutunu yeniden calistirin."
+}
+
+if [ "$(id -u)" != "0" ]; then
+    BETIK="$(readlink -f "$0")"
+    BEN="$(id -un)"
+    BASH_YOLU="$(command -v bash)"
+    if sudo_yetkili; then
+        echo "Yonetici yetkisi gerekiyor: sudo simdi SIZIN ($BEN) parolanizi soracak."
+        exec sudo "$BASH_YOLU" "$BETIK" "$@"
+    fi
+    echo "'$BEN' hesabinin yonetici yetkisi yok; yonetici (etapadmin) parolasi gerekecek."
+    if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v pkexec >/dev/null 2>&1 \
+        && [ -z "${TAHTA_PKEXEC_YOK:-}" ]; then
+        echo "Parola acilan pencerede (ya da burada) sorulacak: yonetici hesabinin (etapadmin) parolasini girin, ogretmen parolasini degil."
+        set +e
+        pkexec "$BASH_YOLU" "$BETIK" "$@"
+        SONUC=$?
+        set -e
+        # 126: pencere kapatildi / yetki verilmedi, 127: dogrulanamadi ya da polkit ajani yok.
+        if [ "$SONUC" != "126" ] && [ "$SONUC" != "127" ]; then
+            exit "$SONUC"
+        fi
+        echo "Pencerede yetki alinamadi; ucbirimde denenecek."
+    fi
+    if command -v su >/dev/null 2>&1 && [ -t 0 ]; then
+        YONETICI="$(yonetici_hesabi)"
+        set +e
+        if [ "$YONETICI" = "root" ]; then
+            echo "Simdi 'root' hesabinin parolasi istenecek (su)."
+            (cd / && su root -c 'bash "$0" "$@"' "$BETIK" "$@")
+        else
+            echo "Simdi '$YONETICI' hesabinin parolasi istenecek (su);"
+            echo "ardindan sudo ayni parolayi ('$YONETICI') bir kez daha sorabilir."
+            # su -c komutu yeni oturumda (denetim ucbirimi olmadan) calistirir; sudo parolayi
+            # okuyabilsin diye su --pty ile sahte ucbirim acilir; eski su'da sudo -S kullanilir.
+            if su --help 2>&1 | grep -q -- '--pty'; then
+                (cd / && su --pty "$YONETICI" -c 'sudo bash "$0" "$@"' "$BETIK" "$@")
+            else
+                (cd / && su "$YONETICI" -c 'sudo -S -p "[sudo] $(id -un) parolasi: " bash "$0" "$@"' "$BETIK" "$@")
+            fi
+        fi
+        SONUC=$?
+        set -e
+        if [ "$SONUC" != "0" ]; then
+            echo
+            echo "Parola kabul edilmediyse:"
+            etapadmin_oturumunda "$BETIK"
+        fi
+        exit "$SONUC"
+    fi
+    etapadmin_oturumunda "$BETIK"
+    exit 1
 fi
 if ! command -v python3 >/dev/null 2>&1; then
     echo "python3 bulunamadi; ajan kurulamaz."

@@ -75,6 +75,95 @@ Sunucu iki kapı açar: `127.0.0.1:8787` (şifresiz, yalnız sunucu bilgisayarı
   İdare kilidi program kilidini ezer; program kilidi ve program açması idare kilidine
   dokunmaz.
 
+### 5.1 Tahtadaki yüzer düğme ve tahtadan kilitleme (0.9.0)
+
+İlk gerçek ETAP denemesinin (16.11.2026) üç bulgusu:
+
+| # | Bulgu | Karar |
+|---|---|---|
+| G1 | Kurulum ve otomatik giriş betikleri `sudo` ile yönetici parolası istiyor; `ogretmen` oturumunda uçbirim **öğretmen** parolasını soruyor (`sudo` çağıran hesabın parolasını sorar; `ogretmen` sudo yetkili değildir). | Betikler yetkiyi kendileri alır (aşağıda). Yönergede `sudo` yazılmaz. |
+| G2 | "Tahta açıkken oturumu kapatıp açınca da yeniden başlatınca da otomatik kilitlenmiyor." Kusur değil, istenen yeni davranış: sunucuya ulaşılabiliyorsa açılışta kilitlensin, ulaşılamıyorsa açık kalsın. | **Açılışta kilit** (aşağıda). Kilitli tahtanın kilidi zaten kalıcıdır: servis yeniden başlasa ya da tahta yeniden açılsa da idare kilidi korunur (`durum.json`), yardımcı bağlanır bağlanmaz kilit ekranı gelir (Docker'da doğrulandı). Giriş ekranında kilit olmaması bilinen sınırdır (kilit oturumun üstündedir, §5). |
+| G3 | Tahtadan kilitlemenin yolu yok; "ekranda bir yüzer düğme olsa: kilitlemek, bilgisayarı kapatmak vb." | Yüzer düğme (aşağıda). |
+
+**Açılışta kilit (G2)** — tahta açılınca ya da tahtada oturum açılınca, sunucuya ulaşılabiliyorsa
+tahta kendiliğinden kilitlenir; öğretmen kilit koduyla açar. Kararı **sunucu** verir; böylece "sunucuya
+ulaşılamıyorsa açık kalır" (kural 3) ayrıca kodlanmaz:
+
+- Ekran yardımcısı `merhaba` iletisinde kendi sürecinin başlangıcını bildirir (`oturum_baslangic`:
+  açılıştan saniye, `/proc/self/stat`). Servis, bilinen oturumdan daha geç başlamış bir yardımcı
+  görünce yeni bir **rastgele** oturum kimliği üretir (kullanıcı adı değil) ve durumda `oturum_no` ile
+  `oturum_yasi_sn`'yi (açılış sayacıyla; tahta saatine dayanmaz) bildirir. Aynı yardımcının yeniden
+  bağlanması ya da güncellemede `execv` ile kendini yeniden başlatması aynı başlangıcı bildirir:
+  oturum değişmez (güncelleme ders ortasında kilitlemez). Oturum `durum.json`'da açılış kimliğiyle
+  (`boot_id`) saklanır: aynı açılışta servis yeniden başlasa da aynı oturum sürer.
+- Sunucu (`tahta_sunucu/acilis_kilidi.py`) bir tahtada önceki durumdakinden farklı `oturum_no` görünce
+  **bir kez** değerlendirir (eşzamanlı iki istekte de bir kez: `program_isaret` tablosuna `oturum|<no>`
+  işareti tek yazılır); uygunsa `kilitle {}` komutu verir (ömür 120 sn) ve işlem kaydına kullanıcı
+  "sistem", "Açılışta kilit" düşer. Aynı oturum yeniden kilitlenmez (kodla ya da panelden açılan tahta
+  açık kalır).
+- Uygulanmaz: Ayarlar › **Açılışta kilit** kapalı (varsayılan açık); kilit kodu belirlenmemiş (kodsuz
+  kilit tahtayı panelden açılana kadar rehin alırdı; Ayarlar'da uyarı çıkar); oturum 120 sn'den
+  yaşlı (ağ geç geldi, ders başlamış olabilir); oturum sınıfı `etapadmin` (bakım) ya da oturum yok;
+  tahta zaten kilitli; acil yayın sürüyor; tahta sınav penceresinde (ya da program kilidi uygulanırken
+  pencereye 10 dk'dan az var); program kilidi bu tahtayı yönetiyor ve tahta şu an derste ya da dersi
+  3 dk içinde başlıyor (derste açık kararı program kilidinindir).
+- **Program kilidiyle birlikte:** program kilidi bu tahtayı yönetiyorsa (kural etkin, tahta yetenekli ve
+  muaf değil, istisna yok, ders günü, son dersin bitişinden önce) ve tahta derste değilse (ilk dersten
+  önce, teneffüs, öğle arası, dersi olmayan saat) açılışta kilit **süreli program kilidi** olarak verilir:
+  tahtanın bir sonraki dersinin başında kendiliğinden açılır (kayıtta "…'de açılır"). Süresiz idare kilidi
+  verilmez: program açması idare kilidine dokunmadığı için sabah açılan tahta 1. derste kilitli kalırdı;
+  ajan yeniden açılınca program kilidini bilerek geri yüklemediği için de teneffüste yeniden başlayan tahta
+  aralık sonuna dek açık kalırdı (0.9.0 incelemesi). Program turu aynı aralık için ikinci kez kilit vermez
+  (aralık işareti yazılır). Son dersten sonra, hafta sonu ve tatilde program yönetmez: idare kilidi.
+- Eski ajan alanları göndermez: davranış yok (Ayarlar'da güncellenmesi gereken tahta sayısı yazar).
+  Yetenek: `acilis_kilidi`.
+- Docker denemesinde bulunan ve düzeltilen yarış: ajan yeniden başlayınca eski (ölü) bağlantının uzun
+  beklemesi sunucuda 25 sn'ye kadar açık kalır ve süresi dolunca bekleyen komutu "gönderildi" diye
+  alıp kaybediyordu. Yerini daha yeni bir uzun bekleme alan bağlantı artık komut almaz; açılış
+  komutu verilince tahtanın güncel uzun beklemesi uyandırılır.
+
+**Yetki alma sırası (G1)** — `tahta_sunucu/ajan_paket/kur.sh` ve `araclar/otomatik-giris.sh` (depoda
+izlenmeyen yardımcı betik) aynı sırayı izler: (a) zaten root ise devam; (b) çağıran hesap sudo yetkiliyse
+(`sudo -n true` ya da `sudo`/`admin`/`wheel` grubu) `sudo` — o hesabın kendi parolası; (c) değilse ve
+grafik oturum + `pkexec` varsa `pkexec` — polkit yönetici hesabını (`etapadmin`) seçtirip onun parolasını
+pencerede sorar; pencere kapatılır ya da doğrulama olmazsa (126/127) (d)'ye geçer; (d) `su` ile yönetici
+hesabı (`etapadmin` varsa o, yoksa `root`) ve ekrana **hangi hesabın** parolasının istendiği yazılır;
+`su etapadmin` içinden `sudo` aynı parolayı bir kez daha sorabilir. `su -c` komutu denetim uçbirimi
+olmadan çalıştırdığı için `su --pty` kullanılır (eski `su`'da `sudo -S`). (e) Hiçbiri olmazsa "Bu
+işlemi etapadmin oturumunda yapın". Parolayı `sudo`/`pkexec`/`su` sorar; betik görmez, saklamaz.
+Eşleştirme kodu denetimi yetkiden önce yapılır (kodsuz çağrıda parola sorulmaz).
+
+**Yüzer düğme (G3)** — ekran yardımcısında (GTK3) küçük, yuvarlak, yarı saydam, hep üstte, görev
+çubuğunda görünmeyen ve odak çalmayan (klavye girişini kesmez) bir düğme; parmakla sürüklenir, kenara
+yapışır, konumu oturum boyunca hatırlanır; varsayılan sağ alt köşe. Ölçüleri ekran ölçeğinden türetilir
+(sabit piksel yok). Tam ekran video/sunumda rahatsız etmemesi için küçük ve soluktur, dokununca belirginleşir.
+Dokununca yanında ekrana sığan yönde küçük bir menü açılır (dışına dokununca kapanır):
+
+| İşlem | Davranış |
+|---|---|
+| Kilitle | Hemen kilitler; **yerelde** çalışır (sunucu kapalıyken de). Bu kilit idare kilidiyle aynıdır (ayrı tür değil): panelde "Kilitli", açma yolları aynı (panel, kilit kodu, sunucuya 90 sn ulaşılamazsa kodsuz). Kilit kodu belirlenmemişse tahtadan kilitlenen tahta yalnız panelden açılabileceği için menüde soluk "Kilitle (kilit kodu belirlenmemiş)" görünür ve kilitlemez. |
+| Kapat, Yeniden başlat | 10 sn geri sayımlı, Vazgeç düğmeli onay (yanlış dokunuşa karşı); servis mevcut kapatma yolunu uygular (benzetim kipine saygı). |
+| Arıza bildir, Yoklama al | Özellik açıksa; mevcut arıza penceresi ve yoklama akışı. |
+
+Kilit, duyuru, acil, sınav, gözetmen, yoklama ve kapatma uyarısı gibi tam ekran sayfalar varken
+düğme gizlenir. `etapadmin` ve kişisel hesap oturumlarında da aynı işlemlerle görünür. Program
+kilidi, sınav kipi ve acil yayının önceliği değişmez (yerel kilit program kilidini ezer, tıpkı
+panelden verilen idare kilidi gibi).
+
+Sunucu tarafı: Ayarlar › **Tahtadaki yüzer düğme** (`bolum=dugme`, anahtar `tahta_dugmesi`): düğme
+açık/kapalı (varsayılan açık) ve işlem kutuları — Kilitle (açık), Kapat (açık), Yeniden başlat
+(**kapalı**), Arıza bildir (açık), Yoklama al (açık). Ayar her `/ajan/bekle` yanıtında durum tabanlı
+iner: `ayar.dugme = {"acik": bool, "islemler": [...]}` — `islemler` menü sırasıyla **etkin** listedir
+(ders yoklaması kapalıysa `yoklama` çıkarılır; hiçbir işlem kalmazsa `acik: false`). Alan hiç yoksa
+(eski sunucu) ajan düğmeyi göstermez; eski ajan alanı yok sayar. Yetenek: `durum.yetenekler` içinde
+`dugme`; tahta sayfasında "Yüzer düğme için ajan güncellenmeli" notu buradan çıkar.
+
+Tahtadan yapılan işlemler sunucuya mevcut olay yoluyla (`durum.olaylar`, düz metin) bildirilir ve
+işlem kaydına "Tahta olayı" olarak düşer: "Tahtadan kilitlendi.", "Tahtadan kapatıldı.", "Tahtadan
+yeniden başlatıldı." (ardına yalnız hesap sınıfı eklenebilir: "(oturum: ogretmen)"); kullanıcı adı
+gönderilmez. Sunucu olay başına en çok 300 karakter, istek başına en çok 20 olay yazar. Kilit durumu
+ayrıca bir alan gerektirmez: ajanın bildirdiği `durum.kilitli`/`kilit_kaynak: "idare"` panele yansır.
+
 ## 6. Duyuru
 
 Tahtada tam ekran başlık + metin; süre dolunca kalkar; istenirse öğretmen

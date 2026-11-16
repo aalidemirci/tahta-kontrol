@@ -134,8 +134,12 @@ def _hesaplar():
     return TAMAM, ayrinti
 
 
-def _ekran(ekranlar):
+def _ekran(ekranlar, oturum_sinifi=None):
     if not ekranlar:
+        if oturum_sinifi not in (None, "", "yok", "windows"):
+            # G2: oturum açık ama yardımcı bağlı değilse kilit bu oturumda gösterilemez.
+            return SORUN, ("Oturum açık ama ekran yardımcısı bağlı değil: kilit ve duyuru bu oturumda görünmez. "
+                           "Otomatik başlatma satırına bakın; oturumu kapatıp açın.")  # fmt: skip
         return UYARI, "Ekran yardımcısı bağlı değil (oturum açılmamış ya da otomatik başlatma çalışmıyor)."
     parcalar = []
     sonuc = TAMAM
@@ -231,6 +235,90 @@ def _ariza_kisayolu():
     return UYARI, f"{sistem.ARIZA_KISAYOLU} yok; ajan paketini yeniden kurun"
 
 
+OTOMATIK_BASLATMA = "/etc/xdg/autostart/tahta-ekran.desktop"
+
+
+def _baslatma_kapali_mi(metin: str) -> bool:
+    """Masaüstü dosyası otomatik başlatmayı kapatıyor mu (Hidden=true ya da X-GNOME-Autostart-enabled=false)."""
+    for satir in metin.splitlines():
+        anahtar, _, deger = satir.partition("=")
+        anahtar, deger = anahtar.strip(), deger.strip().lower()
+        if (anahtar == "Hidden" and deger == "true") or (anahtar == "X-GNOME-Autostart-enabled" and deger == "false"):
+            return True
+    return False
+
+
+def _otomatik_baslatma(hesap_dosyasi: str = "/etc/passwd"):
+    """Ekran yardımcısının oturum açılışında başlaması (G2): sistem dosyası ve hesapların kendi kapatması.
+
+    "Başlangıç uygulamaları" ayarından kapatılan yardımcı yalnız o hesabın ev dizinine
+    ~/.config/autostart/tahta-ekran.desktop (Hidden=true) yazar; o hesapta kilit gelmez. Standart hesap
+    adları yazılır, kişisel hesaplar yalnız SAYI olarak (ad ve ev dizini rapora girmez).
+    """
+    sistem_metni = _oku(OTOMATIK_BASLATMA, 4000)
+    if not sistem_metni:
+        return SORUN, f"{OTOMATIK_BASLATMA} yok; ajan paketini yeniden kurun (yardımcı oturumda başlamaz)."
+    if _baslatma_kapali_mi(sistem_metni):
+        return SORUN, f"{OTOMATIK_BASLATMA} otomatik başlatmayı kapatıyor; ajan paketini yeniden kurun."
+    kapatan_standart, kapatan_kisisel = [], 0
+    for satir in _oku(hesap_dosyasi, 200000).splitlines():
+        alan = satir.split(":")
+        if len(alan) < 7:
+            continue
+        try:
+            kimlik = int(alan[2])
+        except ValueError:
+            continue
+        standart = alan[0] in sistem.STANDART_HESAPLAR
+        if not standart and not 1000 <= kimlik < 60000:
+            continue
+        metin = _oku(os.path.join(alan[5], ".config", "autostart", "tahta-ekran.desktop"), 4000)
+        if metin and _baslatma_kapali_mi(metin):
+            if standart:
+                kapatan_standart.append(alan[0])
+            else:
+                kapatan_kisisel += 1
+    if kapatan_standart or kapatan_kisisel:
+        parcalar = kapatan_standart + ([f"{kapatan_kisisel} kişisel hesap"] if kapatan_kisisel else [])
+        return SORUN, ("Yardımcı şu hesaplarda kapatılmış (~/.config/autostart/tahta-ekran.desktop): "
+                       + ", ".join(parcalar) + ". Dosyayı silin; o hesapta kilit ekranı gelmez.")  # fmt: skip
+    return TAMAM, f"{OTOMATIK_BASLATMA} kurulu; hiçbir hesapta kapatılmamış."
+
+
+def _kilit_kaliciligi(servis_metni):
+    """Kilit durumu kalıcılığı (G2): servisin bellekteki kilidi ile durum.json'daki aynı mı, dosya yazılabiliyor mu.
+
+    Yalnız kilitli/kaynak okunur; dosyadaki kilit kodu özeti ve arıza kuyruğu rapora GİRMEZ.
+    """
+    import json
+
+    from . import ayar
+
+    dizin = ayar.durum_dizini()
+    yol = dizin / "durum.json"
+    try:
+        veri = json.loads(yol.read_text(encoding="utf-8"))
+        veri = veri if isinstance(veri, dict) else {}
+        okundu = True
+    except FileNotFoundError:
+        veri, okundu = {}, None
+    except (OSError, ValueError):
+        veri, okundu = {}, False
+    if veri.get("kilitli"):
+        dosya = f"kilitli ({veri.get('kilit_kaynak') or 'idare'})"
+    else:
+        dosya = "açık" if okundu else ("dosya yok" if okundu is None else "okunamadı")
+    yazilir = os.access(dizin, os.W_OK) if dizin.is_dir() else False
+    ayrinti = f"servis: {servis_metni or 'bilinmiyor (servis dışından çalıştırıldı)'} · durum.json: {dosya} · dizin yazılabilir: {'evet' if yazilir else 'hayır'}"
+    if okundu is False or (servis_metni and not yazilir):
+        return SORUN, ayrinti + " · kilit yeniden başlatmada korunamaz."
+    if servis_metni and servis_metni.startswith("kilitli (idare") and not veri.get("kilitli"):
+        return SORUN, ayrinti + " · servisin kilidi dosyaya yazılmamış."
+    if veri.get("kilit_kaynak") == "program":
+        ayrinti += " · program kilidi yeniden başlatmada bilerek geri yüklenmez (süresi bilinmez)."
+    return TAMAM, ayrinti
+
+
 def _sunucu_adresleri(sunucular):
     """Listedeki her adres için ad çözümü ve TCP erişimi. Adresler rapora YAZILMAZ, yalnız sayılar (A6)."""
     if not sunucular:
@@ -263,10 +351,12 @@ def _servis():
 
 
 def topla(
-    sunucu_makine: str = "", sunucu_port: int = 0, sunucu_saat=None, ekranlar=None, sinav_kipi=None, sunucular=None
-) -> dict:
+    sunucu_makine: str = "", sunucu_port: int = 0, sunucu_saat=None, ekranlar=None, sinav_kipi=None, sunucular=None,
+    kilit=None, dugme=None,
+) -> dict:  # fmt: skip
     """sinav_kipi: servisin "yok" / "giris (kimlik)" / "suruyor (kimlik)" satırı (A4). Liste, ad, kod girmez.
-    sunucular: ajanın deneme sırasındaki adresler (A6); rapora yalnız sayıları girer."""
+    sunucular: ajanın deneme sırasındaki adresler (A6); rapora yalnız sayıları girer.
+    kilit / dugme (0.9.0): servisin kilit ve yüzer düğme satırları; servis dışından çalıştırılınca None."""
     ekranlar = ekranlar or []
     ag = sistem.ag_bilgisi(sunucu_makine, sunucu_port) if sunucu_makine else {}
     if not sistem.LINUX:
@@ -283,7 +373,10 @@ def topla(
         ("Etkin oturum", lambda: _oturum(ekranlar)),
         ("Giriş ekranı ve otomatik giriş", _giris_ekrani),
         ("Hesaplar", _hesaplar),
-        ("Ekran yardımcısı", lambda: _ekran(ekranlar)),
+        ("Ekran yardımcısı", lambda: _ekran(ekranlar, sistem.etkin_oturum().get("sinif"))),
+        ("Ekran yardımcısı otomatik başlatma", _otomatik_baslatma),
+        ("Kilit durumu kalıcılığı", lambda: _kilit_kaliciligi(kilit)),
+        ("Yüzer düğme", lambda: (BILGI, dugme or "servis dışından çalıştırıldı; servis raporunda görünür")),
         ("Sınav kipi", lambda: (BILGI, sinav_kipi or "yok")),
         ("Yoklama kısayolu", _yoklama_kisayolu),
         ("Arıza bildirimi kısayolu", _ariza_kisayolu),

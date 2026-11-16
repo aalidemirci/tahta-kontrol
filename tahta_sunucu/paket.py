@@ -157,7 +157,10 @@ def usb_paketi(sunucu: str, parmak_izi: str, sunucular: list[str] | None = None)
         arsiv.writestr(
             "OKUYUNUZ.txt",
             "Bu klasoru tahtaya kopyalayin, ucbirimi bu klasorde acin ve su komutu calistirin:\n\n"
-            "    sudo bash tahta-kur.sh ESLESTIRME_KODU\n\n"
-            "Eslestirme kodu panelin 'Tahta ekle' sayfasinda yazar.\n",
+            "    bash tahta-kur.sh ESLESTIRME_KODU\n\n"
+            "Eslestirme kodu panelin 'Tahta ekle' sayfasinda yazar.\n"
+            "Betik yonetici (etapadmin) parolasini sorar. En kolayi etapadmin oturumunda\n"
+            "calistirmaktir; ogretmen oturumunda da calisir, ama ogretmen parolasi ise yaramaz.\n"
+            "Komutun basina sudo yazmayin.\n",
         )
     return cikti.getvalue()

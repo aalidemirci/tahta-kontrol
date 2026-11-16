@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.8.0)
+# Saha denemesi kılavuzu (0.9.0)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -40,7 +40,11 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Gerçek e-Okul OOG01001R020 `.XLS` dosyası | — | Denenmedi |
 | İcmalin A4 kâğıda yazdırılması (şube başına sayfa) | — | Denenmedi |
 | Gerçek Kelebek çizelgesi (okulun Kelebek sürümüyle indirilen R5) | — | Denenmedi |
-| **Gerçek ETAP tahtası** | — | **Denenmedi** |
+| Yetki alma (0.9.0, G1): sudo yetkisiz `ogretmen` + `sudo` grubunda parolalı `etapadmin`. `ogretmen` uçbirimde `bash tahta-kur.sh KOD`: "`etapadmin` hesabının parolası istenecek (su)", `su --pty etapadmin` + sudo ile root; aynısı eski `su` (`--pty` yok) yolunda `sudo -S` ile; `etapadmin` uçbirimde sudo (kendi parolası); yanlış parolada "Bu işlemi etapadmin oturumunda yapın"; uçbirim yokken doğrudan bu ileti; kodsuz çağrıda parola sorulmadan kullanım iletisi. Gerçek paketin deneme sunucusundan (8798) `ogretmen` oturumunda kurulup kaydolması. `otomatik-giris.sh` için aynı yollarla `etkinlestir`/`kaldir`/`durum` | Debian 12 kabı, `expect` ile parola girişi | Çalıştı |
+| pkexec yolu: `DISPLAY` varken pkexec'in denenmesi; polkit'in "Authenticating as: etapadmin" demesi; kimlik doğrulama kapta "No session for cookie" ile düştüğünde (logind oturumu yok) ve yanlış parolada `su`'ya geçilmesi | Aynı kap, dbus + polkitd elle | Mantık doğrulandı; **başarılı pkexec denenmedi** (gerçek masaüstü gerekir) |
+| Ayarlar › Tahtadaki yüzer düğme, tahta sayfası notu, "Tahta ekle" yönergesi (0.9.0) | Deneme sunucusu (8797), tarayıcı | Çalıştı |
+| Açılışta kilit (0.9.0, G2): sunucu açıkken oturum kapat/aç ve servis + oturumun birlikte yeniden başlatılması sonrası kilitlenme; kodla açılan tahtanın aynı oturumda 35 sn boyunca açık kalması; yalnız servis yeniden başlayınca yeniden kilitlenmemesi; `etapadmin` oturumunun kilitlenmemesi; sunucu kapalıyken açılan oturumun açık kalması ve sunucu 120 sn'den sonra dönünce de açık kalması; kilit kodu yokken uygulanmaması; panel kilidinin sunucusuz servis yeniden başlatmasında korunması | Debian 12 kabı (gerçek 0.9.0 paketi, Xvfb + openbox, 1366x768 ve 1920x1080), deneme sunucusu 8798 | Çalıştı (kapta "tahta yeniden başlatma" servis ile oturumun birlikte yeniden başlatılmasıdır; çekirdek ve `boot_id` değişmez) |
+| **Gerçek ETAP tahtası** | — | İlk deneme 16.11.2026 (0.8.0): bulgular G1–G3, `docs/tasarim.md` §5.1 |
 | Kurulum dosyasının başka bir bilgisayara kurulması | — | Denenmedi |
 | Gerçek kapatma / yeniden başlatma / uzaktan açma | — | Denenmedi (kapta benzetim) |
 
@@ -109,7 +113,10 @@ alınan yoklamalar yalnız eski klasördedir.
 ## 2. Tahtaya ajanı kurun
 
 1. Panelde **Tahta ekle → Tahta eklemeyi aç**. Ekrandaki kodu not edin.
-2. Tahtada `etapadmin` ile oturum açıp uçbirimde sayfadaki iki komutu çalıştırın.
+2. Tahtada uçbirimi açıp sayfadaki iki komutu çalıştırın (`bash tahta-kur.sh KOD`; başına `sudo`
+   yazmayın). En kolayı `etapadmin` oturumudur (betik `etapadmin` parolasını sorar). `ogretmen`
+   oturumunda betik yönetici parolasını önce bir pencerede (pkexec), olmazsa uçbirimde `su` ile
+   sorar; ekranda hangi hesabın parolasının istendiği yazar — öğretmen parolası işe yaramaz.
 3. Betiğin yazdığı parmak izinin başı paneldekiyle aynı mı, bakın.
 4. Panoda "Onay bekleyen tahtalar" altında tahtayı açın, ad ve derslik verip onaylayın.
 5. Tahtada oturumu kapatıp açın (ekran yardımcısı oturum açılışında başlar).
@@ -307,6 +314,37 @@ saklayın (gerçek kullanıcı dosyası adlarını depoya koymayın; `saha/` git
 | T7 | Ekran klavyesi, ETAP kenar çubuğu/paneli açıkken temizlik | Klavye ve panel kapanmaz (yalnız görev çubuğundaki pencereler) | |
 | T8 | İşlem kaydı ve tahta sayfası | "Oturum temizliği sonucu" yalnız sayılar içerir (kullanıcı, dosya, profil adı yok) | |
 
+### 3.8 Saha bulguları G1–G3 (0.9.0)
+
+Hazırlık: sunucuyu 0.9.0'a yükseltin; tahtalar ajanı kendiliğinden günceller. Ayarlar › Tahtadaki yüzer
+düğme açık (varsayılan), kilit kodu belirlenmiş olsun. Ajanın kapatma komutunu uygulamaması için ilk
+denemelerde benzetimi açın (§3.6.1 hazırlığı).
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| Y1 | `ogretmen` oturumunda `bash tahta-kur.sh KOD` (yeni tahtada ya da yeniden kurulumda) | Pencere (polkit) `etapadmin` parolasını sorar; girilince kurulum sürer. Pencere çıkmazsa uçbirimde "'etapadmin' hesabının parolası istenecek (su)" ve ardından sudo | |
+| Y2 | Y1'de pencereyi Vazgeç ile kapat | "Pencerede yetki alınamadı; uçbirimde denenecek" ve `su` yolu | |
+| Y3 | `etapadmin` oturumunda aynı komut | "sudo şimdi SİZİN (etapadmin) parolanızı soracak" | |
+| Y4 | `ogretmen` oturumunda `sh otomatik-giris.sh durum` (çift tıklamayla da) | Y1 gibi yönetici parolası; ayar gösterilir | |
+| Y5 | Tahta **açıkken** `ogretmen` oturumunu kapatıp yeniden aç (Ayarlar › Açılışta kilit açık, kilit kodu var) | Oturum açıldıktan birkaç saniye sonra kilit ekranı; İşlem kaydında "sistem · Açılışta kilit"; kodla açılınca aynı oturumda yeniden kilitlenmez | |
+| Y6 | Tahta açıkken yeniden başlat (benzetim kapalı; otomatik giriş açık ya da elle giriş) | Oturum gelince kilitli başlar. Giriş ekranında uzun beklense de oturum açılınca kilitlenir (yaş oturumun başından sayılır) | |
+| Y6a | Sunucu bilgisayarını kapat (ya da ağ kablosunu çıkar), tahtada oturumu kapatıp aç; 3 dk sonra sunucuyu aç | Tahta açık başlar, sunucu dönünce de açık kalır (oturum 120 sn'den yaşlı) | |
+| Y6b | `etapadmin` oturumu aç | Kilitlenmez (bakım) | |
+| Y6c | Program kilidi etkinken ders saatinde (ör. 3. ders) oturumu kapatıp aç | Kilitlenmez (derste açık); teneffüste program kilidi kilitler | |
+| Y6e | Program kilidi etkinken tahtayı **ilk dersten önce** aç (ör. 08:05, 1. ders 08:20) | Kilitli başlar, kilit ekranında açılış saati (08:20); 1. ders başında kodsuz kendiliğinden açılır. İşlem kaydında "Açılışta kilit … program kilidiyle kilitlendi (08:20'de açılır)" | |
+| Y6f | Program kilidi etkinken tahtayı **teneffüste ya da öğle arasında** yeniden başlat | Oturum gelince kilitli başlar (program kilidi), ders başında kendiliğinden açılır; dersin başlamasına 3 dk'dan az kalmışsa kilitlenmez | |
+| Y6d | Tahta kilitliyken (panelden) yeniden başlat | Oturum gelince kilit geri gelir; panelde "Kilitli" | |
+| Y7 | Yüzer düğme: sağ alt köşede küçük ve soluk; dokununca belirginleşir; sürükle, kenara yapışsın | Menü düğmenin yanında ekrana sığar; dışına dokununca kapanır; düğme klavye odağını çalmaz (açık bir metin alanına yazarken dokun) | |
+| Y8 | Menüden Kilitle | Hemen kilitlenir; İşlem kaydında "Tahta olayı · Tahtadan kilitlendi" (kullanıcı adı yok); panelde "Kilitli"; kodla ve panelden açılır | |
+| Y9 | Sunucuyu kapat, menüden Kilitle | Kilitlenir; 90 sn sonra kodsuz açma düğmesi; sunucu açılınca olay kayda düşer | |
+| Y10 | Kilit kodu kaldırılmışken menü | "Kilitle (kilit kodu belirlenmemiş)" soluk, dokununca kilitlemez | |
+| Y11 | Menüden Kapat (benzetim), geri sayımda Vazgeç; sonra beklet | Vazgeç'te hiçbir şey olmaz; 10 sn sonunda "Tahtadan kapatıldı" olayı | |
+| Y12 | Ayarlar'da Yeniden başlat kutusunu aç, tahtadan dene | Menüye birkaç saniyede gelir; 10 sn onaylı | |
+| Y13 | Duyuru, acil yayın tatbikatı, kapatma uyarısı, sınav ekranı sırasında | Düğme gizli; sayfa kalkınca geri gelir | |
+| Y14 | Tam ekran video ve sunum (LibreOffice Impress) sırasında | Düğme üstte ama küçük ve soluk; sunum klavyeyle ilerler | |
+| Y15 | `etapadmin` ve kişisel hesap oturumunda | Aynı düğme ve işlemler | |
+| Y16 | Ayarlar'da düğmeyi kapat | Birkaç saniyede tahtadan kalkar | |
+
 ### 3.7 Windows hizmeti (K8, 0.8.0)
 
 Hazırlık: bu denemeler yönetici yetkisi ister ve **önce deneme bilgisayarında** yapılmalıdır.
@@ -343,6 +381,13 @@ ve güncellemeden sonra duruyor mu.
 - ETAP'ta PyGObject/GTK3 kurulu ve oturum X11.
 - `/etc/xdg/autostart` altındaki yardımcı her hesapta (sınırlı erişimli `ogrenci` dâhil) başlar.
 - `etapadmin` `sudo` kullanabilir ve `dpkg -i` engellenmemiştir.
+- ETAP masaüstünde bir polkit ajanı çalışır ve `pkexec` yönetici olarak `etapadmin`'i sorar
+  (kapta polkit "Authenticating as: etapadmin" dedi; gerçek oturumda başarı denenmedi).
+- ETAP'ta ekran yardımcısı her oturum açılışında yeniden başlar (XDG otomatik başlatma) ve oturum
+  kapatılınca eski yardımcı sonlanır. Sonlanmazsa yeni oturum görülmez, açılışta kilit uygulanmaz
+  (tanılamada "Kilit durumu kalıcılığı" satırı oturumun yaşını yazar).
+- Ağ, oturum açıldıktan sonra 120 sn içinde gelir (geç gelirse açılışta kilit uygulanmaz).
+- ETAP'taki `su` `--pty` seçeneğini tanır (util-linux 2.31+; yoksa betik `sudo -S`'e düşer).
 - Merkezî yönetim (LiderAhenk) üçüncü taraf servisi kaldırmaz; bu konuda İlçe MEM
   bilgi işlem birimine danışılması önerilir.
 - Tahtalar ile sunucu bilgisayarı arasındaki ağ erişimi (yönlendirme) açık.

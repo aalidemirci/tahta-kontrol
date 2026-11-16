@@ -77,6 +77,9 @@
       <dt>Ajan sürümü</dt><dd>{{ ham.surum or '—' }}{% if ham.surum and not t.guncel %} <span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Güncelleme var</span>{% endif %}</dd>
       <dt>Oturum</dt><dd>{{ t.oturum }}</dd>
       <dt>Ekran yardımcısı</dt><dd>{{ 'Bağlı' if t.ekran_bagli else 'Bağlı değil' }}</dd>
+      {# 0.9.0 (G3): yüzer düğme yalnız `dugme` yeteneği bildiren ajanda görünür. #}
+      <dt>Yüzer düğme</dt><dd>{% if t.dugme_yetenegi %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Destekleniyor</span> <a href="/ayarlar#yuzer-dugme">Ayarlar</a>
+        {%- elif ham.surum %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Yüzer düğme için ajan güncellenmeli</span>{% else %}—{% endif %}</dd>
       <dt>Ders yoklaması</dt><dd>{% if t.yoklama_yetenegi %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Yoklama: destekleniyor</span>{% if t.yoklama_acik %} <span class="rozet" data-durum="duyuru"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Şu an yoklama alınıyor</span>{% endif %}
         {%- elif ham.surum %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Yoklama: ajan güncellenmeli</span>{% else %}—{% endif %}
         {% if not t.subeler %}<span class="not"> · Şube(ler) alanı boş: tahtada şube önerisi gelmez.</span>{% endif %}</dd>
