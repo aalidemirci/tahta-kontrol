@@ -901,9 +901,13 @@ def kayit_ayrintisi(b, yoklama_id: int) -> dict | None:
     adlar = {i: ad_soyad(o) for i, o in liste.items()}
     izler = []
     usb = False
+    usb_kimlikleri = set()
     for iz in b.execute("SELECT * FROM yoklama_iz WHERE yoklama_id = ? ORDER BY id", (yoklama_id,)):
         # Ek yalnız iz metninin SONUNDA aranır: tahta adı serbest metindir ("Lab USB 2" gibi).
         usb = usb or bool(_USB_IZ_EKI.search(str(iz["kim"])))
+        if _USB_IZ_EKI.search(str(iz["kim"])):
+            usb_kimligi = str(iz["kim"]).rsplit(" ", 1)[1]
+            usb_kimlikleri.add(usb_kimligi[:4] + "-" + usb_kimligi[4:])
         eklenen, cikarilan = json.loads(iz["eklenen"] or "[]"), json.loads(iz["cikarilan"] or "[]")
         izler.append({
             "zaman": an_yazi(iz["zaman"]), "kim": iz["kim"], "islem": IZ_ISLEM_ADI.get(iz["islem"], iz["islem"]),
@@ -911,6 +915,14 @@ def kayit_ayrintisi(b, yoklama_id: int) -> dict | None:
             "aciklama": iz["aciklama"],
         })  # fmt: skip
     gun = tarih_coz(y["tarih"])
+    beklenen = []
+    if gun:
+        program_gunu = program_mod.gun_plani(b, gun)["program_gunu"]
+        beklenen = [dict(o) for o in b.execute(
+            "SELECT DISTINCT o.id, o.ad, o.soyad FROM ogretmen_program p JOIN ogretmen o ON o.id = p.ogretmen_id "
+            "WHERE p.sube = ? AND p.gun = ? AND p.ders_no = ? ORDER BY o.id",
+            (y["sube"], program_gunu, y["ders_no"]),
+        )]
     if y["kaynak"] == "panel":
         kaynak = f"panel: {y['kaydeden']}"
     else:
@@ -928,6 +940,9 @@ def kayit_ayrintisi(b, yoklama_id: int) -> dict | None:
         "ders_adi": y["ders_adi"],
         "ogretmen": f"{y['ogretmen_ad']} {y['ogretmen_soyad']}".strip() if y["ogretmen_ad"] is not None else "",
         "ogretmen_kod": y["ogretmen_kod"] or "",
+        "usb_kimlikleri": sorted(usb_kimlikleri),
+        "program_ogretmenleri": [" ".join((o["ad"], o["soyad"])) for o in beklenen],
+        "program_eslesiyor": any(o["id"] == y["ogretmen_id"] for o in beklenen) if beklenen else None,
         "kaynak": kaynak,
         "kaynak_turu": y["kaynak"],
         "olusturma": an_yazi(y["olusturma"]),
@@ -1122,12 +1137,19 @@ def imha(b, an: int) -> dict:
     """
     sinir = saklama.imha_siniri(b, bugun(an))
     kayit = 0
+    program_sayisi = 0
     usb = {"silinen": 0, "bosaltilan": 0}
     if sinir:
         from . import usb_anahtar  # döngüsel içe aktarma olmasın (usb_anahtar bu modülü kullanır)
 
         kayit = b.execute("DELETE FROM yoklama WHERE tarih <= ?", (sinir.isoformat(),)).rowcount
         b.execute("DELETE FROM eokul_islendi WHERE tarih <= ?", (sinir.isoformat(),))
+        # Öğretmen programında eski yılın kişi bağlantıları süresiz tutulmaz.
+        program_sinir = int(datetime.combine(sinir + timedelta(days=1), datetime.min.time(), ISTANBUL).timestamp())
+        program_sayisi = b.execute("DELETE FROM ogretmen_program WHERE guncelleme < ?", (program_sinir,)).rowcount
+        if program_sayisi:
+            vt.ayar_yaz(b, "ogretmen_program_surum", int(vt.ayar_al(b, "ogretmen_program_surum", 0)) + 1)
+            vt.kayit_dus(b, "sistem", "Öğretmen programı yıl sonu temizliği", f"{program_sayisi} ders satırı")
         # 0.11.0 §7: iptal edilmiş USB anahtarları silinir, etkinlerin son kullanım bilgisi boşaltılır.
         usb = usb_anahtar.yil_sonu(b, sinir)
     ogrenci = b.execute(
@@ -1146,7 +1168,7 @@ def imha(b, an: int) -> dict:
     if usb["silinen"] or usb["bosaltilan"]:
         vt.kayit_dus(b, "sistem", "USB anahtar yıl sonu temizliği",
                      f"{usb['silinen']} iptal edilmiş anahtar silindi, {usb['bosaltilan']} anahtarın son kullanım bilgisi silindi")  # fmt: skip
-    return {"kayit": kayit, "ogrenci": ogrenci, "usb": usb["silinen"] + usb["bosaltilan"]}
+    return {"kayit": kayit, "ogrenci": ogrenci, "usb": usb["silinen"] + usb["bosaltilan"], "program": program_sayisi}
 
 
 class YoklamaZamanlayici:
@@ -1158,4 +1180,4 @@ class YoklamaZamanlayici:
             return False
         vt.ayar_yaz(b, "yoklama_imha_son_tur", an)
         sonuc = imha(b, an)
-        return bool(sonuc["kayit"] or sonuc["ogrenci"] or sonuc["usb"])
+        return bool(sonuc["kayit"] or sonuc["ogrenci"] or sonuc["usb"] or sonuc["program"])

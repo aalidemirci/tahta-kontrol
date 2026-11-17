@@ -13,6 +13,12 @@ import json
 import ssl
 from urllib.parse import urlsplit
 
+# JSON içinde sınav/yoklama listeleri de taşınır. Paket sınırı mevcut paketin
+# büyümesine pay bırakır; logo sınırı sunucudaki kabul sınırıyla aynıdır.
+JSON_SINIRI = 4 * 1024 * 1024
+PAKET_SINIRI = 16 * 1024 * 1024
+LOGO_SINIRI = 256 * 1024
+
 
 class BaglantiHatasi(Exception):
     pass
@@ -20,6 +26,26 @@ class BaglantiHatasi(Exception):
 
 class ParmakIziHatasi(BaglantiHatasi):
     pass
+
+
+def _yanit_oku(yanit, sinir: int) -> bytes:
+    """Başlığa güvenmeden en çok sınır + 1 bayt okur; kesik gövdeyi reddeder."""
+    # HTTPResponse.length, chunked yanıtta None'dır; Content-Length yerine
+    # HTTP ayrıştırıcısının seçtiği çerçevelemeyi izleriz.
+    uzunluk = yanit.length
+    if uzunluk is not None and uzunluk > sinir:
+        raise BaglantiHatasi("Sunucu yanıtı izin verilen boyutu aşıyor.")
+    icerik = bytearray()
+    while len(icerik) <= sinir:
+        parca = yanit.read(min(64 * 1024, sinir + 1 - len(icerik)))
+        if not parca:
+            break
+        icerik.extend(parca)
+    if len(icerik) > sinir:
+        raise BaglantiHatasi("Sunucu yanıtı izin verilen boyutu aşıyor.")
+    if uzunluk is not None and len(icerik) != uzunluk:
+        raise BaglantiHatasi("Sunucu yanıtı tamamlanmadan bağlantı kapandı.")
+    return bytes(icerik)
 
 
 class Istemci:
@@ -66,7 +92,10 @@ class Istemci:
             baglanti = self._baglan(zaman_asimi)
             baglanti.request(yontem, yol, body=veri, headers=basliklar)
             yanit = baglanti.getresponse()
-            icerik = yanit.read()
+            sinir = PAKET_SINIRI if ham and yol == "/ajan/paket" else JSON_SINIRI
+            if ham and yol == "/ajan/logo":
+                sinir = LOGO_SINIRI
+            icerik = _yanit_oku(yanit, sinir)
             yanit_basliklari = {k.lower(): v for k, v in yanit.getheaders()}
             if ham:
                 return yanit.status, icerik, yanit_basliklari

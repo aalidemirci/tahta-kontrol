@@ -6,8 +6,9 @@ düğme gösterir. Dokununca yanında küçük bir menü açılır: Kilitle, Kap
 Yoklama al. Hangi işlemlerin görüneceğini sunucu belirler (`ayar.dugme`, servis üzerinden); işlemi
 servis doğrular ve uygular (yerel_kilitle / yerel_kapat / yerel_yeniden_baslat). Bu modül sır taşımaz.
 
-- Odak çalmaz: iki pencere de yönetilmeyen (override-redirect) açılır pencere türündedir; klavye
-  girişini hiç almaz (menü açıkken yalnız dokunma/fare tutulur ki dışına dokununca kapansın).
+- Odak çalmaz: iki pencere de çerçevesiz yardımcı penceredir; masaüstünün
+  klavye, dokunma veya fare girişini ele geçirmez. Menü düğmeyle, Kapat ile
+  veya zaman aşımıyla kapanır; görev çubuğu menü açıkken de kullanılabilir.
 - Ölçüler 1920x1080 için yazılır ve ekran_olcegi() ile ölçeklenir; sabit piksel yoktur.
 - Konum oturum boyunca bellekte tutulur (kenar + dikey oran): çözünürlük değişse de aynı yere gelir.
 
@@ -195,7 +196,7 @@ def kur(ekran):
             self.belirgin_bitis = 0.0
             self.menu_acik = False
             self.menu_dokunma = 0.0
-            self.tutuldu = False  # menü açıkken dokunma/fare tutuldu mu
+            self.dokunma_dizisi = None
             self.geri_sayim = None  # (islem, bitis zamanı)
             self.ileti_bitis = 0.0
             self.olcek = None
@@ -223,10 +224,11 @@ def kur(ekran):
                 self.dugme.get_style_context().add_class("kati")
             # Basma/bırakma pencere düzeyinde izlenir (sürükleme ile dokunma ayrılsın diye).
             self.dugme.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK
-                                  | Gdk.EventMask.POINTER_MOTION_MASK)  # fmt: skip
+                                  | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.TOUCH_MASK)  # fmt: skip
             self.dugme.connect("button-press-event", self._basildi)
             self.dugme.connect("motion-notify-event", self._kaydi)
             self.dugme.connect("button-release-event", self._birakildi)
+            self.dugme.connect("touch-event", self._dokunuldu)
             self.pencere.add(self.dugme)
 
             self.menu = self._acilir_pencere("yd-menu-pencere")
@@ -235,14 +237,17 @@ def kur(ekran):
             self.menu.add(self.menu_kutu)
             self.menu.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.TOUCH_MASK)
             self.menu.connect("button-press-event", self._menu_basildi)
-            self.menu.connect("grab-broken-event", lambda *_: self.menu_kapat())
             self._olcek_uygula()
             GLib.timeout_add(1000, self._saniye)
 
         def _acilir_pencere(self, ad):
-            # POPUP = override-redirect: pencere yöneticisi yönetmez; görev çubuğunda görünmez, odak almaz.
-            pencere = Gtk.Window(type=Gtk.WindowType.POPUP)
+            # POPUP + seat grab görev çubuğunun dokunma girdisini de ele
+            # geçirebilir. Çerçevesiz olmak için override-redirect gerekmez.
+            pencere = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
             pencere.set_name(ad)
+            pencere.set_decorated(False)
+            pencere.set_resizable(False)
+            pencere.set_keep_above(True)
             pencere.set_accept_focus(False)
             pencere.set_focus_on_map(False)
             pencere.set_skip_taskbar_hint(True)
@@ -293,12 +298,14 @@ def kur(ekran):
         # ---- görünürlük ----------------------------------------------------------------
         def guncelle(self, durum, ana_gorunur):
             """Ekran her çizimde çağırır."""
-            self.ayar = dugme_ayari(durum)
+            yeni_ayar = dugme_ayari(durum)
+            ayar_degisti = yeni_ayar != self.ayar
+            self.ayar = yeni_ayar
             istenen = gorunur_mu(durum, ana_gorunur)
             if not istenen:
                 self.gizle()
                 return
-            if self.menu_acik and not self.geri_sayim:
+            if self.menu_acik and not self.geri_sayim and ayar_degisti:
                 self._menu_kur()  # ayar değişmiş olabilir (ör. kilit kodu kaldırıldı)
             if not self.istenen:
                 self.istenen = True
@@ -307,12 +314,13 @@ def kur(ekran):
                 self._soluk(time.time() > self.belirgin_bitis)
 
         def gizle(self):
-            """Tam ekran sayfa açılmadan ÖNCE çağrılır: menünün tutması (grab) ana pencereninkinden önce bırakılır."""
+            """Tam ekran sayfa açılmadan önce yardımcı pencereleri gizler."""
             self.menu_kapat()
             if self.istenen:
                 self.pencere.hide()
             self.istenen = False
             self.basili = None
+            self.dokunma_dizisi = None
 
         def _soluk(self, soluk: bool):
             for baglam in (self.dugme.get_style_context(), self.pencere.get_style_context()):
@@ -327,10 +335,17 @@ def kur(ekran):
 
         # ---- dokunma ve sürükleme --------------------------------------------------------
         def _basildi(self, _w, olay):
+            if self.dokunma_dizisi is not None:
+                return True
             if olay.type != Gdk.EventType.BUTTON_PRESS:
                 return True  # çift tıklama olayları yok sayılır
+            if olay.button != 1:
+                return False
+            return self._baslat(olay.x_root, olay.y_root)
+
+        def _baslat(self, kok_x, kok_y):
             x, y = self._konum()
-            self.basili = (olay.x_root, olay.y_root, x, y)
+            self.basili = (kok_x, kok_y, x, y)
             self.suruklendi = False
             self.belirgin_bitis = time.time() + BELIRGIN_SN
             self._soluk(False)
@@ -350,6 +365,32 @@ def kur(ekran):
             return True
 
         def _birakildi(self, _w, olay):
+            if self.dokunma_dizisi is not None:
+                return True
+            if olay.button != 1:
+                return False
+            return self._bitir()
+
+        def _dokunuldu(self, _w, olay):
+            # XI2 dokunma dizisini doğrudan işleriz; fare öykünmesine bağlı
+            # kalmayız. True, aynı dokunuşun iki kez düğme sayılmasını önler.
+            dizi = olay.get_event_sequence()
+            if olay.type == Gdk.EventType.TOUCH_BEGIN:
+                if self.dokunma_dizisi is None:
+                    self.dokunma_dizisi = dizi
+                    self._baslat(olay.x_root, olay.y_root)
+            elif dizi == self.dokunma_dizisi:
+                if olay.type == Gdk.EventType.TOUCH_UPDATE:
+                    self._kaydi(_w, olay)
+                elif olay.type == Gdk.EventType.TOUCH_END:
+                    self.dokunma_dizisi = None
+                    self._bitir()
+                elif olay.type == Gdk.EventType.TOUCH_CANCEL:
+                    self.dokunma_dizisi = None
+                    self.basili = None
+            return True
+
+        def _bitir(self):
             if not self.basili:
                 return True
             self.basili = None
@@ -374,43 +415,16 @@ def kur(ekran):
             self.menu.show_all()
             self._ileti_gizle()
             self._menu_yerlestir()
-            GLib.idle_add(self._tut)
-
-        def _tut(self):
-            """Dışına dokununca kapansın diye dokunma ve fare menüye bağlanır (klavye bağlanmaz)."""
-            if not self.menu_acik or self.tutuldu:
-                return False
-            try:
-                pencere = self.menu.get_window()
-                koltuk = Gdk.Display.get_default().get_default_seat()
-                sonuc = koltuk.grab(pencere, Gdk.SeatCapabilities.POINTER | Gdk.SeatCapabilities.TOUCH,
-                                    True, None, None, None, None)  # fmt: skip
-                self.tutuldu = sonuc == Gdk.GrabStatus.SUCCESS
-            except Exception:
-                self.tutuldu = False  # tutulamazsa menü süre dolunca kendiliğinden kapanır
-            return False
-
-        def _birak(self):
-            if self.tutuldu:
-                try:
-                    Gdk.Display.get_default().get_default_seat().ungrab()
-                except Exception:
-                    pass
-            self.tutuldu = False
 
         def menu_kapat(self):
-            self._birak()
             if self.menu_acik:
                 self.menu.hide()
             self.menu_acik = False
             self.geri_sayim = None
 
         def _menu_basildi(self, _w, olay):
-            """Tutma sürerken menünün dışına (düğme dışında) dokunma menüyü kapatır."""
-            en, boy = self.menu.get_size()
-            if olay.window != self.menu.get_window() or not (0 <= olay.x < en and 0 <= olay.y < boy):
-                self.menu_kapat()
-                return True
+            # Olay child GdkWindow'dan gelebilir. Pencere kimliğiyle dışarı
+            # sayıp press anında kapatmak GtkButton.clicked'i engeller.
             self.menu_dokunma = time.time()
             return False
 
@@ -440,6 +454,7 @@ def kur(ekran):
             for oge in menu_ogeleri(self.ayar):
                 dugme = self._menu_dugmesi(oge["etiket"], lambda i=oge["islem"]: self._sec(i), etkin=oge["etkin"])
                 self.menu_kutu.pack_start(dugme, False, False, 0)
+            self.menu_kutu.pack_start(self._menu_dugmesi("Menüyü kapat", self.menu_kapat), False, False, 0)
             self.menu_kutu.show_all()
             self._ileti_gizle()
             if self.menu_acik:
@@ -529,7 +544,7 @@ def kur(ekran):
             if self.istenen and not self.basili:
                 if not self.menu_acik:
                     self._soluk(simdi > self.belirgin_bitis)
-                # Yönetilmeyen pencere, sonradan öne gelen pencerelerin altında kalmasın.
+                # Küçük yardımcı pencere, sonradan öne gelen pencerelerin altında kalmasın.
                 gdk = self.pencere.get_window()
                 if gdk is not None:
                     gdk.raise_()

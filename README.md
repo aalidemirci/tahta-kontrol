@@ -1,5 +1,17 @@
 # Tahta Kontrol
 
+Yerel geliştirme **0.13.0**: PDF/Excel'den öğretmen programı eşlemesi ve
+kilit ekranında bugünün ders programı. Öğretmenlerin başka sınıfta yoklama alma
+yolu açıktır. [Sürüm notları](docs/surum-0.13.0.md). Henüz kurulu sisteme dağıtılmadı.
+
+Son yerel geliştirme **0.12.2**: ETAP yüzer düğme girdi düzeltmesi;
+[`docs/surum-0.12.2.md`](docs/surum-0.12.2.md). Henüz dağıtılmadı.
+
+Yerel geliştirme sürümü **0.12.1**: ajan yanıtlarına boyut sınırı ve kesik
+indirme denetimi eklendi. Geliştirme planı: [`docs/gelistirme-plani.md`](docs/gelistirme-plani.md).
+Otomatik yedek ayrı işte yürür; yavaş ikinci disk ana zamanlayıcıyı bekletmez.
+Bu değişiklikler henüz kurulu sunucuya/istemciye dağıtılmadı.
+
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
@@ -181,6 +193,10 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
   saatlerden oluşturulabilir. Öğretmen adları okunmaz ve saklanmaz; Tahta Kontrol e-Okul'a bağlanmaz.
 
 ## Çalıştırma (geliştirme)
+
+Bu bilgisayar için hazırlanan yerel geliştirme komutları ve editör ayarları:
+[`docs/gelistirme.md`](docs/gelistirme.md). Proje incelemesi ve öncelikli öneriler:
+[`docs/inceleme-2026-11-17.md`](docs/inceleme-2026-11-17.md).
 
 Python 3.12 ve [uv](https://docs.astral.sh/uv/) gerekir.
 

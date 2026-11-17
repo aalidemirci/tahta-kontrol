@@ -137,7 +137,12 @@ Eşleştirme kodu denetimi yetkiden önce yapılır (kodsuz çağrıda parola so
 çubuğunda görünmeyen ve odak çalmayan (klavye girişini kesmez) bir düğme; parmakla sürüklenir, kenara
 yapışır, konumu oturum boyunca hatırlanır; varsayılan sağ alt köşe. Ölçüleri ekran ölçeğinden türetilir
 (sabit piksel yok). Tam ekran video/sunumda rahatsız etmemesi için küçük ve soluktur, dokununca belirginleşir.
-Dokununca yanında ekrana sığan yönde küçük bir menü açılır (dışına dokununca kapanır):
+Dokununca yanında ekrana sığan yönde küçük bir menü açılır. 0.12.2 geliştirmesinde
+ETAP girdisi için POPUP yerine çerçevesiz, odak almayan TOPLEVEL/UTILITY pencereler
+kullanılır; yüzer düğme ve menü seat grab yapmaz. Menü düğmeye yeniden dokunarak,
+"Menüyü kapat" ile veya 12 saniyelik zaman aşımıyla kapanır; masaüstünün dış
+dokunuşlarını yakalamaz. Dokunma dizisi doğrudan işlenir; fare öykünmesi şart değildir.
+Bu değişiklik GTK taklidiyle doğrulandı, gerçek ETAP kabul denemesi bekliyor:
 
 | İşlem | Davranış |
 |---|---|
@@ -289,6 +294,11 @@ sonra açılan tahtaya dokunulmaz. Resmî tatil takvimi yoktur. Uzaktan açma
 cihazdan açılır.
 
 ## 9. Güncelleme
+
+0.12.1 geliştirmesinde ajan indirmeleri sınırlıdır: JSON yanıtı 4 MiB,
+`.deb` paketi 16 MiB, logo 256 KiB. Başlıkta boyut bulunmasa veya yanıt chunked
+olsa da sınır uygulanır. Boyutu aşan ve Content-Length'e göre kesik kalan yanıt
+bağlantı hatası sayılır; paket kurulmaz. Sertifika ve özet denetimi değişmez.
 
 Sunucu, ajan `.deb` paketini kendi içindeki ajan kaynağından üretir. Sunucu
 güncellenince paket de yenilenir; panelde sürümü eski tahtalar "Güncelleme var"
@@ -615,6 +625,27 @@ Türk abecesiyle … H, I, İ, J …); PDF ayrıştırılmaz (yeni bağımlılı
 
 ## 13. Sınav kipi ve sınav yoklaması
 
+### 0.13.0 ek kararı: öğretmen programı ve kilit görünümü
+
+Kullanıcının 17.11.2026 talimatıyla, öğretmen programı ayrı bir içe aktarma
+yolunda (`ogretmen_program.py`, `/ogretmen-programi`) mevcut öğretmen kimliklerine
+bağlanır. PDF şube başlıklarını, XLS gün/saat/ders ve kaynak öğretmen satırlarını
+sağlar. Ham dosyalar ve kaynak adlar yalnız süreli önizleme belleğindedir;
+kalıcı tabloda öğretmen kimliği vardır. Öğretmen adı otomatik oluşturulmaz.
+Eski e-Okul dolu/boş program okuyucusu ve kişi verisi tutmayan derslik programı
+aynen korunur. Program eşlemesi **yoklama yetkisini kısıtlamaz**; nöbet veya boş
+ders gözetimi için başka sınıfın geçerli dersine yoklama alınabilir.
+
+Yeni `ogretmen_program` tablosu yıl sonu saklama sınırında temizlenir; yalnız
+bu tablonun silinmesi de WAL budamasını tetikler. Program sürüm sayacı,
+bekleyen önizlemelerin eski veri üzerine sessizce yazmasını önler.
+
+Kilit ekranına yalnız ilgili şubelerin bugünkü şube/ders/saat listesi gönderilir.
+Öğretmen ve öğrenci kimliği/ismi gönderilmez. Ajan bellek görünümü sunucunun
+gece yarısı süresiyle sona erer, disk/tanılamaya yazılmaz. Bu görünüm eski
+program kilidi gerekçesi satırından ayrıdır. Dört satırlık sayfalama tuş
+takımının altında kalır; gerçek ETAP ekran ölçümü saha aşamasıdır.
+
 Kaynak, Kelebek Sınav'ın **Toplu Dağıtım Çizelgesi** (R5, `.xlsx`) dosyasıdır; bir dosya bir
 sınav oturumudur. Sunucu dosyayı standart kitaplıkla okur (`xlsx.py`: zip üye sayısı ve açılmış
 boyut sınırı, `<!DOCTYPE` reddi; yeni bağımlılık yok), dosyayı diske yazmaz. Başlık satırı (A2)
@@ -888,7 +919,10 @@ yeni `ariza`, `ariza_hareket` tabloları (`user_version` 6).
   çevrilir; sunucuda **yalnız açık anahtar** saklanır. Bu yüzden sunucu parolayı bilmeden her gün
   yedek alabilir ama yedeği açamaz; sunucu diski çalınsa da eski yedekler açılmaz. Parola
   belirlenirken hesap parolası yeniden istenir. Parola unutulursa yedekler açılamaz.
-- **Zamanlama:** zamanlayıcının 7. işi; parola varsa, program en az 5 dk açıksa ve bugünün
+- **Zamanlama:** 0.12.1 geliştirmesinde otomatik yedek ve geri yükleme kalıntılarının temizliği
+  tek bir arka plan işinde yürür; yavaş ikinci disk diğer zamanlayıcı işlerini bekletmez.
+  Önceki iş bitmediyse yeni tur yedek başlatmaz. İş hataları günlüğe yazılır; sonraki tur
+  yeniden denenebilir. Parola varsa, program en az 5 dk açıksa ve bugünün
   (Europe/Istanbul) günlük yedeği yoksa alınır; başarısızsa 30 dk sonra yeniden denenir. Aynı gün
   ikinci günlük yedek üretilmez. Saklama: günlük yedeklerden en yeni N (3–90, varsayılan 14), elle
   alınanlardan en yeni 10; elle alınanlar ayrıca N günden eskiyince silinir (KVKK: seyrek alınan elle
@@ -896,6 +930,11 @@ yeni `ariza`, `ariza_hareket` tabloları (`user_version` 6).
   İsteğe bağlı ikinci kopya klasörü (başka disk/sürücü); klasöre yazılamazsa ayar kaydedilmez. İzin
   komutu (`yedek.izin_komutu`) 6A'da programı çalıştıran Windows hesabına, hizmet kipinde (6B)
   LocalService'e (`*S-1-5-19`) yazma izni verir. Yedek, göç ve geri yükleme aynı kilitte (`vt.KILIT`) çalışır.
+  Kapanış önce yeni yedek kabulünü kapatır ve zamanlayıcıyı uyandırır; HTTP, zamanlayıcı ve
+  süren yedek toplam en çok 16 saniye beklenir (Windows hizmeti ipucu 20 saniye).
+  İşletim sisteminde takılmış disk I/O'su Python iş parçacığından zorla iptal edilemez;
+  süre dolarsa uyarı yazılır ve daemon işi süreç kapanırken sonlanır. Dosyanın atomik
+  değiştirilmesi mevcut tamamlanmış yedeği korur; yarıda kalan `.yeni` dosyası yedek sayılmaz.
 - **Parolasız yedek yoktur:** parola belirlenene kadar panoda kırmızı şerit durur.
 - **Geri yükleme** yalnız sunucu bilgisayarından (127.0.0.1) ve yöneticiyle; ilk kurulumda
   (kullanıcı yokken) oturumsuz ama yine yalnız yerelden ("Yedekten geri yükle" bağlantısı). Akış:

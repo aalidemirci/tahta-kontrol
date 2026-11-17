@@ -81,6 +81,20 @@ def ogrenci_id(okul_no: str) -> int:
     return sorgu("SELECT id FROM ogrenci WHERE okul_no = ?", okul_no)[0]["id"]
 
 
+def test_programdaki_ogretmen_farkli_olsa_da_baska_subede_yoklama_alinir(hazir, panel, tahta):
+    diger_id, _ = ogretmen_ekle(panel, "Program", "Öğretmeni")
+    with vt.islem() as b:
+        b.execute("INSERT INTO ogretmen_program(sube,gun,ders_no,baslangic,bitis,ders_adi,ogretmen_id,guncelleme) "
+                  "VALUES('10/B',0,1,'08:20','09:00','Yapay Ders',?,?)", (diger_id, vt.simdi()))
+    oturum = baslat(tahta, hazir).json()["belirtec"]
+    yanit = ajan(tahta, hazir["basliklar"], "kaydet", {"belirtec": oturum, "sube": "10/B", "ders_no": 1, "yok": []})
+    assert yanit.status_code == 200
+    with vt.islem() as b:
+        kayit = b.execute("SELECT * FROM yoklama WHERE sube = '10/B'").fetchone()
+        assert kayit["ogretmen_id"] == hazir["ogretmen_id"]
+        assert yk.kayit_ayrintisi(b, kayit["id"])["program_eslesiyor"] is False
+
+
 def tum_metin() -> str:
     """Veritabanındaki bütün tabloların bütün hücreleri (gizli bilgi taraması için)."""
     with vt.islem() as b:

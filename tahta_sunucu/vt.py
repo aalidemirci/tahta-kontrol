@@ -425,6 +425,21 @@ GOCLER = [
         bitis INTEGER NOT NULL, olusturma INTEGER NOT NULL,
         CHECK ((ogretmen_id IS NULL) <> (kullanici_id IS NULL)));
     """,
+    # 0.13.0 — öğretmen programı (yoklama yetkisi kısıtlamaz); ham rapor/öğretmen etiketi saklanmaz.
+    """
+    CREATE TABLE ogretmen_program (
+        id INTEGER PRIMARY KEY,
+        sube TEXT NOT NULL,
+        gun INTEGER NOT NULL CHECK (gun BETWEEN 0 AND 6),
+        ders_no INTEGER NOT NULL CHECK (ders_no BETWEEN 1 AND 20),
+        baslangic TEXT NOT NULL,
+        bitis TEXT NOT NULL,
+        ders_adi TEXT NOT NULL,
+        ogretmen_id INTEGER REFERENCES ogretmen(id) ON DELETE SET NULL,
+        guncelleme INTEGER NOT NULL,
+        UNIQUE (sube, gun, ders_no, baslangic, ders_adi, ogretmen_id));
+    CREATE INDEX ogretmen_program_gun ON ogretmen_program(gun, sube, ders_no);
+    """,
 ]
 GOC_ONCESI_KALAN = 3
 # Göç (ve göç öncesi kopya), yedek alma ve geri yükleme aynı anda çalışmaz (A6 K-B2).

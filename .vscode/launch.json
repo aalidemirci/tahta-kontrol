@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Tahta Kontrol: yerel geliştirme sunucusu",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "tahta_sunucu",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "TAHTA_VERI_DIZINI": "${workspaceFolder}/work/dev-veri",
+        "TAHTA_HTTP_MAKINE": "127.0.0.1",
+        "TAHTA_HTTPS_MAKINE": "127.0.0.1",
+        "TAHTA_HTTP_PORT": "8797",
+        "TAHTA_HTTPS_PORT": "8798"
+      }
+    }
+  ]
+}

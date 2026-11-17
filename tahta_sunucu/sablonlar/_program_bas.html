@@ -38,6 +38,7 @@
 <nav class="sekmeler" aria-label="Program bölümleri">
   <a href="/program?bolum=zil" {% if bolum == 'zil' %}aria-current="page"{% endif %}>Zil saatleri</a>
   <a href="/program?bolum=derslik" {% if bolum == 'derslik' %}aria-current="page"{% endif %}>Derslik programları</a>
+  {% if kullanici.rol == 'yonetici' %}<a href="/ogretmen-programi">Öğretmen programı</a>{% endif %}
   <a href="/program?bolum=kurallar" {% if bolum == 'kurallar' %}aria-current="page"{% endif %}>Kurallar</a>
   <a href="/program?bolum=istisnalar" {% if bolum == 'istisnalar' %}aria-current="page"{% endif %}>İstisnalar</a>
   <a href="/program/uyarilar" {% if bolum == 'uyarilar' %}aria-current="page"{% endif %}>Uyarılar{% if serit.uyari_sayisi %} <span class="sayi-rozet">{{ serit.uyari_sayisi }}</span>{% endif %}</a>

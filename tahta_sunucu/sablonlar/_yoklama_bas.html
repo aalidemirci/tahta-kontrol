@@ -13,5 +13,6 @@
   <a href="/ogretmenler" {% if bolum == 'ogretmenler' %}aria-current="page"{% endif %}>Öğretmenler ve PIN</a>
   <a href="/ogrenciler" {% if bolum == 'ogrenciler' %}aria-current="page"{% endif %}>Öğrenci listesi</a>
   <a href="/usb-anahtarlar" {% if bolum == 'usb' %}aria-current="page"{% endif %}>USB anahtarlar</a>
+  {% if kullanici.rol == 'yonetici' %}<a href="/ogretmen-programi" {% if bolum == 'ogretmen_program' %}aria-current="page"{% endif %}>Öğretmen programı</a>{% endif %}
 </nav>
 {% if adli_not %}<p class="bant uyari kvkk-bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ adli_not }}</p>{% endif %}

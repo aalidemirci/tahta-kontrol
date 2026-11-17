@@ -34,6 +34,7 @@ from . import (
     duyuru,
     guvenlik,
     hedef,
+    kilit_program,
     marka,
     metin,
     paket,
@@ -69,7 +70,7 @@ DEVRELER = hedef.DEVRELER
 MENU = [
     {"ad": "Pano", "yol": "/", "esler": ["/", "/tahta/"]},
     {"ad": "Duyurular", "yol": "/duyurular", "esler": ["/duyurular"]},
-    {"ad": "Program", "yol": "/program", "esler": ["/program"]},
+    {"ad": "Program", "yol": "/program", "esler": ["/program", "/ogretmen-programi"]},
     {"ad": "Sınavlar", "yol": "/sinavlar", "esler": ["/sinavlar", "/sinav"]},
     {"ad": "Yoklama", "yol": "/yoklama", "esler": ["/yoklama", "/ogretmenler", "/ogrenciler", "/usb-anahtarlar"]},
     {
@@ -1586,7 +1587,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         """
         ana, vurgu = tema.tema_al(b)
         # Ad ve derslik uzun bekleme sırasında değişmiş olabilir: güncel satırdan okunur.
-        guncel = b.execute("SELECT ad, derslik FROM tahta WHERE id = ?", (tahta["id"],)).fetchone() or tahta
+        guncel = b.execute("SELECT * FROM tahta WHERE id = ?", (tahta["id"],)).fetchone() or tahta
         sonuc = {
             "okul_adi": vt.ayar_al(b, "okul_adi", ""),
             "kilit_kodu": vt.ayar_al(b, "kilit_kodu"),
@@ -1605,6 +1606,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             # 0.11.0: durum tabanlı, YALNIZ açık/kapalı (anahtar listesi, özet, PIN ayarı tahtaya inmez).
             "usb_anahtar": usb_anahtar.ajan_gorunumu(b),
         }
+        if "gun_programi" in acil.yetenekler(guncel):
+            sonuc["gun_programi"] = kilit_program.ajan_gorunumu(b, guncel, vt.simdi())
         # A6: durum tabanlı adres listesi; boşsa gönderilmez (ajan elindeki listeyi korur).
         liste = adresler.al(b)
         if liste:
@@ -2017,6 +2020,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         panel_altyapi,
         panel_cizelge,
         panel_duyuru,
+        panel_ogretmen_program,
         panel_sinav,
         panel_tahtalar,
     )
@@ -2030,6 +2034,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
     panel_sinav.kaydet(uygulama, y)
     panel_yoklama.kaydet(uygulama, y)
     panel_usb.kaydet(uygulama, y)
+    panel_ogretmen_program.kaydet(uygulama, y)
     panel_altyapi.kaydet(uygulama, y)
 
     uygulama.state.zamanlayici = zamanlayici
@@ -2050,7 +2055,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
     uygulama.state.duyuru_zamanlayici = duyuru_zamanlayici
     uygulama.state.acil_denetim = acil_denetim
     uygulama.state.duyuru_yayimla = yayimla
-    # sunucu.py::_zamanlayici bunları sırayla, her birini ayrı try içinde çağırır (ortak sözlük §2.3).
+    # sunucu.py yedeği tek arka plan işine verir; diğerlerini ayrı try içinde sırayla çağırır.
     uygulama.state.zamanlayicilar = [
         ("acil_denetim", acil_denetim),
         ("otomatik_kapatma", zamanlayici),

@@ -10,6 +10,7 @@ import time
 import uvicorn
 
 from . import ayar, guvenlik, paket, web, yedek
+from .yedek_is import YedekIsleyici
 
 gunluk = logging.getLogger("tahta-sunucu")
 
@@ -37,6 +38,9 @@ class Sunucu:
             ),
         ]
         self.is_parcalari: list[threading.Thread] = []
+        self._durdu = threading.Event()
+        self._zamanlayici_parcasi: threading.Thread | None = None
+        self._yedek_isleyici = YedekIsleyici()
 
     @property
     def yerel_adres(self) -> str:
@@ -69,16 +73,20 @@ class Sunucu:
             time.sleep(0.1)
         if not all(s.started for s in self.sunucular):
             raise RuntimeError("Sunucu 15 saniyede açılamadı.")
-        threading.Thread(target=self._zamanlayici, daemon=True).start()
+        self._zamanlayici_parcasi = threading.Thread(target=self._zamanlayici, daemon=True)
+        self._zamanlayici_parcasi.start()
         gunluk.info("Panel (bu bilgisayar): %s", self.yerel_adres)
         for adres in self.ag_adresleri():
             gunluk.info("Panel (okul ağı)     : %s", adres)
 
     def zamanlayici_turu(self) -> None:
-        """Zamanlayıcı işlerini sırayla çalıştırır; biri çökerse diğerleri sürer (ortak sözlük §2.3)."""
+        """Yedek tek arka plan işinde, diğer işler sırayla yürür; hata diğer işleri durdurmaz."""
         for ad, is_ in self.uygulama.state.zamanlayicilar:
             try:
-                is_()
+                if ad == "yedek":
+                    self._yedek_isleyici.baslat(is_)
+                else:
+                    is_()
             except Exception:  # zamanlayıcı hatası sunucuyu düşürmez
                 gunluk.exception("Zamanlayıcı işi başarısız: %s", ad)
 
@@ -88,18 +96,27 @@ class Sunucu:
         İlk tur sunucu açılır açılmaz çalışır: kapalıyken kaçırılan gösterimler hemen
         yayımlanır ya da "kaçırıldı" yazılır.
         """
-        while not any(s.should_exit for s in self.sunucular):
+        while not self._durdu.is_set() and not any(s.should_exit for s in self.sunucular):
             self.zamanlayici_turu()
-            time.sleep(20)
+            self._durdu.wait(20)
 
     def calisiyor_mu(self) -> bool:
         return bool(self.is_parcalari) and all(p.is_alive() for p in self.is_parcalari)
 
     def durdur(self) -> None:
+        # HTTP iş parçacıkları ve yedek için toplam bekleme 16 sn'yi aşmaz;
+        # Windows hizmetinin 20 sn'lik durdurma bütçesi korunur.
+        bitis = time.monotonic() + 16
+        self._durdu.set()
+        self._yedek_isleyici.durdur()
         for sunucu in self.sunucular:
             sunucu.should_exit = True
         for parca in self.is_parcalari:
-            parca.join(timeout=8)
+            parca.join(timeout=max(0, min(8, bitis - time.monotonic())))
+        if self._zamanlayici_parcasi is not None:
+            self._zamanlayici_parcasi.join(timeout=max(0, bitis - time.monotonic()))
+        if not self._yedek_isleyici.durdur(max(0, bitis - time.monotonic())):
+            gunluk.warning("Otomatik yedek kapanış süresinde tamamlanmadı; süreç kapanırken sonlandırılacak.")
 
     def bekle(self) -> None:
         try:

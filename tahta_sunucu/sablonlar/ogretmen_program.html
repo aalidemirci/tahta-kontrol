@@ -1,0 +1,68 @@
+{% extends "taban.html" %}
+{% block baslik %}Öğretmen programını aktar · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{% with bolum='ogretmen_program', bas_baslik='Öğretmen programını aktar',
+        bas_aciklama='Gün, ders saati, şube ve öğretmen eşlemesi. Bu program bilgilendirme içindir; nöbet veya boş ders nedeniyle başka şubenin yoklamasını almaya engel olmaz.' %}
+{% include "_yoklama_bas.html" %}
+{% endwith %}
+<p class="geri"><a href="/ogretmenler">← Öğretmenler ve PIN</a></p>
+<p class="bant uyari" role="note">Bu sayfa öğretmen adları içerir. Dosyalar diske yazılmaz; önizleme yalnız bellekte 15 dakika tutulur. Kaynak öğretmen adları kalıcı saklanmaz, onaylanan eşleme sistemdeki öğretmen kimliğine bağlanır. Öğrenci listesi yüklemeniz gerekmez.</p>
+{% if aktarim_hatasi %}<p class="bant uyari" role="alert">{{ aktarim_hatasi }}</p>{% endif %}
+{% if onizleme %}
+<section class="kutu">
+  <h2>Aktarım önizlemesi</h2>
+  <p>{{ onizleme.sube_sayisi }} dolu şube · {{ onizleme.ders_sayisi }} ders satırı · {{ onizleme.bos_blok }} boş program bloğu. Mevcut {{ mevcut_sayi }} ders satırı bu aktarımın tamamıyla değiştirilecek.</p>
+  {% if onizleme.ogretmensiz %}<p class="bant uyari">{{ onizleme.ogretmensiz }} ders hücresinde öğretmen adı okunamadı. Ders bilgisi öğretmen eşlemesi olmadan aktarılabilir; bunun için ayrıca onay gerekir.</p>{% endif %}
+  <h3>Şube ve blok sırası</h3>
+  <div class="tablo-kap"><table><thead><tr><th>Blok</th><th>Şube</th><th>Saat aralığı</th><th>Dolu ders</th></tr></thead><tbody>
+    {% for b in onizleme.bloklar %}<tr><td>{{ b.no }}</td><td>{{ b.sube }}</td><td>{{ b.bas }}–{{ b.bit }}</td><td>{{ b.dolu }}{% if not b.dolu %} · boş program{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+  <form method="post" action="{{ kaynak_yolu }}/uygula">
+    <input type="hidden" name="belirtec" value="{{ belirtec }}">
+    <div class="tablo-kap"><table>
+      <thead><tr><th scope="col">Rapordaki öğretmen</th><th scope="col">Sistemdeki öğretmen</th><th scope="col">Eşleme</th></tr></thead>
+      <tbody>{% for e in onizleme.ogretmenler %}
+        <tr><td>{{ e.ad }}</td><td><label class="gizli" for="op-{{ e.no }}">{{ e.ad }} eşlemesi</label>
+          <select name="esle_{{ e.no }}" id="op-{{ e.no }}" required>
+            <option value="">Seçin</option>
+            {% for o in onizleme.secenekler %}<option value="{{ o.id }}"{% if e.secilen == o.id | string %} selected{% endif %}>{{ o.ad }}</option>{% endfor %}
+            <option value="yok"{% if e.secilen == 'yok' %} selected{% endif %}>Öğretmen eşlemeden aktar</option>
+          </select></td><td>{% if e.belirsiz %}Aynı isimde birden çok öğretmen var; elle seçin.{% elif e.otomatik %}Tam ad eşleşmesi önerildi; doğrulayın.{% else %}Elle eşleme gerekli.{% endif %}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    <p class="not">USB anahtarları öğretmen kimliğine bağlıdır; doğru öğretmeni seçmeniz program ile USB kimliğini ilişkilendirir. Yeni öğretmen oluşturulmaz veya anahtar üretilmez.</p>
+    <label class="satir"><input type="checkbox" name="ogretmensiz_onay" value="1"> Öğretmeni okunamayan veya açıkça eşlemeden aktar seçtiğim derslerin öğretmensiz saklanmasını kabul ediyorum.</label>
+    <label class="satir"><input type="checkbox" name="onay" value="1" required> Şube sırasını, dersleri ve öğretmen eşlemelerini kontrol ettim; mevcut öğretmen programının değişmesini onaylıyorum.</label>
+    <div class="dugme-satiri"><button class="ana">Programı aktar</button><a class="dugme" href="{{ kaynak_yolu }}">Vazgeç</a></div>
+  </form>
+  <details><summary>İlk {{ onizleme.ornek_dersler | length }} ders satırı</summary>
+    <div class="tablo-kap"><table><thead><tr><th>Şube</th><th>Gün</th><th>Ders</th><th>Saat</th><th>Ders adı</th></tr></thead><tbody>
+      {% set gunler=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'] %}
+      {% for d in onizleme.ornek_dersler %}<tr><td>{{ d.sube }}</td><td>{{ gunler[d.gun] }}</td><td>{{ d.ders_no }}</td><td>{{ d.baslangic }}–{{ d.bitis }}</td><td>{{ d.ders_adi }}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </details>
+</section>
+{% else %}
+<section class="kutu">
+  <h2>Raporları yükle</h2>
+  <p>e-Okul'un aynı raporundan kaydedilen Excel (.XLS) ve PDF'i seçin. PDF her sayfanın şube başlığını tamamlar; Excel blok sırası öğretmen satırlarıyla da kontrol edilir. PDF yerine sıralı şube listesini elle yapıştırabilirsiniz.</p>
+  <form method="post" enctype="multipart/form-data" action="{{ kaynak_yolu }}/onizle">
+    <label for="op-program">Haftalık ders programı Excel'i (.XLS, en çok 2 MB)</label><input id="op-program" type="file" name="program" accept=".xls,.xlsx" required>
+    <label for="op-pdf">Aynı programın PDF'i (isteğe bağlı, en çok 8 MB)</label><input id="op-pdf" type="file" name="pdf" accept=".pdf">
+    <label for="op-subeler">PDF yoksa blok sırasına göre şubeler</label><textarea id="op-subeler" name="subeler" rows="4" maxlength="32000" placeholder="9/A, 9/B, 9/C"></textarea>
+    <p class="not">PDF seçerseniz şube listesi PDF'ten alınır. Boş program blokları için de şube adı gerekir. Bu aktarım mevcut zil saatlerini veya derslik programı kilitlerini değiştirmez.</p>
+    <button class="ana">Önizle ve öğretmenleri eşle</button>
+  </form>
+</section>
+{% endif %}
+{% if mevcut_sayi %}
+<details class="kutu"><summary>Aktarılmış öğretmen programı · {{ mevcut_sayi }} ders satırı</summary>
+  <p class="not">Program bilgilendirme içindir. Öğretmen nöbet veya görevlendirme nedeniyle başka sınıfın yoklamasını da alabilir; bu liste yetki engeli oluşturmaz.</p>
+  {% if cok_grup %}<p class="not">İlk 250 öğretmen/gün/şube grubu gösteriliyor.</p>{% endif %}
+  <div class="tablo-kap"><table><thead><tr><th>Öğretmen</th><th>Gün</th><th>Şube</th><th>Dersler</th></tr></thead><tbody>
+  {% set gunler=['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'] %}
+  {% for g in mevcut_gruplar %}<tr><td>{% if g.ogretmen_id %}{{ g.ad }} {{ g.soyad }}{% else %}Öğretmen eşlenmedi{% endif %}</td><td>{{ gunler[g.gun] }}</td><td>{{ g.sube }}</td><td>{{ g.dersler }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</details>
+{% endif %}
+{% endblock %}

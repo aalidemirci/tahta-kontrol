@@ -1,5 +1,22 @@
 # CLAUDE.md — Tahta Kontrol
 
+0.13.0 kullanıcı kararı (17.11.2026): öğretmen programı bilgilendirme için
+ayrı `/ogretmen-programi` yolunda PDF/XLS'den eşlenir; eski dolu/boş okuyucu
+değişmez. Ham adlar yalnız önizleme belleğinde, kalıcı bağlantı mevcut öğretmen
+kimliğidir. **Program hiçbir öğretmenin başka sınıf/ders yoklamasını engellemez.**
+Kilit ekranında bugünün şube/ders/saat bilgisi gösterilir; öğretmen ve öğrenci
+adları bu yola girmez. Bu talimat eski "programda öğretmen ve ders adı yok"
+kuralına yalnız yeni öğretmen programı tablosu ve ders başlıkları için istisnadır.
+Program ajan diskine yazılmaz, gece yarısında bellek görünümü kalkar.
+
+Yerel geliştirme 0.12.2: ETAP yüzer düğme için yönetilen yardımcı pencereler,
+seat grab kaldırılması ve doğrudan dokunma desteği. `docs/surum-0.12.2.md`.
+Gerçek ETAP'ta henüz denenmedi; kurulu sunucu/istemci değiştirilmedi.
+
+Yerel geliştirme: 0.12.1 — ajan yanıt boyutu sınırları ve kesik yanıt denetimi.
+Otomatik yedek ayrı tek işte çalışır; ortak kilitler ve 16 sn kapanış bütçesi korunur.
+Dağıtılmadı; kurulu sunucu/istemciye dokunulmadı. Plan: `docs/gelistirme-plani.md`.
+
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgisayarda
 **sunucu** (Windows hizmeti + durum penceresi), her tahtada **ajan** (Pardus ETAP, `.deb`).
 İdare, paneli tarayıcıdan kullanıcı adıyla açar; diğer bilgisayarlara kurulum yoktur.

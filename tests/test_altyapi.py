@@ -6,6 +6,7 @@ import io
 import json
 import sqlite3
 import struct
+import threading
 import zipfile
 
 import pytest
@@ -323,6 +324,45 @@ def test_parola_yoksa_otomatik_yedek_alinmaz_pano_uyarir(kurulu, uygulama, saat)
     assert zamanlayici() is True
     assert zamanlayici() is False  # bugünün günlüğü var
     assert [y["tur"] for y in yedek.listele()] == ["gunluk"]
+
+
+def test_yavas_ikinci_diskte_normal_islem_surer_elle_yedek_cakismaz(kurulu, uygulama, saat, tmp_path, monkeypatch):
+    from tahta_sunucu import vt, yedek
+    from tahta_sunucu.yedek_is import YedekIsleyici
+
+    parola_belirle(kurulu)
+    kopya = tmp_path / "ikinci-disk"
+    kopya.mkdir()
+    with vt.islem() as b:
+        ayarlar = yedek.ayarlar(b)
+        ayarlar["kopya_dizini"] = str(kopya)
+        vt.ayar_yaz(b, "yedek", ayarlar)
+    asil_yaz = yedek._atomik_yaz
+    basladi, birak = threading.Event(), threading.Event()
+
+    def yavas_yaz(hedef, veri):
+        if hedef.parent == kopya:
+            basladi.set()
+            assert birak.wait(5)
+        return asil_yaz(hedef, veri)
+
+    monkeypatch.setattr(yedek, "_atomik_yaz", yavas_yaz)
+    saat.ilerlet(600)
+    isleyici = YedekIsleyici()
+    try:
+        assert isleyici.baslat(uygulama.state.yedek_zamanlayici)
+        assert basladi.wait(3)
+        with vt.islem() as b:
+            vt.ayar_yaz(b, "deneme", "program işlemi tamamlandı")
+        with pytest.raises(yedek.YedekMesgul):
+            yedek.yedek_al("elle", bekle=False)
+        assert not isleyici.baslat(uygulama.state.yedek_zamanlayici)
+    finally:
+        birak.set()
+        assert isleyici.durdur(3)
+    son = yedek.listele()[0]
+    assert (kopya / son["ad"]).read_bytes() == (yedek.dizin() / son["ad"]).read_bytes()
+    assert not vt.KILIT.locked()
 
 
 def test_yedek_indirme_yol_disina_cikamaz(kurulu, uygulama):

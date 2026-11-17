@@ -24,7 +24,7 @@ import unicodedata
 from collections import deque
 from urllib.parse import urlsplit
 
-from . import __version__, ayar, envanter, sistem, tani, usb_anahtar
+from . import __version__, ayar, envanter, gun_programi, sistem, tani, usb_anahtar
 from .baglanti import BaglantiHatasi, Istemci
 
 gunluk = logging.getLogger("tahta-ajan")
@@ -36,7 +36,7 @@ LOGO_YENIDEN_DENEME_SN = 60
 # Sunucunun bu ajana uygulayabileceği yetenekler (sürüm karşılaştırması yerine).
 YETENEKLER = [
     "acil", "duyuru_id", "program_kilidi", "sinav", "yoklama", "adres_listesi", "envanter", "ariza", "temizlik",
-    "dugme", "acilis_kilidi", "usb_anahtar",
+    "dugme", "acilis_kilidi", "usb_anahtar", "gun_programi",
 ]  # fmt: skip
 # Yüzer düğme (0.9.0, G3). Ayar sunucudan (`ayar.dugme`) gelir ve durum.json'da saklanır (sır değil): sunucu
 # kapalıyken servis yeniden başlasa da düğme görünür ve tahtadan kilitlenebilir. Ekrandan gelen her işlem
@@ -163,6 +163,9 @@ class Servis:
         self._yoklama_oturum_no = 0
         # Sunucunun durum tabanlı `ayar.yoklama_etkin` bayrağı; None = sunucu bildirmedi (eski sunucu).
         self.yoklama_etkin = None
+        # Yalnız bellekte: günlük program disk/günlük/tanılamaya yazılmaz.
+        self.gun_programi = None
+        self.gun_programi_bitis = 0.0
         # USB anahtar (0.11.0): sunucunun durum tabanlı `ayar.usb_anahtar.etkin` bayrağı (None = bildirmedi:
         # eski sunucu → izleme kapalı). Gizli değer YALNIZ `_usb_gizli`de, tanındıktan sonra en çok
         # TANI_OMRU_SN durur; görünüme, durum dosyasına, günlüğe, tanılamaya ve sunucuya giden duruma girmez.
@@ -1445,6 +1448,7 @@ class Servis:
                 # Ders yoklaması (A5): None ya da yoklama sayfalarının görünümü. Belirteç girmez.
                 "yoklama": self._yoklama_gorunumu(),
                 "yoklama_etkin": bool(self.yoklama_etkin),
+                "gun_programi": self._gun_programi_gorunumu(),
                 "okul_adi": self.okul_adi,
                 "kod_var": bool(self.kilit_kodu),
                 "cevrimdisi": self.cevrimdisi(),
@@ -1460,6 +1464,11 @@ class Servis:
                 # USB anahtar (0.11.0): None (özellik kapalı) ya da durum, kısa ad/kod, izinler. Gizli değer GİRMEZ.
                 "usb": self._usb_gorunumu(),
             }
+
+    def _gun_programi_gorunumu(self):
+        if self.gun_programi is not None and time.monotonic() < self.gun_programi_bitis:
+            return self.gun_programi
+        return None
 
     def _oturum_gor(self, baslangic):
         """Ekran yardımcısı bağlandı: başlangıcı bilinen oturumdan yeniyse yeni oturum kimliği üretilir.
@@ -2275,6 +2284,15 @@ class Servis:
             yerel_sifirlandi = self.sinav_yerel_kapali is not None
             self.sinav_yerel_kapali = None
             self.sunucu_saat = ayarlar.get("sunucu_saat", self.sunucu_saat)
+            program = gun_programi.coz(ayarlar.get("gun_programi"))
+            ham_program = ayarlar.get("gun_programi")
+            omur = ham_program.get("gecerli_sn") if isinstance(ham_program, dict) else 0
+            omur = min(86400, max(0, omur)) if type(omur) is int else 0
+            if not omur:
+                program = None
+            if program != self.gun_programi:
+                self.gun_programi, degisti = program, True
+            self.gun_programi_bitis = time.monotonic() + omur if program is not None else 0.0
             if "okul_adi" in ayarlar and ayarlar["okul_adi"] != self.okul_adi:
                 self.okul_adi, degisti = ayarlar["okul_adi"], True
             if "kilit_kodu" in ayarlar and ayarlar["kilit_kodu"] != self.kilit_kodu:

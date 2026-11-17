@@ -23,7 +23,7 @@ gunluk = logging.getLogger("tahta-sunucu")
 
 GUNLUK_BOYUT = 5 * 1024 * 1024
 GUNLUK_SAYI = 3
-DURDURMA_SURESI_MS = 20000  # Sunucu.durdur iki iş parçacığını en çok 8'er sn bekler
+DURDURMA_SURESI_MS = 20000  # Sunucu.durdur HTTP, zamanlayıcı ve yedeği toplam en çok 16 sn bekler
 
 # govde() çıkış kodları
 TAMAM = 0  # durduruldu (net stop, kapanış)

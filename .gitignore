@@ -16,3 +16,5 @@ veri/
 saha/
 # A6: şifreli yedek dosyaları depoya girmez
 *.tkyedek
+# Yerel geliştirme verisi, araç önbelleği ve doğrulama çıktıları
+work/

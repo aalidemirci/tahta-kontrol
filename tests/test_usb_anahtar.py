@@ -69,7 +69,8 @@ def liste_ve_kaydet(tahta, basliklar, belirtec: str, yok: list[int] | None = Non
 def test_usb_goc_tablolari_ve_belirtec_yeniden_kurulur(tmp_path, monkeypatch):
     monkeypatch.setenv("TAHTA_VERI_DIZINI", str(tmp_path))
     b = sqlite3.connect(tmp_path / "tahta-kontrol.db")
-    onceki = len(vt.GOCLER) - 1
+    # Yeni göçler eklense de bu test USB göçünün HEMEN öncesinden yükseltir.
+    onceki = next(i for i, sql in enumerate(vt.GOCLER) if "CREATE TABLE usb_anahtar" in sql)
     for sira in range(onceki):
         b.executescript(vt.GOCLER[sira])
     b.execute(f"PRAGMA user_version = {onceki}")
