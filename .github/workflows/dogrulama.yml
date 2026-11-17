@@ -1,4 +1,4 @@
-name: Proje doğrulama
+name: Proje doÄŸrulama
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     env:
       PYTHONUTF8: "1"
-      TAHTA_VERI_DIZINI: ${{ runner.temp }}/tahta-kontrol-test
+      TAHTA_VERI_DIZINI: ${{ github.workspace }}/work/ci-veri
       TAHTA_HTTP_MAKINE: "127.0.0.1"
       TAHTA_HTTPS_MAKINE: "127.0.0.1"
       TAHTA_HTTP_PORT: "8797"
@@ -34,16 +34,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: uv ve Python ortamını hazırla
+      - name: uv ve Python ortamÄ±nÄ± hazÄ±rla
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.13.8"
           python-version: "3.12"
           enable-cache: true
           cache-dependency-glob: uv.lock
-      - name: Kilitli geliştirme bağımlılıklarını kur
+      - name: Kilitli geliÅŸtirme baÄŸÄ±mlÄ±lÄ±klarÄ±nÄ± kur
         run: uv sync --locked --group dev
-      - name: Statik kod kontrolü
+      - name: Statik kod kontrolÃ¼
         run: uv run --no-sync ruff check .
       - name: Birim ve uygulama testleri
         run: uv run --no-sync pytest -q
