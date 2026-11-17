@@ -243,7 +243,9 @@ def test_servis_yoklama_hatasinda_isaretler_korunur(servis):
     assert servis.gorunum()["sinav"]["bildirim"].startswith("Gözetmen oturumu sona erdi")
 
 
-def test_servis_gozetmen_kodu_hatalari_ve_bekleme(servis):
+def test_servis_gozetmen_kodu_hatalari_ve_bekleme(servis, monkeypatch):
+    # Aynı anda yanıt ve tekrar deneme: kayan nokta saat hassasiyetinden bağımsız.
+    monkeypatch.setattr(time, "monotonic", lambda: 1000.0)
     servis._yanit_isle(yanit(sinav(basla_sn=-60)))
     servis.istemci.yanitlar["/ajan/sinav/kod"] = (403, {"hata": "Kod geçersiz.", "kalan_deneme": 3})
     servis.ekran_mesaji(1, {"tur": "gozetmen_kod", "kod": "000000"})
