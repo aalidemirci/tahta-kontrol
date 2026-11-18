@@ -1136,8 +1136,8 @@ halde öğretmene "Kaydedildi" denip kaydı gösterilmiyor, silinen bir kaydın 
 yeni yoklamayı eziyordu. Düzeltme ve iz satırları silinmez (kayıt silinip o ders saatinin başka kaydı
 kalmadıysa düzeltmeleri de silinir). Yan etkiler: kayıt ayrıntısındaki "Düzelt" eski bir kaydı düzeltince o
 kayıt en yeni olur ve öbür kaydı da panel düzeltmelerini de örter; aynı saniyedeki düzeltme ve kayıtta
-düzeltme kazanır; üstüne kayıt gelen (bayat) düzeltme hücrede görünmez, izi yalnız tablodadır. Bu seçim
-kullanıcıya sorulacaktır (§17 soru 65).
+düzeltme kazanır; üstüne kayıt gelen (bayat) düzeltme hücrede görünmez, izi yalnız tablodadır. Bu seçimi
+kullanıcı 18.11.2026'da onayladı (§17 soru 65, kapandı).
 
 **Mazeret/izin** (`/yoklama/mazeret`). Form: okul no(ları) (en çok 50), tarih aralığı, tam gün ya da ders
 aralığı, tür, isteğe bağlı dayanak. Türler: izinli, raporlu, mazeretli, görevli (nöbet, yarışma, gezi, okul
@@ -1597,9 +1597,9 @@ Ders yoklaması (0.6.0):
 40. **Program yokken icmal:** ders programı yüklenmemişse icmal, günlük ızgara gibi 8 ders
     saati varsayar ("ders programı yüklü değil, 8 saat varsayıldı"). Okulun günlük ders sayısı
     farklıysa programın yüklenmesi gerekir.
-65. **Düzeltmeden sonra tahtadan yeniden alınan yoklama** idarenin şube defterindeki düzeltmesinin üstüne
-    geçsin mi? (0.14.0'da böyle: "en son işlem geçerlidir"; gerekçe ve yan etkiler §14.2. Öbür seçenek:
-    idare düzeltmesi, kaldırılana kadar her kaydın üstünde kalır.)
+65. ~~**Düzeltmeden sonra tahtadan yeniden alınan yoklama** idarenin şube defterindeki düzeltmesinin üstüne
+    geçsin mi?~~ **Kapandı (kullanıcı kararı, 18.11.2026):** evet, "en son işlem geçerlidir"; gerekçe ve yan
+    etkiler §14.2. Yeniden tartışılmaz.
 66. **Mazeret türleri** (izinli, raporlu, mazeretli, görevli) ve dayanak seçenekleri okulun uygulamasına
     uyuyor mu? Defterde tür harfi görmek istenir mi? (Şimdi tek "Ö".)
 67. **Teneffüste ön seçim:** program hangi dersin kastedildiğini göstermiyorsa "biten / başlayacak"
