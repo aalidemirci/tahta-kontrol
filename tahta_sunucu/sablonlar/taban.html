@@ -11,7 +11,11 @@
 <script src="/statik/panel.js?v={{ surum }}" defer></script>
 <title>{% block baslik %}Tahta Kontrol{% endblock %}</title>
 </head>
-<body class="{% block govde_sinifi %}{% endblock %}">
+{# Kabuk (yan menü, üst ve alt çubuk) yalnız oturumlu ve tam ekran çerçeve çizmeyen sayfadadır: giriş, ilk kurulum ve
+   ilk kurulum çerçevesindeki geri yükleme (gövde sınıfı giris-sayfasi) kabuksuzdur. #}
+{% set govde = self.govde_sinifi() | trim %}
+{% set kabuklu = kullanici and 'giris-sayfasi' not in govde %}
+<body class="{{ 'kabuklu ' if kabuklu }}{% block govde_sinifi %}{% endblock %}">
 <a class="atla" href="#icerik">İçeriğe geç</a>
 <svg class="gizli" aria-hidden="true" focusable="false">
   <symbol id="s-acik" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" fill="currentColor"/></symbol>
@@ -25,9 +29,34 @@
   <symbol id="s-bilgi" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 7v4.5M8 4.5v1" stroke="currentColor" stroke-width="1.8"/></symbol>
   <symbol id="s-asagi" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
   <symbol id="s-takvim" viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="10.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M2 7h12M5.5 2v3M10.5 2v3" stroke="currentColor" stroke-width="1.5"/></symbol>
+  {# 0.15.0 kabuk simgeleri (m-*): 24 birimlik çizgi simgeler; çizgi biçimi öznitelikle verilir, CSS'e bağlı değildir. #}
+  <symbol id="m-tahta" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></g></symbol>
+  <symbol id="m-duyuru" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h3l6 4V6l-6 4z"/><path d="M17 9a4 4 0 0 1 0 6"/></g></symbol>
+  <symbol id="m-yoklama" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="m9 13 2 2 4-4"/></g></symbol>
+  <symbol id="m-program" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></g></symbol>
+  <symbol id="m-sinav" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h4"/></g></symbol>
+  <symbol id="m-kisiler" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></g></symbol>
+  <symbol id="m-yedek" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v5H3zM5 10v10h14V10M10 14h4"/></g></symbol>
+  <symbol id="m-kayit" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></g></symbol>
+  <symbol id="m-kullanici" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></g></symbol>
+  <symbol id="m-ayar" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></g></symbol>
+  <symbol id="m-menu" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></g></symbol>
+  <symbol id="m-kapat" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></g></symbol>
+  <symbol id="m-cikis" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></g></symbol>
 </svg>
-{% if kullanici %}
-<header class="ust"><div class="ust-ic">
+{% if kabuklu %}
+{# Kabuk (0.15.0): DOM sırası klavye sırasıdır. Üst çubuk yalnız çekmece kipinde, alt çubuk yalnız telefonda görünür
+   (kip stil.css'te, --kb-* özelliklerinde). JS yokken çekmece #menu (:target) ile açılır, #icerik ile kapanır. #}
+<header class="ust-cubuk">
+  <a class="menu-ac" href="#menu" aria-controls="menu"><svg class="simge" aria-hidden="true"><use href="#m-menu"/></svg><span>Menü</span></a>
+  <a class="kimlik" href="/">
+    {% include "_logo.html" %}
+    <span class="kimlik-okul">{{ okul_adi or 'Tahta Kontrol' }}</span>
+  </a>
+  <a class="acil-dugme" href="{{ menu_acil.yol }}"{% if menu_acil.secili %} aria-current="page"{% endif %}><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>Acil</span><span class="gizli"> durum</span></a>
+</header>
+<aside class="yan-menu" id="menu" tabindex="-1" aria-label="Menü">
+  <a class="yan-kapat" href="#icerik"><svg class="simge" aria-hidden="true"><use href="#m-kapat"/></svg><span class="gizli">Menüyü kapat</span></a>
   <a class="kimlik" href="/">
     {% include "_logo.html" %}
     <span class="kimlik-yazi">
@@ -35,29 +64,35 @@
       {% if okul_adi %}<span class="kimlik-urun">Tahta Kontrol</span>{% endif %}
     </span>
   </a>
-  <nav class="ana-menu" aria-label="Ana menü">
-    {% for oge in menu %}
-    {% if oge.alt %}
-    {# Açılır grup JS'siz <details>; panel.js yalnız dışarı tıklayınca ve Esc ile kapatır. #}
-    <details class="menu-grup"{% if oge.secili %} data-secili{% endif %}>
-      <summary>{{ oge.ad }}{% if oge.sayi %} <span class="sayi-rozet" aria-label="{{ oge.sayi }} açık arıza">{{ oge.sayi }}</span>{% endif %}<svg class="simge ok" aria-hidden="true"><use href="#s-asagi"/></svg></summary>
-      <div class="menu-alt">
-        {% for a in oge.alt %}<a href="{{ a.yol }}" {% if a.secili %}aria-current="page"{% endif %}>{{ a.ad }}{% if a.sayi %} <span class="sayi-rozet">{{ a.sayi }}</span>{% endif %}</a>{% endfor %}
-      </div>
-    </details>
-    {% else %}
-    <a href="{{ oge.yol }}" {% if oge.secili %}aria-current="page"{% endif %}>{{ oge.ad }}</a>
-    {% endif %}
+  <a class="acil-dugme" href="{{ menu_acil.yol }}"{% if menu_acil.secili %} aria-current="page"{% endif %}><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>{{ menu_acil.ad }}</span></a>
+  <nav class="yan-gezinme" aria-label="Ana menü">
+    {% for kume in menu.kumeler %}
+    <p class="yan-kume" id="kume-{{ loop.index }}">{{ kume.ad }}</p>
+    <ul aria-labelledby="kume-{{ loop.index }}">
+      {% for oge in kume.ogeler %}
+      <li{% if oge.secili %} data-secili{% elif oge.icinde %} data-icinde{% endif %}>
+        <a href="{{ oge.yol }}"{% if oge.secili %} aria-current="page"{% endif %}><svg class="simge" aria-hidden="true"><use href="#m-{{ oge.simge }}"/></svg><span>{{ oge.ad }}</span>{% if oge.sayi %}<span class="sayi-rozet">{{ oge.sayi }}</span><span class="gizli"> açık arıza</span>{% endif %}</a>
+        {% if oge.alt %}
+        {# Alt liste her zaman çizilir; sabit kipte yalnız etkin bölümünki görünür, çekmecede hepsi. #}
+        <ul class="yan-alt">
+          {% for a in oge.alt %}
+          <li><a href="{{ a.yol }}"{% if a.secili %} aria-current="page"{% endif %}><span>{{ a.ad }}</span>{% if a.sayi %}<span class="sayi-rozet">{{ a.sayi }}</span><span class="gizli"> açık arıza</span>{% endif %}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
     {% endfor %}
-    <a href="{{ menu_acil.yol }}" class="menu-acil" {% if menu_acil.secili %}aria-current="page"{% endif %}><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ menu_acil.ad }}</a>
   </nav>
-  <div class="oturum">
-    <span>{{ kullanici.gorunen_ad }} · {{ roller[kullanici.rol] }}</span>
-    <form method="post" action="/cikis" class="satir-ici"><button class="cikis">Çıkış</button></form>
+  <div class="yan-son">
+    <p class="yan-oturum"><span>{{ kullanici.gorunen_ad }}</span> <small>{{ roller[kullanici.rol] }}</small></p>
+    <form method="post" action="/cikis"><button class="yan-cikis"><svg class="simge" aria-hidden="true"><use href="#m-cikis"/></svg>Çıkış</button></form>
   </div>
-</div></header>
+</aside>
+<a class="perde" href="#icerik" tabindex="-1" aria-hidden="true"></a>
 {% endif %}
-<main id="icerik">
+<main id="icerik" tabindex="-1">
 {% if aktif_acil %}
 {# Acil sürerken her sayfada: kırmızı (tatbikatta kehribar) bant; yetkiliye "Yayını bitir". #}
 <div class="acil-bant" data-tur="{{ aktif_acil.tur }}" role="alert">
@@ -79,6 +114,14 @@
 {% block mesaj_yeri %}{% if mesaj %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}{% endblock %}
 </main>
+{% if kabuklu %}
+<nav class="alt-cubuk" aria-label="Kısayollar">
+  {% for oge in menu.alt_cubuk %}
+  <a href="{{ oge.yol }}"{% if oge.secili or oge.icinde %} aria-current="page"{% endif %}><svg class="simge" aria-hidden="true"><use href="#m-{{ oge.simge }}"/></svg><span>{{ oge.ad }}</span></a>
+  {% endfor %}
+  <a class="menu-ac" href="#menu" aria-controls="menu"><svg class="simge" aria-hidden="true"><use href="#m-menu"/></svg><span>Menü</span></a>
+</nav>
+{% endif %}
 {% if kullanici %}
 <dialog id="onay-diyalog" class="onay" aria-labelledby="onay-baslik" aria-describedby="onay-metin">
   <h2 id="onay-baslik"></h2>

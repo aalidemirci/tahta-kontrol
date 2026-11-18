@@ -3,7 +3,7 @@
 {# Oturum temizliği iletisi sayfa başında değil, #temizlik bölümünde çizilir. #}
 {% block mesaj_yeri %}{% if mesaj and ileti_yeri != 'temizlik' %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}
-<p class="geri"><a href="/">← Pano</a></p>
+<p class="geri"><a href="/">← Tahtalar</a></p>
 <div class="sayfa-bas">
   <h1>{{ t.ad }}
     {% if t.durum == 'bekliyor' %}<span class="rozet" data-durum="onay"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Onay bekliyor</span>

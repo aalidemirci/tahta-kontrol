@@ -103,7 +103,7 @@ def test_panel_kancalari_ve_salt_okunur_plan(panel, tahta):
     kur_ve_gir(panel)
     tahta_ekle(panel, tahta, "Z-01", durum=yeni_ajan_durumu())
     sayfa = panel.get("/").text
-    assert '<details class="menu-grup"' in sayfa and 'class="menu-acil"' in sayfa
+    assert '<aside class="yan-menu" id="menu"' in sayfa and 'class="acil-dugme" href="/acil"' in sayfa
     assert '"acil": false' in sayfa  # pano-veri: acil rozetleri için
     form = panel.get("/duyurular/yeni").text
     for kanca in ('id="duyuru-formu"', 'data-kosul="zaman" data-deger="bir_kez"', 'id="hedef-onizleme"',

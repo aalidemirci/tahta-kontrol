@@ -66,36 +66,40 @@ ROLLER = {"yonetici": "Yönetici", "idareci": "İdareci"}
 DUZEYLER = hedef.DUZEYLER
 DEVRELER = hedef.DEVRELER
 
-# Üst menü (ortak sözlük §4). Her aşama yalnız kendi öğesini ekler. "rol" verilmişse
-# yalnız o role görünür; "esler" sayfanın hangi yollarda seçili sayılacağını söyler.
+# Yan menü (0.15.0, kabuk): üç küme, en çok on üst öğe; açılır grup yok. Öğe alanları:
+#   ad, yol (VAR OLAN GET adresi), simge (taban.html sprite'ında m-<simge>), esler (etkin sayılacağı yollar),
+#   rol ("yonetici" ise yalnız yöneticiye çizilir), sayi (rozet sayısının anahtarı; sayfa() hesaplar),
+#   alt_cubuk (telefon alt çubuğunda da yer alır), alt (alt öğeler; simge/alt_cubuk/alt taşımaz).
+# Öğe eklenirse biri çıkar (test_menu_uc_kume_ve_en_cok_on_oge).
 MENU = [
-    {"ad": "Pano", "yol": "/", "esler": ["/", "/tahta/"]},
-    {"ad": "Duyurular", "yol": "/duyurular", "esler": ["/duyurular"]},
-    {"ad": "Program", "yol": "/program", "esler": ["/program", "/ogretmen-programi"]},
-    {"ad": "Sınavlar", "yol": "/sinavlar", "esler": ["/sinavlar", "/sinav"]},
-    {"ad": "Yoklama", "yol": "/yoklama", "esler": ["/yoklama", "/ogretmenler", "/ogrenciler", "/usb-anahtarlar"]},
-    {
-        "ad": "Tahtalar",
-        "alt": [
-            {"ad": "Tahta ekle", "yol": "/ekle", "esler": ["/ekle"]},
-            {"ad": "Gruplar", "yol": "/gruplar", "esler": ["/gruplar", "/tahtalar/ice-aktar"]},
-            {"ad": "Envanter", "yol": "/envanter", "esler": ["/envanter"]},
-            # "sayi": menü öğesinde rozetle gösterilen sayının anahtarı (sayfa() hesaplar).
+    {"kume": "Her gün", "ogeler": [
+        {"ad": "Tahtalar", "yol": "/", "simge": "tahta", "esler": ["/", "/tahta/"], "alt_cubuk": True, "alt": [
             {"ad": "Arızalar", "yol": "/arizalar", "esler": ["/arizalar", "/ariza"], "sayi": "ariza"},
-        ],
-    },
-    {"ad": "İşlem kaydı", "yol": "/kayit", "esler": ["/kayit"]},
-    {
-        "ad": "Yönetim",
-        "rol": "yonetici",
-        "alt": [
-            {"ad": "Kullanıcılar", "yol": "/kullanicilar", "esler": ["/kullanicilar"]},
-            {"ad": "Yedekler", "yol": "/yedekler", "esler": ["/yedekler"]},
-            {"ad": "Ayarlar", "yol": "/ayarlar", "esler": ["/ayarlar"]},
-        ],
-    },
+            {"ad": "Envanter", "yol": "/envanter", "esler": ["/envanter"]},
+            {"ad": "Gruplar", "yol": "/gruplar", "esler": ["/gruplar", "/tahtalar/ice-aktar"], "rol": "yonetici"},
+            {"ad": "Tahta ekle", "yol": "/ekle", "esler": ["/ekle"], "rol": "yonetici"},
+        ]},
+        {"ad": "Duyurular", "yol": "/duyurular", "simge": "duyuru", "esler": ["/duyurular"], "alt_cubuk": True},
+        {"ad": "Yoklama", "yol": "/yoklama", "simge": "yoklama", "esler": ["/yoklama"], "alt_cubuk": True},
+    ]},
+    {"kume": "Dönemlik", "ogeler": [
+        {"ad": "Program", "yol": "/program", "simge": "program", "esler": ["/program"]},
+        {"ad": "Sınavlar", "yol": "/sinavlar", "simge": "sinav", "esler": ["/sinavlar", "/sinav"]},
+        {"ad": "Kişiler ve anahtarlar", "yol": "/ogrenciler", "simge": "kisiler",
+         # /ogretmen-programi: sayfa Yoklama şeridini ve "← Öğretmenler ve PIN" bağlantısını çizdiği sürece buradadır
+         # (öteki kişi sayfalarıyla aynı bölüm); sekmeler ayrışınca Program'a taşınır (sonraki aşama).
+         "esler": ["/ogrenciler", "/ogretmenler", "/usb-anahtarlar", "/ogretmen-programi"]},
+    ]},
+    {"kume": "Yönetim", "ogeler": [
+        {"ad": "Yedekler", "yol": "/yedekler", "simge": "yedek", "esler": ["/yedekler"], "rol": "yonetici"},
+        {"ad": "İşlem kaydı", "yol": "/kayit", "simge": "kayit", "esler": ["/kayit"]},
+        {"ad": "Kullanıcılar", "yol": "/kullanicilar", "simge": "kullanici", "esler": ["/kullanicilar"], "rol": "yonetici"},
+        {"ad": "Ayarlar", "yol": "/ayarlar", "simge": "ayar", "esler": ["/ayarlar"], "rol": "yonetici"},
+    ]},
 ]
+# Kümelerin dışında, en üstte; iki role de çizilir (K4).
 MENU_ACIL = {"ad": "Acil durum", "yol": "/acil", "esler": ["/acil"]}
+MENU_BOS = {"kumeler": [], "alt_cubuk": []}
 
 
 def _secili(oge: dict, yol: str) -> bool:
@@ -105,27 +109,49 @@ def _secili(oge: dict, yol: str) -> bool:
     return False
 
 
-def menu_gorunumu(k, yol: str, sayilar: dict | None = None) -> list[dict]:
-    """Kullanıcının rolüne göre süzülmüş menü; her öğede `secili`, grupta `alt` ve `secili`.
+def menu_gorunumu(k, yol: str, sayilar: dict | None = None) -> dict:
+    """Role göre süzülmüş yan menü: {"kumeler": [{"ad", "ogeler"}], "alt_cubuk": [oge]}.
 
-    `sayi` (0 ise rozet yok): alt öğede `sayilar[oge["sayi"]]`, grupta alt öğelerin toplamı (A6 arızalar).
+    Öğe: {"ad", "yol", "simge", "secili", "icinde", "sayi", "alt": [{"ad", "yol", "secili", "sayi"}]}.
+    `secili` öğenin KENDİ `esler`'inden gelir; `icinde` alt öğelerinden biri yola uyuyorsa doğrudur ve rolle
+    gizlenen alt öğeyi de sayar (idareci /gruplar'ı adresle açarsa "Tahtalar" yine vurgulanır).
+    `sayi` (0 ise rozet yok): alt öğede `sayilar[anahtar]`, üst öğede kendi sayısı + görünen alt öğelerin toplamı.
     """
     sayilar = sayilar or {}
-    sonuc = []
-    for oge in MENU:
-        if oge.get("rol") and (not k or k["rol"] != oge["rol"]):
-            continue
-        if "alt" in oge:
+    rol = k["rol"] if k else None
+
+    def gorunur(oge: dict) -> bool:
+        return not oge.get("rol") or oge["rol"] == rol
+
+    def sayi(oge: dict) -> int:
+        return int(sayilar.get(oge.get("sayi"), 0) or 0)
+
+    kumeler, alt_cubuk = [], []
+    for kume in MENU:
+        ogeler = []
+        for oge in kume["ogeler"]:
+            if not gorunur(oge):
+                continue
             alt = [
-                {"ad": a["ad"], "yol": a["yol"], "secili": _secili(a, yol), "sayi": int(sayilar.get(a.get("sayi"), 0) or 0)}
-                for a in oge["alt"]
+                {"ad": a["ad"], "yol": a["yol"], "secili": _secili(a, yol), "sayi": sayi(a)}
+                for a in oge.get("alt", [])
+                if gorunur(a)
             ]
-            sonuc.append(
-                {"ad": oge["ad"], "alt": alt, "secili": any(a["secili"] for a in alt), "sayi": sum(a["sayi"] for a in alt)}
-            )
-        else:
-            sonuc.append({"ad": oge["ad"], "yol": oge["yol"], "secili": _secili(oge, yol)})
-    return sonuc
+            gorunum = {
+                "ad": oge["ad"],
+                "yol": oge["yol"],
+                "simge": oge["simge"],
+                "secili": _secili(oge, yol),
+                "icinde": any(_secili(a, yol) for a in oge.get("alt", [])),
+                "sayi": sayi(oge) + sum(a["sayi"] for a in alt),
+                "alt": alt,
+            }
+            ogeler.append(gorunum)
+            if oge.get("alt_cubuk"):
+                alt_cubuk.append(gorunum)
+        if ogeler:
+            kumeler.append({"ad": kume["kume"], "ogeler": ogeler})
+    return {"kumeler": kumeler, "alt_cubuk": alt_cubuk}
 
 
 OTURUM_SINIFI = {
@@ -256,7 +282,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             aktif_acil = acil_ozeti(b) if k else None
             menu_sayilari = {"ariza": ariza_mod.suren_toplam(b)} if k else {}
         baglam.update(
-            menu=menu_gorunumu(k, istek.url.path, menu_sayilari) if k else [],
+            menu=menu_gorunumu(k, istek.url.path, menu_sayilari) if k else MENU_BOS,
             menu_acil={**MENU_ACIL, "secili": _secili(MENU_ACIL, istek.url.path)},
             aktif_acil=aktif_acil,
             acil_yetkili=acil.yetkili(k),

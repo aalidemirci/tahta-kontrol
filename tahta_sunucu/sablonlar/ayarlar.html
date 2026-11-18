@@ -331,8 +331,8 @@
       <label class="satir"><input type="checkbox" name="vurgu_kullan" value="1" {% if tema_vurgu %}checked{% endif %}> İkinci okul rengi (vurgu) kullan</label>
       <div class="renk-alani"><input type="color" id="vurgu_renk" name="vurgu_renk" value="{{ tema_vurgu or varsayilan_vurgu }}" aria-label="Vurgu rengi">
         <output for="vurgu_renk" class="kod">{{ tema_vurgu or varsayilan_vurgu }}</output></div>
-      <p class="not">Ana renk üst şeritte, birincil düğmelerde ve tahta ekranının üst bandında görünür; vurgu rengi
-        şeridin alt çizgisinde ve duyuru başlığında. Durum renkleri (açık, kilitli, sorun…) her okulda aynıdır.</p>
+      <p class="not">Ana renk panelin menüsünde, birincil düğmelerde ve tahta ekranının üst bandında görünür; vurgu rengi
+        menüdeki etkin öğenin çizgisinde ve duyuru başlığında. Durum renkleri (açık, kilitli, sorun…) her okulda aynıdır.</p>
       <p class="dugmeler"><button name="eylem" value="kaydet" class="ana">Renkleri kaydet</button>
         <button name="eylem" value="varsayilan">Varsayılan renklere dön</button></p>
     </form>

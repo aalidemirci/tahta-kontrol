@@ -1,5 +1,6 @@
-/* Tahta Kontrol paneli 0.2.0 — dış kaynak yok, derleme yok. */
-@layer sifirla, temel, bilesen, yardimci;
+/* Tahta Kontrol paneli 0.2.0 — dış kaynak yok, derleme yok.
+   Katman sırası: kabuk (0.15.0) bilesen'den SONRA gelir; kabukla çakışan bileşen kuralı yerinde değil orada ezilir. */
+@layer sifirla, temel, bilesen, kabuk, yardimci;
 
 @layer sifirla {
   html { box-sizing: border-box; scrollbar-gutter: stable; }
@@ -43,6 +44,19 @@
     --vurgu:var(--vurgu-a); --vurgu-serit:var(--vurgu-serit-a);
     --odak: var(--ana-yazi);
     accent-color: var(--ana-yazi);
+
+    /* 4) Ölçek belirteçleri (0.15.0). Şimdilik kabuk katmanı ve birkaç temel kural kullanır; bileşenler yeniden
+          çizildikçe taşınır. AD KURALI: yeni belirteç adı -a / -k ile bitmez, t- ile başlamaz (o adlar tema.py'nin
+          ham marka renkleridir; test_stil_varsayilanlari_motorla_ayni hepsini motorla karşılaştırır). */
+    --yazi-xs:.8125rem; --yazi-s:.875rem; --yazi-m:1rem; --yazi-l:1.125rem; --yazi-xl:1.625rem; --yazi-2xl:2rem;
+    --b1:.25rem; --b2:.5rem; --b3:.75rem; --b4:1rem; --b5:1.5rem; --b6:2rem; --b7:3rem;
+    --kose-s:6px; --kose-m:10px; --kose-l:14px; --kose-hap:999px;
+    --golge-1: 0 1px 2px color-mix(in oklab, #000 9%, transparent);
+    --golge-2: 0 8px 28px color-mix(in oklab, #000 20%, transparent), 0 1px 3px color-mix(in oklab, #000 12%, transparent);
+    --dokunma:2.75rem; --dokunma-kucuk:2.25rem;
+    --d-yazi:#ffffff;            /* dolu durum zemininin (--d-*) üstündeki yazı */
+    --yan-en:15rem; --ust-boy:3.5rem; --alt-boy:3.5rem;
+    --yapiskan-ust:0px;          /* içerikteki yapışkan öğelerin üst payı; yalnız üst çubuk yapışkanken > 0 */
   }
 
   @media (prefers-color-scheme: dark) {
@@ -80,6 +94,7 @@
       --d-kapali:light-dark(#59616d, #a3abb7); --dz-kapali:light-dark(#e8eaee, #252a32);
       --d-sorun:light-dark(#b42318, #ff9b8f);  --dz-sorun:light-dark(#fde4e1, #3d1714);
       --d-guncel:light-dark(#0e6a7a, #6cd0de); --dz-guncel:light-dark(#dcf1f4, #0f3238);
+      --d-yazi:light-dark(#ffffff, #0d1117);
     }
   }
   /* light-dark() olmayan tarayıcıda koyu durum renkleri */
@@ -92,6 +107,7 @@
         --d-kapali:#a3abb7; --dz-kapali:#252a32;
         --d-sorun:#ff9b8f; --dz-sorun:#3d1714;
         --d-guncel:#6cd0de; --dz-guncel:#0f3238;
+        --d-yazi:#0d1117;
       }
     }
   }
@@ -109,12 +125,12 @@
   :where([data-durum="guncelleme"]) { --d: var(--d-guncel); --dz: var(--dz-guncel); }
 
   body {
-    font: 400 0.9375rem/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, "Noto Sans", Cantarell, "DejaVu Sans", sans-serif;
+    font: 400 var(--yazi-m)/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, "Noto Sans", Cantarell, "DejaVu Sans", sans-serif;
     font-variant-numeric: tabular-nums;
     background: var(--zemin); color: var(--metin);
   }
   h1, h2, h3, caption { line-height: 1.25; font-weight: 650; text-wrap: balance; }
-  h1 { font-size: 1.5rem; }
+  h1 { font-size: var(--yazi-xl); }
   h2 { font-size: 1.125rem; margin-block: 1.75rem .625rem; }
   h3 { font-size: 1rem; }
   p, li { text-wrap: pretty; }
@@ -128,15 +144,11 @@
 }
 
 @layer bilesen {
-  .atla { position: absolute; inset-inline-start: 1rem; inset-block-start: -4rem; z-index: 20;
+  .atla { position: absolute; inset-inline-start: 1rem; inset-block-start: -4rem; z-index: 60;
     background: var(--yuzey); color: var(--metin); padding: .5rem .75rem; border-radius: .5rem; }
   .atla:focus { inset-block-start: .5rem; }
 
-  /* Üst şerit */
-  .ust { background: var(--serit); color: var(--serit-yazi); border-block-end: 3px solid var(--vurgu-serit);
-    view-transition-name: ust-serit; }
-  .ust-ic { max-inline-size: 80rem; margin-inline: auto; padding: .5rem 1.25rem;
-    display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.25rem; }
+  /* Okul kimliği (yan menü, üst çubuk, giriş); kabuğun kendisi dosya sonundaki kabuk katmanındadır */
   .kimlik { display: flex; align-items: center; gap: .75rem; color: inherit; text-decoration: none; min-inline-size: 0; }
   .logo-rozet { inline-size: 2.75rem; block-size: 2.75rem; flex: none; border-radius: .625rem;
     background: #fff; color-scheme: light; display: grid; place-items: center; padding: .25rem; overflow: clip; }
@@ -146,28 +158,8 @@
   .kimlik-yazi { display: grid; line-height: 1.2; min-inline-size: 0; }
   .kimlik-okul { font-weight: 650; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-inline-size: 28ch; }
   .kimlik-urun { font-size: .75rem; color: var(--serit-soluk); }
-  .ana-menu { display: flex; gap: .125rem; overflow-x: auto; min-inline-size: 0; }
-  .ana-menu a { color: var(--serit-soluk); text-decoration: none; padding: .5rem .75rem; min-block-size: 2.5rem;
-    display: inline-flex; align-items: center; white-space: nowrap;
-    border-block-end: 3px solid transparent; border-radius: .375rem .375rem 0 0; }
-  .ana-menu a:hover { color: var(--serit-yazi); background: color-mix(in oklab, var(--serit-yazi) 10%, transparent); }
-  /* Şeritte odak halkası şerit yazı renginde: ana-yazi koyu şeride karşı 3:1'i tutmaz (WCAG 2.4.7, 1.4.11) */
-  .ust, .komut-kap { --odak: var(--serit-yazi); }
-  /* Menü kaydırma kutusu dışa taşan halkayı kırpar; halka içe çizilir */
-  .ana-menu a:focus-visible { outline-offset: -3px; }
-  .ana-menu a[aria-current="page"] { color: var(--serit-yazi); font-weight: 600; border-block-end-color: var(--vurgu-serit); }
-  .oturum { margin-inline-start: auto; display: flex; align-items: center; gap: .75rem; font-size: .8125rem; color: var(--serit-soluk); }
-  .ust .cikis { background: none; color: var(--serit-yazi); border: 1px solid color-mix(in oklab, var(--serit-yazi) 35%, transparent);
-    border-radius: .375rem; padding: .25rem .75rem; min-block-size: 2rem; cursor: pointer; }
-  .ust .cikis:hover { background: color-mix(in oklab, var(--serit-yazi) 12%, transparent); }
-  /* Dar ekran: kimlik ve oturum ilk satırda, menü ikinci satırda tam genişlikte yatay kayar (order yok, ızgara alanları) */
-  @media (max-width: 48rem) {
-    .ust-ic { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "kimlik oturum" "menu menu"; }
-    .kimlik { grid-area: kimlik; }
-    .oturum { grid-area: oturum; }
-    .oturum > span { display: none; } /* dar ekranda okul adına yer kalsın; Çıkış durur */
-    .ana-menu { grid-area: menu; }
-  }
+  /* Koyu şerit zemininde odak halkası şerit yazı renginde: ana-yazi koyu şeride karşı 3:1'i tutmaz (WCAG 2.4.7, 1.4.11) */
+  .komut-kap { --odak: var(--serit-yazi); }
 
   main { max-inline-size: 80rem; margin-inline: auto; padding: 1.25rem 1.25rem 4rem; }
   .sayfa-bas { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem 1rem; margin-block-end: 1rem; }
@@ -196,7 +188,7 @@
   .iki-sutun + * { margin-block-start: 1rem; }
 
   /* Düğmeler: hem button hem a.dugme; düz <button> da aynı görünümü alır */
-  :where(button, .dugme) { display: inline-flex; align-items: center; gap: .4rem; min-block-size: 2.25rem;
+  :where(button, .dugme) { display: inline-flex; align-items: center; gap: .4rem; min-block-size: var(--dokunma-kucuk); font-size: var(--yazi-s);
     padding: .375rem .875rem; border-radius: .5rem; border: 1px solid var(--cizgi);
     background: var(--yuzey); color: var(--metin); cursor: pointer; text-decoration: none; font-weight: 550;
     transition: background-color .15s, border-color .15s; }
@@ -212,7 +204,7 @@
   .simge { inline-size: 1em; block-size: 1em; flex: none; }
   /* "Sorun" üçgenindeki ünlem zemin renginde: koyu temada açık üçgen üstünde beyaz kayboluyordu */
   .unlem { stroke: var(--dz, var(--yuzey)); }
-  @media (pointer: coarse) { :where(button, .dugme) { min-block-size: 2.75rem; } }
+  @media (pointer: coarse) { :where(button, .dugme) { min-block-size: var(--dokunma); } }
 
   /* Rozet: renk + simge + metin */
   .rozet { display: inline-flex; align-items: center; gap: .3rem; font-size: .75rem; font-weight: 600; line-height: 1;
@@ -420,7 +412,6 @@
     .rozet, .tahta, .bant, .kutu { border: 1px solid CanvasText; }
     .tahta:has(input:checked) { outline: 3px solid Highlight; }
     :where(button, .dugme).ana { border: 2px solid ButtonText; }
-    .ana-menu a[aria-current="page"] { border-block-end-color: Highlight; }
     .ozet button[aria-pressed="true"] { outline: 3px solid Highlight; }
   }
 }
@@ -429,42 +420,10 @@
   .gizli { position: absolute; inline-size: 1px; block-size: 1px; overflow: clip; clip-path: inset(50%); white-space: nowrap; }
 }
 
-/* ---- 0.3.0 (Aşama 2): menü grupları, acil bandı ve acil sayfası, duyuru formu, gruplar,
+/* ---- 0.3.0 (Aşama 2): acil bandı ve acil sayfası, duyuru formu, gruplar,
         içe aktarma, acil şablonları, yazdırma. Yalnız tema ve durum belirteçleri; yeni renk kodu yok. ---- */
 @layer bilesen {
   [hidden] { display: none !important; }
-
-  /* Menü: açılır gruplar JS'siz <details>. Geniş ekranda şeridin altına açılan kutu, dar ekranda
-     yatay kayan menünün içinde satır içi açılır (kaydırma kutusu mutlak konumlu kutuyu kırpardı). */
-  .menu-grup { position: relative; display: inline-flex; }
-  .menu-grup > summary { list-style: none; color: var(--serit-soluk); cursor: pointer; padding: .5rem .75rem;
-    min-block-size: 2.5rem; display: inline-flex; align-items: center; gap: .3rem; white-space: nowrap;
-    border-block-end: 3px solid transparent; border-radius: .375rem .375rem 0 0; }
-  .menu-grup > summary::-webkit-details-marker { display: none; }
-  .menu-grup > summary:hover { color: var(--serit-yazi); background: color-mix(in oklab, var(--serit-yazi) 10%, transparent); }
-  .menu-grup > summary:focus-visible { outline-offset: -3px; }
-  .menu-grup[data-secili] > summary { color: var(--serit-yazi); font-weight: 600; border-block-end-color: var(--vurgu-serit); }
-  .menu-grup[open] > summary .ok { transform: rotate(180deg); }
-  .menu-alt { display: flex; }
-  .ana-menu .menu-alt a { border-radius: .375rem; }
-  @media (min-width: 48.01rem) {
-    .ana-menu { overflow: visible; flex-wrap: wrap; }
-    .menu-alt { position: absolute; inset-block-start: calc(100% + 3px); inset-inline-start: 0; z-index: 30;
-      flex-direction: column; min-inline-size: 12rem; padding: .375rem; background: var(--serit);
-      border: 1px solid color-mix(in oklab, var(--serit-yazi) 20%, transparent); border-block-start: 3px solid var(--vurgu-serit);
-      border-radius: 0 0 .625rem .625rem; box-shadow: 0 .75rem 2rem rgb(0 0 0 / .3); }
-    .menu-alt a { border-block-end: 0; border-inline-start: 3px solid transparent; }
-    .ana-menu .menu-alt a[aria-current="page"] { border-inline-start-color: var(--vurgu-serit); }
-  }
-  .ana-menu a.menu-acil { align-self: center; min-block-size: 2.125rem; padding-block: .25rem; gap: .35rem; margin-inline-start: .5rem; font-weight: 650; color: var(--yuzey);
-    background: var(--d-sorun); border: 1px solid var(--d-sorun); border-radius: .375rem; }
-  .ana-menu a.menu-acil:hover { color: var(--yuzey); background: color-mix(in oklab, var(--d-sorun) 85%, var(--metin)); }
-  .ana-menu a.menu-acil[aria-current="page"] { box-shadow: inset 0 -3px 0 var(--vurgu-serit); }
-  /* Dar ekranda menü yatay kayar: "Acil durum" kaydırma kutusunun sağ ucuna yapışır, hep görünür. */
-  @media (max-width: 48rem) {
-    .ana-menu a.menu-acil { position: sticky; inset-inline-end: 0; z-index: 2; margin-inline-start: auto;
-      box-shadow: -.5rem 0 .5rem var(--serit); }
-  }
 
   /* Acil bandı: her sayfada, main'in en üstünde. Kırmızı (tatbikatta kehribar) zemin, zemin rengi yazı. */
   .acil-bant { --odak: currentColor; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .5rem 1rem;
@@ -665,7 +624,7 @@
   @media print {
     :root { color-scheme: light; }
     body { background: #fff; color: #000; font-size: 11pt; }
-    .ust, .atla, .acil-bant, .yazdirma, dialog, .bant[role="status"] { display: none !important; }
+    .yan-menu, .ust-cubuk, .alt-cubuk, .perde, .atla, .acil-bant, .yazdirma, dialog, .bant[role="status"] { display: none !important; }
     main { max-inline-size: none; padding: 0; }
     .yalniz-baski { display: block; }
     .kutu, .tablo-kap { border-color: #999; background: #fff; box-shadow: none; }
@@ -679,7 +638,6 @@
   @media (forced-colors: active) {
     .acil-bant, .acil-kutu, .tur-kart, .hedef-onizleme { border: 2px solid CanvasText; }
     .tur-kart:has(input:checked), :where(.dugme-secim, .secenekler, .gunler) label:has(input:checked) { outline: 3px solid Highlight; }
-    .menu-alt { border: 1px solid CanvasText; }
   }
 }
 /* ---- 0.5.0 (Aşama 4): sınav sayfaları, gözetmen fişleri, yoklama icmali, yazdırma.
@@ -1201,3 +1159,249 @@
   }
 }
 /* ---- 0.14.0 sonu ---- */
+
+/* ---- 0.15.0: kabuk (arayüz 1. aşama) — sol yan menü, dar ekranda çekmece + üst çubuk, telefonda alt çubuk.
+        Katman bilesen'den SONRA gelir: buradaki kural özgüllüğe bakmadan bileşen kuralını ezer; kabukla çakışan
+        bileşen kuralı yerinde değiştirilmez, burada ezilir. Yalnız anlamsal belirteçler; yeni renk kodu yok.
+        main, html ve body'ye overflow / yükseklik VERİLMEZ (içerikteki yapışkan şeritler pencere kaydırmasına bağlı). ---- */
+@layer kabuk {
+  /* Kip: çekmece (varsayılan) ya da sabit. Kabuk kuralları yalnız bu özellikleri okur; panel.js kipi --kb-kip'ten
+     öğrenir (eşik JS'te yinelenmez). --kb-perde ve --kb-alt çekmecede tanımsızdır (geri düşüş: block). */
+  body.kabuklu {
+    --kb-kip: cekmece; --kb-dolgu: 0px; --kb-kaydir: translateX(-102%); --kb-gorunur: hidden; --kb-cekmece: flex;
+    --kb-en: min(20rem, 88vw); --kb-oge: var(--dokunma); --kb-z: 51;
+    --yapiskan-ust: var(--ust-boy); /* çekmece kipinde üst çubuk yapışkandır; sabit kipte 0 */
+    padding-inline-start: var(--kb-dolgu);
+  }
+  @media (min-width: 64rem) {
+    body.kabuklu:not(.genis-sayfa) {
+      --kb-kip: sabit; --kb-dolgu: var(--yan-en); --kb-kaydir: none; --kb-gorunur: visible; --kb-cekmece: none;
+      --kb-perde: none; --kb-alt: none; --kb-en: var(--yan-en); --kb-oge: var(--dokunma-kucuk); --kb-z: 40; --kb-golge: none;
+      --yapiskan-ust: 0px;
+    }
+  }
+  /* Şube defteri (genis-sayfa): beş günlük tablo ≈1290 px'tir; sabit menü ancak içerik yine ≥85rem kalınca gelir. */
+  @media (min-width: 100rem) {
+    body.kabuklu.genis-sayfa {
+      --kb-kip: sabit; --kb-dolgu: var(--yan-en); --kb-kaydir: none; --kb-gorunur: visible; --kb-cekmece: none;
+      --kb-perde: none; --kb-alt: none; --kb-en: var(--yan-en); --kb-oge: var(--dokunma-kucuk); --kb-z: 40; --kb-golge: none;
+      --yapiskan-ust: 0px;
+    }
+  }
+  /* 0.14.0 defteri 15 px gövdeyle ölçülerek kuruldu (fırça şeridi tek satır, 3.25rem); 16 px'e geçişi yeniden çizimde. */
+  @media screen { body.genis-sayfa { font-size: .9375rem; } } /* baskıda gövde 11pt kalır */
+
+  /* Yan menü */
+  .yan-menu {
+    position: fixed; inset-block: 0; inset-inline-start: 0; z-index: var(--kb-z); inline-size: var(--kb-en);
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr) auto;
+    row-gap: var(--b2); padding: var(--b3);
+    background: var(--serit); color: var(--serit-yazi); border-inline-end: 1px solid var(--cizgi);
+    transform: var(--kb-kaydir); visibility: var(--kb-gorunur); overflow: hidden;
+    --odak: var(--serit-yazi); view-transition-name: kabuk-yan;
+  }
+  .yan-menu:target, .yan-menu.acik { transform: none; visibility: visible; box-shadow: var(--kb-golge, var(--golge-2)); }
+  .yan-menu:focus, main:focus { outline: none; } /* yalnız betikle odaklanır (tabindex="-1"); halka çizilmez */
+  /* Görünürlük kapanırken geçişin sonunda, açılırken HEMEN değişir (yoksa açılış anında odak verilemez) */
+  @media (prefers-reduced-motion: no-preference) {
+    .yan-menu { transition: transform .18s ease, visibility 0s .18s; }
+    .yan-menu:target, .yan-menu.acik { transition: transform .18s ease, visibility 0s; }
+  }
+  .yan-menu > * { grid-column: 1 / -1; }
+  .yan-menu > .kimlik { grid-column: 1; grid-row: 1; gap: var(--b3); border-radius: var(--kose-s); }
+  .yan-menu > .yan-kapat { grid-column: 2; grid-row: 1; margin-inline-start: var(--b2); }
+  .yan-menu .logo-rozet { inline-size: 2.5rem; block-size: 2.5rem; }
+  /* Okul adı iki satıra kadar sarar (15rem'lik menüde tek satır çoğu adı keser) */
+  .yan-menu .kimlik-okul { font-size: .9375rem; white-space: normal; max-inline-size: none; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+  .yan-menu .kimlik-urun { font-size: var(--yazi-xs); }
+
+  .perde { display: none; }
+  .yan-menu:target ~ .perde, .yan-menu.acik ~ .perde { display: var(--kb-perde, block); position: fixed; inset: 0; z-index: 50;
+    background: rgb(0 0 0 / .5); }
+
+  /* Acil durum: kümelerin dışında, en üstte; renk + simge + sözcük */
+  .acil-dugme { --dz: var(--d-sorun); /* simgedeki ünlem (.unlem) zemin renginde çizilir */
+    display: flex; align-items: center; justify-content: center; gap: var(--b2); min-block-size: var(--dokunma);
+    padding-inline: var(--b3); border-radius: var(--kose-m); background: var(--d-sorun); color: var(--d-yazi);
+    font-weight: 650; text-decoration: none; white-space: nowrap;
+    border: 1px solid color-mix(in oklab, var(--serit-yazi) 35%, transparent); }
+  .acil-dugme:hover { background: color-mix(in oklab, var(--d-sorun) 88%, var(--d-yazi)); }
+  .acil-dugme[aria-current="page"] { box-shadow: inset 0 0 0 2px var(--serit-yazi); }
+  .acil-dugme .simge { inline-size: 1.125rem; block-size: 1.125rem; }
+
+  /* Gezinme: liste kayar, oturum bölümü her yükseklikte görünür kalır */
+  .yan-gezinme { min-block-size: 0; overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain;
+    scrollbar-color: color-mix(in oklab, var(--serit-yazi) 40%, transparent) transparent;
+    /* Kaydırma ipucu: liste sığmıyorsa kesilen kenarda soluk bir geçiş görünür; o kenara gelinince içerikle
+       birlikte kayan örtü (local) onu kapatır. Kısa pencerede ve telefon çekmecesinde son öğeler gizli kalmasın. */
+    --kb-ipucu: color-mix(in oklab, var(--serit-yazi) 30%, transparent);
+    background:
+      linear-gradient(var(--serit) 40%, transparent) top / 100% 2.5rem no-repeat local,
+      linear-gradient(transparent, var(--serit) 60%) bottom / 100% 2.5rem no-repeat local,
+      linear-gradient(var(--kb-ipucu), transparent) top / 100% 1rem no-repeat scroll,
+      linear-gradient(transparent, var(--kb-ipucu)) bottom / 100% 1rem no-repeat scroll; }
+  .yan-gezinme ul { list-style: none; margin: 0; padding: 0; }
+  .yan-kume { margin-block: var(--b2) var(--b1); padding-inline: var(--b3); font-size: var(--yazi-xs); font-weight: 600;
+    line-height: 1.25; color: var(--serit-soluk); }
+  .yan-kume:first-child { margin-block-start: 0; }
+  /* Öğe yazısı her zaman --serit-yazi: soluk renk üzerine gelme / etkin zemininde 4,5:1'i garanti etmez */
+  .yan-gezinme a { display: flex; align-items: center; gap: var(--b3); min-block-size: var(--kb-oge);
+    padding: var(--b1) var(--b3); border-radius: var(--kose-s); color: var(--serit-yazi); text-decoration: none; line-height: 1.25; }
+  .yan-gezinme a:hover { background: color-mix(in oklab, var(--serit-yazi) 10%, transparent); }
+  .yan-gezinme a:focus-visible { outline-offset: -3px; } /* kaydırma kutusu dışa taşan halkayı kırpar */
+  .yan-gezinme a[aria-current="page"] { background: color-mix(in oklab, var(--serit-yazi) 16%, transparent); font-weight: 650;
+    box-shadow: inset 3px 0 0 var(--vurgu-serit); }
+  .yan-gezinme li[data-icinde] > a { font-weight: 650; box-shadow: inset 3px 0 0 var(--vurgu-serit); }
+  .yan-gezinme .simge { inline-size: 1.25rem; block-size: 1.25rem; }
+  .yan-gezinme .sayi-rozet { margin-inline-start: auto; }
+  /* Alt liste HTML'de hep vardır: sabit kipte yalnız etkin bölümünki, çekmecede hepsi görünür */
+  .yan-alt { display: var(--kb-alt, block); }
+  .yan-gezinme li:is([data-secili], [data-icinde]) > .yan-alt { display: block; }
+  .yan-alt a { padding-inline-start: 2.75rem; font-size: var(--yazi-s); }
+
+  .yan-son { display: flex; align-items: center; gap: var(--b2); padding-block-start: var(--b2);
+    border-block-start: 1px solid color-mix(in oklab, var(--serit-yazi) 20%, transparent); }
+  .yan-oturum { flex: 1; min-inline-size: 0; display: grid; line-height: 1.25; font-size: var(--yazi-s); }
+  .yan-oturum span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .yan-oturum small { font-size: var(--yazi-xs); color: var(--serit-soluk); }
+  .yan-son form { flex: none; }
+
+  /* Şerit zeminindeki düğmeler: saydam zemin, şerit yazısı, yarı saydam kenarlık */
+  .yan-cikis, .yan-kapat, .ust-cubuk .menu-ac { display: inline-flex; align-items: center; justify-content: center; gap: var(--b2);
+    min-inline-size: var(--dokunma); min-block-size: var(--dokunma); padding: 0 var(--b3); border-radius: var(--kose-m);
+    background: none; color: var(--serit-yazi); border: 1px solid color-mix(in oklab, var(--serit-yazi) 35%, transparent);
+    font-size: var(--yazi-s); font-weight: 550; text-decoration: none; cursor: pointer; }
+  :is(.yan-cikis, .yan-kapat, .ust-cubuk .menu-ac):hover { background: color-mix(in oklab, var(--serit-yazi) 12%, transparent); }
+  .yan-cikis { min-block-size: var(--kb-oge); }
+  .yan-kapat { display: var(--kb-cekmece); padding: 0; }
+  :is(.yan-cikis, .yan-kapat, .menu-ac) .simge { inline-size: 1.25rem; block-size: 1.25rem; }
+  @media (pointer: coarse) { .yan-gezinme a, .yan-cikis { min-block-size: var(--dokunma); } }
+  @media (max-height: 40rem) {
+    .yan-menu { row-gap: var(--b1); padding-block: var(--b2); }
+    .yan-kume { margin-block-start: var(--b1); }
+    .yan-menu .kimlik-urun { display: none; }
+  }
+
+  /* Üst çubuk: yalnız çekmece kipinde. Yüksekliği sabittir (--ust-boy): içerikteki yapışkan şeritler ona göre iner. */
+  .ust-cubuk { display: var(--kb-cekmece); align-items: center; gap: var(--b2); box-sizing: border-box;
+    block-size: var(--ust-boy); padding: 0 var(--b3); background: var(--serit); color: var(--serit-yazi);
+    box-shadow: inset 0 -2px 0 var(--vurgu-serit); z-index: 40; --odak: var(--serit-yazi); view-transition-name: kabuk-ust; }
+  .ust-cubuk .kimlik { flex: 1; gap: var(--b2); min-block-size: var(--dokunma); border-radius: var(--kose-s); }
+  .ust-cubuk .kimlik-okul { min-inline-size: 0; max-inline-size: none; }
+  .ust-cubuk .logo-rozet { inline-size: 2.25rem; block-size: 2.25rem; border-radius: var(--kose-s); font-size: .9rem; }
+  .ust-cubuk .acil-dugme { flex: none; }
+  /* Üst çubuk çekmece kipinin HER genişliğinde yapışkandır (sabit kipte zaten çizilmez): "Acil" ve "Menü" telefonda,
+     tablette ve şube defterinin 64–100rem arasındaki çekmece kipinde de hep elin altında. İçerikteki yapışkan
+     şeritler ve defterin başlık satırı --yapiskan-ust kadar aşağıdan yapışır. */
+  .ust-cubuk { position: sticky; inset-block-start: 0; }
+  #islem .arac-cubugu, .firca-serit { inset-block-start: var(--yapiskan-ust); }
+  @media (min-width: 85rem) {
+    .defter-kap.sigar .defter thead th { inset-block-start: var(--yapiskan-ust); }
+    .defter-formu:has(.firca-serit) .defter-kap.sigar .defter-gun thead th { inset-block-start: calc(var(--yapiskan-ust) + 3.25rem); }
+  }
+  @media (max-width: 63.99rem) { html:has(body.kabuklu) { scroll-padding-block-start: calc(var(--ust-boy) + .5rem); } }
+  @media (max-width: 99.99rem) { html:has(body.kabuklu.genis-sayfa) { scroll-padding-block-start: calc(var(--ust-boy) + .5rem); } }
+  /* Dar telefonda okul adına yer kalsın: "Menü" yazısı görünmez olur ama erişilebilir ad olarak kalır */
+  @media (max-width: 27rem) {
+    .ust-cubuk .menu-ac span { position: absolute; inline-size: 1px; block-size: 1px; overflow: clip; clip-path: inset(50%); white-space: nowrap; }
+  }
+  /* Fırça şeridi 64rem altında alt satıra iner (0.14.0'da telefonda sayfayı 453 px'e genişletiyordu; sabit konumlu
+     alt çubuk da onunla uzuyor, "Menü" düğmesi ekran dışında kalıyordu). */
+  @media (max-width: 63.99rem) { .firca-serit .firca { flex-wrap: wrap; } }
+
+  /* Alt çubuk: yalnız telefonda (< 40rem) */
+  .alt-cubuk { display: none; }
+  @media (max-width: 39.99rem) {
+    body.kabuklu .alt-cubuk { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); position: fixed;
+      inset: auto 0 0 0; z-index: 40; min-block-size: var(--alt-boy); padding-block-end: env(safe-area-inset-bottom);
+      background: var(--yuzey); border-block-start: 1px solid var(--cizgi); box-shadow: var(--golge-1);
+      view-transition-name: kabuk-alt; }
+    body.kabuklu main { padding-block-end: calc(4rem + var(--alt-boy) + env(safe-area-inset-bottom)); }
+  }
+  .alt-cubuk a { display: grid; justify-items: center; align-content: center; gap: 1px; min-block-size: var(--alt-boy);
+    padding: var(--b1); color: var(--metin); text-decoration: none; font-size: var(--yazi-xs); line-height: 1.2; }
+  .alt-cubuk a span { max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .alt-cubuk .simge { inline-size: 1.375rem; block-size: 1.375rem; }
+  .alt-cubuk a:focus-visible { outline-offset: -3px; }
+  /* Etkin: renk tek başına değil; kalın yazı + üstte çizgi */
+  .alt-cubuk a[aria-current="page"] { color: var(--ana-yazi); font-weight: 700; box-shadow: inset 0 3px 0 var(--ana-yazi); }
+
+  /* Dokunma hedefi: dokunulan yerde (dar ekran, kaba işaretçi) en az 44 px; fareyle kullanılan geniş ekranda
+     bugünkü 36 px taban korunur. Defter hücreleri ve tablo başlığındaki sıralama düğmesi bilerek ayrık. */
+  @media screen and (max-width: 63.99rem), screen and (pointer: coarse) {
+    :where(button, .dugme, summary.dugme, .sekmeler a):not(.sirala, .defter button) { min-block-size: var(--dokunma); }
+    :where(input[type=text], input[type=password], input[type=number], input[type=date], input[type=time], select) {
+      min-block-size: var(--dokunma); }
+  }
+
+  /* Sekme şeridi: içerik yan menü kadar daraldı. Sekizli Yoklama şeridi 1366 px'te tek satıra sığsın diye sekme
+     15 px ve dar dolguludur; daha dar pencerede şerit (48rem altındaki eski kural gibi) alt satıra iner, kaymaz. */
+  .sekmeler a { font-size: .9375rem; padding-inline: .625rem; }
+  /* Sarma eşiği içeriğin enine göredir: sabit menülü sayfada 85rem, tam genişlikli şube defterinde 70rem. */
+  @media (max-width: 84.99rem) {
+    body:not(.genis-sayfa) .sekmeler { flex-wrap: wrap; overflow-x: visible; box-shadow: none; }
+    body:not(.genis-sayfa) .sekmeler a { box-shadow: inset 0 -1px 0 var(--cizgi); }
+  }
+  @media (max-width: 69.99rem) {
+    .genis-sayfa .sekmeler { flex-wrap: wrap; overflow-x: visible; box-shadow: none; }
+    .genis-sayfa .sekmeler a { box-shadow: inset 0 -1px 0 var(--cizgi); }
+  }
+
+  /* Tablolar: içerik yan menü kadar daraldı (1366 px'te 1238 → 1069 px). Sabit menülü orta genişlikte hücre yatay
+     dolgusu küçülür; işlem düğmeleri tek satırda kalır (yoksa satır iki düğme sırası kadar uzuyordu). Yana kayan
+     tabloda kesilen kenarda gölge görünür: görüş dışında sütun kaldığı anlaşılsın (o kenara gelinince kalkar). */
+  @media (min-width: 64rem) and (max-width: 99.99rem) {
+    .tablo-kap :is(th, td) { padding-inline: .5rem; }
+    .tablo-kap :is(th, td):first-child { padding-inline-start: .75rem; }
+    .tablo-kap th[data-sirala] { padding: 0; }
+  }
+  @container (inline-size >= 60rem) { .tablo-kap .islemler { flex-wrap: nowrap; } }
+  @media screen {
+    .tablo-kap { --kb-ipucu: color-mix(in oklab, var(--metin) 22%, transparent);
+      background:
+        linear-gradient(to right, var(--yuzey) 40%, transparent) left / 2.5rem 100% no-repeat local,
+        linear-gradient(to left, var(--yuzey) 40%, transparent) right / 2.5rem 100% no-repeat local,
+        linear-gradient(to right, var(--kb-ipucu), transparent) left / .75rem 100% no-repeat scroll,
+        linear-gradient(to left, var(--kb-ipucu), transparent) right / .75rem 100% no-repeat scroll,
+        var(--yuzey); }
+  }
+
+  /* Daralan içerikte sayfa başı ve araç çubuğu: alt satıra inen durum çipleri sağa değil sola yaslanır (aynı satıra
+     sığıyorsa yine sağdadır); araç çubuğu sarınca satır başında / sonunda asılı kalan ayırıcı çizgi 85rem altında çizilmez. */
+  .sayfa-bas:has(> .ozet) { justify-content: space-between; }
+  .sayfa-bas > .ozet { margin-inline-start: 0; }
+  @media (max-width: 84.99rem) { .arac-cubugu .ayrac { display: none; } }
+
+  /* Telefonda sayfayı pencereden genişleten iki eski taşma (alt çubuk sabit konumlu olduğundan birlikte uzuyordu):
+     kaydırma kutusundaki tabloda .gizli metin kutunun dışına konumlanıyordu; uzun yol / parmak izi bölünmüyordu. */
+  .yk-izgara-kap { position: relative; }
+  main .kod { overflow-wrap: break-word; }
+
+  /* Şekilli durum rozeti: simgesi olmayan rozete duruma göre şekil (durum yalnız renkle anlatılmaz) */
+  .rozet[data-durum]:not(:has(.simge))::before { content: ""; inline-size: .625em; block-size: .625em; flex: none;
+    background: currentColor; border-radius: 50%; }
+  .rozet[data-durum="kilitli"]:not(:has(.simge))::before { border-radius: 1px; }
+  .rozet:is([data-durum="duyuru"], [data-durum="onay"], [data-durum="uyari"]):not(:has(.simge))::before {
+    border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+  .rozet[data-durum="sorun"]:not(:has(.simge))::before { border-radius: 0; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+  .rozet:is([data-durum="cevrimdisi"], [data-durum="bilgi"]):not(:has(.simge))::before { background: none; border: 2px solid currentColor; }
+  .rozet[data-durum="guncelleme"]:not(:has(.simge))::before { border-radius: 0;
+    clip-path: polygon(35% 0, 65% 0, 65% 55%, 100% 55%, 50% 100%, 0 55%, 35% 55%); }
+  /* Hücredeki sayı çipleri ve onları anlatan açıklama satırı: bilgi sayının kendisidir, ikisi aynı görünür */
+  :is(.yoklama-izgara, .yk-lejant) .rozet[data-durum]:not(:has(.simge))::before { content: none; }
+
+  @media print {
+    .yan-menu, .ust-cubuk, .alt-cubuk, .perde { display: none !important; }
+    body.kabuklu { padding: 0; --yapiskan-ust: 0px; }
+    body.kabuklu main { padding: 0; }
+  }
+  @media (forced-colors: active) {
+    .yan-menu { border-inline-end: 1px solid CanvasText; }
+    .yan-gezinme a[aria-current="page"], .alt-cubuk a[aria-current="page"] { outline: 2px solid Highlight; outline-offset: -2px; }
+    .acil-dugme, .ust-cubuk, .alt-cubuk { border: 1px solid CanvasText; }
+    .rozet[data-durum]:not(:has(.simge))::before { forced-color-adjust: none; background: CanvasText; }
+    .rozet:is([data-durum="cevrimdisi"], [data-durum="bilgi"]):not(:has(.simge))::before { background: none; border-color: CanvasText; }
+  }
+}
+/* ---- 0.15.0 sonu ---- */

@@ -18,3 +18,5 @@ saha/
 *.tkyedek
 # Yerel geliştirme verisi, araç önbelleği ve doğrulama çıktıları
 work/
+# Arayüz taslağı (prototip, ekran görüntüleri, üretim betikleri): yerel çalışma, depoya girmez
+taslak/

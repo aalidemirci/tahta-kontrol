@@ -1,5 +1,14 @@
 # CLAUDE.md — Tahta Kontrol
 
+Yerel geliştirme 0.15.0 (kullanıcı onayı 18.11.2026): panel arayüzünün yeniden düzeninde 1. aşama, "kabuk".
+Sol kenar menüsü (üç küme, en çok on öğe, role göre çizilir), dar ekranda çekmece + yapışkan üst çubuk,
+telefonda alt çubuk, Acil durum en üstte, ölçek belirteçleri, şekilli rozet, 44 px dokunma hedefi. YALNIZ
+çerçeve değişti: sayfa içerikleri, adresler, POST uçları, veritabanı ve ajan aynı (sürüm statik dosya
+önbelleği için yükseldi). `docs/surum-0.15.0.md`, tasarım §11.1 (aşama planı; 2–6. aşamalar AYRI onay
+ister, kendiliğinden başlanmaz; taslağın soruları §17 69–79, önerilenler varsayıldı). Arayüz taslağı
+(`taslak/`) depo dışında tutulur. Testlerle ve deneme sunucusunda başsız Edge ölçümüyle (uydurma veri)
+denendi; dağıtılmadı, okul bilgisayarında, gerçek telefonda ve ekran okuyucuyla denenmedi.
+
 Yerel geliştirme 0.14.0 (kullanıcı isteği 18.11.2026): ders yoklaması yeniden tasarlandı. Tahtada
 kaydırmasız şube/ders saati seçimi, okul no sırasıyla "123 Ayşe Y." listesi, devrenin ilk dersinde "geç",
 saate göre ders ön seçimi; panelde şube defteri (son beş öğretim günü + gün kipinde düzeltme), mazeret/izin
@@ -37,7 +46,10 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.14.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.14.0: ders yoklaması
+- Durum: **0.15.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.15.0: panel
+  arayüzü 1. aşama — sol menü, çekmece, alt çubuk, ölçek belirteçleri; yalnız sunucu, ajan değişmedi;
+  testlerle ve başsız tarayıcı ölçümüyle (1366 ve 390 px, açık/koyu, uydurma veri) denendi, okul
+  bilgisayarında ve gerçek telefonda denenmedi; tasarım §11.1; 0.14.0: ders yoklaması
   yeniden tasarımı — tahtada kaydırmasız seçim ekranı, okul no sıralı liste, geç, panelde şube defteri, mazeret
   ve son beş gün; testlerle, Debian 12 kabında (Xvfb) ekran ölçümüyle ve tarayıcıda uydurma veriyle denendi,
   gerçek ETAP'ta ve gerçek sınıfta denenmedi; tasarım §14.2; 0.13.1: 0.13.0
@@ -100,7 +112,9 @@ Ajan: `TAHTA_AJAN_DIZIN`, `TAHTA_AJAN_DURUM`, `TAHTA_AJAN_BENZETIM=1` (kapatma k
 
 ```
 tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
-  web.py        uygulama_olustur: oturum, pano, tahta, ayarlar, /marka/*, /ajan/* (uzun bekleme), MENU
+  web.py        uygulama_olustur: oturum, pano, tahta, ayarlar, /marka/*, /ajan/* (uzun bekleme);
+                MENU (0.15.0): üç küme (Her gün, Dönemlik, Yönetim), ≤ 10 üst öğe, öğede `rol`/`simge`/`esler`/
+                `alt`/`alt_cubuk`; MENU_ACIL kümelerin dışında; menu_gorunumu → {kumeler, alt_cubuk} (rolle süzülür)
   panel_duyuru.py   duyuru/plan uçları, /api/hedef-onizleme   (web.py'den `kaydet(uygulama, y)` ile)
   panel_tahtalar.py gruplar, /tahtalar.csv ve CSV içe aktarma
   panel_acil.py     /acil: başlatma, bitirme, rapor
@@ -138,7 +152,9 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   adresler.py   sunucu adres listesi (en çok 5): doğrulama, özet (ajanla aynı), eski sunucu_adresi geçişi
   envanter.py   ajanın gönderdiği envanteri saklar/gösterir, donanım kimliği değişimi, CSV
   ariza.py      arıza kayıtları: kategoriler, durum geçişleri, hareketler, tahtadan alma (yerel_id tekrarsız)
-  sablonlar/    program.html, uyarilar.html ve ortak başları _program_bas.html (şerit + sekmeler);
+  sablonlar/    taban.html (0.15.0 kabuk: üst çubuk, yan menü `#menu`, perde, `main#icerik`, alt çubuk; `m-*`
+                simgeleri; kabuk yalnız oturumlu ve `giris-sayfasi` olmayan sayfada — gövde sınıfı `kabuklu`);
+                program.html, uyarilar.html ve ortak başları _program_bas.html (şerit + sekmeler);
                 cizelge.html, program_gun.html, _zaman_cizgisi.html (SVG + liste makrosu), program_aktar.html,
                 program_gecmis.html (0.10.0);
                 sinavlar.html, sinav.html, sinav_yoklama.html, sinav_kodlar.html, sinav_icmal.html, _sinav.html;
@@ -207,7 +223,9 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 gunluk\sunucu.log (5 MB × 3), geri yüklemede 75 koduyla çıkış (`yeniden_baslat_planla`)
   tasima.py     0.8 öncesi veriyi (%LOCALAPPDATA%) %PROGRAMDATA%'ya KOPYALAR (kurucu çağırır; çıkış kodları
                 0/10/11/20/21); belirsizlik/hatada TASIMA-BEKLIYOR.txt → hizmet açılmaz
-  statik/       stil.css (tek dosya, katmanlı), panel.js (tek dosya, kütüphanesiz), isaret.svg (nötr ürün işareti)
+  statik/       stil.css (tek dosya; katmanlar `sifirla, temel, bilesen, kabuk, yardimci`; ölçek belirteçleri
+                `--yazi-*`, `--b1..7`, `--kose-*`, `--golge-*`, `--dokunma`; kabuk kipi `--kb-*`), panel.js (tek dosya,
+                kütüphanesiz; `kabukKur` = çekmece), isaret.svg (nötr ürün işareti)
   ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh, tahta-yoklama.desktop,
                 tahta-ariza.desktop
 tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
@@ -241,6 +259,9 @@ tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
                 dokunma gölgesi 0,7 sn, dokunmada sürükleme eşiği 28 px); üstteki işlevler saf, GTK sınıfı kur() içinde
   gun_programi.py  sunucudan gelen gün programının izinli alanları (0.13.0, saf): coz — en çok 24 ders, şube/ders
                 adı/saat/ileti; başka alan ekrana geçmez; yalnız servis belleğinde, gecerli_sn dolunca kalkar
+scripts/panel_olcum.mjs  panel sayfalarını başsız Edge/Chrome ile ölçer (0.15.0; Node 22+, bağımlılık yok): yatay
+                taşma, kontrast, küçük yazı, dokunma hedefi, isteğe bağlı görüntü. YALNIZ deneme sunucusuna karşı;
+                adres/hesap/çıktı ortam değişkeniyle (PANEL_ADRES, PANEL_KULLANICI, PANEL_PAROLA, PANEL_CIKTI), çıktı depo DIŞINA
 scripts/ekran_olcum.py  Docker/Xvfb'de her tahta sayfasının ekrana sığıp sığmadığını ölçer (uydurma veri); 0.14.0:
                 yoklama senaryoları (yk-secim-*, yk-liste-*), kaydırmasızlık ve dokunma ölçüsü denetimi, `--yalniz`
   __main__.py   komut satırı; `tahta-ajan yoklama` ("Yoklama Al" kısayolu) servise yoklama_ac yollar;
@@ -464,6 +485,31 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
 
 ## Bilinen tuzaklar
 
+- **Panel kabuğunun kipi CSS'tedir (0.15.0):** çekmece / sabit menü ayrımı `stil.css`'te `--kb-*` özellikleriyle
+  durur (sabit: ≥ 64rem; şube defteri `genis-sayfa` için ≥ 100rem). `panel.js` kipi `--kb-kip`'ten okur; genişlik
+  eşiğini JS'e ya da başka bir kurala kopyalama.
+- **`body`, `html` ve `main`'e `overflow` ya da yükseklik verme (0.15.0):** yan menü `position: fixed`'tir, içerik
+  `body` dolgusuyla kayar; belge kaydırması bozulursa içerikteki bütün yapışkan (`sticky`) şeritler kırılır.
+- **İçerikteki yapışkan öğe `inset-block-start: var(--yapiskan-ust)` kullanır (0.15.0):** çekmece kipinin HER
+  genişliğinde üst çubuk yapışkandır (şube defterinde 1600 px'e kadar); `0` yazılırsa araç çubuğu, fırça şeridi
+  ya da tablo başlığı üst çubuğun altında kalır. Baskıda değer 0'dır.
+- **Yeni CSS belirteci `-a`/`-k` ile bitmez, `t-` ile başlamaz (0.15.0):** o adlar `tema.py`'nin ham marka
+  renkleridir; `test_stil_varsayilanlari_motorla_ayni` hepsini motorla karşılaştırır ve kırılır.
+- **Kabukla çakışan bileşen kuralı `kabuk` katmanında ezilir (0.15.0):** `kabuk` `bilesen`'den sonra gelir; aynı
+  şeyi bileşen bloğunda düzeltmeye çalışmak etkisizdir.
+- **İçerik sabit menü kadar (15rem) dardır (0.15.0):** 1366 px'te içerik ≈ 1069 px. Görüntü alanına bağlı
+  `@media` eşikleri içerik enini anlatmaz; sekme şeridi ve tablo kuralları eşiği buna göre taşır (sabit menülü
+  sayfa 85rem, tam genişlikli şube defteri 70rem; testi var). Yeni geniş tablo ya da şerit ekleyince
+  `scripts/panel_olcum.mjs` ile 1366 ve 390 px'te, açık ve koyu ölç.
+- **Telefonda sabit konumlu alt çubuk sayfayla birlikte genişler (0.15.0):** tek bir taşan öğe (ör. sarmayan
+  fırça şeridi) sayfayı 390 px'ten genişletince alt çubuk da taşar; taşmayı çubukta değil taşan öğede gider.
+- **Çekmece açık sayfa geri tuşunda açık ve `inert` dönebilir (0.15.0):** geri/ileri önbelleği sayfayı olduğu
+  gibi getirir; `kabukKur` `pagehide` ve `pageshow`'da kapatır. `#menu` parçasıyla gelinirse çekmece sınıfla
+  yeniden açılır (`:target`'a bağlı kalan çekmeceyi Esc ve perde kapatamaz).
+- **Menüye öğe eklenirse biri çıkar (0.15.0):** üç küme, en çok on üst öğe (`test_menu_uc_kume_ve_en_cok_on_oge`);
+  yöneticiye özel öğe `rol` taşır. Menü yalnız görünümdür: yetki denetimi uçta kalır. Bir sayfa hangi sekme
+  şeridini çiziyorsa menüde o bölümün `esler`'inde durur (yoksa vurgu başka bölüme zıplar).
+
 - **Panonun genel `.ozet { display: flex }` kuralı tablo hücresini bozar (0.14.0):** şube defterinin özet
   hücreleri bu yüzden alt alta diziliyordu; `.defter .ozet { display: table-cell }` ayrıca verilir. Dar ekranda
   görünmez (ekran okuyucu) metinler de sayfayı yatay taşırıyordu; yeni tablo sayfasında 800 px'te taşmaya bak.
@@ -525,9 +571,9 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
 - **Statik dosya adresleri sürüm taşır** (`/statik/stil.css?v=<sürüm>`, `panel.js?v=<sürüm>`)
   ve uzun önbellekle sunulur: `stil.css` ya da `panel.js` değişip sürüm yükseltilmezse
   tarayıcı eskisini tutmaya devam eder. Statik dosya değiştiyse sürüm yükseltilir (16.11.2026).
-- **Panel menüsünün açılır grupları JS'siz `<details>`dır.** Dar ekranda menü yatay kayan
-  kutudur ve mutlak konumlu açılır kutuyu kırpar; bu yüzden grup dar ekranda satır içi, geniş
-  ekranda şeridin altına açılır (`stil.css`, `48rem`). `<form>` `<p>` içine konmaz (tarayıcı
+- **Panel menüsünde açılır grup yoktur (0.15.0'dan beri; eskiden JS'siz `<details>` idi).** Yan menünün alt
+  listeleri HTML'de hep çizilir; sabit kipte yalnız etkin bölümünki, çekmecede hepsi görünür. JS'siz açılır
+  `<details>` yalnız Program şeridindeki "Program kilidini durdur"da kaldı. `<form>` `<p>` içine konmaz (tarayıcı
   `<p>`yi kapatır, düğme satırı dağılır); düğme satırında `<div class="dugme-satiri">` kullanılır.
 - **Acil sayfası da `yigin.show_all()`'dan önce eklenir** ve rengi pencereye eklenen stil
   sınıfından (`acil`/`tatbikat`) gelir; başka sayfaya geçince sınıf kaldırılır. Acil renkleri

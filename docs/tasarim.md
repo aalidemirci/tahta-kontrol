@@ -393,6 +393,41 @@ seçimde korunur.
 - **GTK'da iki stil sağlayıcısı:** ölçüler bir kez yüklenir, renkler tema
   değişince aynı sağlayıcıya yeniden yüklenir (pencere yeniden açılmaz).
 
+### 11.1 Panel kabuğu ve arayüzün yeniden düzeni (0.15.0)
+
+Kullanıcı (18.11.2026) paneli "ilkel ve karışık" buldu. Bütün panel için bir arayüz taslağı hazırlandı
+(tıklanabilir prototip ve ölçümler; **taslak depo dışında tutulur**), kullanıcı taslağı gördü ve aynı gün
+"Evet, başla" diyerek 1. aşamaya onay verdi. Sonraki aşamalar ayrı sürüm ve ayrı onaydır.
+
+| Aşama | Sürüm | İçerik | Durum |
+|---|---|---|---|
+| 1. Kabuk | 0.15.0 | Sol menü, çekmece, telefon alt çubuğu, Acil en üstte, ölçek belirteçleri, şekilli rozet, 44 px dokunma hedefi, görünür odak, menüde rol | Uygulandı (yerel) |
+| 2. Ayarlar | — | Ayarlar'ın bölüm sayfalarına ayrılması, değer özetleri, Ayarlar içi arama | Onay bekliyor |
+| 3. Tahtalar | — | Ayrı `/tahtalar` listesi, satır düğmeleri, tahta sayfası sekmeleri | Onay bekliyor |
+| 4. Bugün | — | "Bugün" masası: şu an, bekleyen işler, yoklama ve duyuru kutuları | Onay bekliyor |
+| 5. Sekmeler | — | Yoklama / Program / Kişiler sekmelerinin ayrışması, tek sayfalık duyuru formu | Onay bekliyor |
+| 6. Arama | — | Genel arama (rolle süzülür; dizinde kişi adı yok) | Onay bekliyor |
+
+Birinci aşamanın kuralları:
+
+- **Yalnız çerçeve değişir.** Menü yalnız var olan adreslere bağlanır; sayfa içerikleri, adresler, POST
+  uçları, veritabanı ve ajan değişmez. Ajan kodu değişmediği halde sürüm yükselir (statik dosya önbelleği).
+- **Menü:** `web.py::MENU` üç kümedir (Her gün, Dönemlik, Yönetim), en çok on üst öğe; açılır grup yoktur.
+  "Acil durum" kümelerin dışında, en üsttedir ve iki role de çizilir (K4). `rol` taşıyan öğe öbür role hiç
+  çizilmez; bu görünümdür, yetki denetimi uçlarda kalır. Etkin öğe öğenin kendi `esler`'inden, üst öğenin
+  "içinde" işareti alt öğelerinden gelir (rolle gizlenen alt öğe de sayılır).
+- **İki kip, tek kural kümesi:** çekmece (varsayılan) ve sabit menü (≥ 64rem). Kip `stil.css`'te `--kb-*`
+  özellikleriyle durur; `panel.js` kipi `--kb-kip`'ten okur, genişlik eşiği JS'te yinelenmez. Çekmece
+  kipinde üst çubuk yapışkandır (Menü, okul adı, Acil); 40rem altında alt çubuk gelir. Şube defteri
+  (`genis-sayfa`, yalnız tablo çizilince) 100rem altında çekmece kipindedir.
+- **JS'siz çalışır:** çekmece `#menu` (`:target`) ile açılır, `#icerik` ile kapanır. JS varken sınıfla açılır
+  (adrese parça yazılmaz), arkadaki sayfa `inert` olur, Esc kapatır, odak açan düğmeye döner.
+- **Kabuksuz sayfalar:** giriş, ilk kurulum ve ilk kurulum çerçevesindeki geri yükleme.
+- **Renk:** menü okulun şerit rengindedir (`tema.py`; motor değişmedi). Durum yalnız renkle anlatılmaz.
+- Taslağın sorularına ayrıca cevap verilmedi; önerilen seçenekler varsayıldı (§17, soru 69–79).
+- Ölçüm: `scripts/panel_olcum.mjs` (uydurma veriyle deneme sunucusu; çıktı depo dışına). Sonuçlar ve
+  denenmeyenler `docs/surum-0.15.0.md`'dedir.
+
 ## 12. Ders programı ve program kilidi
 
 Panelde **Program** sayfası (menüde Duyurular'dan sonra) sekmelidir: Zil saatleri ·
@@ -1452,6 +1487,7 @@ izlenir. Kurulu (PyInstaller) programda sistem sertifika deposunun bulunduğu he
 | 5B | USB anahtar: bellekteki anahtar dosyasıyla idare ve isteyen öğretmen için yoklama, ayarla kilit açma; tek seferlik indirme, iptal, kopya uyarısı (§14.1) | 0.11.0 — testlerle, tarayıcıda ve Debian 12 kabında loop bellekle (USB benzetimi) denendi; gerçek USB bellek, udisks ve ETAP'ta denenecek |
 | 3B | Zil düzenleyici (çizelgeler, haftalık düzen, tarihe özel çizelge, günü önizle, CSV; Okul Zili'nden alma aynı yapıya yazar) ve ders programını içe aktarma sihirbazı (aSc XML deneme, şablon CSV/XLSX, yapay zekâ istemi, önceki programlar) | 0.10.0 (§12.2–12.3) — testlerle ve tarayıcıda uydurma veriyle denendi; gerçek aSc dosyası ve okulun gerçek zil saatleriyle denenecek |
 | 5C | Yoklama yeniden tasarımı: tahtada kaydırmasız şube/ders seçimi, okul no sıralı liste, devrenin ilk dersinde geç, saate göre ders ön seçimi; panelde şube defteri (son beş öğretim günü, düzeltme katmanı), mazeret/izin, son günler listesi (§14.2) | 0.14.0 — testlerle, Debian 12 kabında (Xvfb) ekran ölçümüyle ve tarayıcıda uydurma veriyle denendi; ETAP'ta ve gerçek sınıfta denenecek |
+| P1 | Panel arayüzü 1. aşama (kabuk): sol menü (üç küme, role göre), dar ekranda çekmece ve telefon alt çubuğu, Acil en üstte, ölçek belirteçleri, şekilli rozet, dokunma hedefi (§11.1) | 0.15.0 — testlerle ve deneme sunucusunda başsız tarayıcı ölçümüyle (uydurma veri; 1366 ve 390 px, açık/koyu) denendi; okulun bilgisayarlarında, gerçek telefonda ve ekran okuyucuyla denenecek. 2–6. aşamalar onay bekliyor |
 | 3C | Sihirbaza e-Okul "Haftalık Ders Programları" raporu (OOK11002_R01, .XLS): blok ayrıştırma, rapordan zil çizelgesi, zorunlu şube eşlemesi, şubenin tahtasına yazma (§12.4) | 0.12.0 — testlerle (uydurma matris) ve geliştirme bilgisayarında gerçek bir raporla (ayrı veri dizini, uydurma tahtalar) uçtan uca denendi; okulda denenecek |
 
 Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" ve "Seçili
@@ -1606,6 +1642,26 @@ Ders yoklaması (0.6.0):
     sorulur. Her zaman başlayacak ders mi seçilsin?
 68. **Aydınlatma:** okulun aydınlatma metni tahtada okul numarası ile adın birlikte görünmesini ve mazeret
     türünün (raporlu dahil) okul sunucusunda tutulmasını kapsıyor mu? (Soru 33'ün devamı.)
+
+Panel arayüzü (0.15.0; taslağın soruları — yanıt gelene kadar **önerilen** seçenek geçerlidir, §11.1):
+
+69. **Panel kullanıcıları nerede dursun?** Öneri: Ayarlar içinde bir bölüm (2. aşama). Şimdi menüde ayrı öğe.
+70. **Ana sayfanın adı:** öneri "Bugün" (4. aşama). Şimdi menüde "Tahtalar", adres `/`.
+71. **Bugün ekranında tahtalar:** öneri kat/blok çipleri ve durum sayıları, tam liste Tahtalar'da; öbür
+    seçenek bugünkü kart ızgarası.
+72. **Genel arama ne zaman?** Öneri: son aşamada; önce yalnız Ayarlar içinde.
+73. **Sol menünün rengi:** öneri okulun şerit rengi (0.15.0'da böyle); öbür seçenek nötr koyu gri.
+74. **Yoklama'ya tıklayınca ilk sayfa:** öneri Günlük (bugünkü gibi); öbür seçenek şube defteri.
+75. **Tahta ayrıntısında bugünün ders başlıkları gösterilsin mi?** Öneri: gösterilsin, öğretmen adı olmadan.
+    Kural 12 istisnası bugün yalnız kilit ekranı kutusu içindir; panelde göstermek yeni bir kullanımdır ve
+    uygulanmadan önce açıkça onaylanmalıdır.
+76. **Açık/koyu görünüm elle seçilebilsin mi?** Öneri: hayır, işletim sistemini izlesin (0.15.0'da böyle).
+77. **Menü adı:** öneri "Kişiler ve anahtarlar" (0.15.0'da böyle); öbür seçenekler "Okul verisi",
+    "Öğrenci ve öğretmenler".
+78. **"Hepsini kilitle" kime gitsin?** Öneri: çevrimiçi ve onaylı bütün tahtalara (3. aşama); öbür seçenek
+    bugünkü gibi yalnız seçilenlere.
+79. **Koyu görünümde birincil düğme tonu:** öneri olduğu gibi kalsın (kontrast eşiği tutuyor, `tema.py`
+    değişmez); öbür seçenek koyuda ayrı ton türetmek.
 
 Altyapı (0.7.0 ve 6B):
 

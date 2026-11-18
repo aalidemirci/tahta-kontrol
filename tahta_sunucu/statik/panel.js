@@ -806,10 +806,89 @@
     else window.addEventListener("load", odakla, { once: true });
   }
 
+  /* ---- kabuk: dar ekranda yan menü çekmecesi (0.15.0) --------------------------------
+     JS'siz de çalışır: <a href="#menu"> çekmeceyi :target ile açar, #icerik kapatır. Burada sınıfla açılır
+     (adrese parça yazılmaz), arkadaki sayfa inert olur, Esc kapatır ve odak açan düğmeye döner.
+     Kip (çekmece / sabit) yalnız stil.css'tedir: --kb-kip okunur, genişlik eşiği burada yinelenmez. */
+  function kabukKur() {
+    var menu = $("menu");
+    if (!menu || !menu.classList.contains("yan-menu")) return; // kabuksuz sayfa (giriş, ilk kurulum)
+    // Çekmece açıkken arkada kalanlar (inert): Tab çekmecenin dışına çıkmaz. Onay diyaloğu body'nin çocuğudur, kapsam dışı.
+    var arka = Array.prototype.slice.call(document.querySelectorAll("main#icerik, .ust-cubuk, .alt-cubuk, a.atla"));
+    var acanlar = Array.prototype.slice.call(document.querySelectorAll("a.menu-ac"));
+    var kapatan = menu.querySelector(".yan-kapat");
+    var perde = document.querySelector(".perde");
+    var sonTetik = null;
+    function cekmeceMi() {
+      return getComputedStyle(document.body).getPropertyValue("--kb-kip").trim() !== "sabit";
+    }
+    function acikMi() { return menu.classList.contains("acik"); }
+    function isaretle(acik) {
+      arka.forEach(function (o) { o.inert = acik; });
+      acanlar.forEach(function (a) { a.setAttribute("aria-expanded", acik ? "true" : "false"); });
+    }
+    // Liste sığmayıp kayıyorsa (kısa pencere, telefon çekmecesi) etkin öğe görünür alana gelir; sayfa kaymaz
+    // (yan menü sabit konumludur, en yakın kaydırma kutusu listenin kendisidir).
+    function etkiniGoster() {
+      var etkin = menu.querySelector('.yan-gezinme a[aria-current="page"]') || menu.querySelector(".yan-gezinme li[data-icinde] > a");
+      if (etkin && etkin.scrollIntoView) etkin.scrollIntoView({ block: "nearest" });
+    }
+    function ac(tetik) {
+      if (!cekmeceMi() || acikMi()) return;
+      menu.classList.add("acik");
+      isaretle(true);
+      sonTetik = tetik;
+      (kapatan || menu).focus();
+      etkiniGoster();
+    }
+    function kapat(odakGeri) {
+      if (!acikMi()) return;
+      menu.classList.remove("acik");
+      isaretle(false);
+      if (!odakGeri) return;
+      var hedef = sonTetik && sonTetik.getClientRects().length ? sonTetik : $("icerik");
+      if (hedef) hedef.focus();
+    }
+    acanlar.forEach(function (a) {
+      a.setAttribute("role", "button");
+      a.setAttribute("aria-expanded", "false");
+      a.addEventListener("click", function (olay) { olay.preventDefault(); ac(a); });
+      a.addEventListener("keydown", function (olay) { // role="button": Boşluk da açar
+        if (olay.key === " " || olay.key === "Spacebar") { olay.preventDefault(); ac(a); }
+      });
+    });
+    [kapatan, perde].forEach(function (o) {
+      if (o) o.addEventListener("click", function (olay) {
+        if (!acikMi()) return; // JS'siz açılmış (:target) çekmecede bağlantı kendi işini görür
+        olay.preventDefault();
+        kapat(true);
+      });
+    });
+    document.addEventListener("keydown", function (olay) {
+      if (olay.key === "Escape" && acikMi()) kapat(true); // onay diyaloğu açıkken tarayıcı Esc'yi diyaloğa verir
+    });
+    window.addEventListener("resize", function () { if (!cekmeceMi()) kapat(false); });
+    // Çekmeceden bir sayfaya gidilip Geri'ye basılınca sayfa geri/ileri önbelleğinden çekmece açık ve içerik
+    // inert olarak dönmesin: ayrılırken (ve önbellekten dönerken) çekmece kapatılır.
+    window.addEventListener("pagehide", function () { kapat(false); });
+    window.addEventListener("pageshow", function (olay) { if (olay.persisted) kapat(false); });
+    etkiniGoster();
+    // #menu parçasıyla gelinirse (JS'siz açılmış adres yenilendi, adres elle yazıldı) çekmece sınıfla açılır;
+    // :target'a bağlı kalırsa Esc ve perde onu kapatamaz.
+    function parcadanAc() {
+      if (location.hash !== "#menu") return;
+      location.replace("#icerik"); // :target menüden alınır (replaceState tek başına :target'ı değiştirmez)
+      history.replaceState(null, "", location.pathname + location.search);
+      ac(null);
+    }
+    window.addEventListener("hashchange", parcadanAc);
+    parcadanAc();
+  }
+
   /* ---- menu: açılır gruplar (<details>) — JS'siz de çalışır; burada yalnız kapanış --- */
   function menuKur() {
     // Program şeridindeki "Program kilidini durdur" açılır menüsü de aynı biçimde kapanır.
-    var gruplar = Array.prototype.slice.call(document.querySelectorAll("details.menu-grup, details.durdur-menu"));
+    var gruplar = Array.prototype.slice.call(document.querySelectorAll("details.durdur-menu"));
     if (!gruplar.length) return;
     function kapat(haric) {
       gruplar.forEach(function (g) { if (g !== haric) g.open = false; });
@@ -818,7 +897,7 @@
       g.addEventListener("toggle", function () { if (g.open) kapat(g); });
     });
     document.addEventListener("click", function (olay) {
-      var icinde = olay.target.closest && olay.target.closest("details.menu-grup, details.durdur-menu");
+      var icinde = olay.target.closest && olay.target.closest("details.durdur-menu");
       kapat(icinde || null);
     });
     document.addEventListener("keydown", function (olay) {
@@ -1585,6 +1664,7 @@
   secimDegisimiKur();
   yokSayaciKur();
   izgaraKur();
+  kabukKur();
   menuKur();
   sayacKur();
   duyuruFormuKur();

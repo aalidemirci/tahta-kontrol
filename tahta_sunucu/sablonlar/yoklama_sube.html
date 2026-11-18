@@ -1,7 +1,8 @@
 {% extends "taban.html" %}
 {% import "_yoklama_hucre.html" as yh %}
 {% block baslik %}Şube defteri{% if sube %} · {{ sube }}{% endif %} · Tahta Kontrol{% endblock %}
-{% block govde_sinifi %}genis-sayfa{% endblock %}
+{# genis-sayfa (çekmece kipi, yatay baskı) yalnız geniş tablo gerçekten çizilince: liste boşken sayfa olağan kabuktadır. #}
+{% block govde_sinifi %}{% if kip != 'bos' %}genis-sayfa{% endif %}{% endblock %}
 {% block icerik %}
 {# Şube defteri (0.14.0). Bağlam: panel_defter.py SÖZLEŞME. kip = bes (son beş öğretim günü; varsayılan) | gun | bos.
    Gün kipinde tek form vardır ve JS'siz çalışır (fırça = radyo, hücre = gönder düğmesi); panel.js::defterKur yalnız

@@ -27,9 +27,9 @@ def test_menu_sirasi_ortak_sozluge_uyar(uygulama, panel):
     kur_ve_gir(panel)
     sayfa = panel.get("/program").text
     menu = sayfa.split('aria-label="Ana menü"')[1].split("</nav>")[0]
-    sira = [menu.index(f">{ad}<") for ad in ("Pano", "Duyurular", "Program", "İşlem kaydı")]
+    sira = [menu.index(f">{ad}<") for ad in ("Tahtalar", "Duyurular", "Yoklama", "Program", "Sınavlar", "İşlem kaydı")]
     assert sira == sorted(sira)
-    assert re.search(r'<a href="/program" aria-current="page">Program</a>', menu)
+    assert re.search(r'<a href="/program" aria-current="page">.*?<span>Program</span>', menu, re.S)
 
 
 @pytest.mark.parametrize(

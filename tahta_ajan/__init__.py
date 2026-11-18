@@ -4,4 +4,4 @@ Yalnız standart kitaplık kullanır (ekran yardımcısı ayrıca PyGObject/GTK3
 tahtalarda internet ve paket deposu erişimi varsayılmaz.
 """
 
-__version__ = "0.14.0"
+__version__ = "0.15.0"

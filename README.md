@@ -1,5 +1,10 @@
 # Tahta Kontrol
 
+Yerel geliştirme **0.15.0**: panel arayüzünün yeniden düzeninde 1. aşama — sol kenar menüsü (üç küme,
+role göre), dar ekranda çekmece ve telefonda alt çubuk, Acil durum en üstte, ortak ölçüler, dokunma
+hedefleri. Sayfaların içi, adresler ve tahtalar değişmedi. [Sürüm notları](docs/surum-0.15.0.md).
+Dağıtılmadı; okul bilgisayarlarında ve gerçek telefonda denenmedi.
+
 Yerel geliştirme **0.14.0**: ders yoklaması yeniden tasarlandı — tahtada kaydırmasız şube ve ders
 saati seçimi, numara sırasıyla "123 Ayşe Y." listesi, ilk derste "geç", saate göre ders ön seçimi;
 panelde şube defteri (son beş öğretim günü), mazeret/izin girişi. [Sürüm notları](docs/surum-0.14.0.md).
@@ -24,9 +29,9 @@ Bu değişiklikler henüz kurulu sunucuya/istemciye dağıtılmadı.
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.14.0 yerel geliştirme; saha denemesindeki sürüm 0.12.0.** Debian 12 ve Pardus 25
+> **Durum: 0.15.0 yerel geliştirme; saha denemesindeki sürüm 0.12.0.** Debian 12 ve Pardus 25
 > masaüstünde denendi; gerçek bir Pardus ETAP tahtasında ilk deneme yapıldı (0.8.0; bulgular 0.9.0'da
-> giderildi), sonraki sürümler (0.13.x ve 0.14.0 dahil) gerçek tahtada henüz denenmedi. Okul genelinde
+> giderildi), sonraki sürümler (0.13.x, 0.14.0 ve 0.15.0 dahil) gerçek tahtada henüz denenmedi. Okul genelinde
 > kullanmadan önce tek tahtada deneyin (`docs/saha-denemesi.md`).
 
 ## Ne yapar

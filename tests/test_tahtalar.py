@@ -166,9 +166,13 @@ def test_csv_formul_kacisi_ve_ice_aktarma_yetkisi(iki_tahta, panel):
 
 def test_menu_ve_rol_gorunurlugu(iki_tahta, panel):
     sayfa = panel.get("/gruplar").text
-    for parca in ('href="/gruplar" aria-current="page"', 'href="/acil"', ">Yönetim<", 'href="/kullanicilar"'):
+    for parca in ('href="/gruplar" aria-current="page"', 'href="/acil"', 'href="/kullanicilar"', 'href="/ayarlar"'):
         assert parca in sayfa, parca
     kullanici_ekle(panel, "idareci1")
     gir(panel, "idareci1")
     sayfa = panel.get("/").text
-    assert 'href="/acil"' in sayfa and ">Yönetim<" not in sayfa and 'href="/kullanicilar"' not in sayfa
+    assert 'href="/acil"' in sayfa
+    # Yan menüde (0.15.0) idareciye yönetici öğesi çizilmez; "Yönetim" kümesi İşlem kaydı için idarecide de vardır.
+    menu = sayfa.split('id="menu"')[1].split("</aside>")[0]
+    for yol in ("/kullanicilar", "/ayarlar", "/yedekler", "/ekle", "/gruplar"):
+        assert f'href="{yol}"' not in menu, yol
