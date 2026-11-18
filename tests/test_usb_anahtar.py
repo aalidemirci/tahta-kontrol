@@ -426,7 +426,8 @@ def test_usb_yoklama_idare_kaydi_ogretmensiz_kaydeden_kullanici(panel, tahta, us
     assert yanit.status_code == 200
     veri = yanit.json()
     assert veri["ogretmen"] == {"kod": "", "etiket": "İdare · D. Yönetici"} and veri["tur"] == "idare"
-    assert set(veri) == {"belirtec", "kalan_sn", "bosta_sn", "ogretmen", "tur"}
+    assert set(veri) == {"belirtec", "kalan_sn", "bosta_sn", "ogretmen", "tur", "oneri", "subeler_once"}
+    assert veri["oneri"] is None and veri["subeler_once"] == []  # idare anahtarı: öğretmen programı önerisi yok
     assert ajan(tahta, h, "oneri", {}).status_code == 200
     kayit = liste_ve_kaydet(tahta, h, veri["belirtec"], [ogrenci_id("1047")])
     assert kayit.status_code == 200, kayit.text
@@ -656,7 +657,7 @@ def test_usb_uretilen_dosya_geri_cozulur(panel, tahta, usb_hazir):
 def test_yoklama_mevcut_kod_pin_akisi_degismedi(panel, tahta, usb_hazir):
     h = usb_hazir["basliklar"]
     veri = baslat(tahta, usb_hazir).json()
-    assert set(veri) == {"belirtec", "kalan_sn", "bosta_sn", "ogretmen"}
+    assert set(veri) == {"belirtec", "kalan_sn", "bosta_sn", "ogretmen", "oneri", "subeler_once"}  # 0.14.0: iki yeni alan
     assert liste_ve_kaydet(tahta, h, veri["belirtec"], [ogrenci_id("1102")]).status_code == 200
     y = sorgu("SELECT * FROM yoklama")[0]
     assert (y["ogretmen_id"], y["kaydeden"]) == (usb_hazir["ogretmen_id"], f"ogretmen:{usb_hazir['kod']}")

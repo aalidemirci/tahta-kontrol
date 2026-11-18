@@ -821,6 +821,41 @@ def gun_plani(b, tarih: date, saatler: list[tuple] | None = None) -> dict:
     return plan
 
 
+def gun_planlari(b, tarihler) -> dict[date, dict]:
+    """Birden çok günün planı, sabit sayıda sorguyla (0.14.0; şube defteri ve "son günler" listesi).
+
+    `gun_plani` ile aynı `tatil`, `dersler`, `program_gunu` değerlerini verir; yalnız `kaynak` metnine
+    haftalık çizelgenin adı eklenmez. Ders saatleri, takvim ve tarihe özel çizelgeler birer kez okunur
+    (gün başına sorgu yok)."""
+    from . import cizelge, vt
+
+    tarihler = sorted(set(tarihler))
+    if not tarihler:
+        return {}
+    saatler = ders_saatleri_oku(b)
+    takvim = vt.ayar_al(b, "zil_takvimi")
+    ozel = b.execute(
+        "SELECT t.*, c.ad AS cizelge_adi FROM zil_tarihli t LEFT JOIN zil_cizelgesi c ON c.id = t.cizelge_id "
+        "WHERE t.bas <= ? AND t.bit >= ? ORDER BY t.id DESC",
+        (tarihler[-1].isoformat(), tarihler[0].isoformat()),
+    ).fetchall()
+    dersler: dict[int, list] = {}
+    sonuc: dict[date, dict] = {}
+    for gun in tarihler:
+        iso = gun.isoformat()
+        yerel = None
+        for s in ozel:
+            if not (s["bas"] <= iso <= s["bit"]) or gun.weekday() not in cizelge.gunler_coz(s["gunler"]):
+                continue
+            if s["cizelge_id"] and s["cizelge_id"] not in dersler:
+                dersler[s["cizelge_id"]] = cizelge.cizelge_dersleri(b, s["cizelge_id"])
+            yerel = {"id": s["id"], "ad": s["ad"], "dersler": dersler.get(s["cizelge_id"], []),
+                     "ders_yok": s["cizelge_id"] is None, "cizelge_id": s["cizelge_id"], "cizelge_adi": s["cizelge_adi"]}  # fmt: skip
+            break
+        sonuc[gun] = plan_hesapla(gun, saatler, takvim, yerel)
+    return sonuc
+
+
 def simdiki_ders(b, tahta, an: datetime) -> dict | None:
     """Tahtanın derslik programına göre şu anki dersi: {"devre","devre_adi","ders_no","bas","bit","sube"} ya da None.
 

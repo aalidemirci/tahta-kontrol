@@ -26,6 +26,7 @@ from urllib.parse import urlsplit
 
 from . import __version__, ayar, envanter, gun_programi, sistem, tani, usb_anahtar
 from .baglanti import BaglantiHatasi, Istemci
+from .yoklama import sayfa_sayisi, sonraki_durum
 
 gunluk = logging.getLogger("tahta-ajan")
 
@@ -36,7 +37,7 @@ LOGO_YENIDEN_DENEME_SN = 60
 # Sunucunun bu ajana uygulayabileceği yetenekler (sürüm karşılaştırması yerine).
 YETENEKLER = [
     "acil", "duyuru_id", "program_kilidi", "sinav", "yoklama", "adres_listesi", "envanter", "ariza", "temizlik",
-    "dugme", "acilis_kilidi", "usb_anahtar", "gun_programi",
+    "dugme", "acilis_kilidi", "usb_anahtar", "gun_programi", "yoklama_gec",
 ]  # fmt: skip
 # Yüzer düğme (0.9.0, G3). Ayar sunucudan (`ayar.dugme`) gelir ve durum.json'da saklanır (sır değil): sunucu
 # kapalıyken servis yeniden başlasa da düğme görünür ve tahtadan kilitlenebilir. Ekrandan gelen her işlem
@@ -82,6 +83,8 @@ YOKLAMA_KAYDEDILDI_SN = 3
 YOKLAMA_ISTEK_SN = 10  # ağ isteklerinin zaman aşımı (uzun bekleme döngüsünü durdurmaz)
 YOKLAMA_LISTE_SINIRI = 300
 YOKLAMA_DERS_NO_EN_COK = 20
+YOKLAMA_SUBELER_ONCE_SINIRI = 6  # ★ satırı: tahtanın şubeleri + (PIN/USB sonrası) öğretmenin bugünkü şubeleri
+YOKLAMA_DERS_ADAYI_SINIRI = 2  # teneffüs: [biten, başlayacak]
 # K5: tahtadaki yoklama kâğıdın yanında yardımcı kayıttır; sunucu yoksa asıl dayanak kâğıt yoklamadır.
 ILETI_YOKLAMA_SUNUCU_YOK = "Sunucuya ulaşılamıyor. Bu dersin yoklamasını kâğıda alın."
 ILETI_YOKLAMA_SINAV = "Sınav sürüyor; ders yoklaması açılamaz."
@@ -587,6 +590,19 @@ class Servis:
             "ders_adi": "",
             "ogrenciler": [],  # [{"id","etiket"}] yalnız bellekte
             "yok": set(),
+            # 0.14.0 (hepsi yalnız bellekte; durum.json, günlük, tanılama yok):
+            "gec": set(),
+            "gec_secilebilir": False,  # seçilen ders devrenin ilk dersi mi (sunucu söyler)
+            "gec_destek": False,  # sunucu geç'i biliyor (liste yanıtında gec_secilebilir var): /kaydet'e gec gider
+            "subeler_once": [],  # tahtanın şubeleri (PIN'siz /oneri)
+            "subeler_once_ogretmen": [],  # öğretmenin bugünkü şubeleri (yalnız PIN/USB sonrası)
+            "ogretmen_oneri": None,  # /baslat ve /ajan/usb/yoklama yanıtındaki öneri
+            "ders_adaylari": [],
+            "ders_elle": False,  # ders saatine kullanıcı dokundu (şube değişince §2.2 kuralıyla korunur)
+            "elle_saat": "",  # elle seçilen dersin başlangıç saati ("" = saatsiz görünüm)
+            "secim_acik": False,  # liste bellekteyken seçim görünümüne dönüldü (işaretler korunur)
+            "sayfa": 0,
+            "gorulen_sayfalar": set(),
             "mevcut": 0,
             "baska_yoklama": False,
             "liste_ileti": "",
@@ -612,8 +628,10 @@ class Servis:
         if y is None:
             y = self.yoklama = self._yoklama_yeni("ileti")
         belirtec, self._yoklama_belirtec = self._yoklama_belirtec, None
-        y.update(asama="ileti", ogrenciler=[], yok=set(), liste_yuklu=False, ileti=str(metin)[:300],
-                 ileti_bitis=time.monotonic() + sure, hata="", istek=False, bitis=None)  # fmt: skip
+        y.update(asama="ileti", ogrenciler=[], yok=set(), gec=set(), liste_yuklu=False, ileti=str(metin)[:300],
+                 ileti_bitis=time.monotonic() + sure, hata="", istek=False, bitis=None, oneri=None, sube=None,
+                 ders_no=None, subeler_once=[], subeler_once_ogretmen=[], ogretmen_oneri=None, ders_adaylari=[],
+                 secim_acik=False, sayfa=0, gorulen_sayfalar=set())  # fmt: skip
         return belirtec
 
     def _yoklama_kapat(self):
@@ -674,9 +692,9 @@ class Servis:
             self.arka_plan(lambda: self._yoklama_oneri_al(oturum))
 
     def _yoklama_oneri_al(self, oturum: int, sube: str | None = None):
-        """İlk açılışta öneri (sube=None) ya da şube değişince o şubenin ders saatleri."""
+        """İlk açılışta öneri (sube=None) ya da şube seçilince o şubenin ders saatleri VE ders önerisi."""
         kod, yanit = self._yoklama_istek("/ajan/yoklama/oneri", {"sube": sube} if sube else {})
-        belirtec, usb_baslat = None, None
+        belirtec, usb_baslat, liste = None, None, None
         with self.kilit:
             y = self.yoklama
             if y is None or y["oturum"] != oturum or (sube is not None and y["sube"] != sube):
@@ -684,17 +702,23 @@ class Servis:
             y["istek"] = False
             if kod == 200:
                 oneri = _oneri_coz(yanit)
-                if sube is None and y["usb"] and not self.usb["pin_gerek"]:
-                    # USB anahtar, PIN sorulmuyor: PIN sayfası hiç açılmadan oturum istenir.
-                    y.update(oneri=oneri, sube=oneri["sube"], ders_no=oneri["ders_no"], hata="", istek=True)
+                if sube is None:
+                    # Şubesiz açılışta ders sütunundaki ön seçim: tahtanın şubesinin dersi, yoksa "şimdiki" ders.
+                    ders_no = oneri["ders_no"] if oneri["sube"] else oneri["simdiki_ders_no"]
+                    y.update(oneri=oneri, sube=oneri["sube"], ders_no=ders_no, hata="", ders_elle=False, elle_saat="",
+                             subeler_once=list(oneri["subeler_once"]),
+                             ders_adaylari=list(oneri["ders_adaylari"]) if oneri["sube"] else [])  # fmt: skip
                     y["son_dokunma"] = time.monotonic()
-                    usb_baslat = oturum
-                elif sube is None:
-                    y.update(oneri=oneri, sube=oneri["sube"], ders_no=oneri["ders_no"], asama="pin", hata=y["usb_not"])
-                    y["son_dokunma"] = time.monotonic()
+                    if y["usb"] and not self.usb["pin_gerek"]:
+                        # USB anahtar, PIN sorulmuyor: PIN sayfası hiç açılmadan oturum istenir.
+                        y["istek"] = True
+                        usb_baslat = oturum
+                    else:
+                        y.update(asama="pin", hata=y["usb_not"])
                 elif y["oneri"] is not None:
-                    y["oneri"]["ders_saatleri"] = oneri["ders_saatleri"]
-                    y["oneri"]["ders_no_en_cok"] = oneri["ders_no_en_cok"]
+                    for alan in ("ders_saatleri", "ders_no_en_cok", "devre_adi", "simdiki_ders_no", "simdiki_bitti"):
+                        y["oneri"][alan] = oneri[alan]
+                    liste = self._yoklama_ders_uygula(y, oneri)
             elif kod == 409:
                 belirtec = self._yoklama_ileti_ver(str(yanit.get("hata") or ILETI_YOKLAMA_KAPALI))
             elif kod in (404, 405):
@@ -702,12 +726,46 @@ class Servis:
             elif sube is None or kod in (401, 403):
                 belirtec = self._yoklama_ileti_ver(ILETI_YOKLAMA_SUNUCU_YOK)
             else:
-                y["hata"] = "Ders saatleri alınamadı; yeniden deneyin."
+                # Şubenin ders saatleri gelmedi: eski ders saatleri başka devrenin olabilir; şube seçimi geri alınır.
+                y.update(hata="Ders saatleri alınamadı; şubeye yeniden dokunun.", sube=None, ders_adaylari=[])
+                if not y["ders_elle"]:
+                    y["ders_no"] = None
         self._yoklama_bitir_gonder(belirtec)
         self.yayinla()
         self.bildir()
         if usb_baslat is not None:
             self._usb_yoklama_baslat(usb_baslat, None)
+        if liste:
+            self._yoklama_liste_al(*liste)
+
+    def _yoklama_ders_uygula(self, y: dict, oneri: dict):
+        """Şube seçildi, o şubenin ders saatleri geldi (çağıran kilidi tutar): dersi belirler; ders tekse liste
+        isteğini (oturum, şube, ders) döndürür (şubeye TEK dokunuş). Sıra: (1) kullanıcının elle seçtiği ders —
+        yalnız yeni şubede AYNI numara ve AYNI başlangıç saati varsa (kural 25: sabahın 3. dersi öğlenin 3. dersi
+        değildir; saatsiz görünümden hiç korunmaz); (2) sunucunun o şube için ders önerisi; (3) teneffüste iki
+        aday varsa ve şube öğretmenin program önerisiyle aynıysa onun dersi. Yoksa ders seçilmez, adaylar vurgulanır."""
+        saatler = {s["ders_no"]: s for s in oneri["ders_saatleri"]}
+        secenekler = {s["ders_no"] for s in _ders_secenekleri(oneri) if s["secilebilir"]}
+        ders_no, adaylar = None, []
+        elle_korunur = (y["ders_elle"] and y["ders_no"] in secenekler and bool(y["elle_saat"])
+                        and saatler.get(y["ders_no"], {}).get("baslangic") == y["elle_saat"])  # fmt: skip
+        if elle_korunur:
+            ders_no = y["ders_no"]
+        else:
+            y["ders_elle"], y["elle_saat"] = False, ""
+            adaylar = [d for d in oneri["ders_adaylari"] if d in secenekler]
+            ogretmen = y["ogretmen_oneri"] if self._yoklama_belirtec else None
+            if oneri["ders_no"] in secenekler:
+                ders_no, adaylar = oneri["ders_no"], []
+            elif ogretmen and ogretmen["sube"] == y["sube"] and ogretmen["ders_no"] in secenekler:
+                ders_no, adaylar = ogretmen["ders_no"], []
+            elif not adaylar and ogretmen and ogretmen["sube"] == y["sube"]:
+                adaylar = [d for d in ogretmen["ders_adaylari"] if d in secenekler]
+        y.update(ders_no=ders_no, ders_adaylari=adaylar, hata="")
+        if ders_no and self._yoklama_belirtec:
+            y["istek"] = True
+            return (y["oturum"], y["sube"], ders_no)
+        return None
 
     def _yoklama_pin(self, kod, pin):
         """Ekrandan gelen öğretmen kodu + PIN: sunucuda doğrulanır. PIN saklanmaz, günlüğe yazılmaz."""
@@ -770,8 +828,15 @@ class Servis:
         self._yoklama_bitir_gonder(kapatilacak)
         self.yayinla()
         self.bildir()
-        if liste:
-            self._yoklama_liste_al(*liste)
+        self._yoklama_sonraki(liste)
+
+    def _yoklama_sonraki(self, is_):
+        """_yoklama_oturum_acildi'nin döndürdüğü işi kilit DIŞINDA yürütür: ("liste", oturum, şube, ders) ya da
+        ("oneri", oturum, şube)."""
+        if is_ and is_[0] == "liste":
+            self._yoklama_liste_al(*is_[1:])
+        elif is_:
+            self._yoklama_oneri_al(*is_[1:])
 
     def _yoklama_oturum_acildi(self, y: dict, yanit: dict, oturum: int, belirtec: str):
         """Sunucu oturumu açtı (kod + PIN ya da USB anahtar; çağıran kilidi tutar). Liste isteğini döndürür."""
@@ -783,10 +848,33 @@ class Servis:
             bosta_sn=min(600, max(30, _sayi(yanit.get("bosta_sn")) or YOKLAMA_BOSTA_VARSAYILAN_SN)),
             ogretmen={"kod": _kes(ogretmen.get("kod"), 4), "etiket": _kes(ogretmen.get("etiket"), 60)},
         )  # fmt: skip
-        if y["sube"] and y["ders_no"]:
-            y["istek"] = True
-            return (oturum, y["sube"], y["ders_no"])
+        # §2.3 karar tablosu, liste isteğinden ÖNCE (kod + PIN, USB + PIN ve USB PIN'siz akışta aynı yer).
+        # Tahtanın önerisi (PIN'siz /oneri) ile öğretmenin program önerisi (bu yanıt) karşılaştırılır:
+        #   aynı şube / yalnız biri var ve ders tek → liste doğrudan;
+        #   iki farklı şube                          → liste AÇILMAZ: tahtanın şubesi seçili, öğretmeninki ★ satırında;
+        #   hiçbiri                                  → seçim görünümü.
+        # Eski sunucuda yanıtta öneri yoktur: bugünkü davranış (tahtanın önerisi tamsa liste).
+        subeler = (y["oneri"] or {}).get("subeler") or []
+        ogretmen_oneri, once = _baslat_oneri_coz(yanit, subeler)
+        y["ogretmen_oneri"], y["subeler_once_ogretmen"] = ogretmen_oneri, once
+        if y["sube"] and ogretmen_oneri and ogretmen_oneri["sube"] != y["sube"]:
+            return None
+        if y["sube"]:
+            if not y["ders_no"] and ogretmen_oneri and self._ders_secilebilir(y, ogretmen_oneri["ders_no"]):
+                y["ders_no"], y["ders_adaylari"] = ogretmen_oneri["ders_no"], []  # teneffüste kimlik dersi belirler
+            if y["ders_no"]:
+                y["istek"] = True
+                return ("liste", oturum, y["sube"], y["ders_no"])
+            return None
+        if ogretmen_oneri:
+            # Tahtanın şubesi yok: öğretmenin şubesi seçilir; ders saatleri (devresi) o şube için istenir.
+            y.update(sube=ogretmen_oneri["sube"], ders_no=None, ders_adaylari=[], ders_elle=False, elle_saat="", istek=True)
+            return ("oneri", oturum, y["sube"])
         return None
+
+    @staticmethod
+    def _ders_secilebilir(y: dict, ders_no) -> bool:
+        return any(s["ders_no"] == ders_no and s["secilebilir"] for s in _ders_secenekleri(y["oneri"] or {}))
 
     def _yoklama_liste_al(self, oturum: int, sube: str, ders_no: int):
         with self.kilit:
@@ -802,7 +890,14 @@ class Servis:
             if durum_kodu == 200:
                 ogrenciler = _yoklama_listesi_coz(yanit.get("ogrenciler"))
                 kimlikler = {o["id"] for o in ogrenciler}
-                yok = {i for i in (yanit.get("yok") if isinstance(yanit.get("yok"), list) else []) if _tamsayi_mi(i) and i in kimlikler}
+                yok = _kimlik_kumesi(yanit.get("yok"), kimlikler)
+                # Geç (0.14.0): yalnız sunucu "bu ders devrenin ilk dersi" derse sunulur. Eski sunucuda anahtar
+                # yoktur: geç sunulmaz, /kaydet'e gec gönderilmez.
+                gec_destek = "gec_secilebilir" in yanit
+                gec_secilebilir = gec_destek and yanit.get("gec_secilebilir") is True
+                gec = _kimlik_kumesi(yanit.get("gec"), kimlikler) - yok if gec_secilebilir else set()
+                y.update(gec=gec, gec_secilebilir=gec_secilebilir, gec_destek=gec_destek, secim_acik=False, sayfa=0,
+                         gorulen_sayfalar={0}, ders_adaylari=[])  # fmt: skip
                 y.update(ogrenciler=ogrenciler, yok=yok, mevcut=len(ogrenciler), liste_yuklu=True, hata="",
                          baska_yoklama=bool(yanit.get("baska_yoklama")), liste_ileti=_kes(yanit.get("ileti"), 200),
                          ders_adi=_kes(yanit.get("ders_adi"), 60), kaydet_denendi=False)  # fmt: skip
@@ -810,6 +905,7 @@ class Servis:
                     y["bitis"] = time.monotonic() + min(YOKLAMA_OTURUM_EN_UZUN_SN, _sayi(yanit.get("kalan_sn")))
             elif durum_kodu == 400:
                 y["ders_no"], y["hata"] = None, hata or "Ders saatini yeniden seçin."  # seçime dön
+                y["ders_elle"], y["elle_saat"] = False, ""
             elif durum_kodu in (401, 403, 409):
                 kapatilacak = self._yoklama_ileti_ver(hata or "Yoklama oturumu sona erdi; PIN'i yeniden girin.")
             elif durum_kodu is None:
@@ -821,8 +917,19 @@ class Servis:
         self._yoklama_bitir_gonder(kapatilacak)
         self.yayinla()
 
+    def _yoklama_liste_birak(self, y: dict):
+        y.update(ogrenciler=[], yok=set(), gec=set(), gec_secilebilir=False, gec_destek=False, mevcut=0,
+                 liste_yuklu=False, liste_ileti="", baska_yoklama=False, secim_acik=False, sayfa=0,
+                 gorulen_sayfalar=set())  # fmt: skip
+
     def _yoklama_sec(self, mesaj: dict):
-        """Şube ve/veya ders saati seçimi. Seçim değişince liste ve işaretler bırakılır."""
+        """Şube ve/veya ders saati seçimi (ekran → servis `yoklama_sec`):
+
+        - {"secim": true}: listeden seçim görünümüne dönüş; şube, ders VE işaretler bellekte kalır.
+        - {"sube": s}: yeni şube → /oneri {sube}: ders saatleri ve ders önerisi uygulanır, ders tekse liste hemen
+          istenir. Seçili şubeye yeniden dokunmak (ders de seçiliyse) listeyi açar.
+        - {"ders_no": n}: elle ders seçimi; şube seçiliyse liste istenir. {"ders_no": null}: ders seçimi kalkar.
+        Hiçbir şube ya da ders programa göre kapatılmaz (program yalnız ön seçimdir)."""
         oneri_iste, liste_iste = None, None
         with self.kilit:
             y = self.yoklama
@@ -830,48 +937,104 @@ class Servis:
                 return
             y["son_dokunma"] = time.monotonic()
             oneri = y["oneri"] or {}
-            sube_degisti = False
+            onceki = (y["sube"], y["ders_no"])
+            sube_degisti, dokunuldu = False, False
+            if mesaj.get("secim") is True:
+                if y["liste_yuklu"]:
+                    y["secim_acik"] = True
+                y["hata"] = ""
             if "sube" in mesaj:
                 s = mesaj.get("sube")
-                if isinstance(s, str) and s and (not oneri.get("subeler") or s in oneri["subeler"]) and s != y["sube"]:
-                    y["sube"], y["ders_no"], sube_degisti = s[:16], None, True
+                if isinstance(s, str) and s and (not oneri.get("subeler") or s in oneri["subeler"]):
+                    dokunuldu = True
+                    if s[:16] != y["sube"]:
+                        y["sube"], sube_degisti = s[:16], True
             if "ders_no" in mesaj and not sube_degisti:
                 d = mesaj.get("ders_no")
+                secenek = next((x for x in _ders_secenekleri(oneri) if x["ders_no"] == d and x["secilebilir"]), None)
                 if d is None:
-                    y["ders_no"] = None
-                elif _tamsayi_mi(d) and any(s["ders_no"] == d and s["secilebilir"] for s in _ders_secenekleri(oneri)):
-                    y["ders_no"] = d
-            y.update(ogrenciler=[], yok=set(), mevcut=0, liste_yuklu=False, liste_ileti="", baska_yoklama=False, hata="")
+                    self._yoklama_liste_birak(y)
+                    y.update(ders_no=None, ders_elle=False, elle_saat="", hata="")
+                    dokunuldu = False
+                elif _tamsayi_mi(d) and secenek:
+                    y.update(ders_no=d, ders_elle=True, elle_saat=secenek["baslangic"], ders_adaylari=[])
+                    dokunuldu = True
+                else:
+                    dokunuldu = False
             if sube_degisti:
-                y["istek"] = True
+                self._yoklama_liste_birak(y)
+                y.update(hata="", istek=True, ders_adaylari=[])
+                if not y["ders_elle"]:
+                    y["ders_no"] = None
                 oneri_iste = (y["oturum"], y["sube"])
-            elif y["sube"] and y["ders_no"]:
-                y["istek"] = True
-                liste_iste = (y["oturum"], y["sube"], y["ders_no"])
+            elif dokunuldu and y["sube"] and y["ders_no"]:
+                if y["liste_yuklu"] and onceki == (y["sube"], y["ders_no"]):
+                    y["secim_acik"] = False  # aynı şube ve ders: bellekteki liste işaretleriyle geri gelir
+                else:
+                    self._yoklama_liste_birak(y)
+                    y.update(hata="", istek=True)
+                    liste_iste = (y["oturum"], y["sube"], y["ders_no"])
         self.yayinla()
         if oneri_iste:
             self.arka_plan(lambda: self._yoklama_oneri_al(*oneri_iste))
         if liste_iste:
             self.arka_plan(lambda: self._yoklama_liste_al(*liste_iste))
 
+    @staticmethod
+    def _yoklama_liste_acik(y) -> bool:
+        return y is not None and y["asama"] == "liste" and y["liste_yuklu"] and not y["secim_acik"]
+
     def _yoklama_isaret(self, kimlik):
+        """Öğrenciye dokunuş: var → yok → (yalnız devrenin ilk dersinde) geç → var. Ekran aynı saf işlevle
+        (`yoklama.sonraki_durum`) hemen çizer; burası doğrunun kaynağıdır."""
         with self.kilit:
             y = self.yoklama
-            if y is None or y["asama"] != "liste" or not y["liste_yuklu"] or not _tamsayi_mi(kimlik):
+            if not self._yoklama_liste_acik(y) or not _tamsayi_mi(kimlik):
                 return
             if not any(o["id"] == kimlik for o in y["ogrenciler"]):
                 return
             y["son_dokunma"] = time.monotonic()
-            y["yok"] ^= {kimlik}
+            durum = "yok" if kimlik in y["yok"] else "gec" if kimlik in y["gec"] else "var"
+            yeni = sonraki_durum(durum, y["gec_secilebilir"])
+            y["yok"].discard(kimlik)
+            y["gec"].discard(kimlik)
+            if yeni != "var":
+                y[yeni].add(kimlik)
         self.yayinla()
 
+    def _yoklama_temizle(self):
+        """[Temizle]: bütün sayfalardaki yok ve geç işaretleri kalkar (liste ve görülen sayfalar kalır)."""
+        with self.kilit:
+            y = self.yoklama
+            if not self._yoklama_liste_acik(y):
+                return
+            y.update(yok=set(), gec=set(), son_dokunma=time.monotonic())
+        self.yayinla()
+
+    def _yoklama_sayfa(self, yon):
+        """56'dan kalabalık listede sayfa değiştirir; işaretler korunur, görülen sayfalar tutulur."""
+        with self.kilit:
+            y = self.yoklama
+            if not self._yoklama_liste_acik(y) or not _tamsayi_mi(yon) or yon not in (-1, 1):
+                return
+            y["son_dokunma"] = time.monotonic()
+            y["sayfa"] = max(0, min(sayfa_sayisi(len(y["ogrenciler"])) - 1, y["sayfa"] + yon))
+            y["gorulen_sayfalar"].add(y["sayfa"])
+        self.yayinla()
+
+    @staticmethod
+    def _yoklama_tum_sayfalar_goruldu(y: dict) -> bool:
+        return len(y["gorulen_sayfalar"]) >= sayfa_sayisi(len(y["ogrenciler"]))
+
     def _yoklama_asama(self, eski: str, yeni: str):
-        """Kaydet (liste → onay) ve Geri (onay → liste)."""
+        """Kaydet (liste → onay) ve Geri (onay → liste). Görülmeyen sayfa varken onaya geçilmez: o sayfadaki
+        öğrenciler bakılmadan "var" sayılmasın."""
         with self.kilit:
             y = self.yoklama
             if y is None or y["asama"] != eski or y["istek"]:
                 return
-            if yeni == "onay" and not (y["liste_yuklu"] and y["ogrenciler"]):
+            if yeni == "onay" and not (y["liste_yuklu"] and y["ogrenciler"] and not y["secim_acik"]
+                                       and self._yoklama_tum_sayfalar_goruldu(y)):  # fmt: skip
                 return
             y.update(asama=yeni, son_dokunma=time.monotonic(), hata="")
         self.yayinla()
@@ -882,14 +1045,18 @@ class Servis:
             if y is None or y["asama"] != "onay" or y["istek"] or not self._yoklama_belirtec:
                 return
             y.update(asama="kaydediliyor", istek=True, hata="", son_dokunma=time.monotonic())
-            istek = (y["oturum"], self._yoklama_belirtec, y["sube"], y["ders_no"], sorted(y["yok"]))
+            # Eski sunucuya (geç'i bilmiyor) gec anahtarı HİÇ gitmez; yenisine boş liste dahil her zaman gider.
+            gec = sorted(y["gec"] - y["yok"]) if y["gec_destek"] else None
+            istek = (y["oturum"], self._yoklama_belirtec, y["sube"], y["ders_no"], sorted(y["yok"]), gec)
         self.yayinla()
         self.arka_plan(lambda: self._yoklama_kaydet_gonder(*istek))
 
-    def _yoklama_kaydet_gonder(self, oturum: int, belirtec: str, sube: str, ders_no: int, yok: list[int]):
-        durum_kodu, yanit = self._yoklama_istek(
-            "/ajan/yoklama/kaydet", {"belirtec": belirtec, "sube": sube, "ders_no": ders_no, "yok": yok}
-        )
+    def _yoklama_kaydet_gonder(self, oturum: int, belirtec: str, sube: str, ders_no: int, yok: list[int],
+                               gec: list[int] | None = None):  # fmt: skip
+        govde = {"belirtec": belirtec, "sube": sube, "ders_no": ders_no, "yok": yok}
+        if gec is not None:
+            govde["gec"] = gec
+        durum_kodu, yanit = self._yoklama_istek("/ajan/yoklama/kaydet", govde)
         kapatilacak = None
         with self.kilit:
             y = self.yoklama
@@ -900,9 +1067,15 @@ class Servis:
             if durum_kodu == 200:
                 n = _sayi(yanit.get("yok_sayisi")) if "yok_sayisi" in yanit else len(yok)
                 self._yoklama_belirtec = None  # sunucu kaydet sonrası oturumu kapattı (tek seferlik)
-                self._yoklama_ileti_ver(f"Kaydedildi: {n} öğrenci yok." if n else "Kaydedildi: bütün öğrenciler derste.",
-                                        YOKLAMA_KAYDEDILDI_SN)  # fmt: skip
-                self.olaylar.append(f"Ders yoklaması tahtadan kaydedildi ({n} yok).")
+                m = (_sayi(yanit.get("gec_sayisi")) if "gec_sayisi" in yanit else len(gec)) if gec is not None else 0
+                if gec is None:  # eski sunucu: eski ileti
+                    ileti = f"Kaydedildi: {n} öğrenci yok." if n else "Kaydedildi: bütün öğrenciler derste."
+                else:
+                    ileti = f"Kaydedildi: {n} yok, {m} geç." if n or m else "Kaydedildi: bütün öğrenciler derste."
+                self._yoklama_ileti_ver(ileti, YOKLAMA_KAYDEDILDI_SN)
+                # Günlüğe yalnız sayı: ad, numara, şube yok.
+                self.olaylar.append(f"Ders yoklaması tahtadan kaydedildi ({n} yok, {m} geç)." if gec is not None
+                                    else f"Ders yoklaması tahtadan kaydedildi ({n} yok).")  # fmt: skip
             elif durum_kodu == 401 and y["kaydet_denendi"]:
                 # Önceki deneme sunucuya ulaşıp yanıtı yitirmiş olabilir; belirteç o anda silinmişti.
                 kapatilacak = self._yoklama_ileti_ver("Yoklama kaydedilmiş olabilir; panelde kontrol edilir.", 8)
@@ -957,8 +1130,15 @@ class Servis:
             return None
         simdi = time.monotonic()
         oneri = y["oneri"] or {}
-        liste = y["asama"] in ("liste", "onay", "kaydediliyor") and y["liste_yuklu"] and self._yoklama_belirtec is not None
+        oturumlu = self._yoklama_belirtec is not None
+        liste = y["asama"] in ("liste", "onay", "kaydediliyor") and y["liste_yuklu"] and oturumlu and not y["secim_acik"]
         secenekler = _ders_secenekleri(oneri)
+        # ★ satırı: tahtanın şubeleri önce; öğretmenin bugünkü şubeleri YALNIZ belirteç varken (PIN/USB sonrası).
+        once = list(y["subeler_once"])
+        for s in y["subeler_once_ogretmen"] if oturumlu and y["asama"] not in ("yukleniyor", "pin") else []:
+            if s not in once:
+                once.append(s)
+        n = len(y["ogrenciler"]) if liste else 0
         saat = next((s for s in secenekler if s["ders_no"] == y["ders_no"]), None)
         return {
             "asama": y["asama"],
@@ -974,6 +1154,16 @@ class Servis:
             "liste_yuklu": liste,
             "ogrenciler": [dict(o) for o in y["ogrenciler"]] if liste else [],
             "yok": sorted(y["yok"]) if liste else [],
+            "gec": sorted(y["gec"]) if liste else [],
+            "gec_secilebilir": y["gec_secilebilir"] if liste else False,
+            "subeler_once": once[:YOKLAMA_SUBELER_ONCE_SINIRI],
+            "ders_adaylari": list(y["ders_adaylari"]),
+            "devre_adi": oneri.get("devre_adi", ""),
+            "simdiki_ders_no": oneri.get("simdiki_ders_no"),
+            "simdiki_bitti": bool(oneri.get("simdiki_bitti")),
+            "sayfa": y["sayfa"] if liste else 0,
+            "sayfa_sayisi": sayfa_sayisi(n),
+            "tum_sayfalar_goruldu": self._yoklama_tum_sayfalar_goruldu(y) if liste else False,
             "mevcut": y["mevcut"] if liste else 0,
             "baska_yoklama": y["baska_yoklama"] if liste else False,
             "liste_ileti": y["liste_ileti"] if liste else "",
@@ -1359,8 +1549,7 @@ class Servis:
         self._yoklama_bitir_gonder(kapatilacak)
         self.yayinla()
         self.bildir()
-        if liste:
-            self._yoklama_liste_al(*liste)
+        self._yoklama_sonraki(liste)
 
     def _usb_gorunumu(self) -> dict | None:
         """Ekrana giden USB görünümü (çağıran kilidi tutar): gizli, kimlik, bağlama yolu, bellek etiketi GİRMEZ."""
@@ -1781,6 +1970,10 @@ class Servis:
             self._yoklama_sec(mesaj)
         elif tur == "yoklama_isaret":
             self._yoklama_isaret(mesaj.get("id"))
+        elif tur == "yoklama_temizle":
+            self._yoklama_temizle()
+        elif tur == "yoklama_sayfa":
+            self._yoklama_sayfa(mesaj.get("yon"))
         elif tur == "yoklama_kaydet":
             self._yoklama_asama("liste", "onay")
         elif tur == "yoklama_geri":
@@ -2798,18 +2991,68 @@ def _oneri_coz(deger) -> dict:
     oneri = deger.get("oneri") if isinstance(deger.get("oneri"), dict) else {}
     sube = oneri.get("sube") if isinstance(oneri.get("sube"), str) and oneri.get("sube") else None
     ders_no = oneri.get("ders_no") if _tamsayi_mi(oneri.get("ders_no")) and 1 <= oneri["ders_no"] <= en_cok else None
+    # 0.14.0 alanları sınırlı okunur; eski sunucuda yoktur (boş sayılır, bugünkü davranış).
+    simdiki = deger.get("simdiki_ders_no")
+    simdiki = simdiki if _tamsayi_mi(simdiki) and any(s["ders_no"] == simdiki for s in saatler) else None
     return {"tarih_yazi": _kes(deger.get("tarih_yazi"), 40), "ders_saatleri": saatler, "ders_no_en_cok": en_cok,
-            "subeler": subeler, "sube": sube[:16] if sube else None, "ders_no": ders_no}  # fmt: skip
+            "subeler": subeler, "sube": sube[:16] if sube else None, "ders_no": ders_no,
+            "ders_adaylari": _ders_adaylari_coz(oneri.get("ders_adaylari"), en_cok),
+            "subeler_once": _subeler_once_coz(deger.get("subeler_once"), subeler),
+            "devre_adi": _kes(deger.get("devre_adi"), 20) if isinstance(deger.get("devre_adi"), str) else "",
+            "simdiki_ders_no": simdiki, "simdiki_bitti": simdiki is not None and deger.get("simdiki_bitti") is True}  # fmt: skip
+
+
+def _ders_adaylari_coz(deger, en_cok: int = YOKLAMA_DERS_NO_EN_COK) -> list[int]:
+    """Teneffüs adayları [biten, başlayacak]: en çok 2 farklı ders numarası."""
+    adaylar = []
+    for d in deger if isinstance(deger, list) else []:
+        if _tamsayi_mi(d) and 1 <= d <= en_cok and d not in adaylar and len(adaylar) < YOKLAMA_DERS_ADAYI_SINIRI:
+            adaylar.append(d)
+    return adaylar
+
+
+def _subeler_once_coz(deger, subeler: list[str]) -> list[str]:
+    """Öne alınan şubeler: en çok 6, yinelenmez; şube listesi biliniyorsa yalnız listedekiler."""
+    once = []
+    for s in deger if isinstance(deger, list) else []:
+        if isinstance(s, str) and s.strip() and len(once) < YOKLAMA_SUBELER_ONCE_SINIRI:
+            s = s[:16]
+            if s not in once and (not subeler or s in subeler):
+                once.append(s)
+    return once
+
+
+def _baslat_oneri_coz(yanit, subeler: list[str]) -> tuple[dict | None, list[str]]:
+    """/ajan/yoklama/baslat ve /ajan/usb/yoklama yanıtındaki öğretmen önerisi ve öğretmenin bugünkü şubeleri.
+
+    Yalnız şube, ders numarası ve adaylar alınır (ad, ders adı gelse de tutulmaz). Eski sunucuda ikisi de yoktur:
+    (None, []). Önerinin şubesi öne alınanların başına konur."""
+    yanit = yanit if isinstance(yanit, dict) else {}
+    ham = yanit.get("oneri") if isinstance(yanit.get("oneri"), dict) else {}
+    sube = ham.get("sube") if isinstance(ham.get("sube"), str) and ham.get("sube").strip() else None
+    oneri = None
+    if sube and (not subeler or sube[:16] in subeler):
+        ders_no = ham.get("ders_no")
+        oneri = {"sube": sube[:16], "ders_no": ders_no if _tamsayi_mi(ders_no) and 1 <= ders_no <= YOKLAMA_DERS_NO_EN_COK else None,
+                 "ders_adaylari": _ders_adaylari_coz(ham.get("ders_adaylari"))}  # fmt: skip
+    gelen = yanit.get("subeler_once") if isinstance(yanit.get("subeler_once"), list) else []
+    return oneri, _subeler_once_coz(([oneri["sube"]] if oneri else []) + gelen, subeler)
+
+
+def _kimlik_kumesi(deger, kimlikler: set) -> set:
+    """Yanıttaki id listesi (yok / geç): yalnız listedeki öğrenciler, en çok liste sınırı kadar."""
+    return {i for i in (deger if isinstance(deger, list) else [])[:YOKLAMA_LISTE_SINIRI] if _tamsayi_mi(i) and i in kimlikler}
 
 
 def _ders_secenekleri(oneri: dict) -> list[dict]:
     """Seçilebilecek ders saatleri: zil saatleri biliniyorsa onlar (başlamamışlar seçilemez), yoksa 1..en_cok."""
     saatler = oneri.get("ders_saatleri") or []
     if saatler:
-        return [{"ders_no": s["ders_no"], "secilebilir": s["secilebilir"],
+        return [{"ders_no": s["ders_no"], "secilebilir": s["secilebilir"], "baslangic": s["baslangic"], "bitis": s["bitis"],
                  "metin": f"{s['ders_no']}. ders ({s['baslangic']}–{s['bitis']})" if s["baslangic"] and s["bitis"] else f"{s['ders_no']}. ders"}
                 for s in saatler]  # fmt: skip
-    return [{"ders_no": n, "secilebilir": True, "metin": f"{n}. ders"} for n in range(1, int(oneri.get("ders_no_en_cok") or 12) + 1)]
+    return [{"ders_no": n, "secilebilir": True, "baslangic": "", "bitis": "", "metin": f"{n}. ders"}
+            for n in range(1, int(oneri.get("ders_no_en_cok") or 12) + 1)]  # fmt: skip
 
 
 def _yoklama_listesi_coz(deger) -> list[dict]:

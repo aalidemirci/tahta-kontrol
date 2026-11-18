@@ -120,15 +120,17 @@ def test_portre_ekranda_duyuru_sutunu_ve_liste_yazisi_ene_sigar():
     assert sutun * ekran.LISTE_SATIR_KARAKTER * 0.6 * punto <= 1080
 
 
-def test_yoklama_sutun_olcekli():
-    assert ekran.yoklama_sutun(1920) == 6 and ekran.yoklama_sutun(800) == 2  # eski çağrı aynı
+def test_yoklama_izgarasi_dokunma_olcusu_her_ekranda_sigar():
+    """Öğrenci ızgarası homojen Gtk.Grid'dir: sabit düğme ölçüsü yok, yalnız en küçük dokunma boyu verilir.
+    En sık ızgarada (8 satır) en küçük boy + aralık, sayfanın diğer satırlarından (bant, üst satır, bilgi, alt
+    çubuk; 1920x1080'de yaklaşık 440 px) kalan alana sığar."""
     for en, boy in ((1024, 768), (1280, 800), (1366, 768), (1920, 1080), (3840, 2160)):
         olcek = ekran.ekran_olcegi(en, boy)
-        sutun = ekran.yoklama_sutun(en, olcek)
-        assert sutun == 6
-        # Akışın en küçük eni (sütun x düğme + aralık + kenarlar) ekrana sığar.
-        assert sutun * ekran.olcekle(ekran.YOKLAMA_DUGME_EN + 12, olcek) + ekran.olcekle(120, olcek) <= en
-    assert ekran.yoklama_sutun(1080, ekran.ekran_olcegi(1080, 1920)) == 3  # portre
+        for n in (30, 42, 48, 56, 70):
+            sutun, satir = ekran.yoklama_izgara_olcusu(n)
+            assert (sutun, satir) == ekran.yoklama_yerlesim(n)
+            gerekli = satir * ekran.olcekle(ekran.YOKLAMA_DOKUNMA_EN_AZ, olcek) + (satir - 1) * ekran.olcekle(8, olcek)
+            assert gerekli + ekran.olcekle(440, olcek) <= boy, (en, boy, n)
 
 
 @pytest.mark.parametrize(("en", "boy"), [(1024, 768), (1280, 800), (1366, 768), (1920, 1080), (3840, 2160), (1080, 1920)])
@@ -170,33 +172,6 @@ def test_ekran_kodunda_sabit_piksel_yok():
     ]
     for desen in yasak:
         assert not re.search(desen, kaynak), desen
-
-
-def test_yoklama_dugme_boyu_alan_olculmeden_tam_boy():
-    assert ekran.yoklama_dugme_boyu(32, 6, 1) == ekran.YOKLAMA_DUGME_BOY
-    assert ekran.yoklama_dugme_boyu(0, 6, 600) == ekran.YOKLAMA_DUGME_BOY
-    assert ekran.yoklama_dugme_boyu(32, 6, 1, 0.7111) == ekran.olcekle(ekran.YOKLAMA_DUGME_BOY, 0.7111)
-
-
-def test_yoklama_dugme_boyu_kisa_listede_tam_boy():
-    assert ekran.yoklama_dugme_boyu(12, 6, 680) == ekran.YOKLAMA_DUGME_BOY
-
-
-def test_yoklama_32_kisi_1366x768_alana_sigar():
-    """1366x768'de 32 kişilik şubenin son satırı liste alanının altında yarım kalıyordu (0.7.1 denetimi)."""
-    olcek = ekran.ekran_olcegi(1366, 768)
-    sutun = ekran.yoklama_sutun(1366, olcek)
-    alan = 470  # Xvfb 1366x768'de ölçülen liste alanı boyu (yaklaşık)
-    boy = ekran.yoklama_dugme_boyu(32, sutun, alan, olcek)
-    satir = -(-32 // sutun)
-    aralik = ekran.olcekle(ekran.YOKLAMA_SATIR_ARALIGI, olcek)
-    assert satir * (boy + ekran.YOKLAMA_HUCRE_PAYI) + (satir - 1) * aralik <= alan
-    assert boy >= ekran.olcekle(ekran.YOKLAMA_DUGME_BOY_EN_AZ, olcek)
-
-
-def test_yoklama_dugme_boyu_alt_sinir():
-    """Çok uzun listede düğme iki satırlık yazının altına inmez; liste kaydırılır."""
-    assert ekran.yoklama_dugme_boyu(60, 6, 500) == ekran.YOKLAMA_DUGME_BOY_EN_AZ
 
 
 @pytest.mark.parametrize(("en", "boy"), [(1024, 768), (1280, 800), (1366, 768), (1920, 1080)])

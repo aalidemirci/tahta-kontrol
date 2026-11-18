@@ -1,0 +1,45 @@
+{% extends "taban.html" %}
+{% block baslik %}Mazeret/izin önizleme · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Mazeret önizleme (0.14.0). Bağlam: o (yoklama_defter.mazeret_onizle), onizleme (belirteç), omur_dk, adli_not, k5_notu.
+   Önizleme yalnız sunucu belleğinde omur_dk dakika durur; "Kaydet" onayı tek kullanımlıktır, bu sayfa hiçbir şey yazmaz. #}
+<p class="geri"><a href="/yoklama/mazeret">← Mazeret/izin</a></p>
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>Mazeret/izin önizleme</h1>
+    <p>{{ o.ogrenciler | length }} öğrenci · {{ o.aralik }} · {{ o.kapsam }}{% if o.devre_adi %} ({{ o.devre_adi }}){% endif %}. Önizleme {{ omur_dk }} dakika geçerlidir.</p>
+  </div>
+</div>
+<p class="bant uyari kvkk-bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ adli_not }}</p>
+{% if o.bulunamayan %}
+<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Bu numaralarla etkin öğrenci bulunamadı, kayda girmeyecek: <span class="kod">{{ o.bulunamayan | join(', ') }}</span></p>
+{% endif %}
+
+<section class="kutu" aria-labelledby="mo-ozet">
+  <h2 id="mo-ozet">Kaydedilince</h2>
+  <dl class="ozellikler">
+    <dt>Tarih</dt><dd>{{ o.aralik }} ({{ o.takvim_gunu }} gün)</dd>
+    <dt>Kapsam</dt><dd>{{ o.kapsam }}{% if o.devre_adi %} · {{ o.devre_adi }}{% endif %}</dd>
+    <dt>Tür</dt><dd>{{ o.tur_adi }}</dd>
+    <dt>Dayanak</dt><dd>{{ o.dayanak_adi }}</dd>
+    <dt>Kapsanan öğretim günü</dt><dd>{{ o.gun_sayisi }}</dd>
+    <dt>Kapsanan ders saati</dt><dd>{{ o.ders_saati_sayisi }} <span class="not">(öğrenci × ders saati; zil saatleri bilinen günler)</span></dd>
+    <dt>Şu an "yok" kayıtlı</dt><dd>{{ o.yok_kayitli }} ders saati <span class="not">(defterde "özürlü" görünecek)</span></dd>
+  </dl>
+  <p class="not">{{ k5_notu }} Öğretmenin yoklama kaydı ve idare düzeltmeleri değişmez; kayıt kaldırılınca asıl durum yeniden görünür.</p>
+</section>
+
+<h2 id="mo-liste">Öğrenciler</h2>
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="mo-liste">
+<table>
+  <thead><tr><th scope="col">Şube</th><th scope="col">No</th><th scope="col">Ad Soyad</th></tr></thead>
+  <tbody>{% for g in o.ogrenciler %}<tr><td data-etiket="Şube">{{ g.sube }}</td><td data-etiket="No" class="kod">{{ g.okul_no }}</td><td data-etiket="Ad Soyad">{{ g.ad_soyad }}</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+
+<form method="post" action="/yoklama/mazeret/onayla" class="dugme-satiri">
+  <input type="hidden" name="onizleme" value="{{ onizleme }}">
+  <button class="ana"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Kaydet</button>
+  <a class="dugme" href="/yoklama/mazeret">Vazgeç</a>
+</form>
+{% endblock %}

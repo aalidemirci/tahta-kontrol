@@ -1,5 +1,10 @@
 # Tahta Kontrol
 
+Yerel geliştirme **0.14.0**: ders yoklaması yeniden tasarlandı — tahtada kaydırmasız şube ve ders
+saati seçimi, numara sırasıyla "123 Ayşe Y." listesi, ilk derste "geç", saate göre ders ön seçimi;
+panelde şube defteri (son beş öğretim günü), mazeret/izin girişi. [Sürüm notları](docs/surum-0.14.0.md).
+Dağıtılmadı; gerçek tahtada ve gerçek sınıfta denenmedi.
+
 Yerel geliştirme **0.13.1**: 0.13.0 inceleme bulgularının düzeltmesi — seçmeli derslerde
 öğretmen adının ders başlığına karışması, kilit ekranındaki gün programı, önizleme belleği ve
 yüzer düğme. [Sürüm notları](docs/surum-0.13.1.md). Dağıtılmadı; gerçek tahtada denenmedi.
@@ -19,9 +24,9 @@ Bu değişiklikler henüz kurulu sunucuya/istemciye dağıtılmadı.
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.13.1 yerel geliştirme; saha denemesindeki sürüm 0.12.0.** Debian 12 ve Pardus 25
+> **Durum: 0.14.0 yerel geliştirme; saha denemesindeki sürüm 0.12.0.** Debian 12 ve Pardus 25
 > masaüstünde denendi; gerçek bir Pardus ETAP tahtasında ilk deneme yapıldı (0.8.0; bulgular 0.9.0'da
-> giderildi), sonraki sürümler (0.13.x dahil) gerçek tahtada henüz denenmedi. Okul genelinde
+> giderildi), sonraki sürümler (0.13.x ve 0.14.0 dahil) gerçek tahtada henüz denenmedi. Okul genelinde
 > kullanmadan önce tek tahtada deneyin (`docs/saha-denemesi.md`).
 
 ## Ne yapar
@@ -102,6 +107,25 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
   işareti. e-Okul'a giriş idarece elle yapılır; Tahta Kontrol e-Okul'a bağlanmaz.
 - Tahtadan alınan yoklama kâğıt yoklamanın yanında yardımcı kayıttır. Yoklama kayıtları öğretim
   yılı sonunda kendiliğinden silinir; bütün öğrenci ve yoklama verisi tek işlemle de silinebilir.
+
+0.14.0 ile (yoklama yeniden tasarımı):
+
+- **Tahtada tek ekranlık seçim:** şube ve ders saati kaydırmasız tek ekrandadır; saate göre o anın
+  dersi seçili gelir, şubeye tek dokunuşla liste açılır. Teneffüste hangi dersin kastedildiği belli
+  değilse "biten / başlayacak" ders tek dokunuşla sorulur. Öğretmen programı yalnız ön seçimdir;
+  hiçbir şube ya da ders kapatılmaz.
+- **Numara sırasıyla liste:** öğrenciler okul numarası sırasıyla, "123 Ayşe Y." biçiminde (numara +
+  ad + soyadın baş harfi) ve kaydırmasız görünür; 56'dan kalabalık şube sayfalanır. Tam soyad tahtaya
+  gitmez; eski maskeli biçimler Ayarlar'dan seçilebilir.
+- **Geç:** her devrenin ilk dersinde ikinci dokunuş "geç" işaretler; geç, yok sayılmaz ve ayrı
+  sayılır.
+- **Şube defteri:** panelde öğrenci × ders tablosu; varsayılan görünüm son beş öğretim günüdür
+  (hafta sonu ve tatil atlanır), art arda günlerdir derste görülmeyen öğrenci rozetle öne çıkar. Gün
+  görünümünde idare yok / geç / var düzeltmesi yapar; düzeltme öğretmenin kaydını silmez, ayrı
+  katmanda izlenir.
+- **Mazeret/izin:** okul numarasıyla, tarih ya da ders aralığı için izinli, raporlu, mazeretli ya da
+  görevli kaydı girilir (serbest açıklama yoktur); defterde ve icmalde mazeretli yokluk tek "Ö" ile
+  görünür. Mazeret ve geçmiş günler tahtaya gönderilmez.
 
 0.7.0 ile:
 
@@ -229,7 +253,9 @@ Windows hizmeti olarak kaydeder (pywin32; ayrı bir hizmet aracı kullanılmaz).
   açılabilir.
 - Sınav listesinde ad soyad saklanmaz; tahtada yalnız maskeli ad, numaranın son iki hanesi,
   şube ve koltuk görünür. Liste tahtada diske yazılmaz ve öğretim yılı sonunda sunucudan silinir.
-- Ders yoklamasında tahtada öğrenci yalnız maskeli adla görünür; liste tahtada diske yazılmaz.
+- Ders yoklamasında tahtada öğrenci okul numarası, adı ve soyadının baş harfiyle görünür (0.14.0; tam
+  soyad ve T.C. kimlik no tahtaya gitmez, eski maskeli biçimler seçilebilir); liste tahtada diske yazılmaz.
+  Mazeret kaydında serbest metin tutulmaz; mazeret türü tahtaya, icmale ve işlem kaydına girmez.
   Öğretmen PIN'i sunucuda yalnız geri çevrilemez özet olarak durur ve tahtaya gitmez. Yoklama
   kayıtları öğretim yılı sonunda silinir; öğrenci listesi dışa verilmez.
 - USB anahtar dosyasında ad, kod ya da okul adı yoktur; sunucu anahtarın gizli değerini değil, yalnız

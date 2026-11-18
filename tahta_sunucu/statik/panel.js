@@ -125,6 +125,12 @@
       metin: "Bu anahtar hemen geçersiz olur ve geri alınamaz. Bu anahtarla açılmış yoklama ekranları da kapanır.",
       baslik: function (n, ad) { return (ad ? ad + " a" : "A") + "nahtarı iptal edilsin mi?"; }
     },
+    /* Mazeret/izin (0.14.0): kayıt silinmez; tür ve dayanak boşaltılır, yoklamadaki asıl durum geri görünür */
+    mazeret_kaldir: {
+      ad: "eylem", deger: "iptal", evet: "Mazereti kaldır",
+      metin: "Kayıt kaldırılır; yoklamada yok yazılan saatler yeniden mazeretsiz görünür. Öğretmenin yoklama kaydı değişmez.",
+      baslik: function (n, ad) { return (ad ? ad + ": bu" : "Bu") + " mazeret/izin kaydı kaldırılsın mı?"; }
+    },
     sinav_sil: {
       ad: "eylem", deger: "sil", evet: "Sınavı sil",
       metin: "Sınav, salonları ve öğrenci listesi tamamen silinir; icmal de üretilemez. Geri alınamaz.",
@@ -1477,7 +1483,100 @@
     }
   }
 
+  /* ---- Şube defteri (0.14.0): fırça ile hücre düzeltme -----------------------------
+     Form JS'siz de aynı sonucu verir (hücre = gönder düğmesi, 303 ile aynı sayfa). Burada yalnız
+     fetch + yerinde güncelleme + aria-live iletisi eklenir; hata olursa hücre geri alınır.
+     Toplu işlemler ("Bütün gün yok", "Temizle", "Alındı") ve "Notu kaydet" düz gönderilir. */
+  var DEFTER_SIMGE = { yok: "Y", gec: "G", "var": "·" };
+  function defterKur() {
+    var form = document.querySelector("form[data-defter]");
+    if (!form || typeof window.fetch !== "function" || typeof window.URLSearchParams !== "function") return;
+    var ileti = $("defter-ileti");
+    function bildir(metin, hata) {
+      if (!ileti) return;
+      if (hata) ileti.setAttribute("data-hata", ""); else ileti.removeAttribute("data-hata");
+      ileti.textContent = metin;
+    }
+    function ciz(td, dugme, durum, simge, ozurlu, kapsam, duz) {
+      td.setAttribute("data-d", durum);
+      if (ozurlu) td.setAttribute("data-ozurlu", ""); else td.removeAttribute("data-ozurlu");
+      if (kapsam && durum === "var") td.setAttribute("data-kapsam", ""); else td.removeAttribute("data-kapsam");
+      if (duz) td.setAttribute("data-duz", ""); else td.removeAttribute("data-duz");
+      dugme.textContent = simge;
+    }
+    // Ok tuşlarıyla hücreden hücreye (Tab sırası değişmez; tıklanamayan hücreler atlanır).
+    var OK_YONU = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] };
+    form.addEventListener("keydown", function (olay) {
+      var yon = OK_YONU[olay.key];
+      var hedef = olay.target;
+      if (!yon || !hedef || hedef.name !== "hucre" || olay.altKey || olay.ctrlKey || olay.metaKey) return;
+      var hucre = hedef.closest("td");
+      var satir = hucre.parentNode;
+      var sira = Array.prototype.indexOf.call(satir.children, hucre);
+      var bulunan = null;
+      for (var adim = 0; adim < 80 && !bulunan; adim++) {
+        if (yon[0]) {
+          satir = yon[0] > 0 ? satir.nextElementSibling : satir.previousElementSibling;
+          hucre = satir ? satir.children[sira] : null;
+        } else {
+          hucre = yon[1] > 0 ? hucre.nextElementSibling : hucre.previousElementSibling;
+        }
+        if (!hucre) return;
+        bulunan = hucre.querySelector('button[name="hucre"]');
+      }
+      if (bulunan) { olay.preventDefault(); bulunan.focus(); }
+    });
+    form.addEventListener("submit", function (olay) {
+      var dugme = olay.submitter;
+      if (!dugme || dugme.name !== "hucre") return;
+      olay.preventDefault();
+      var td = dugme.closest("td");
+      var tr = dugme.closest("tr");
+      var govde = new URLSearchParams(new FormData(form));
+      govde.set("hucre", dugme.value);
+      var firca = govde.get("durum") || "yok";
+      var onceki = {
+        durum: td.getAttribute("data-d"), simge: dugme.textContent, ozurlu: td.hasAttribute("data-ozurlu"),
+        kapsam: td.hasAttribute("data-kapsam"), duz: td.hasAttribute("data-duz")
+      };
+      // Dokunuş hemen çizilir; yanıt gelince sunucunun dediğiyle eşitlenir (aynı duruma dokunmak düzeltmeyi kaldırır).
+      ciz(td, dugme, firca, DEFTER_SIMGE[firca] || onceki.simge, false, false, true);
+      td.setAttribute("aria-busy", "true");
+      fetch(form.getAttribute("action"), {
+        method: "POST", body: govde, credentials: "same-origin", headers: { Accept: "application/json" }
+      }).then(function (yanit) {
+        return yanit.json().then(function (veri) { return { tamam: yanit.ok, veri: veri }; });
+      }).then(function (sonuc) {
+        if (!sonuc.tamam) {
+          var hata = new Error(sonuc.veri && sonuc.veri.hata ? sonuc.veri.hata : "Kaydedilemedi.");
+          hata.notGerek = !!(sonuc.veri && sonuc.veri.not_gerek);
+          throw hata;
+        }
+        var v = sonuc.veri;
+        ciz(td, dugme, v.durum, v.simge, v.ozurlu, v.kapsam, v.duzeltme);
+        var etiket = dugme.getAttribute("aria-label") || "";
+        dugme.setAttribute("aria-label", etiket.replace(/: [^:]*$/, ": " + v.durum_metni));
+        var satir = tr && tr.querySelector("[data-satir-ozet]");
+        if (satir) satir.textContent = v.satir_ozeti.yok + " / " + v.satir_ozeti.gec;
+        var sutun = form.querySelector('[data-sutun-ozet="' + dugme.value.split(":")[1] + '"]');
+        if (sutun) sutun.textContent = v.sutun_ozeti.yok + " / " + v.sutun_ozeti.gec;
+        // Satırın "Temizle" düğmesi satırda düzeltme kaldıkça görünür (yanlış dokunuş sayfa yenilemeden geri alınır).
+        var temizle = tr && tr.querySelector("[data-temizle]");
+        if (temizle) temizle.hidden = !v.satir_duzeltme;
+        bildir(v.ileti || "", false);
+      }).catch(function (hata) {
+        ciz(td, dugme, onceki.durum, onceki.simge, onceki.ozurlu, onceki.kapsam, onceki.duz);
+        bildir(hata && hata.message ? hata.message : "Kaydedilemedi; bağlantıyı denetleyin.", true);
+        var notAlani = hata && hata.notGerek ? $("df-not") : null;
+        if (notAlani) notAlani.focus(); // not zorunlu: alan yapışkan şeritte, odak oraya gider
+      }).then(function () {
+        td.removeAttribute("aria-busy");
+      });
+    });
+  }
+
   panoKur();
+  defterKur();
   cizelgeKur();
   siralamaKur();
   sinavKur();

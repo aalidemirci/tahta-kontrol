@@ -19,7 +19,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.datastructures import UploadFile
 
-from . import acil, eokul, maske, metin, sinav, usb_anahtar, vt
+from . import acil, eokul, maske, metin, panel_defter, sinav, usb_anahtar, vt
 from . import yoklama as yk
 from .panel_program import bellekte_form, govde_uzunlugu
 
@@ -85,6 +85,9 @@ def kaydet(uygulama, y) -> None:
     def gun_al(deger, an: int):
         return yk.tarih_coz(deger) or yk.bugun(an)
 
+    # Şube defteri, son günler, mazeret/izin ve öğrenci görünümü (0.14.0) ayrı dosyadadır; önizleme deposu ortaktır.
+    panel_defter.kaydet(uygulama, y, depo)
+
     # ---- günlük görünüm --------------------------------------------------------------------------
     @uygulama.get("/yoklama", response_class=HTMLResponse)
     async def yoklama_sayfasi(istek: Request):
@@ -134,18 +137,29 @@ def kaydet(uygulama, y) -> None:
                 gun = yk.tarih_coz(kayit_["tarih"])
                 if eylem == "duzelt":
                     gecerli = {o["id"] for o in yk.sube_ogrencileri(b, kayit_["sube"])} | set(yk.yok_listesi(b, yoklama_id))
+                    onceki_gec = set(yk.gec_listesi(b, yoklama_id))
+                    gecerli |= onceki_gec
                     yok = yk.yok_idleri_coz([str(x) for x in form.getlist("yok")], gecerli)
+                    gec = yk.yok_idleri_coz([str(x) for x in form.getlist("gec")], gecerli)
+                    # Geç yalnız devrenin ilk dersinde eklenir; kayıtta zaten duran geç işareti korunabilir.
+                    if set(gec) - onceki_gec and not (gun and yk.gec_secilebilir(b, gun, kayit_["sube"], kayit_["ders_no"])):
+                        raise ValueError(yk.ILETI_GEC_ILK_DERS)
                     yk.yoklama_yaz(
                         b, tarih=kayit_["tarih"], sube=kayit_["sube"], ders_no=kayit_["ders_no"], ogretmen_id=kayit_["ogretmen_id"],
-                        kaynak=kayit_["kaynak"], kaydeden=kayit_["kaydeden"], tahta_id=None, yok=yok, kim=k["ad"], an=an,
+                        kaynak=kayit_["kaynak"], kaydeden=kayit_["kaydeden"], tahta_id=None, yok=yok, gec=gec, kim=k["ad"], an=an,
                         islem="duzelt", aciklama=aciklama,
                     )  # fmt: skip
                     vt.kayit_dus(b, k["ad"], "Yoklama düzeltildi", yk.kayit_metni(kayit_["sube"], kayit_["ders_no"], len(yok),
-                                 kayit_["kod"], gun), ip(istek))  # fmt: skip
+                                 kayit_["kod"], gun, len(gec)), ip(istek))  # fmt: skip
                     mesaj = "Düzeltme kaydedildi."
                 elif eylem == "sil":
                     n = len(yk.yok_listesi(b, yoklama_id))
                     b.execute("DELETE FROM yoklama WHERE id = ?", (yoklama_id,))
+                    # Ders saatinin başka kaydı kalmadıysa panel düzeltmeleri de gider: yetim düzeltme, sonradan yeniden
+                    # alınan yoklamanın üstünde durmasın (birleşim kuralı da kayıttan eski düzeltmeyi yok sayar).
+                    hucre = (kayit_["tarih"], kayit_["sube"], kayit_["ders_no"])
+                    if not b.execute("SELECT 1 FROM yoklama WHERE tarih = ? AND sube = ? AND ders_no = ? LIMIT 1", hucre).fetchone():
+                        b.execute("DELETE FROM yoklama_duzeltme WHERE tarih = ? AND sube = ? AND ders_no = ?", hucre)
                     # yoklama_iz kayıtla birlikte silindiği için gerekçe işlem kaydına yazılır (tc_kimlik_var'dan geçti).
                     vt.kayit_dus(b, k["ad"], "Yoklama silindi", yk.kayit_metni(kayit_["sube"], kayit_["ders_no"], n, kayit_["kod"], gun)
                                  + f" · gerekçe: {aciklama}", ip(istek))  # fmt: skip
@@ -193,7 +207,9 @@ def kaydet(uygulama, y) -> None:
                 ogrenciler = [{"id": o["id"], "okul_no": o["okul_no"], "ad_soyad": yk.ad_soyad(o)}
                               for o in yk.ogrenci_sirala(yk.sube_ogrencileri(b, sube))]  # fmt: skip
                 if ders_no:
-                    onceki = yk.onceki_yok(b, gun.isoformat(), sube, ders_no, ogretmen_id, "panel")
+                    # 0.14.0: form ders saatinin GEÇERLİ durumuyla açılır (en son kaydedilen kayıt + panel düzeltmesi);
+                    # kaydedilen gövde tam durum olduğu için başka kayıttaki işaretler kaybolmaz.
+                    onceki = sorted(yk.gecerli_durum(b, gun.isoformat(), sube, ders_no)[0] & {o["id"] for o in ogrenciler})
                     baska = yk.baska_yoklama_var(b, gun.isoformat(), sube, ders_no, ogretmen_id, "panel")
             ogretmenler = ogretmen_secenekleri(b)
         return y.sayfa(
@@ -484,7 +500,7 @@ def kaydet(uygulama, y) -> None:
             return red
         form = await istek.form()
         ayristirma = depo.al(str(form.get("onizleme", "")), k["id"])
-        if not ayristirma:
+        if not ayristirma or "satirlar" not in ayristirma:  # depo mazeret önizlemesiyle ortaktır
             return y.yonlendir(donus, "Önizlemenin süresi doldu; dosyayı yeniden yükleyin.", hata=True)
         with vt.islem() as b:
             s = yk.ogrenci_aktar(b, ayristirma, k["ad"], vt.simdi())
@@ -541,6 +557,10 @@ def kaydet(uygulama, y) -> None:
     def sinavda(b, tahta, an: int) -> bool:
         return sinav.tahta_sinav_penceresinde(b, tahta["id"], an)
 
+    def yetenekli(tahta) -> bool:
+        """Tahta yoklama_gec bildiriyor mu? Karar istekteki anahtara göre değil, yeteneğe göre verilir."""
+        return yk.GEC_YETENEGI in acil.yetenekler(tahta)
+
     @uygulama.post("/ajan/yoklama/oneri")
     async def ajan_oneri(istek: Request):
         cozulen, hata = await ajan_govdesi(istek)
@@ -552,7 +572,7 @@ def kaydet(uygulama, y) -> None:
             if sinavda(b, tahta, an):
                 return JSONResponse({"hata": yk.ILETI_SINAV}, status_code=409)
             istek_sube = govde.get("sube") if isinstance(govde.get("sube"), str) else None
-            return yk.oneri(b, tahta, an, istek_sube)
+            return yk.oneri(b, tahta, an, istek_sube, yetenekli(tahta))
 
     @uygulama.post("/ajan/yoklama/baslat")
     async def ajan_baslat(istek: Request):
@@ -583,8 +603,11 @@ def kaydet(uygulama, y) -> None:
             ayar_ = yk.ayar_al(b)
             belirtec, bitis = yk.oturum_ac(b, ogr["id"], tahta["id"], an, ayar_["oturum_dk"])
             vt.kayit_dus(b, kim, "Yoklama oturumu açıldı", f"öğretmen kodu {ogr['kod']}", ip(istek))
+            # PIN doğrulandı: öğretmenin programından ön seçim (yalnız şube ve ders no; ad ve ders adı yok).
+            program = yk.ogretmen_onerisi(b, ogr["id"], tahta, an, yetenekli(tahta))
         return {"belirtec": belirtec, "kalan_sn": bitis - an, "bosta_sn": ayar_["bosta_dk"] * 60,
-                "ogretmen": {"kod": ogr["kod"], "etiket": yk.ogretmen_etiketi(ogr["ad"], ogr["soyad"])}}  # fmt: skip
+                "ogretmen": {"kod": ogr["kod"], "etiket": yk.ogretmen_etiketi(ogr["ad"], ogr["soyad"])},
+                "oneri": program["oneri"], "subeler_once": program["subeler_once"]}  # fmt: skip
 
     def liste_denetimi(b, tahta, govde, an: int):
         """(oturum, şube, ders_no) ya da JSONResponse (hata)."""
@@ -612,17 +635,25 @@ def kaydet(uygulama, y) -> None:
             if isinstance(sonuc, JSONResponse):
                 return sonuc
             oturum, sube, ders_no = sonuc
-            tarih = yk.bugun(an).isoformat()
-            ogrenciler = yk.sube_ogrencileri(b, sube)
+            gun = yk.bugun(an)
+            tarih = gun.isoformat()
+            # Sıra okul numarasıdır (sayısal; numarasız öğrenci sonda); ajan sırayı korur.
+            ogrenciler = yk.ogrenci_sirala(sorted(yk.sube_ogrencileri(b, sube), key=lambda o: o["id"]))
             etiketler = maske.sinif_etiketleri(ogrenciler, yk.ayar_al(b)["maske"])
-            liste = sorted(({"id": o["id"], "etiket": etiketler[o["id"]]} for o in ogrenciler),
-                           key=lambda x: (metin.tr_sirala_anahtari(x["etiket"]), x["id"]))  # fmt: skip
             gecerli = {o["id"] for o in ogrenciler}
             ogretmen_id = oturum["ogretmen_id"] if oturum["tur"] == "ogretmen" else None  # idare oturumu öğretmensizdir
-            yok = [i for i in yk.onceki_yok(b, tarih, sube, ders_no, ogretmen_id, "tahta") if i in gecerli]
+            # Ders saatinin GEÇERLİ durumu (en son kaydedilen kayıt + panel düzeltmesi); kimin kaydı olduğu yanıtta yok.
+            # Mazeret bu yanıtı değiştirmez (tahtaya mazeret, geçmiş gün ve tür gitmez).
+            yok_k, gec_k, _alindi = yk.gecerli_durum(b, tarih, sube, ders_no)
+            gec_sec = yk.gec_secilebilir(b, gun, sube, ders_no)
+            yok = sorted(yok_k & gecerli)
+            gec = sorted(gec_k & gecerli) if gec_sec else []
+            eski_ajan = not yetenekli(tahta)
+            liste = [{"id": o["id"], "etiket": maske.gec_ekli(etiketler[o["id"]]) if eski_ajan and o["id"] in gec else etiketler[o["id"]]}
+                     for o in ogrenciler]  # fmt: skip
             baska = yk.baska_yoklama_var(b, tarih, sube, ders_no, ogretmen_id, "tahta")
-        yanit = {"sube": sube, "ders_no": ders_no, "ders_adi": "", "ogrenciler": liste, "yok": yok, "baska_yoklama": baska,
-                 "kalan_sn": oturum["bitis"] - an, "mevcut": len(liste)}  # fmt: skip
+        yanit = {"sube": sube, "ders_no": ders_no, "ders_adi": "", "ogrenciler": liste, "yok": yok, "gec": gec,
+                 "gec_secilebilir": gec_sec, "baska_yoklama": baska, "kalan_sn": oturum["bitis"] - an, "mevcut": len(liste)}  # fmt: skip
         if not liste:
             yanit["ileti"] = yk.ILETI_LISTE_YOK
         return yanit
@@ -644,22 +675,39 @@ def kaydet(uygulama, y) -> None:
                 return JSONResponse({"hata": yk.ILETI_LISTE_YOK}, status_code=409)
             if not isinstance(govde.get("yok"), list) or len(govde["yok"]) > yk.YOK_EN_COK:
                 return JSONResponse({"hata": "Geçersiz istek."}, status_code=400)
+            idler = {o["id"] for o in ogrenciler}
+            gun = yk.bugun(an)
+            gec_sec = yk.gec_secilebilir(b, gun, sube, ders_no)
+            gec_bilir = yetenekli(tahta)
+            # Yetenekli ajanda gec zorunludur (boş liste dahil): gövde öğretmenin gördüğü TAM durumdur.
+            if gec_bilir and (not isinstance(govde.get("gec"), list) or len(govde["gec"]) > yk.YOK_EN_COK):
+                return JSONResponse({"hata": "Geçersiz istek."}, status_code=400)
             try:
-                yok = yk.yok_idleri_coz(govde["yok"], {o["id"] for o in ogrenciler})
+                yok = yk.yok_idleri_coz(govde["yok"], idler)
+                gec = yk.yok_idleri_coz(govde["gec"], idler) if gec_bilir else None
             except ValueError as hata_:
                 return JSONResponse({"hata": str(hata_)}, status_code=409)
+            if gec is None:
+                # Eski ajan geçi bilmez: geçerli durumdaki geç öğrenciler bu kayda da geç yazılır; yalnız yeni
+                # "yok"a girenler geçten çıkar.
+                gec = sorted((yk.gecerli_durum(b, gun.isoformat(), sube, ders_no)[1] & idler) - set(yok)) if gec_sec else []
+            if set(yok) & set(gec):
+                return JSONResponse({"hata": yk.ILETI_HEM_YOK_HEM_GEC}, status_code=400)
+            if gec and not gec_sec:
+                return JSONResponse({"hata": yk.ILETI_GEC_ILK_DERS}, status_code=400)
             # 0.11.0: idare USB anahtarıyla açılan oturumda öğretmen yoktur; kayıt "kullanici:<ad>" adına yazılır.
             ogretmen_id, kaydeden, kim = yk.oturum_kaydedeni(oturum, tahta["ad"])
-            yk.yoklama_yaz(b, tarih=yk.bugun(an).isoformat(), sube=sube, ders_no=ders_no, ogretmen_id=ogretmen_id,
-                           kaynak="tahta", kaydeden=kaydeden, tahta_id=tahta["id"], yok=yok, kim=kim, an=an)  # fmt: skip
+            yk.yoklama_yaz(b, tarih=gun.isoformat(), sube=sube, ders_no=ders_no, ogretmen_id=ogretmen_id,
+                           kaynak="tahta", kaydeden=kaydeden, tahta_id=tahta["id"], yok=yok, gec=gec, kim=kim, an=an)  # fmt: skip
             b.execute("DELETE FROM yoklama_belirtec WHERE belirtec_ozet = ?", (oturum["belirtec_ozet"],))  # kaydet tek seferliktir
-            ayrinti = yk.kayit_metni(sube, ders_no, len(yok), oturum["kod"] if oturum["tur"] == "ogretmen" else None)
+            ayrinti = yk.kayit_metni(sube, ders_no, len(yok), oturum["kod"] if oturum["tur"] == "ogretmen" else None,
+                                     gec_sayisi=len(gec))  # fmt: skip
             if oturum["tur"] == "idare":
                 ayrinti += f", kullanıcı {oturum['kullanici_ad']}"
             if oturum["anahtar_kimlik"]:
                 ayrinti += f" · USB {oturum['anahtar_kimlik'][:4]}-{oturum['anahtar_kimlik'][4:]}"
             vt.kayit_dus(b, f"tahta:{tahta['ad']}", "Yoklama alındı", ayrinti, ip(istek))
-        return {"tamam": True, "yok_sayisi": len(yok), "mevcut": len(ogrenciler)}
+        return {"tamam": True, "yok_sayisi": len(yok), "gec_sayisi": len(gec), "mevcut": len(ogrenciler)}
 
     @uygulama.post("/ajan/yoklama/bitir")
     async def ajan_bitir(istek: Request):
@@ -709,4 +757,16 @@ def kaydet(uygulama, y) -> None:
 # ayarlar.html (bolum=yoklama): yoklama_ayari{etkin,maske,oturum_dk,bosta_dk}, yoklama_maskeleri{kod:ad},
 #   yoklama_sinirlari{alan:(en_az,en_cok)}, yoklama_ogrenci_sayisi. Alanlar: yk_etkin=1, yk_maske, yk_oturum_dk, yk_bosta_dk.
 #   Saklama 0.8.0'dan beri ayrı bölümdür (bolum=saklama, `saklama.py`).
+#
+# 0.14.0 ekleri (tahta uçlarının sözleşmesi tests/yoklama_sozlesme.json'dadır; şube defteri, son günler, mazeret/izin ve
+#   öğrenci görünümü panel_defter.py'dedir):
+#   g.satirlar[] += bayat (e-Okul'a işlendikten sonra değişti); hücre += gec (geç sayısı); kayit_id = en son kaydedilen kayıt.
+#   kayit += gec_sayisi, gec_secilebilir; kayit.ogrenciler[] += gec; kayit.izler[] += gec_eklenen[ad], gec_cikarilan[ad].
+#     Düzeltme formu: {eylem=duzelt, yok*, gec*, aciklama} (geç yalnız devrenin ilk dersinde eklenir).
+#   icmal.subeler[].ogrenciler[] += gec_saatler, gec_sayisi, ozurlu_saatler, ozurlu_sayisi; hucreler[Y|Ö|G|.|-];
+#     CSV'nin SONUNA iki sütun: "Geç Sayısı", "Özürlü Yok Sayısı". Mazeret türü hiçbir çıktıda yoktur.
+#   Bütün sayılar tek birleşim kuralından gelir (yoklama_defter.Veri.kumeler): hücrede panel düzeltmesi varsa o, yoksa o ders
+#     saatinin EN SON KAYDEDİLEN kaydı. /yoklama/gir formu ders saatinin geçerli durumuyla açılır.
+#   /ajan/yoklama/oneri += subeler_once, devre_adi, simdiki_ders_no, simdiki_bitti, oneri.ders_adaylari · /baslat += oneri, subeler_once ·
+#     /liste += gec, gec_secilebilir (sıra okul no) · /kaydet isteği += gec (yetenekli ajanda zorunlu), yanıtı += gec_sayisi.
 # =================================================================================================

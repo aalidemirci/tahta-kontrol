@@ -141,7 +141,7 @@ def test_ayar_sinirlari_ve_tam_ad_secenegi_reddedilir(panel, tahta):
     with vt.islem() as b:
         assert yk.ayar_al(b)["etkin"] is True
         vt.ayar_yaz(b, "yoklama", {"etkin": True, "maske": "tam"})  # elle yazılmış eski değer
-        assert yk.ayar_al(b)["maske"] == "ad_soyadbas"
+        assert yk.ayar_al(b)["maske"] == maske.VARSAYILAN_SINIF_BICIMI == "no_ad_soyadbas"
     assert 'name="yk_maske"' in panel.get("/ayarlar").text
 
 
@@ -271,10 +271,12 @@ def test_liste_maskeye_gore_etiket_uretir(panel, tahta, hazir):
     yanit = ajan(tahta, hazir["basliklar"], "liste", {"belirtec": belirtec, "sube": "10/A", "ders_no": 1})
     veri = yanit.json()
     etiketler = [o["etiket"] for o in veri["ogrenciler"]]
-    assert etiketler == ["Ayşe Y. (47)", "Ayşe Y. (50)", "Burak K.", "Cemre D."]
+    # 0.14.0: sıra okul numarasıdır (0215 < 1047 < 1102 < 1150), her biçimde.
+    assert etiketler == ["Cemre D.", "Ayşe Y. (47)", "Burak K.", "Ayşe Y. (50)"]
     for gizli in ("YILMAZ", "KAYA", "DOĞAN", "1047", "1102", "0215", "Deniz"):
         assert gizli not in yanit.text
     assert veri["mevcut"] == 4 and veri["yok"] == [] and veri["baska_yoklama"] is False
+    assert veri["gec"] == [] and veri["gec_secilebilir"] is True  # zil saati yok: 1. ders ilk ders sayılır
     ayar_kaydet(panel, yk_maske="no_basharf")
     yanit = ajan(tahta, hazir["basliklar"], "liste", {"belirtec": belirtec, "sube": "10/A", "ders_no": 1})
     etiketler = sorted(o["etiket"] for o in yanit.json()["ogrenciler"])
@@ -289,7 +291,7 @@ def test_etiket_cakismasi_numara_son_haneleriyle_cozulur():
         {"id": 3, "ad": "Ayşe", "soyad": "YAZ", "okul_no": "3150"},
         {"id": 4, "ad": "Elif Su", "soyad": "DEMİR", "okul_no": "9"},
     ]
-    sonuc = maske.sinif_etiketleri(ogrenciler)
+    sonuc = maske.sinif_etiketleri(ogrenciler, "ad_soyadbas")
     # İkinci çakışmada açık ad ile tam numara yan yana gelmez (M2): baş harfli biçime geçilir.
     assert sonuc == {1: "1047 A. Y.", 2: "2047 A. Y.", 3: "Ayşe Y. (50)", 4: "Elif Su D."}
     assert maske.sinif_etiketi("Elif Su", "DEMİR", "1047", "no_basharf") == "1047 E. S. D."
@@ -312,7 +314,8 @@ def test_oneri_programdan_sube_ve_ders_onerir(panel, tahta, hazir, saat):
     saat.ayarla(an(16, 8, 30))  # 1. ders sürüyor
     yanit = ajan(tahta, hazir["basliklar"], "oneri")
     veri = yanit.json()
-    assert veri["oneri"] == {"sube": "10/A", "ders_no": 1, "ders_adi": "", "ogretmen": None}  # tahta.subeler tek şube
+    assert veri["oneri"] == {"sube": "10/A", "ders_no": 1, "ders_adi": "", "ogretmen": None, "ders_adaylari": []}  # tek şube
+    assert veri["subeler_once"] == ["10/A"] and veri["devre_adi"] == "" and veri["simdiki_ders_no"] == 1
     assert veri["subeler"] == ["10/A", "10/B"] and veri["tarih"] == "2026-11-16"
     assert veri["tarih_yazi"] == "16.11.2026 Pazartesi"
     assert "Ayşe" not in yanit.text and "1047" not in yanit.text
@@ -343,7 +346,7 @@ def test_kaydet_sonrasi_belirtec_tek_kullanimlik(panel, tahta, hazir):
     belirtec = baslat(tahta, hazir).json()["belirtec"]
     govde = {"belirtec": belirtec, "sube": "10/A", "ders_no": 1, "yok": [ogrenci_id("1047"), ogrenci_id("0215")]}
     yanit = ajan(tahta, hazir["basliklar"], "kaydet", govde)
-    assert yanit.json() == {"tamam": True, "yok_sayisi": 2, "mevcut": 4}
+    assert yanit.json() == {"tamam": True, "yok_sayisi": 2, "gec_sayisi": 0, "mevcut": 4}
     assert ajan(tahta, hazir["basliklar"], "kaydet", govde).status_code == 401
     assert sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Yoklama alındı'")[0]["ayrinti"] == f"10/A 1. ders, 2 yok, öğretmen kodu {hazir['kod']}"
 
@@ -367,21 +370,26 @@ def tahtadan_yoklama(tahta, h, sube: str, ders_no: int, yok_nolar: list[str]):
     assert yanit.status_code == 200, yanit.text
 
 
-def test_iki_ogretmenin_kaydi_icmalde_birlesir(panel, tahta, hazir):
+def test_iki_ogretmenin_kaydinda_en_son_kaydedilen_tam_durum_gecerlidir(panel, tahta, hazir):
+    """0.14.0 birleşim kuralı: ikinci öğretmenin listesi ders saatinin GEÇERLİ durumuyla açılır (ilk öğretmenin
+    işareti hazır gelir) ve kaydı tam durumdur; ilk öğretmenin kaydı olduğu gibi durur."""
     tahtadan_yoklama(tahta, hazir, "10/A", 3, ["1047"])
     ikinci_id, ikinci_kod = ogretmen_ekle(panel, "Can", "Demir")
     ikinci = dict(hazir, kod=ikinci_kod, pin=pin_uret(panel, ikinci_id))
     belirtec = baslat(tahta, ikinci).json()["belirtec"]
     liste = ajan(tahta, hazir["basliklar"], "liste", {"belirtec": belirtec, "sube": "10/A", "ders_no": 3}).json()
-    assert liste["baska_yoklama"] is True and liste["yok"] == []
-    ajan(tahta, hazir["basliklar"], "kaydet", {"belirtec": belirtec, "sube": "10/A", "ders_no": 3, "yok": [ogrenci_id("1102")]})
+    assert liste["baska_yoklama"] is True and liste["yok"] == [ogrenci_id("1047")]
+    ajan(tahta, hazir["basliklar"], "kaydet", {"belirtec": belirtec, "sube": "10/A", "ders_no": 3,
+                                               "yok": [ogrenci_id("1047"), ogrenci_id("1102")]})  # fmt: skip
+    ilk = sorgu("SELECT id FROM yoklama WHERE ogretmen_id = ?", hazir["ogretmen_id"])[0]["id"]
+    assert [s["ogrenci_id"] for s in sorgu("SELECT ogrenci_id FROM yoklama_yok WHERE yoklama_id = ?", ilk)] == [ogrenci_id("1047")]
     with vt.islem() as b:
         veri = yk.icmal(b, yk.bugun(), "10/A")
     s = veri["subeler"][0]
     assert [o["okul_no"] for o in s["ogrenciler"]] == ["1047", "1102"]
     assert s["alanlar"][2]["metin"] == "A. Örnek, C. Demir"
     sayfa = panel.get("/yoklama").text
-    assert "2 yoklama birleştirildi" in sayfa and ">2 yok<" in sayfa
+    assert "2 kayıt; en son kaydedilen geçerli" in sayfa and ">2 yok<" in sayfa
 
 
 def test_yok_isaretsiz_yoklama_tam_sayilir(panel, tahta, hazir):
@@ -432,7 +440,8 @@ def test_icmal_metni_ve_csv_bicimi(panel, tahta, hazir):
     assert yanit.headers["content-disposition"] == 'attachment; filename="yoklama-icmali-2026-11-16.csv"'
     govde = yanit.content.decode("utf-8")
     assert govde.startswith("﻿Tarih;Şube;Okul No;Adı;Soyadı;Yok Ders Saatleri;Yok Ders Saati Sayısı;")
-    assert "16.11.2026;10/A;1047;Ayşe;YILMAZ;1,2;2;2\r\n" in govde
+    assert govde.splitlines()[0].endswith(";Yoklama Alınan Ders Saati Sayısı;Geç Sayısı;Özürlü Yok Sayısı")  # yeni sütunlar sonda
+    assert "16.11.2026;10/A;1047;Ayşe;YILMAZ;1,2;2;2;0;0\r\n" in govde
     assert ";'=HYPERLINK(1);" in govde
     kayitlar = [s["islem"] for s in sorgu("SELECT islem FROM kayit")]
     assert "Devamsızlık icmali indirildi (CSV)" in kayitlar

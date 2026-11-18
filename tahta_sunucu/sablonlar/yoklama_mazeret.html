@@ -1,0 +1,72 @@
+{% extends "taban.html" %}
+{% block baslik %}Mazeret/izin · Yoklama · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Mazeret/izin (0.14.0). Bağlam: panel_defter.py SÖZLEŞME. Serbest açıklama alanı YOKTUR (sağlık verisi birikmesin);
+   tür yalnız bu sayfada ve öğrenci görünümünün mazeret bölümünde görünür. Giriş iki adımdır: önizle → onayla.
+   Kaldırma tetikleri type="button" + data-onay="mazeret_kaldir" (JS yoksa hiçbir şey gönderilmez). #}
+{% with bolum='mazeret', bas_baslik='Mazeret/izin',
+        bas_aciklama='İzinli, raporlu, mazeretli ya da görevli öğrenciyi girin: yoklamada "yok" yazıldığı saatler defterde "özürlü" (Ö) görünür. Öğretmenin yoklama kaydı değişmez.' %}
+{% include "_yoklama_bas.html" %}
+{% endwith %}
+<p class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ k5_notu }} Belge içeriği, tanı ve açıklama yazılmaz; gerekçe e-Okul'da ve öğrenci dosyasında durur.</p>
+
+<form method="post" action="/yoklama/mazeret/onizle" class="kutu" aria-labelledby="mz-baslik">
+  <h2 id="mz-baslik">Yeni kayıt</h2>
+  <label for="mz-nolar">Okul numaraları</label>
+  <textarea id="mz-nolar" name="nolar" rows="2" required class="alan-genis" aria-describedby="mz-nolar-ipucu" placeholder="1047, 1102">{{ girdi.nolar }}</textarea>
+  <p class="ipucu" id="mz-nolar-ipucu">Virgül, boşluk ya da satırla ayırın; en çok {{ no_en_cok }} numara. Ad yazmayın; önizlemede adlar gösterilir.</p>
+  <div class="satir-form">
+    <div><label for="mz-bas">Başlangıç</label><input id="mz-bas" type="date" name="bas" value="{{ girdi.bas }}" min="{{ en_erken }}" max="{{ en_gec }}" required></div>
+    <div><label for="mz-bit">Bitiş</label><input id="mz-bit" type="date" name="bit" value="{{ girdi.bit }}" min="{{ en_erken }}" max="{{ en_gec }}" required aria-describedby="mz-tarih-ipucu"></div>
+  </div>
+  <p class="ipucu" id="mz-tarih-ipucu">En çok {{ gun_en_cok }} gün; bitiş en geç {{ en_gec_metni }}.</p>
+  <fieldset class="mz-kapsam">
+    <legend>Kapsam</legend>
+    <label class="satir"><input type="radio" name="kapsam" value="tam" {% if girdi.kapsam != 'ders' %}checked{% endif %}> Tam gün</label>
+    <label class="satir"><input type="radio" name="kapsam" value="ders" {% if girdi.kapsam == 'ders' %}checked{% endif %}> Ders aralığı:</label>
+    <span class="satir-ici"><label for="mz-ders-bas" class="gizli">İlk ders</label><input id="mz-ders-bas" type="number" name="ders_bas" min="1" max="20" value="{{ girdi.ders_bas }}" class="alan-kisa" inputmode="numeric">
+      <span aria-hidden="true">–</span>
+      <label for="mz-ders-bit" class="gizli">Son ders</label><input id="mz-ders-bit" type="number" name="ders_bit" min="1" max="20" value="{{ girdi.ders_bit }}" class="alan-kisa" inputmode="numeric"> . ders</span>
+    <p class="ipucu">Ders aralığında sabah ve öğle şubelerini ayrı girin (ders numaraları devreye göredir).</p>
+  </fieldset>
+  <div class="satir-form">
+    <div><label for="mz-tur">Tür</label>
+      <select id="mz-tur" name="tur" required><option value="">Seçin</option>{% for kod, ad in turler.items() %}<option value="{{ kod }}" {% if kod == girdi.tur %}selected{% endif %}>{{ ad }}</option>{% endfor %}</select></div>
+    <div><label for="mz-dayanak">Dayanak (isteğe bağlı)</label>
+      <select id="mz-dayanak" name="dayanak">{% for kod, ad in dayanaklar.items() %}<option value="{{ kod }}" {% if kod == girdi.dayanak %}selected{% endif %}>{{ ad }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="dugme-satiri"><button class="ana">Önizle</button></div>
+</form>
+
+<h2 id="liste">Kayıtlar <span class="not">(geçerli, ilerideki ve son {{ liste_gun }} günde biten ya da kaldırılanlar)</span></h2>
+{% if liste %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="liste">
+<table class="mazeret-tablo">
+  <thead><tr><th scope="col">Şube</th><th scope="col">No</th><th scope="col">Ad Soyad</th><th scope="col">Tarih</th><th scope="col">Kapsam</th><th scope="col" class="yazdirma">Tür</th><th scope="col" class="yazdirma">Dayanak</th><th scope="col">Giren</th><th scope="col" class="yazdirma">İşlem</th></tr></thead>
+  <tbody>
+  {% for m in liste %}
+  <tr{% if m.iptal %} class="pasif"{% endif %}>
+    <td data-etiket="Şube">{{ m.sube }}</td><td data-etiket="No" class="kod">{{ m.okul_no }}</td>
+    <th scope="row" data-etiket="Ad Soyad"><a href="/yoklama/ogrenci/{{ m.ogrenci_id }}">{{ m.ad_soyad }}</a></th>
+    <td data-etiket="Tarih">{{ m.aralik }}{% if m.durum == 'bitti' %} <span class="not">(bitti)</span>{% elif m.durum == 'ileride' %} <span class="not">(ileride)</span>{% endif %}</td>
+    <td data-etiket="Kapsam">{{ m.kapsam }}</td>
+    <td data-etiket="Tür" class="yazdirma">{% if m.iptal %}<span class="not">kaldırıldı</span>{% else %}{{ m.tur_adi }}{% endif %}</td>
+    <td data-etiket="Dayanak" class="yazdirma">{{ m.dayanak_adi or '—' }}</td>
+    <td data-etiket="Giren">{{ m.giren }} <span class="not">{{ m.zaman }}</span>{% if m.iptal %}<br><span class="not">kaldıran: {{ m.iptal_metni }}</span>{% endif %}</td>
+    <td data-etiket="İşlem" class="yazdirma">
+      {% if not m.iptal %}
+      <form method="post" action="/yoklama/mazeret/{{ m.id }}/iptal" id="mazeret-iptal-{{ m.id }}" class="satir-ici">
+        <button type="button" class="tehlike kucuk" data-onay="mazeret_kaldir" data-onay-ad="No {{ m.okul_no }}, {{ m.aralik }}" aria-haspopup="dialog">Kaldır…<span class="gizli"> ({{ m.okul_no }})</span></button>
+      </form>
+      {% else %}—{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="bos-not">Kayıtlı mazeret/izin yok.</p>
+{% endif %}
+<p class="not">Bu kayıtlar {{ silinme }}. Liste dışa aktarılmaz; yalnız yazdırılır.</p>
+{% endblock %}

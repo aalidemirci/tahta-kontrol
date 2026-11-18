@@ -153,7 +153,7 @@
     <select id="yk_maske" name="yk_maske" aria-describedby="yk-maske-not" class="alan-oto">
       {% for kod, ad in yoklama_maskeleri.items() %}<option value="{{ kod }}" {% if yoklama_ayari.maske == kod %}selected{% endif %}>{{ ad }}</option>{% endfor %}
     </select>
-    <p class="not" id="yk-maske-not">Tahta bütün sınıfa açık ekrandır; gerektiğinden fazla bilgi göstermeyin. Ad ve okul numarası tahtada hiçbir zaman ikisi birden açık görünmez.</p>
+    <p class="not" id="yk-maske-not">Tahta bütün sınıfa açık ekrandır; gerektiğinden fazla bilgi göstermeyin. Liste yalnız PIN ya da USB anahtarla açılır ve okul numarası sırasıyla gelir. Tam soyad ve T.C. kimlik numarası hiçbir biçimde tahtaya gitmez.</p>
     <div class="alan-cifti">
       <div><label for="yk_oturum_dk">Yoklama oturumu en çok (dk)</label>
         <input id="yk_oturum_dk" name="yk_oturum_dk" type="number" required class="alan-sayi" min="{{ yoklama_sinirlari.oturum_dk[0] }}" max="{{ yoklama_sinirlari.oturum_dk[1] }}" value="{{ yoklama_ayari.oturum_dk }}" aria-describedby="yk-oturum-not">
@@ -200,7 +200,7 @@
 <h2 id="saklama">Kişisel veri saklama</h2>
 <section class="kutu" aria-labelledby="saklama">
   {% if mesaj and ileti_yeri == 'saklama' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
-  <p class="ipucu" id="saklama-ipucu">Ders yoklaması, sınav listeleri ve sınav yoklaması, boş ders uyarıları öğretim yılı sonuna kadar saklanır.
+  <p class="ipucu" id="saklama-ipucu">Ders yoklaması (mazeret/izin kayıtları ve şube defteri düzeltmeleri dahil), sınav listeleri ve sınav yoklaması, boş ders uyarıları öğretim yılı sonuna kadar saklanır.
     Bitiş tarihi geçince (ertesi gün) o tarihe kadar oluşan kayıtlar kalıcı olarak silinir; tarihten sonra oluşanlar bir sonraki
     yılın bitişine kadar kalır. Tarih boşsa hiçbir kayıt kendiliğinden silinmez. Tarih geçtikten sonra yeni öğretim yılının
     bitiş tarihini girin. Öğrenci listesi bu silmeye girmez; yıl sonunda <a href="/ogrenciler">Öğrenci listesi</a> sekmesinden silinir

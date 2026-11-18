@@ -1,0 +1,64 @@
+{% extends "taban.html" %}
+{% import "_yoklama_hucre.html" as yh %}
+{% block baslik %}Öğrenci devam görünümü · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Öğrenci görünümü (0.14.0; salt okunur). Bağlam: panel_defter.py SÖZLEŞME — o, gun_sayisi, adli_not, n_gun_notu.
+   Sayfa başlığına (sekme adı, tarayıcı geçmişi) öğrenci adı yazılmaz. Mazeret TÜRÜ yalnız buradaki mazeret bölümünde
+   ve mazeret sayfasında görünür; yazdırmada tür sütunu çıkmaz. Dışa aktarılmaz. #}
+<p class="geri yazdirma"><a href="/yoklama/sube?sube={{ o.sube | urlencode }}">← Şube defteri · {{ o.sube }}</a></p>
+{% with bolum='sube', bas_baslik=o.ad_soyad ~ ' · ' ~ o.okul_no ~ ' · ' ~ o.sube,
+        bas_aciklama='Son ' ~ gun_sayisi ~ " öğretim gününün yoklaması. Yardımcı kayıttır; resmî devamsızlık kaydı e-Okul'dadır." %}
+{% include "_yoklama_bas.html" %}
+{% endwith %}
+<div class="arac-cubugu yazdirma" role="toolbar" aria-label="Öğrenci görünümü">
+  <button type="button" data-yazdir hidden>Yazdır</button>
+  <a class="dugme" href="/yoklama/mazeret?ogrenci={{ o.id }}">Mazeret/izin gir</a>
+  {% if o.pasif %}<span class="rozet" data-durum="bilgi">listeden çıkmış</span>{% endif %}
+  {{ yh.rozet(o.rozet, true) }}
+</div>
+<p class="not">{{ n_gun_notu }}</p>
+
+<h2 id="og-baslik">Yoklama <span class="not">({{ o.yok }} yok, {{ o.gec }} geç ders saati)</span></h2>
+{% if o.satirlar %}
+{{ yh.lejant(true, true, false) }}
+<div class="defter-kap" role="region" tabindex="0" aria-labelledby="og-baslik">
+<table class="defter defter-ogrenci">
+  <caption class="gizli">Son {{ o.satirlar | length }} öğretim günü: satırlar günler, sütunlar ders saatleri.</caption>
+  <thead><tr><th scope="col">Gün</th>{% for n in o.sutunlar %}<th scope="col" class="dh"><abbr title="{{ n }}. ders">{{ n }}</abbr></th>{% endfor %}<th scope="col" class="sayi-hucre"><abbr title="Yok / geç ders saati">Y / G</abbr></th></tr></thead>
+  <tbody>
+  {% for s in o.satirlar %}
+  <tr>
+    <th scope="row"><a href="/yoklama/sube?sube={{ o.sube | urlencode }}&amp;tarih={{ s.tarih }}">{{ s.yazi }}</a></th>
+    {% for h in s.hucreler %}{{ yh.salt(h) }}{% endfor %}
+    <td class="sayi-hucre ozet">{{ s.yok }} / {{ s.gec }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="bos-not">Son günlerde bu şube için öğretim günü ya da yoklama yok.</p>
+{% endif %}
+
+<h2 id="og-mazeret">Mazeret/izin kayıtları</h2>
+{% if o.mazeretler %}
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="og-mazeret">
+<table>
+  <thead><tr><th scope="col">Tarih</th><th scope="col">Kapsam</th><th scope="col" class="yazdirma">Tür</th><th scope="col" class="yazdirma">Dayanak</th><th scope="col">Durum</th><th scope="col">Giren</th></tr></thead>
+  <tbody>
+  {% for m in o.mazeretler %}
+  <tr{% if m.iptal %} class="pasif"{% endif %}>
+    <td data-etiket="Tarih">{{ m.aralik }}</td><td data-etiket="Kapsam">{{ m.kapsam }}</td>
+    <td data-etiket="Tür" class="yazdirma">{{ m.tur_adi or '—' }}</td><td data-etiket="Dayanak" class="yazdirma">{{ m.dayanak_adi or '—' }}</td>
+    <td data-etiket="Durum">{% if m.iptal %}kaldırıldı <span class="not">({{ m.iptal_metni }})</span>{% elif m.durum == 'bitti' %}bitti{% elif m.durum == 'ileride' %}ileride{% else %}<span class="rozet" data-durum="bilgi">geçerli</span>{% endif %}</td>
+    <td data-etiket="Giren">{{ m.giren }} <span class="not">{{ m.zaman }}</span></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="not">Tür yalnız bu bölümde ve <a href="/yoklama/mazeret">Mazeret/izin</a> sayfasında görünür; defterde, icmalde ve yazdırmada yalnız "özürlü" (Ö) yazar.</p>
+{% else %}
+<p class="bos-not">Mazeret/izin kaydı yok.</p>
+{% endif %}
+{% endblock %}

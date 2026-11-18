@@ -15,7 +15,7 @@ import json
 import re
 
 import pytest
-from yardimci import an, ileti, kimlik, kur_ve_gir, sorgu, tahta_ekle, zil_elle
+from yardimci import an, bekle, ileti, kimlik, kur_ve_gir, sorgu, tahta_ekle, zil_elle
 
 from tahta_sunucu import vt
 from tahta_sunucu import yoklama as yk
@@ -156,13 +156,21 @@ def test_yoklama_onerisi_saate_gore_dogru_devrenin_subesini_ve_dersini_secer(tah
                                                                                 ilk_baslangic):  # fmt: skip
     saat.ayarla(an(16, *saat_))
     veri = oneri(tahta, yoklamali["z04"])
-    assert (veri["oneri"]["sube"], veri["oneri"]["ders_no"]) == (sube, ders_no)
+    # 0.14.0: yoklama_gec bildirmeyen eski ajana "biten ders" önerilmez (şube önerisi kalır, ders seçilmez).
+    eski_ajan_dersi = None if saat_ == (12, 30) else ders_no
+    assert (veri["oneri"]["sube"], veri["oneri"]["ders_no"]) == (sube, eski_ajan_dersi)
+    bekle(tahta, yoklamali["z04"], durum(yetenekler=[*YETENEKLER, "yoklama_gec"]), surum="0.14.0")
+    yeni = oneri(tahta, yoklamali["z04"])["oneri"]
+    # Yetenekli ajan: teneffüste biten ve başlayacak ders birlikte tutuyorsa ders seçilmez, iki aday döner.
+    beklenen = (sube, None, [1, 2]) if saat_ == (13, 45) else (sube, ders_no, [])
+    assert (yeni["sube"], yeni["ders_no"], yeni["ders_adaylari"]) == beklenen
     assert veri["ders_saatleri"][0]["baslangic"] == ilk_baslangic and len(veri["ders_saatleri"]) == 6
 
 
 def test_programsiz_iki_subeli_tahtada_devresi_suren_sube_onerilir(tahta, yoklamali, saat):
     saat.ayarla(an(16, 9, 20))
-    assert oneri(tahta, yoklamali["z06"])["oneri"] == {"sube": "9/A", "ders_no": 3, "ders_adi": "", "ogretmen": None}
+    assert oneri(tahta, yoklamali["z06"])["oneri"] == {"sube": "9/A", "ders_no": 3, "ders_adi": "", "ogretmen": None,
+                                                       "ders_adaylari": []}  # fmt: skip
     saat.ayarla(an(16, 15, 0))
     assert oneri(tahta, yoklamali["z06"])["oneri"]["sube"] == "11/C"
     saat.ayarla(an(16, 20, 0))  # iki devre de bitti: öneri yok, öğretmen seçer

@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.13.1)
+# Saha denemesi kılavuzu (0.14.0)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -52,6 +52,9 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Yüzer düğme (0.13.1): tıklama, menü, sürükleme, odaklı tam ekran üstünde görünme, ikinci çalışma alanı | Debian 12 kabı + Xvfb, `xdotool`; xfwm4, Mutter, Muffin, Openbox | xfwm4'te tamamı çalıştı; Mutter/Muffin'de "masaüstünü göster" düğmeyi gizledi; Openbox'ta odaklı tam ekranın üstüne çıkamadı. Gerçek dokunma olayı üretilemedi |
 | Kilit ekranı gün programı (0.13.1): `scripts/ekran_olcum.py` üç yeni senaryo, 1024×768, 1366×768, 1920×1080, 3840×2160 | Debian 12 kabı + Xvfb (Openbox) | "TAŞTI" ve "OYNADI" yok (en dar pay 1366×768'de 767/768 px) |
 | **Yüzer düğme, gün programı ve öğretmen programı gerçek ETAP tahtasında** | — | **Denenmedi** (§3.12) |
+| Yoklama yeniden tasarımı (0.14.0), tahta: `scripts/ekran_olcum.py` 19 yoklama senaryosu (40 ve 60 şube, 12 ders, teneffüs, ikili eğitim, saatsiz, 30/42/48/56/70 öğrenci, 4 haneli no + uzun adlar, ilk ders/geç, eski sunucu biçimi), 1024×768, 1366×768, 1920×1080, 3840×2160 | Debian 12 kabı + Xvfb (Openbox), uydurma veri | Hepsi sığdı; kaydırma alanı ve kesik etiket yok. Dokunuş döngüsü ve akış yalnız testlerle ve kapta sanal dokunuşla |
+| Yoklama yeniden tasarımı (0.14.0), panel: şube defteri (beş gün ve gün kipi, fırça, Alındı, notlu/notsuz düzeltme), mazeret önizle → kaydet, son günler, öğrenci görünümü; 1366×768, 1920×1080 ve 800 px; şube defterinin A4 yatay PDF'i | Deneme sunucusu (ayrı veri klasörü, 8797), tarayıcı; uydurma 2 şube × 35 öğrenci × 6 gün | Çalıştı; 8 ders × 5 gün 1366 px'te yatay kaydırmasız |
+| **Yoklama yeniden tasarımı gerçek ETAP tahtasında ve gerçek sınıfta** (dokunma, süre ölçümü, gerçek sınıf listesi) | — | **Denenmedi** (§3.14) |
 | **Gerçek ETAP tahtası** | — | İlk deneme 16.11.2026 (0.8.0): bulgular G1–G3, `docs/tasarim.md` §5.1 |
 | Kurulum dosyasının başka bir bilgisayara kurulması | — | Denenmedi |
 | Gerçek kapatma / yeniden başlatma / uzaktan açma | — | Denenmedi (kapta benzetim) |
@@ -477,6 +480,44 @@ henüz denenmedi.
 | S3 | "Şimdi denetle" (GitHub'a ulaşılamıyorken) | En geç birkaç saniyede yanıt; panel donmaz | |
 | S4 | Kutuyu kaldırıp "Güncelleme ayarını kaydet" | "Denetim kapalı"; "Şimdi denetle" düğmesi görünmez; panodaki yeni sürüm notu (varsa) kalkar | |
 | S5 | Yeni sürüm yayımlandığında yönetici ve idareci hesabıyla pano | Not yalnız yöneticide; bağlantı GitHub'daki sürüm sayfasını açar; program kendiliğinden hiçbir şey indirmez | |
+
+### 3.14 Yoklama yeniden tasarımı (0.14.0)
+
+Hazırlık: sunucuyu yükseltmeden önce şifreli yedek alın (şema değişir). Ajan değişti: önce tek tahtayı
+güncelleyin, yeni ekran yardımcısı için oturumu yeniden açın. Ayarlar › Ders yoklaması etkin, öğrenci
+listesi ve bir deneme öğretmeni (PIN pusulası) hazır; tahtanın "Şube(ler)" alanı dolu; varsa öğretmen
+programı aktarılmış. Sınıf listesi, ekran görüntüsü ve fotoğraf depoya girmez (`saha/`); buraya yalnız
+süre, sayı ve evet/hayır yazılır. Kâğıt yoklama denemede de alınır (yardımcı kayıt).
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| T1 | **Süre ölçümü:** gerçek sınıfta, ders sürerken öğretmen "Yoklama al"a dokunup kaydedene kadar geçen süre (üç ayrı derste; öğrenci sayısını yazın) | PIN dahil 1 dakikanın altında; şube ve ders için kaydırma ya da ikinci dokunuş gerekmiyor | |
+| T2 | Aynı ölçüm, tahtanın şubesi olmayan (ortak) derslikte | PIN → seçim ekranı; şimdiki ders seçili ("● … · şimdi"); şubeye TEK dokunuşla liste açılır | |
+| T3 | Seçim ekranı, okulun bütün şubeleriyle (şube sayısını yazın) | Tek ekranda, kaydırmasız; düğmeler parmakla rahat seçiliyor; yanlış şubeye dokunma yok | |
+| T4 | Liste: sıra ve etiket | Okul no sırasında; "123 Ayşe Y." arka sıradan okunuyor; uzun adlarda soyadın baş harfi kesilmiyor; tam soyad yok | |
+| T5 | En kalabalık şubede liste (mevcudu yazın) | Kaydırmasız tek sayfa (56'ya kadar); en küçük düğmeye de tek dokunuşla doğru basılıyor | |
+| T6 | Devrenin ilk dersinde bir öğrenciye bir, bir başkasına iki kez dokunun; kaydedin | Birinci YOK (kırmızı), ikinci GEÇ (kehribar, kalın kenar); alt çubuk "Yok: 1 · Geç: 1"; ileti "Kaydedildi: 1 yok, 1 geç." | |
+| T7 | İkinci derste aynı öğrenciye iki kez dokunun; ikili eğitimde öğle devresinin ilk dersini de deneyin | İkinci derste geç yok (var ↔ yok); öğlenin ilk dersinde geç var | |
+| T8 | İlk dersin yoklamasını yeniden açın (aynı ya da başka öğretmen) | Kayıtlı YOK ve GEÇ işaretli gelir; yok öğrenci tek dokunuşla geç, geç öğrenci tek dokunuşla var olur | |
+| T9 | Teneffüste (biten dersten sonraki ilk dakikalarda), öğretmen programı olmayan şubede yoklama açın | Liste kendiliğinden açılmaz; "biten N. ders" / "başlayacak N+1. ders" iki düğme vurgulu, tek dokunuşla seçilir | |
+| T10 | Teneffüste, programında yalnız biten (ya da yalnız başlayacak) dersi olan öğretmenle | O ders seçili gelir; üst satırda ders numarası ve saat büyük yazıyla okunur | |
+| T11 | Tahtanın şubesi 10/A iken programında o saatte başka şube olan öğretmen PIN girsin | Liste açılmaz; seçim ekranında tahtanın şubesi seçili, öğretmeninki ★ satırında; ikisi de tek dokunuş | |
+| T12 | Programda olmayan bir şube ve dersi seçip kaydedin | Engellenmez; kayıt panelde görünür | |
+| T13 | [Temizle] ve yanlışlıkla dokunma | Temizle ilk dokunuşta silmez ("Hepsini sil (n)"), 4 sn içinde ikinci dokunuş siler; KAYDET'e yakın değil | |
+| T14 | 56'dan kalabalık şube varsa | "Sonraki sayfa ›"; ikinci sayfa görülmeden KAYDET çıkmaz; işaretler sayfa değişince korunur | |
+| T15 | Güncellenmemiş (eski ajanlı) ikinci tahtada yoklama | Eski ekran, ama etikette numara var; geç sunulmaz; ilk derste başka tahtadan geç yazılmış öğrenci "(geç)" ekiyle görünür ve kaydedince geçi silinmez | |
+| T16 | Tahtada `durum.json` ve `journalctl -u tahta-ajan` | Öğrenci adı, numara, geç listesi, şube önerisi, belirteç yok | |
+| D1 | Panel: Yoklama › Şube defteri (1366×768 ekranlı idare bilgisayarında) | Son beş öğretim günü; hafta sonu ve tatil yok; okulun ders sayısıyla yatay kaydırma yok (ders sayısını yazın); rozet ve gün şeridi her satırda | |
+| D2 | Üç gündür alınan bütün derslerde yok olan bir öğrenci | "3 gündür" vurgulu rozet; Yoklama › son günler listesinde de var; yoklama alınmamış gün zinciri bozmuyor | |
+| D3 | Gün kipi: fırçayla yok yazın, aynı hücreye yeniden tıklayın; öğretmenin "yok"unu notsuz "var" yapmayı deneyin | Yerinde güncellenir; ikinci tıklama düzeltmeyi kaldırır; notsuz var reddedilir, notla olur (hücre "V") | |
+| D4 | Yoklaması alınmamış saatte hücreye tıklayın; sonra sütun başlığından "Alındı" | Hücre tıklanamaz; "Alındı" onay sorar; gün boyu yok olanlar seçenekle yok yazılır | |
+| D5 | D3'teki düzeltmeden sonra öğretmen aynı ders saatini tahtadan yeniden kaydetsin | Tahta listesi düzeltilmiş durumla açılır; kaydedilen son durum geçerli olur (§17 soru 65: bu davranış uygun mu?) | |
+| D6 | Mazeret/izin: iki numara (biri yanlış), üç gün, tür ve dayanak | Önizleme bulunamayan numarayı gösterir; onaydan sonra defterde yok hücreleri "Ö"; hücrede, icmalde, CSV'de, işlem kaydında tür yok | |
+| D7 | Mazereti kaldırın | Onay sorar; asıl durum (Y) geri görünür; listede tür göstermeden "kaldırıldı" | |
+| D8 | Mazeretli öğrencinin şubesinde tahtadan yoklama açın | Tahtada mazeret işareti YOK; liste değişmemiş | |
+| D9 | İcmal ve CSV; "e-Okul'a işlendi" işaretinden sonra bir düzeltme yapın | G ve Ö hücreleri; CSV sonunda geç ve özürlü yok sayıları; rozet "İşlendikten sonra değişti" | |
+| D10 | Şube defterini ve icmali A4 yazdırın | Şube defteri yatay, beş gün ve sayılar sayfada; başlık her sayfada; menü ve düğmeler basılmaz | |
+| D11 | İdare işleyişi: beş günlük görünüm e-Okul girişinden önceki denetimi kolaylaştırıyor mu; mazeret türleri yeterli mi | Görüşünüzü yazın (§17 soru 66) | |
 
 ### 3.7 Windows hizmeti (K8, 0.8.0)
 

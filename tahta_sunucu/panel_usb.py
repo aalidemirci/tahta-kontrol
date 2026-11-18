@@ -19,7 +19,7 @@ import json
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
-from . import metin, sinav, vt
+from . import acil, metin, sinav, vt
 from . import usb_anahtar as ua
 from . import yoklama as yk
 
@@ -345,9 +345,13 @@ def kaydet(uygulama, y) -> None:
             gorunum = ua.gorunum(b, satir, sahip)
             vt.kayit_dus(b, f"tahta:{tahta['ad']}", "Yoklama oturumu açıldı (USB anahtar)", ua.kayit_ayrintisi(b, satir, sahip),
                          ip(istek))  # fmt: skip
-        # /ajan/yoklama/baslat ile AYNI biçim (+ "tur"): sonraki oneri/liste/kaydet/bitir uçları değişmeden kullanılır.
+            # 0.14.0: öğretmen anahtarında programdan ön seçim; idare anahtarında (ogretmen_id yok) ikisi de boş.
+            program = yk.ogretmen_onerisi(b, satir["ogretmen_id"] if satir["sahip_turu"] == "ogretmen" else None, tahta, an,
+                                          yk.GEC_YETENEGI in acil.yetenekler(tahta))  # fmt: skip
+        # /ajan/yoklama/baslat ile AYNI biçim (+ "tur", 0.14.0: "oneri", "subeler_once"): sonraki uçlar değişmeden kullanılır.
         return {"belirtec": belirtec, "kalan_sn": bitis - an, "bosta_sn": yoklama_ayari["bosta_dk"] * 60,
-                "ogretmen": {"kod": gorunum["kod"], "etiket": gorunum["etiket"]}, "tur": gorunum["tur"]}  # fmt: skip
+                "ogretmen": {"kod": gorunum["kod"], "etiket": gorunum["etiket"]}, "tur": gorunum["tur"],
+                "oneri": program["oneri"], "subeler_once": program["subeler_once"]}  # fmt: skip
 
     @uygulama.post("/ajan/usb/kilit_ac")
     async def ajan_kilit_ac(istek: Request):

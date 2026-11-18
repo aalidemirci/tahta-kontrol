@@ -1,0 +1,48 @@
+{% extends "taban.html" %}
+{% import "_yoklama_hucre.html" as yh %}
+{% block baslik %}Son günler · Yoklama · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Okul geneli "son günler" listesi (0.14.0). Bağlam: panel_defter.py SÖZLEŞME — liste, esik, adli_not, n_gun_notu.
+   Türetilmiş listedir: saklanmaz, dışa aktarılmaz; yalnız yazdırılır. Mazeret türü gösterilmez. #}
+{% with bolum='son_gunler', bas_baslik='Son günlerde derste görülmeyenler',
+        bas_aciklama='Alınan yoklamalara göre art arda en az ' ~ esik ~ ' gündür, yoklaması alınan bütün derslerde yok yazılan öğrenciler.' %}
+{% include "_yoklama_bas.html" %}
+{% endwith %}
+<p class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ n_gun_notu }} Yoklaması hiç alınmamış gün sayılmaz; zinciri de kırmaz.</p>
+
+<div class="arac-cubugu yazdirma" role="toolbar" aria-label="Liste">
+  <a class="dugme" href="/yoklama">← Günlük görünüm</a>
+  <form method="get" action="/yoklama/son-gunler" class="satir-ici tarih-sec">
+    <label class="satir"><input type="checkbox" name="ozurluler" value="1" {% if liste.ozurluler %}checked{% endif %}> Özürlüleri de göster</label>
+    <button>Göster</button>
+  </form>
+  <span class="ayrac" aria-hidden="true"></span>
+  <button type="button" data-yazdir hidden>Yazdır</button>
+</div>
+
+<h2 id="son-baslik">{{ liste.tarih_yazi }} itibarıyla <span class="not">({{ liste.satirlar | length }} öğrenci)</span></h2>
+{% if liste.satirlar %}
+<p class="defter-lejant not">{{ yh.serit_lejanti() }}</p>
+<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="son-baslik">
+<table class="son-gunler">
+  <thead><tr><th scope="col">Şube</th><th scope="col">No</th><th scope="col">Ad Soyad</th><th scope="col" class="sayi-hucre">Gün</th><th scope="col">Durum</th><th scope="col">Son günler</th></tr></thead>
+  <tbody>
+  {% for o in liste.satirlar %}
+  <tr>
+    <td data-etiket="Şube"><a href="/yoklama/sube?sube={{ o.sube | urlencode }}">{{ o.sube }}</a></td>
+    <td data-etiket="No" class="kod">{{ o.okul_no }}</td>
+    <th scope="row" data-etiket="Ad Soyad"><a href="/yoklama/ogrenci/{{ o.id }}">{{ o.ad_soyad }}</a></th>
+    <td data-etiket="Gün" class="sayi-hucre"><strong>{{ o.n }}</strong></td>
+    <td data-etiket="Durum">{{ yh.rozet(o.rozet, true) }}</td>
+    <td data-etiket="Son günler">{{ yh.serit(o.serit) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="bos-not">Art arda {{ esik }} gün ve daha çok, alınan bütün derslerde yok yazılan öğrenci yok.</p>
+{% endif %}
+{% if liste.ozurlu_gizlenen %}<p class="not">Zincirindeki bütün günleri mazeret/izin kapsamında olan {{ liste.ozurlu_gizlenen }} öğrenci gösterilmiyor ("Özürlüleri de göster").</p>{% endif %}
+<p class="not">Bu liste dışa aktarılmaz; yalnız yazdırılır.</p>
+{% endblock %}

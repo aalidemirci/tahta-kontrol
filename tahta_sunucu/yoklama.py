@@ -7,6 +7,10 @@ sunucuda `guvenlik.ozet` ile saklanır, tahtada yalnız yönetici yetkili servis
 etiketleriyle iner (ortak sözlük §6). İşlem kaydına (`kayit`) öğrenci adı ve numarası yazılmaz;
 öğrenci kimliği gereken iz `yoklama_iz`'dedir ve yoklamayla birlikte imha edilir.
 
+0.14.0: "geç" ayrı tablodadır (`yoklama_gec`; yalnız devrenin ilk dersinde), kayıt anındaki devre `yoklama.devre`e
+yazılır. Bir ders saatinin GEÇERLİ durumu tek kuraldan gelir (`gecerli_durum`, `yoklama_defter.Veri`): hücrede panel
+düzeltmesi (en son kayıttan eski değilse) varsa o, yoksa en son kaydedilen kayıt. Şube defteri, son günler ve mazeret/izin `yoklama_defter.py`dedir.
+
 Aşama 3 sözleşmesi (ortak sözlük §8): A3 öğretmen ve ders adı vermez; ders saatleri ve "programda
 ders var" bilgisi `ders_saati` + `tahta_ders`'ten okunur. Program yoksa öneri boş gelir, yoklama yine
 çalışır.
@@ -26,6 +30,7 @@ from . import program as program_mod
 
 ISTANBUL = ZoneInfo("Europe/Istanbul")
 YOKLAMA_YETENEGI = "yoklama"
+GEC_YETENEGI = "yoklama_gec"  # 0.14.0: ajan "geç" işaretini ve yeni öneri alanlarını anlıyor (tests/yoklama_sozlesme.json)
 
 # Saklama süresi 0.8.0'dan beri ayar değildir: kayıtlar öğretim yılı sonuna kadar durur (`saklama.py`).
 VARSAYILAN_AYAR = {"etkin": False, "maske": maske.VARSAYILAN_SINIF_BICIMI, "oturum_dk": 8, "bosta_dk": 3}
@@ -62,6 +67,21 @@ ILETI_LISTE_YOK = "Bu şubenin öğrenci listesi yüklenmemiş. Okul idaresine b
 ILETI_SINAV = "Sınav sürüyor; ders yoklaması açılamaz."
 ILETI_GELECEK = "Bu ders saati henüz başlamadı."
 ILETI_ADLI_SAYFA = "Bu sayfa öğrenci adları içerir. Ekranı paylaşırken ya da yazdırırken dikkat edin."
+ILETI_GEC_ILK_DERS = "Geç yalnız ilk derste işaretlenir."
+ILETI_HEM_YOK_HEM_GEC = "Bir öğrenci hem yok hem geç işaretlenemez."
+
+# 0.14.0 — öneri sınırları (tests/yoklama_sozlesme.json "sinirlar")
+SUBELER_ONCE_ONERI = 3  # /oneri: yalnız tahtanın şubeleri
+SUBELER_ONCE_BASLAT = 4  # /baslat, /ajan/usb/yoklama: öğretmenin bugünkü şubeleri
+DEVRE_ESLEME_PAYI_DK = 5  # öğretmen programındaki başlangıç saati plan devresiyle bu payla eşlenir
+
+# 0.14.0 — mazeret/izin katmanı. Serbest açıklama YOKTUR (sağlık verisi birikmesin); tür yalnız mazeret
+# sayfasında ve öğrenci görünümünün mazeret bölümünde görünür, başka her yerde tek "özürlü" (Ö).
+MAZERET_TURLERI = {"izinli": "İzinli", "raporlu": "Raporlu", "mazeretli": "Mazeretli",
+                   "gorevli": "Görevli (nöbet, yarışma, gezi, okul görevi)"}  # fmt: skip
+MAZERET_IPTAL = "iptal"
+MAZERET_DAYANAKLARI = {"": "Belirtilmedi", "dilekce": "Veli dilekçesi", "yazi": "Kurum yazısı", "belge": "Belge sunuldu",
+                       "idare": "İdare izni"}  # fmt: skip
 
 GUN_ADLARI = program_mod.GUN_ADLARI
 KAYNAK_ADI = {"tahta": "Tahta", "panel": "Panel"}
@@ -189,28 +209,119 @@ def _sube_devreleri(b, plan: dict, sube: str) -> set[str]:
     }
 
 
-def program_ders_saatleri(b, tarih: date, sube: str | None, plan: dict | None = None) -> list[dict]:
-    """O gün şubenin devresine ait ders saatleri: [{"ders_no","baslangic","bitis","bas","bit"}] (bas/bit epoch).
-
-    Devre: o gün `tahta_ders.sube = sube` satırlarının devresi; satır yoksa ve günde tek devre varsa o.
-    Belirlenemezse (ikili öğretimde programsız şube) boş liste: ders saati 1–12 serbest seçilir.
-    """
-    plan = plan or _plan(b, tarih)
-    dersler = plan.get("dersler") or []
-    if not dersler:
-        return []
-    tum_devreler = {d[0] for d in dersler}
-    devreler = _sube_devreleri(b, plan, sube) & tum_devreler if sube else set()
-    if not devreler:
-        devreler = tum_devreler if len(tum_devreler) == 1 else set()
-    if len(devreler) != 1:
-        return []
+def devre_saatleri(plan: dict, devre: str | None) -> list[dict]:
+    """Planın bir devresinin ders saatleri: [{"ders_no","baslangic","bitis","bas","bit"}] (bas/bit epoch)."""
     sonuc: dict[int, dict] = {}
-    for d in dersler:
-        if d[0] in devreler and d[2] not in sonuc:
+    for d in plan.get("dersler") or []:
+        if d[0] == devre and d[2] not in sonuc:
             sonuc[d[2]] = {"ders_no": d[2], "baslangic": f"{d[3]:%H:%M}", "bitis": f"{d[4]:%H:%M}",
                            "bas": int(d[3].timestamp()), "bit": int(d[4].timestamp())}  # fmt: skip
     return [sonuc[n] for n in sorted(sonuc)]
+
+
+def program_devresi(plan: dict, satirlar) -> str | None:
+    """Öğretmen programı satırlarından ([(ders_no, "SS:DD")]) şubenin devresi: ders numarası ve başlangıç saati
+    (±5 dk) tutan plan dersi en çok olan TEK devre; eşitlik ya da eşleşme yoksa None (saf)."""
+    sayac: dict[str, int] = {}
+    for no, baslangic in satirlar:
+        try:
+            dakika = program_mod.dk(str(baslangic))
+        except (ValueError, TypeError, IndexError):
+            continue
+        for d in plan.get("dersler") or []:
+            if d[2] == no and abs(d[3].hour * 60 + d[3].minute - dakika) <= DEVRE_ESLEME_PAYI_DK:
+                sayac[d[0]] = sayac.get(d[0], 0) + 1
+    if not sayac:
+        return None
+    en_cok = max(sayac.values())
+    adaylar = [d for d, n in sayac.items() if n == en_cok]
+    return adaylar[0] if len(adaylar) == 1 else None
+
+
+def devre_sec(plan: dict, derslik_devreleri: set[str], program_satirlari) -> str | None:
+    """Şubenin devresi (saf; kural 25). Sıra: derslik programındaki devre (tekse) → günde tek devre varsa o →
+    öğretmen programı satırlarının saatleri (`program_devresi`). Belirlenemezse None.
+    `program_satirlari` çağrılabilir de olabilir (yalnız gerekince okunsun)."""
+    tum_devreler = {d[0] for d in plan.get("dersler") or []}
+    if not tum_devreler:
+        return None
+    devreler = derslik_devreleri & tum_devreler
+    if len(devreler) == 1:
+        return next(iter(devreler))
+    if devreler:
+        return None  # şube iki devrede birden görünüyor: seçim yapılmaz
+    if len(tum_devreler) == 1:
+        return next(iter(tum_devreler))
+    satirlar = program_satirlari() if callable(program_satirlari) else program_satirlari
+    return program_devresi(plan, satirlar or [])
+
+
+def sube_devresi(b, plan: dict, sube: str | None) -> str | None:
+    """Şubenin o günkü devresi: `tahta_ders` → tek devre → öğretmen programındaki o şube-gün satırlarının saatleri
+    (yalnız ders no ve başlangıç saati okunur; ders adı ve öğretmen sorguya girmez). Belirlenemezse None:
+    ders saati 1–12 serbest seçilir."""
+
+    def satirlar():
+        if not sube:
+            return []
+        return [(s["ders_no"], s["baslangic"]) for s in b.execute(
+            "SELECT DISTINCT ders_no, baslangic FROM ogretmen_program WHERE sube = ? AND gun = ?", (sube, plan["program_gunu"]))]  # fmt: skip
+
+    return devre_sec(plan, _sube_devreleri(b, plan, sube) if sube else set(), satirlar)
+
+
+def program_ders_saatleri(b, tarih: date, sube: str | None, plan: dict | None = None) -> list[dict]:
+    """O gün şubenin devresine ait ders saatleri: [{"ders_no","baslangic","bitis","bas","bit"}] (bas/bit epoch).
+
+    Devre `sube_devresi` ile bulunur; belirlenemezse (ikili öğretimde programsız şube) boş liste: ders saati
+    1–12 serbest seçilir.
+    """
+    plan = plan or _plan(b, tarih)
+    devre = sube_devresi(b, plan, sube)
+    return devre_saatleri(plan, devre) if devre is not None else []
+
+
+def pencere_devresi(plan: dict, an: int) -> str | None:
+    """Şubesiz istekte devre: tek devreli günde o devre; ikili eğitimde penceresi (ilk ders − 5 dk … son ders
+    + 15 dk) şu anı kapsayan TEK devre. İki pencere çakışıyorsa (devir saati) ya da hiçbiri kapsamıyorsa None."""
+    sinirlar: dict[str, list[int]] = {}
+    for d in plan.get("dersler") or []:
+        bas, bit = int(d[3].timestamp()), int(d[4].timestamp())
+        s = sinirlar.setdefault(d[0], [bas, bit])
+        s[0], s[1] = min(s[0], bas), max(s[1], bit)
+    if len(sinirlar) == 1:
+        return next(iter(sinirlar))
+    kapsayan = [d for d, (bas, bit) in sinirlar.items() if bas - GELECEK_PAYI_SN <= an <= bit + ALINMADI_PAYI_SN]
+    return kapsayan[0] if len(kapsayan) == 1 else None
+
+
+def ders_kurali(saatler: list[dict], an: int, biten_dahil: bool = True) -> tuple[int | None, list[int]]:
+    """Ön seçilecek ders (saf): (ders_no | None, adaylar).
+
+    1) süren ders; 2) yoksa 5 dk içinde başlayacak; 3) yoksa son 15 dk içinde bitmiş ders. 2 ve 3 birlikte
+    tutuyorsa (teneffüs) ders seçilmez, adaylar = [biten, baslayacak] döner. `biten_dahil=False` (yoklama_gec
+    yeteneği olmayan ajan): 3. kural ve adaylar uygulanmaz.
+    """
+    suren = next((s["ders_no"] for s in saatler if s["bas"] <= an < s["bit"]), None)
+    if suren is not None:
+        return suren, []
+    baslayacak = next((s["ders_no"] for s in saatler if 0 < s["bas"] - an <= GELECEK_PAYI_SN), None)
+    biten = None
+    if biten_dahil:
+        biten = next((s["ders_no"] for s in reversed(saatler) if 0 <= an - s["bit"] <= ALINMADI_PAYI_SN), None)
+    if baslayacak is not None and biten is not None and baslayacak != biten:
+        return None, [biten, baslayacak]
+    return (baslayacak if baslayacak is not None else biten), []
+
+
+def ilk_ders_mi(saatler: list[dict], ders_no: int) -> bool:
+    """ "Geç" kuralı (saf): ders, devrenin o günkü EN KÜÇÜK numaralı dersi mi; ders saati bilinmiyorsa ders_no == 1."""
+    return ders_no == (min(s["ders_no"] for s in saatler) if saatler else 1)
+
+
+def gec_secilebilir(b, gun: date, sube: str, ders_no: int, plan: dict | None = None) -> bool:
+    """ "Geç" yalnız şubenin devresinin o günkü İLK dersinde işaretlenir (sabah ve öğle devresi ayrı ayrı)."""
+    return ilk_ders_mi(program_ders_saatleri(b, gun, sube, plan), ders_no)
 
 
 def sube_devre_adi(b, plan: dict, sube: str) -> str:
@@ -300,14 +411,17 @@ def _devresi_suren_subeler(b, gun: date, subeler: list[str], an: int, plan: dict
     return sonuc
 
 
-def oneri(b, tahta, an: int, sube_istegi: str | None = None) -> dict:
-    """/ajan/yoklama/oneri yanıtı (öğrenci verisi İÇERMEZ).
+def oneri(b, tahta, an: int, sube_istegi: str | None = None, yetenekli: bool = False) -> dict:
+    """/ajan/yoklama/oneri yanıtı (öğrenci verisi İÇERMEZ; hiçbir öğretmene bağlı DEĞİLDİR).
 
-    Şube ve ders saati önerisi sırası: programdaki şu anki ders (`tahta_ders.sube`) → tahtada 5 dk içinde
-    başlayacak ya da 15 dk içinde bitmiş ders → `tahta.subeler` tek şubeyse o (ikili eğitimde birden çok
-    şube varsa devresi şu an süren tek şube) → None. Ders numarası şubenin kendi devresinin numarasıdır
-    (sabahçının 3. dersi ile öğlencinin 3. dersi karışmaz).
-    `sube_istegi` verilirse ders saatleri o şubenin devresine göre döner (öğretmen şubeyi değiştirdi).
+    Şube önerisi sırası: programdaki şu anki ders (`tahta_ders.sube`) → tahtada 5 dk içinde başlayacak ya da
+    15 dk içinde bitmiş ders → `tahta.subeler` tek şubeyse o (ikili eğitimde birden çok şube varsa devresi şu an
+    süren tek şube) → None. Ders numarası şubenin kendi devresinin numarasıdır (kural 25) ve `ders_kurali` ile
+    seçilir: süren → 5 dk içinde başlayacak → son 15 dk içinde biten; teneffüste iki aday varsa `ders_no` None,
+    `ders_adaylari` = [biten, baslayacak]. `sube_istegi` verilirse ders saatleri ve ders önerisi o şubenindir
+    (öğretmen şubeyi elle seçti). Şubesiz ve önerisiz istekte ders saatleri `pencere_devresi`nden gelir;
+    belirsizse boş döner. `yetenekli` = tahta `yoklama_gec` bildiriyor; bildirmeyen eski ajana "biten ders"
+    önerilmez ve `ders_adaylari` hep boştur (yanıtın anahtar kümesi yine aynıdır).
     Ders saatlerinde `secilebilir`: başlangıcı şimdi + 5 dk'dan önce (tahtanın saatine güvenilmez).
     """
     gun = bugun(an)
@@ -315,18 +429,42 @@ def oneri(b, tahta, an: int, sube_istegi: str | None = None) -> dict:
     su_an = program_su_an(b, tahta, an)
     if not su_an:
         try:
-            su_an = _yakin_ders(b, tahta, plan, an)
+            su_an = _yakin_ders(b, tahta, plan, an)  # şube önerisi; ders numarası aşağıda ders_kurali ile
         except Exception:  # öneri yardımcıdır; bozuk program yoklamayı durdurmasın
             su_an = None
-    tahta_subeleri = tahta_subeleri_(tahta)
+    tum_tahta_subeleri = tahta_subeleri_(tahta)
+    tahta_subeleri = tum_tahta_subeleri
     if len(tahta_subeleri) > 1:
         tahta_subeleri = _devresi_suren_subeler(b, gun, tahta_subeleri, an, plan)
     sube = (su_an or {}).get("sube") or (tahta_subeleri[0] if len(tahta_subeleri) == 1 else None)
     hedef_sube = metin.sube_duzelt(sube_istegi) if sube_istegi else sube
-    saatler = program_ders_saatleri(b, gun, hedef_sube, plan)
-    ders_no = (su_an or {}).get("ders_no") if hedef_sube == sube else None
-    if ders_no is None and hedef_sube:
-        ders_no = next((s["ders_no"] for s in saatler if s["bas"] <= an < s["bit"]), None)
+    devre = sube_devresi(b, plan, hedef_sube) if hedef_sube else pencere_devresi(plan, an)
+    saatler = devre_saatleri(plan, devre) if devre is not None else []
+    simdiki, adaylar = ders_kurali(saatler, an, biten_dahil=yetenekli)
+    ders_no = simdiki if hedef_sube else None
+    if not hedef_sube:
+        adaylar = []
+    try:
+        odanin_dersleri = _tahtanin_dersleri(b, tahta, plan)
+    except Exception:
+        odanin_dersleri = []
+    if adaylar:
+        # Bu derslikte o şubenin yalnız bir adayda dersi varsa (derslik programı) o derstir.
+        odadaki = {d[2] for d in odanin_dersleri if d[0] == devre and metin.sube_duzelt(d[5] or "") == hedef_sube}
+        kalan = [n for n in adaylar if n in odadaki]
+        if len(kalan) == 1:
+            ders_no, adaylar, simdiki = kalan[0], [], kalan[0]
+    yakinlik: dict[str, int] = {}
+    for d in odanin_dersleri:
+        ad = metin.sube_duzelt(d[5] or "")
+        if ad:
+            bas, bit = int(d[3].timestamp()), int(d[4].timestamp())
+            uzaklik = 0 if bas <= an < bit else min(abs(bas - an), abs(an - bit))
+            yakinlik[ad] = min(yakinlik.get(ad, uzaklik), uzaklik)
+    odadakiler = sorted(yakinlik, key=lambda x: (yakinlik[x], sube_anahtari(x)))
+    subeler_once = list(dict.fromkeys(x for x in [sube, *odadakiler, *tum_tahta_subeleri] if x))[:SUBELER_ONCE_ONERI]
+    cok_devre = len({d[0] for d in plan.get("dersler") or []}) > 1
+    devre_adi = next((d[1] for d in plan.get("dersler") or [] if d[0] == devre), "") if cok_devre and saatler else ""
     return {
         "etkin": True,
         "tarih": gun.isoformat(),
@@ -336,9 +474,80 @@ def oneri(b, tahta, an: int, sube_istegi: str | None = None) -> dict:
             for s in saatler
         ],
         "ders_no_en_cok": max((s["ders_no"] for s in saatler), default=DERS_NO_EN_COK),
-        "oneri": {"sube": sube, "ders_no": ders_no, "ders_adi": "", "ogretmen": None},
+        "oneri": {"sube": sube, "ders_no": ders_no, "ders_adi": "", "ogretmen": None, "ders_adaylari": adaylar if yetenekli else []},
         "subeler": aktif_subeler(b),
+        "subeler_once": subeler_once,
+        "devre_adi": devre_adi,
+        "simdiki_ders_no": simdiki,
+        # "Şimdi" işaretli ders az önce bitmiş bir ders mi (kural 3): tahta "şimdi" yerine "bitti" yazar.
+        "simdiki_bitti": simdiki is not None and any(s["ders_no"] == simdiki and s["bit"] <= an for s in saatler),
     }
+
+
+def ogretmen_onerisi(b, ogretmen_id: int | None, tahta, an: int, yetenekli: bool = False) -> dict:
+    """/baslat ve /ajan/usb/yoklama yanıtına eklenen, PIN/USB ile doğrulanan öğretmenin programından gelen ön seçim:
+    {"oneri": {"sube","ders_no"|None,"ders_adaylari"} | None, "subeler_once": [≤ 4]}.
+
+    `ogretmen_program`dan yalnız sube, gun, ders_no, baslangic, bitis SEÇİLİR; ders adı ve öğretmen adı sorguya
+    girmez. Program yalnız ÖN SEÇİMDİR, hiçbir şube/ders seçimini engellemez. Kimlik eşleşmesi olmayan oturumda
+    (idare USB anahtarı) ikisi de boştur.
+    """
+    bos = {"oneri": None, "subeler_once": []}
+    if not ogretmen_id:
+        return bos
+    gun = bugun(an)
+    plan = _plan(b, gun)
+    if plan.get("tatil"):
+        return bos
+    satirlar = b.execute(
+        "SELECT sube, gun, ders_no, baslangic, bitis FROM ogretmen_program WHERE ogretmen_id = ? AND gun = ? ORDER BY baslangic, ders_no",
+        (ogretmen_id, plan["program_gunu"]),
+    ).fetchall()
+    dersler = []  # [{"sube","ders_no","bas","bit"}]: saatler şubenin devresinin planından; yoksa satırın kendi saatinden
+    saat_onbellek: dict[str, dict[int, dict]] = {}
+    for s in satirlar:
+        sube = metin.sube_duzelt(s["sube"]) or s["sube"]
+        if sube not in saat_onbellek:
+            saat_onbellek[sube] = {x["ders_no"]: x for x in program_ders_saatleri(b, gun, sube, plan)}
+        planli = saat_onbellek[sube].get(s["ders_no"])
+        if planli:
+            bas, bit = planli["bas"], planli["bit"]
+        else:
+            try:
+                bas = int(program_mod.an_dt(gun, s["baslangic"]).timestamp())
+                bit = int(program_mod.an_dt(gun, s["bitis"]).timestamp())
+            except (ValueError, TypeError, IndexError):
+                continue
+        dersler.append({"sube": sube, "ders_no": s["ders_no"], "bas": bas, "bit": bit})
+    if not dersler:
+        return bos
+    dersler.sort(key=lambda d: (d["bas"], d["ders_no"]))
+    yakin: dict[str, int] = {}
+    for d in dersler:
+        uzaklik = 0 if d["bas"] <= an < d["bit"] else min(abs(d["bas"] - an), abs(an - d["bit"]))
+        yakin[d["sube"]] = min(yakin.get(d["sube"], uzaklik), uzaklik)
+    suren = next((d for d in dersler if d["bas"] <= an < d["bit"]), None)
+    baslayacak = next((d for d in dersler if 0 < d["bas"] - an <= GELECEK_PAYI_SN), None)
+    biten = next((d for d in reversed(dersler) if 0 <= an - d["bit"] <= ALINMADI_PAYI_SN), None) if yetenekli else None
+    secilen = None
+    if suren:
+        secilen = {"sube": suren["sube"], "ders_no": suren["ders_no"], "ders_adaylari": []}
+    elif baslayacak and biten:
+        if baslayacak["sube"] == biten["sube"]:  # aynı şubede iki ders art arda: hangisi olduğu bilinemez
+            secilen = {"sube": biten["sube"], "ders_no": None, "ders_adaylari": [biten["ders_no"], baslayacak["ders_no"]]}
+        else:
+            # Farklı şubeler: tahtanın (kişiden bağımsız) önerdiği şubeyle aynı olan; o da yoksa başlayacak ders.
+            try:
+                tahta_subesi = oneri(b, tahta, an, None, yetenekli)["oneri"]["sube"] if tahta is not None else None
+            except Exception:
+                tahta_subesi = None
+            d = biten if tahta_subesi == biten["sube"] else baslayacak
+            secilen = {"sube": d["sube"], "ders_no": d["ders_no"], "ders_adaylari": []}
+    elif baslayacak or biten:
+        d = baslayacak or biten
+        secilen = {"sube": d["sube"], "ders_no": d["ders_no"], "ders_adaylari": []}
+    sirali = sorted(yakin, key=lambda x: (x != (secilen or {}).get("sube"), yakin[x], sube_anahtari(x)))
+    return {"oneri": secilen, "subeler_once": sirali[:SUBELER_ONCE_BASLAT]}
 
 
 def ders_no_denetle(b, gun: date, sube: str, ders_no, an: int, gelecek_reddet: bool = True) -> str | None:
@@ -588,11 +797,6 @@ def yok_listesi(b, yoklama_id: int) -> list[int]:
     return sorted(s["ogrenci_id"] for s in b.execute("SELECT ogrenci_id FROM yoklama_yok WHERE yoklama_id = ?", (yoklama_id,)))
 
 
-def onceki_yok(b, tarih: str, sube: str, ders_no: int, ogretmen_id: int | None, kaynak: str) -> list[int]:
-    satir = _yoklama_bul(b, tarih, sube, ders_no, ogretmen_id, kaynak)
-    return yok_listesi(b, satir["id"]) if satir else []
-
-
 def baska_yoklama_var(b, tarih: str, sube: str, ders_no: int, ogretmen_id: int | None, kaynak: str) -> bool:
     return bool(
         b.execute(
@@ -619,37 +823,78 @@ def yok_idleri_coz(ham, gecerli: set[int]) -> list[int]:
     return sorted(idler)
 
 
+def gec_listesi(b, yoklama_id: int) -> list[int]:
+    return sorted(s["ogrenci_id"] for s in b.execute("SELECT ogrenci_id FROM yoklama_gec WHERE yoklama_id = ?", (yoklama_id,)))
+
+
+def gecerli_durum(b, tarih: str, sube: str, ders_no: int) -> tuple[set[int], set[int], bool]:
+    """Bir ders saatinin GEÇERLİ durumu: (yok, geç, alındı mı). Tek birleşim kuralı (`yoklama_defter.Veri`):
+    hücrede en yeni panel düzeltmesi (en son kayıttan eski değilse) varsa o; yoksa o ders saatinin EN SON KAYDEDİLEN
+    yoklama kaydı.
+    Mazeret durumu değiştirmez (ayrı katmandır). Tahtanın `/liste` yanıtı ve yeteneksiz ajanın kaydı bunu kullanır."""
+    from . import yoklama_defter
+
+    gun = tarih_coz(tarih)
+    if not gun:
+        return set(), set(), False
+    veri = yoklama_defter.Veri(b, gun, gun, sube)
+    yok, gec = veri.kumeler(tarih, sube, ders_no)
+    return set(yok), set(gec), veri.alindi(tarih, sube, ders_no)
+
+
 def yoklama_yaz(
     b, *, tarih: str, sube: str, ders_no: int, ogretmen_id: int | None, kaynak: str, kaydeden: str,
     tahta_id: int | None, yok: list[int], kim: str, an: int, islem: str | None = None, aciklama: str = "",
+    gec: list[int] | None = None,
 ) -> tuple[int, bool]:  # fmt: skip
-    """Upsert (tarih, şube, ders saati, öğretmen, kaynak) + `yoklama_yok` yeniden yazılır + `yoklama_iz` farkı.
+    """Upsert (tarih, şube, ders saati, öğretmen, kaynak) + `yoklama_yok` ve `yoklama_gec` yeniden yazılır +
+    `yoklama_iz` farkı. Gövde, kaydedenin gördüğü TAM durumdur ve yalnız kendi kaydına yazılır; aynı ders saatinin
+    başka kaydına dokunulmaz (geçerli durum = en son kaydedilen kayıt, `gecerli_durum`).
 
+    `gec=None` (geç bilgisi taşımayan form ya da `yoklama_gec` yeteneği olmayan ajan): ders saatinin geçerli
+    durumundaki geç öğrenciler bu kayda da geç yazılır; yalnız yeni `yok`a girenler geçten çıkar (geç yalnız
+    devrenin ilk dersindeyse korunur). `devre` her yazmada şubenin o günkü devresiyle doldurulur (bulunamazsa '').
+    Bir öğrenci aynı kayıtta hem yok hem geç olamaz (ValueError).
     Döndürür: (yoklama_id, yeni_mi). `mevcut` kayıt anındaki şubenin etkin öğrenci sayısıdır.
     """
+    yeni = set(yok)
+    gun = tarih_coz(tarih)
+    plan = _plan(b, gun) if gun else {"dersler": [], "program_gunu": 0}
+    devre = sube_devresi(b, plan, sube) or ""
+    if gec is None:
+        ilk = ilk_ders_mi(devre_saatleri(plan, devre) if devre else [], ders_no)
+        yeni_gec = (gecerli_durum(b, tarih, sube, ders_no)[1] - yeni) if ilk else set()
+    else:
+        yeni_gec = set(gec)
+    if yeni & yeni_gec:
+        raise ValueError(ILETI_HEM_YOK_HEM_GEC)
     mevcut = b.execute("SELECT COUNT(*) FROM ogrenci WHERE sube = ? AND aktif = 1", (sube,)).fetchone()[0]
     eski = _yoklama_bul(b, tarih, sube, ders_no, ogretmen_id, kaynak)
     if eski:
         yoklama_id = eski["id"]
         onceki = set(yok_listesi(b, yoklama_id))
+        onceki_gec = set(gec_listesi(b, yoklama_id))
         b.execute(
-            "UPDATE yoklama SET kaydeden = ?, tahta_id = COALESCE(?, tahta_id), mevcut = ?, guncelleme = ? WHERE id = ?",
-            (kaydeden, tahta_id, mevcut, an, yoklama_id),
+            "UPDATE yoklama SET kaydeden = ?, tahta_id = COALESCE(?, tahta_id), mevcut = ?, guncelleme = ?, devre = ? WHERE id = ?",
+            (kaydeden, tahta_id, mevcut, an, devre, yoklama_id),
         )
         b.execute("DELETE FROM yoklama_yok WHERE yoklama_id = ?", (yoklama_id,))
+        b.execute("DELETE FROM yoklama_gec WHERE yoklama_id = ?", (yoklama_id,))
     else:
-        onceki = set()
+        onceki, onceki_gec = set(), set()
         yoklama_id = b.execute(
-            "INSERT INTO yoklama (tarih, ders_no, sube, ogretmen_id, ders_adi, tahta_id, kaynak, kaydeden, mevcut, olusturma, guncelleme) "
-            "VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?)",
-            (tarih, ders_no, sube, ogretmen_id, tahta_id, kaynak, kaydeden, mevcut, an, an),
+            "INSERT INTO yoklama (tarih, ders_no, sube, ogretmen_id, ders_adi, tahta_id, kaynak, kaydeden, mevcut, olusturma, "
+            "guncelleme, devre) VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?)",
+            (tarih, ders_no, sube, ogretmen_id, tahta_id, kaynak, kaydeden, mevcut, an, an, devre),
         ).lastrowid
-    yeni = set(yok)
     b.executemany("INSERT INTO yoklama_yok (yoklama_id, ogrenci_id) VALUES (?, ?)", [(yoklama_id, i) for i in sorted(yeni)])
+    b.executemany("INSERT INTO yoklama_gec (yoklama_id, ogrenci_id) VALUES (?, ?)", [(yoklama_id, i) for i in sorted(yeni_gec)])
     b.execute(
-        "INSERT INTO yoklama_iz (yoklama_id, zaman, kim, islem, eklenen, cikarilan, aciklama) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO yoklama_iz (yoklama_id, zaman, kim, islem, eklenen, cikarilan, aciklama, gec_eklenen, gec_cikarilan) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (yoklama_id, an, kim, islem or ("guncelle" if eski else "olustur"),
-         json.dumps(sorted(yeni - onceki)), json.dumps(sorted(onceki - yeni)), aciklama[:ACIKLAMA_EN_UZUN]),
+         json.dumps(sorted(yeni - onceki)), json.dumps(sorted(onceki - yeni)), aciklama[:ACIKLAMA_EN_UZUN],
+         json.dumps(sorted(yeni_gec - onceki_gec)), json.dumps(sorted(onceki_gec - yeni_gec))),
     )  # fmt: skip
     return yoklama_id, not eski
 
@@ -664,9 +909,12 @@ def aciklama_denetle(aciklama: str) -> str:
     return aciklama
 
 
-def kayit_metni(sube: str, ders_no: int, yok_sayisi: int, kod: str | None = None, tarih: date | None = None) -> str:
+def kayit_metni(sube: str, ders_no: int, yok_sayisi: int, kod: str | None = None, tarih: date | None = None,
+                gec_sayisi: int = 0) -> str:  # fmt: skip
     """İşlem kaydı ayrıntısı: şube, ders saati, sayı, öğretmen kodu (ad ve okul no YOK)."""
     parca = [f"{tarih_kisa(tarih)} " if tarih else "", f"{sube} {ders_no}. ders, {yok_sayisi} yok"]
+    if gec_sayisi:
+        parca.append(f", {gec_sayisi} geç")
     if kod:
         parca.append(f", öğretmen kodu {kod}")
     return "".join(parca)
@@ -682,15 +930,6 @@ def _gunun_yoklamalari(b, tarih: str) -> list:
     ).fetchall()
 
 
-def _gunun_yoklari(b, tarih: str) -> dict[int, set[int]]:
-    yoklar: dict[int, set[int]] = {}
-    for s in b.execute(
-        "SELECT yy.yoklama_id, yy.ogrenci_id FROM yoklama_yok yy JOIN yoklama y ON y.id = yy.yoklama_id WHERE y.tarih = ?", (tarih,)
-    ):
-        yoklar.setdefault(s["yoklama_id"], set()).add(s["ogrenci_id"])
-    return yoklar
-
-
 def alan_etiketi(y) -> str:
     """Yoklamayı alan: öğretmen etiketi, "idare (kullanıcı adı)" (idare USB anahtarı, 0.11.0) ya da "panel"."""
     if y["ogretmen_id"] and y["ogretmen_ad"] is not None:
@@ -702,11 +941,16 @@ def alan_etiketi(y) -> str:
 
 
 def gunluk_gorunum(b, gun: date, an: int) -> dict:
-    """/yoklama sayfasının verisi (şube × ders saati ızgarası, özet, öğrenci bazında liste)."""
+    """/yoklama sayfasının verisi (şube × ders saati ızgarası, özet, öğrenci bazında liste).
+
+    Sayılar tek birleşim kuralından (`yoklama_defter.Veri.kumeler`) gelir: hücrede (kayıttan eski olmayan) panel düzeltmesi varsa o,
+    yoksa o ders saatinin en son kaydedilen kaydı. Mazeretli yokluk da "yok" sayılır (yok toplamı değişmez)."""
+    from . import yoklama_defter
+
     tarih = gun.isoformat()
-    plan = _plan(b, gun)
+    veri = yoklama_defter.Veri(b, gun, gun)
+    plan = veri.plan(gun)
     yoklamalar = _gunun_yoklamalari(b, tarih)
-    yoklar = _gunun_yoklari(b, tarih)
     subeler = set(aktif_subeler(b)) | {y["sube"] for y in yoklamalar}
     programli = {s: program_gunluk(b, gun, s, plan) for s in subeler}
     for s in b.execute("SELECT DISTINCT sube FROM tahta_ders WHERE gun = ? AND sube != ''", (plan["program_gunu"],)):
@@ -722,6 +966,7 @@ def gunluk_gorunum(b, gun: date, an: int) -> dict:
     for y in yoklamalar:
         kayitlar.setdefault((y["sube"], y["ders_no"]), []).append(y)
     islenen = {s["sube"]: s for s in b.execute("SELECT * FROM eokul_islendi WHERE tarih = ?", (tarih,))}
+    bayat = yoklama_defter.eokul_bayat(b, veri, tarih, islenen)
     saat_araliklari = {s: {d["ders_no"]: f"{d['baslangic']}–{d['bitis']}" for d in program_ders_saatleri(b, gun, s, plan)}
                        for s in subeler_sirali}  # fmt: skip
     satirlar = []
@@ -735,33 +980,35 @@ def gunluk_gorunum(b, gun: date, an: int) -> dict:
             aralik = saat_araliklari[s].get(n, "")
             if ks:
                 alinan += 1
-                birlesik = set().union(*(yoklar.get(k["id"], set()) for k in ks))
+                yok_k, gec_k = veri.kumeler(tarih, s, n)
                 ipucu = [aralik] if aralik else []
                 if len(ks) > 1:
-                    ipucu.append(f"{len(ks)} yoklama birleştirildi")
+                    ipucu.append(f"{len(ks)} kayıt; en son kaydedilen geçerli")
                 ipucu.append("Alan: " + ", ".join(alan_etiketi(k) for k in ks))
-                hucreler.append({"ders_no": n, "durum": "alindi", "yok": len(birlesik), "kayit_id": ks[0]["id"],
+                en_son = max(ks, key=lambda k: (k["guncelleme"], k["id"]))
+                hucreler.append({"ders_no": n, "durum": "alindi", "yok": len(yok_k), "gec": len(gec_k), "kayit_id": en_son["id"],
                                  "kayit_sayisi": len(ks), "baslik": " · ".join(ipucu)})  # fmt: skip
             elif n in dersli and dersli[n]["bit"] and dersli[n]["bit"] + ALINMADI_PAYI_SN <= an:
-                hucreler.append({"ders_no": n, "durum": "alinmadi", "yok": None, "kayit_id": None, "kayit_sayisi": 0,
+                hucreler.append({"ders_no": n, "durum": "alinmadi", "yok": None, "gec": 0, "kayit_id": None, "kayit_sayisi": 0,
                                  "baslik": " · ".join(p for p in (aralik, "Programda ders var; yoklama alınmadı") if p)})  # fmt: skip
             else:
-                hucreler.append({"ders_no": n, "durum": "bos", "yok": None, "kayit_id": None, "kayit_sayisi": 0, "baslik": aralik})
+                hucreler.append({"ders_no": n, "durum": "bos", "yok": None, "gec": 0, "kayit_id": None, "kayit_sayisi": 0,
+                                 "baslik": aralik})  # fmt: skip
         satirlar.append({
             "sube": s,
             "devre_adi": sube_devre_adi(b, plan, s),
             "hucreler": hucreler,
             "islendi": s in islenen,
+            "bayat": s in bayat,
             "islendi_metni": f"{islenen[s]['kullanici']}, {an_yazi(islenen[s]['zaman'])}" if s in islenen else "",
         })  # fmt: skip
     # Öğrenci bazında: (şube, öğrenci) → yok olduğu ders saatleri; "bütün gün yok" = şubenin yoklaması alınan bütün saatlerde yok
     alinan_saatler: dict[str, set[int]] = {}
-    for y in yoklamalar:
-        alinan_saatler.setdefault(y["sube"], set()).add(y["ders_no"])
     ogrenci_saat: dict[tuple[str, int], set[int]] = {}
-    for y in yoklamalar:
-        for oid in yoklar.get(y["id"], ()):
-            ogrenci_saat.setdefault((y["sube"], oid), set()).add(y["ders_no"])
+    for sube, no in kayitlar:
+        alinan_saatler.setdefault(sube, set()).add(no)
+        for oid in veri.kumeler(tarih, sube, no)[0]:
+            ogrenci_saat.setdefault((sube, oid), set()).add(no)
     ogrenci_satirlari = _ogrenci_satirlari(b, ogrenci_saat, alinan_saatler)
     butun_gun = sum(1 for o in ogrenci_satirlari if o["butun_gun"])
     listedeki = set(aktif_subeler(b))  # bir kez sorgulanır (önceden her şube için yeniden sorgulanıyordu)
@@ -787,35 +1034,50 @@ def gunluk_gorunum(b, gun: date, an: int) -> dict:
     }
 
 
-def _ogrenci_satirlari(b, ogrenci_saat: dict[tuple[str, int], set[int]], alinan_saatler: dict[str, set[int]]) -> list[dict]:
-    if not ogrenci_saat:
+def _ogrenci_satirlari(b, ogrenci_saat: dict[tuple[str, int], set[int]], alinan_saatler: dict[str, set[int]],
+                       gec_saat: dict[tuple[str, int], set[int]] | None = None,
+                       ozurlu_saat: dict[tuple[str, int], set[int]] | None = None) -> list[dict]:  # fmt: skip
+    """(şube, öğrenci) → yok olduğu ders saatleri kümelerinden satırlar; `gec_saat` verilirse yalnız geç kalan
+    öğrenci de satır olur. `ozurlu_saat`: yok saatlerinden geçerli mazeret kapsamında olanlar (tür taşımaz)."""
+    gec_saat, ozurlu_saat = gec_saat or {}, ozurlu_saat or {}
+    anahtarlar = set(ogrenci_saat) | set(gec_saat)
+    if not anahtarlar:
         return []
-    idler = sorted({oid for (_, oid) in ogrenci_saat})
+    idler = sorted({oid for (_, oid) in anahtarlar})
     ogrenciler: dict[int, object] = {}
     for i in range(0, len(idler), 500):
         parca = idler[i : i + 500]
         for o in b.execute(f"SELECT * FROM ogrenci WHERE id IN ({','.join('?' * len(parca))})", parca):
             ogrenciler[o["id"]] = o
     satirlar = []
-    for (sube, oid), saatler in ogrenci_saat.items():
+    for sube, oid in anahtarlar:
         o = ogrenciler.get(oid)
         if not o:
             continue
+        saatler = ogrenci_saat.get((sube, oid), set())
+        gec = gec_saat.get((sube, oid), set())
+        ozurlu = ozurlu_saat.get((sube, oid), set()) & saatler
         alinan = alinan_saatler.get(sube, set())
         satirlar.append({
             "sube": sube, "ogrenci_id": oid, "okul_no": o["okul_no"], "ad": o["ad"], "soyad": o["soyad"],
             "ad_soyad": ad_soyad(o), "saatler": sorted(saatler), "saatler_metni": ", ".join(map(str, sorted(saatler))),
-            "sayi": len(saatler), "alinan": len(alinan), "butun_gun": bool(alinan) and saatler >= alinan,
+            "sayi": len(saatler), "alinan": len(alinan), "butun_gun": bool(alinan) and bool(saatler) and saatler >= alinan,
+            "gec_saatler": sorted(gec), "gec_sayisi": len(gec), "ozurlu_saatler": sorted(ozurlu), "ozurlu_sayisi": len(ozurlu),
         })  # fmt: skip
     return sorted(satirlar, key=lambda r: (sube_anahtari(r["sube"]), no_anahtari(r["okul_no"])))
 
 
 def icmal(b, gun: date, sube: str | None = None) -> dict:
-    """Gün sonu icmali: şube başına yok listesi (birleşim kuralı; `yoklama.sube`'ye göre)."""
+    """Gün sonu icmali: şube başına yok/geç listesi (tek birleşim kuralı; `yoklama.sube`'ye göre).
+
+    Hücre: Y yok · Ö yok ve geçerli mazeret kapsamında ("özürlü"; tür hiçbir çıktıya girmez) · G geç · . derste ·
+    - yoklama alınmadı. Yok toplamı özürlü yokları da sayar."""
+    from . import yoklama_defter
+
     tarih = gun.isoformat()
-    plan = _plan(b, gun)
+    veri = yoklama_defter.Veri(b, gun, gun)
+    plan = veri.plan(gun)
     yoklamalar = _gunun_yoklamalari(b, tarih)
-    yoklar = _gunun_yoklari(b, tarih)
     subeler = {y["sube"] for y in yoklamalar} | set(aktif_subeler(b))
     if sube:
         subeler = {sube} if sube in subeler else set()
@@ -829,13 +1091,28 @@ def icmal(b, gun: date, sube: str | None = None) -> dict:
         program_bilinir = bool(programli)
         sutun = max([*programli, *alinan, 0 if program_bilinir else IZGARA_EN_AZ]) or IZGARA_EN_AZ
         alinmayan = [n for n in range(1, sutun + 1) if n not in alinan]
+        devre = veri.devre(gun, s)
         ogrenci_saat: dict[tuple[str, int], set[int]] = {}
-        for y in ks:
-            for oid in yoklar.get(y["id"], ()):
-                ogrenci_saat.setdefault((s, oid), set()).add(y["ders_no"])
+        gec_saat: dict[tuple[str, int], set[int]] = {}
+        ozurlu_saat: dict[tuple[str, int], set[int]] = {}
+        for n in alinan:
+            yok_k, gec_k = veri.kumeler(tarih, s, n)
+            for oid in yok_k:
+                ogrenci_saat.setdefault((s, oid), set()).add(n)
+                if veri.mazeret_kapsar(oid, tarih, n, devre):
+                    ozurlu_saat.setdefault((s, oid), set()).add(n)
+            for oid in gec_k:
+                gec_saat.setdefault((s, oid), set()).add(n)
         ogrenciler = []
-        for r in _ogrenci_satirlari(b, ogrenci_saat, {s: set(alinan)}):
-            hucreler = ["Y" if n in r["saatler"] else ("." if n in alinan else "-") for n in range(1, sutun + 1)]
+        for r in _ogrenci_satirlari(b, ogrenci_saat, {s: set(alinan)}, gec_saat, ozurlu_saat):
+            hucreler = []
+            for n in range(1, sutun + 1):
+                if n not in alinan:
+                    hucreler.append("-")
+                elif n in r["saatler"]:
+                    hucreler.append("Ö" if n in r["ozurlu_saatler"] else "Y")
+                else:
+                    hucreler.append("G" if n in r["gec_saatler"] else ".")
             ogrenciler.append({**r, "hucreler": hucreler})
         alanlar = []
         for n in range(1, sutun + 1):
@@ -848,12 +1125,13 @@ def icmal(b, gun: date, sube: str | None = None) -> dict:
             "alinan_metni": aralik_yaz(alinan) if alinan else "yok", "alinmayan": alinmayan,
             "alinan_sayisi": len(alinan), "sutun_sayisi": sutun, "ogrenciler": ogrenciler, "alanlar": alanlar,
             "program_bilinir": program_bilinir,
+            "gec_var": any(o["gec_sayisi"] for o in ogrenciler), "ozurlu_var": any(o["ozurlu_sayisi"] for o in ogrenciler),
         })  # fmt: skip
     return {"tarih": tarih, "tarih_yazi": tarih_yazi(gun), "tarih_kisa": tarih_kisa(gun), "subeler": sonuc}
 
 
 def icmal_metni(veri: dict) -> str:
-    """Kopyalanabilir düz metin (sekmeyle ayrılmış; şube başlıklı)."""
+    """Kopyalanabilir düz metin (sekmeyle ayrılmış; şube başlıklı). Geç ve özürlü saatler varsa satır sonuna eklenir."""
     satirlar = [f"{veri['tarih_yazi']} — ders yoklaması icmali"]
     for s in veri["subeler"]:
         bas = f"{s['sube']}{' · ' + s['devre_adi'] if s.get('devre_adi') else ''} (yoklama alınan: {s['alinan_metni']}"
@@ -865,17 +1143,24 @@ def icmal_metni(veri: dict) -> str:
         if not s["ogrenciler"]:
             satirlar.append("yok yazılan öğrenci yok")
         for o in s["ogrenciler"]:
-            satirlar.append("\t".join([o["okul_no"], o["ad_soyad"], ",".join(map(str, o["saatler"])), str(o["sayi"])]))
+            parcalar = [o["okul_no"], o["ad_soyad"], ",".join(map(str, o["saatler"])), str(o["sayi"])]
+            if o.get("gec_saatler"):
+                parcalar.append("geç: " + ",".join(map(str, o["gec_saatler"])))
+            if o.get("ozurlu_saatler"):
+                parcalar.append("özürlü: " + ",".join(map(str, o["ozurlu_saatler"])))
+            satirlar.append("\t".join(parcalar))
     return "\n".join(satirlar) + "\n"
 
 
+# Yeni sütunlar SONA eklenir (var olanların sırası değişmez). Mazeret türü CSV'ye girmez.
 ICMAL_CSV_BASLIKLARI = ["Tarih", "Şube", "Okul No", "Adı", "Soyadı", "Yok Ders Saatleri", "Yok Ders Saati Sayısı",
-                        "Yoklama Alınan Ders Saati Sayısı"]  # fmt: skip
+                        "Yoklama Alınan Ders Saati Sayısı", "Geç Sayısı", "Özürlü Yok Sayısı"]  # fmt: skip
 
 
 def icmal_csv(veri: dict) -> bytes:
     satirlar = [
-        [veri["tarih_kisa"], s["sube"], o["okul_no"], o["ad"], o["soyad"], ",".join(map(str, o["saatler"])), o["sayi"], s["alinan_sayisi"]]
+        [veri["tarih_kisa"], s["sube"], o["okul_no"], o["ad"], o["soyad"], ",".join(map(str, o["saatler"])), o["sayi"], s["alinan_sayisi"],
+         o.get("gec_sayisi", 0), o.get("ozurlu_sayisi", 0)]  # fmt: skip
         for s in veri["subeler"]
         for o in s["ogrenciler"]
     ]
@@ -893,9 +1178,10 @@ def kayit_ayrintisi(b, yoklama_id: int) -> dict | None:
     if not y:
         return None
     yoklar = set(yok_listesi(b, yoklama_id))
+    gecler = set(gec_listesi(b, yoklama_id))
     liste = {o["id"]: o for o in sube_ogrencileri(b, y["sube"])}
-    if yoklar - set(liste):
-        eksik = sorted(yoklar - set(liste))
+    if (yoklar | gecler) - set(liste):
+        eksik = sorted((yoklar | gecler) - set(liste))
         for o in b.execute(f"SELECT * FROM ogrenci WHERE id IN ({','.join('?' * len(eksik))})", eksik):
             liste[o["id"]] = o
     adlar = {i: ad_soyad(o) for i, o in liste.items()}
@@ -912,6 +1198,8 @@ def kayit_ayrintisi(b, yoklama_id: int) -> dict | None:
         izler.append({
             "zaman": an_yazi(iz["zaman"]), "kim": iz["kim"], "islem": IZ_ISLEM_ADI.get(iz["islem"], iz["islem"]),
             "eklenen": [adlar.get(i, f"#{i}") for i in eklenen], "cikarilan": [adlar.get(i, f"#{i}") for i in cikarilan],
+            "gec_eklenen": [adlar.get(i, f"#{i}") for i in json.loads(iz["gec_eklenen"] or "[]")],
+            "gec_cikarilan": [adlar.get(i, f"#{i}") for i in json.loads(iz["gec_cikarilan"] or "[]")],
             "aciklama": iz["aciklama"],
         })  # fmt: skip
     gun = tarih_coz(y["tarih"])
@@ -949,8 +1237,12 @@ def kayit_ayrintisi(b, yoklama_id: int) -> dict | None:
         "guncelleme": an_yazi(y["guncelleme"]),
         "mevcut": y["mevcut"],
         "yok_sayisi": len(yoklar),
+        "gec_sayisi": len(gecler),
+        # Geç kutusu yalnız devrenin ilk dersinde (ya da kayıtta zaten geç varsa) gösterilir.
+        "gec_secilebilir": bool(gun and gec_secilebilir(b, gun, y["sube"], y["ders_no"])),
         "ogrenciler": [
-            {"id": o["id"], "okul_no": o["okul_no"], "ad_soyad": ad_soyad(o), "yok": o["id"] in yoklar, "pasif": not o["aktif"]}
+            {"id": o["id"], "okul_no": o["okul_no"], "ad_soyad": ad_soyad(o), "yok": o["id"] in yoklar, "gec": o["id"] in gecler,
+             "pasif": not o["aktif"]}  # fmt: skip
             for o in ogrenci_sirala(liste.values())
         ],
         "izler": izler,
@@ -1017,10 +1309,10 @@ class OnizlemeDeposu:
         for anahtar in [k for k, v in list(self.kayitlar.items()) if v[0] <= simdi]:
             self.kayitlar.pop(anahtar, None)
 
-    def koy(self, kullanici_id: int, veri: dict) -> str:
+    def koy(self, kullanici_id: int, veri: dict, omur_sn: int = ONIZLEME_OMRU_SN) -> str:
         self._temizle()
         belirtec = guvenlik.belirtec()
-        self.kayitlar[guvenlik.ozet(belirtec)] = (time.monotonic() + ONIZLEME_OMRU_SN, kullanici_id, veri)
+        self.kayitlar[guvenlik.ozet(belirtec)] = (time.monotonic() + omur_sn, kullanici_id, veri)
         return belirtec
 
     def al(self, belirtec, kullanici_id: int) -> dict | None:
@@ -1126,7 +1418,12 @@ def hepsini_sil(b) -> tuple[int, int]:
     """
     ogrenci = b.execute("SELECT COUNT(*) FROM ogrenci").fetchone()[0]
     yoklama_ = b.execute("SELECT COUNT(*) FROM yoklama").fetchone()[0]
-    b.execute("DELETE FROM yoklama")  # CASCADE: yoklama_yok, yoklama_iz
+    # Sıra bağlayıcıdır: öğrenciye giden yabancı anahtarlar CASCADE'siz (yok, geç, düzeltme, mazeret); önce onlar.
+    b.execute("DELETE FROM yoklama_yok")
+    b.execute("DELETE FROM yoklama_gec")
+    b.execute("DELETE FROM yoklama")  # CASCADE: yoklama_iz
+    b.execute("DELETE FROM yoklama_duzeltme")
+    b.execute("DELETE FROM yoklama_mazeret")
     b.execute("DELETE FROM yoklama_belirtec")
     b.execute("DELETE FROM eokul_islendi")
     b.execute("DELETE FROM ogrenci")
@@ -1143,12 +1440,17 @@ def imha(b, an: int) -> dict:
     """
     sinir = saklama.imha_siniri(b, bugun(an))
     kayit = 0
+    katman = 0
     program_sayisi = 0
     usb = {"silinen": 0, "bosaltilan": 0}
     if sinir:
         from . import usb_anahtar  # döngüsel içe aktarma olmasın (usb_anahtar bu modülü kullanır)
 
-        kayit = b.execute("DELETE FROM yoklama WHERE tarih <= ?", (sinir.isoformat(),)).rowcount
+        kayit = b.execute("DELETE FROM yoklama WHERE tarih <= ?", (sinir.isoformat(),)).rowcount  # CASCADE: yok, geç, iz
+        # 0.14.0: panel düzeltmeleri ve mazeretler de öğrenci kimliği taşır. Aralığı sınırı aşan mazeret de
+        # bütünüyle silinir (başlangıcı eski yılda kalan kayıt yeni yıla taşınmaz).
+        katman = b.execute("DELETE FROM yoklama_duzeltme WHERE tarih <= ?", (sinir.isoformat(),)).rowcount
+        katman += b.execute("DELETE FROM yoklama_mazeret WHERE bas_tarih <= ?", (sinir.isoformat(),)).rowcount
         b.execute("DELETE FROM eokul_islendi WHERE tarih <= ?", (sinir.isoformat(),))
         # Öğretmen programında eski yılın kişi bağlantıları süresiz tutulmaz.
         program_sinir = int(datetime.combine(sinir + timedelta(days=1), datetime.min.time(), ISTANBUL).timestamp())
@@ -1159,22 +1461,29 @@ def imha(b, an: int) -> dict:
         # 0.11.0 §7: iptal edilmiş USB anahtarları silinir, etkinlerin son kullanım bilgisi boşaltılır.
         usb = usb_anahtar.yil_sonu(b, sinir)
     ogrenci = b.execute(
-        "DELETE FROM ogrenci WHERE aktif = 0 AND NOT EXISTS (SELECT 1 FROM yoklama_yok yy WHERE yy.ogrenci_id = ogrenci.id)"
+        "DELETE FROM ogrenci WHERE aktif = 0 "
+        "AND NOT EXISTS (SELECT 1 FROM yoklama_yok yy WHERE yy.ogrenci_id = ogrenci.id) "
+        "AND NOT EXISTS (SELECT 1 FROM yoklama_gec yg WHERE yg.ogrenci_id = ogrenci.id) "
+        "AND NOT EXISTS (SELECT 1 FROM yoklama_duzeltme yd WHERE yd.ogrenci_id = ogrenci.id) "
+        "AND NOT EXISTS (SELECT 1 FROM yoklama_mazeret ym WHERE ym.ogrenci_id = ogrenci.id)"
     ).rowcount
     b.execute("DELETE FROM yoklama_belirtec WHERE bitis <= ?", (an,))
     b.execute(
         "UPDATE ogretmen_pin SET hatali_sayi = 0, hatali_ilk = NULL WHERE hatali_ilk IS NOT NULL AND hatali_ilk <= ?",
         (an - OGRETMEN_PENCERE_SN,),
     )
-    if kayit or ogrenci:
+    if kayit or ogrenci or katman:
         ayrinti = f"{kayit} kayıt, {ogrenci} öğrenci"
-        if kayit:
+        if katman:
+            ayrinti += f", {katman} düzeltme/mazeret"
+        if kayit or katman:
             ayrinti += f" (öğretim yılı bitişi {saklama.tarih_metni(sinir)})"
         vt.kayit_dus(b, "sistem", "Yoklama imhası", ayrinti)
     if usb["silinen"] or usb["bosaltilan"]:
         vt.kayit_dus(b, "sistem", "USB anahtar yıl sonu temizliği",
                      f"{usb['silinen']} iptal edilmiş anahtar silindi, {usb['bosaltilan']} anahtarın son kullanım bilgisi silindi")  # fmt: skip
-    return {"kayit": kayit, "ogrenci": ogrenci, "usb": usb["silinen"] + usb["bosaltilan"], "program": program_sayisi}
+    return {"kayit": kayit, "ogrenci": ogrenci, "usb": usb["silinen"] + usb["bosaltilan"], "program": program_sayisi,
+            "katman": katman}  # fmt: skip
 
 
 class YoklamaZamanlayici:
@@ -1186,4 +1495,4 @@ class YoklamaZamanlayici:
             return False
         vt.ayar_yaz(b, "yoklama_imha_son_tur", an)
         sonuc = imha(b, an)
-        return bool(sonuc["kayit"] or sonuc["ogrenci"] or sonuc["usb"] or sonuc["program"])
+        return bool(sonuc["kayit"] or sonuc["ogrenci"] or sonuc["usb"] or sonuc["program"] or sonuc["katman"])

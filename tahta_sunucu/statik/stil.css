@@ -1035,3 +1035,169 @@
   .usb-tablo th.kod { white-space: nowrap; }
   .usb-tablo td .rozet + .not { display: block; }
 }
+/* ---- 0.14.0: şube defteri (öğrenci × ders saati), son günler, mazeret/izin, geç işareti.
+        Renk tek başına anlam taşımaz: her durum harf/simge + desen taşır. Yalnız tema ve durum belirteçleri;
+        yazdırmada siyah-beyaz. Beş gün kipinde hücre 22×26 px: 8 ders × 5 gün 1366 px'te yatay kaydırmasız sığar. ---- */
+@layer bilesen {
+  .genis-sayfa main { max-inline-size: 100rem; }
+  /* Şube defterinde tablo ilk ekranda görünsün: üst bloklar sıkı dizilir (içerik aynı, yalnız boşluklar küçülür). */
+  .genis-sayfa .sayfa-bas { margin-block-end: .35rem; }
+  .genis-sayfa .sayfa-bas p { display: none; }
+  .genis-sayfa .sekmeler { margin-block-end: .5rem; }
+  .genis-sayfa :is(.kvkk-bant, .arac-cubugu) { padding-block: .35rem; margin-block-end: .5rem; }
+  .genis-sayfa #defter-baslik { margin-block: .25rem .4rem; }
+  .alan-kisa { inline-size: 4.5rem; }
+  .kip-dugmeleri { display: inline-flex; gap: .25rem; }
+  .kip-dugmeleri a[aria-current] { background: var(--ana-hafif); border-color: var(--ana-yazi); font-weight: 650; }
+  .defter-lejant { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem 1rem; list-style: none; padding: 0; margin: 0 0 .5rem; }
+  /* Dar ekranda tablo kendi kabında kayar. Geniş ekranda ve tablo sayfaya sığıyorsa (.sigar: sunucu sütun sayısından
+     bilir) kabın kendi kaydırması YOKTUR: sayfa kayar, başlık satırı ve fırça şeridi pencerenin üstünde yapışkan kalır
+     (iç içe iki dikey kaydırma çubuğu olmaz). position: relative — hücrelerdeki görünmez (.gizli, mutlak konumlu) metinler
+     kabın dışına taşıp dar ekranda sayfayı yatay kaydırmasın. */
+  .defter-kap { position: relative; overflow: auto; max-block-size: calc(100dvh - 5rem); background: var(--yuzey); border: 1px solid var(--cizgi);
+    border-radius: .75rem; margin-block-end: .5rem; }
+  @media (min-width: 85rem) {
+    .defter-kap.sigar { overflow: visible; max-block-size: none; }
+    .firca-serit { flex-wrap: nowrap; block-size: 3.25rem; }
+    .defter-formu:has(.firca-serit) .defter-kap.sigar .defter-gun thead th { inset-block-start: 3.25rem; }
+  }
+  .defter-kap:focus-visible { outline: 3px solid var(--odak); outline-offset: 2px; }
+  .defter { border-collapse: separate; border-spacing: 0; inline-size: auto; font-size: .8125rem; }
+  .defter :is(th, td) { box-sizing: border-box; padding: .15rem .4rem; border-block-end: 1px solid var(--cizgi); white-space: nowrap;
+    vertical-align: middle; background: var(--yuzey); }
+  .defter thead th { position: sticky; inset-block-start: 0; z-index: 2; block-size: 1.75rem; padding-block: 0; text-align: center;
+    font-weight: 600; background: var(--yuzey2); }
+  .defter thead tr:nth-child(2) th { inset-block-start: 1.75rem; }
+  .defter thead abbr { text-decoration: none; }
+  .defter tbody th { text-align: start; font-weight: 500; }
+  .defter .yap { position: sticky; z-index: 1; overflow: hidden; text-overflow: ellipsis; }
+  .defter thead .yap { z-index: 3; }
+  .defter .y1 { inset-inline-start: 0; inline-size: 3rem; min-inline-size: 3rem; max-inline-size: 3rem; }
+  .defter .y2 { inset-inline-start: 3rem; inline-size: 10rem; min-inline-size: 10rem; max-inline-size: 10rem; }
+  .defter .y3 { inset-inline-start: 13rem; inline-size: 5.25rem; min-inline-size: 5.25rem; max-inline-size: 5.25rem; padding-inline: .2rem; }
+  .defter .y4 { inset-inline-start: 18.25rem; inline-size: 3.75rem; min-inline-size: 3.75rem; max-inline-size: 3.75rem; padding-inline: .2rem;
+    text-align: center; }
+  .defter-gun .y2 { inline-size: auto; min-inline-size: 11rem; max-inline-size: 16rem; border-inline-end: 2px solid var(--metin); }
+  .defter-bes .y3 .rozet { font-size: .6875rem; padding-inline: .3rem; white-space: nowrap; }
+  .defter tr.vurgulu > .y1 { box-shadow: inset 4px 0 0 var(--d-sorun); }
+  .defter .gun-ilk { border-inline-start: 2px solid var(--metin); }
+  /* display: panonun genel .ozet kuralı (flex) tablo hücresini bozuyordu: alt satırdaki sayılar tek sütunda alt alta diziliyordu. */
+  .defter .ozet { display: table-cell; margin: 0; font-weight: 600; border-inline-start: 2px solid var(--metin); }
+  .defter-bes td.ozet { position: sticky; inset-inline-end: 0; z-index: 1; } /* Y / G sütunu yatay kaydırmada kenarda kalır */
+  .defter-bes thead th.ozet-bas { inset-inline-end: 0; z-index: 3; border-inline-start: 2px solid var(--metin); }
+  .defter-islem [hidden] { display: none; }
+  .defter thead th.sayi-hucre { text-align: end; }
+  .defter .dh .saat { display: block; font-weight: 400; font-size: .6875rem; color: var(--soluk); }
+  .defter-gun thead th { block-size: auto; padding-block: .25rem; vertical-align: top; }
+  .defter-gun thead th .kucuk { display: block; margin: .2rem auto 0; }
+  .defter-islem > :is(button, a) { margin-inline-end: .4rem; vertical-align: middle; }
+  .defter-ogrenci tbody th { min-inline-size: 11rem; }
+  .defter-ogrenci td.yh { inline-size: 2rem; min-inline-size: 2rem; }
+
+  /* Hücre: harf + renk + desen. --hz zemin; gün grupları dönüşümlü (g1). */
+  .defter td.yh { --hz: var(--yuzey); position: relative; padding: 0; inline-size: 22px; min-inline-size: 22px; block-size: 26px;
+    text-align: center; background: var(--hz); font-family: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; }
+  .defter td.yh.g1, .defter thead th.g1 { --hz: var(--yuzey2); }
+  .defter thead th.g0 { background: var(--yuzey); }
+  .defter td.yh > :is(a, span) { display: block; line-height: 25px; color: inherit; text-decoration: none; }
+  .defter td.yh > a:hover { box-shadow: inset 0 0 0 2px var(--ana-yazi); }
+  .defter td.yh > :is(a, button):focus-visible { outline-offset: -3px; }
+  .defter-gun td.yh { inline-size: 2.5rem; min-inline-size: 2.5rem; block-size: 2rem; }
+  .defter-gun td.yh > span { line-height: 2rem; }
+  .defter-gun td.yh > button { display: block; inline-size: 100%; min-inline-size: 28px; block-size: 2rem; min-block-size: 28px; padding: 0;
+    border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+  .defter-gun td.yh > button:hover { box-shadow: inset 0 0 0 2px var(--ana-yazi); }
+  .defter-gun td.yh[aria-busy="true"] { opacity: .6; }
+  .yh-ornek { --hz: var(--yuzey); position: relative; display: inline-block; inline-size: 1.5rem; block-size: 1.5rem; line-height: 1.5rem;
+    text-align: center; border: 1px solid var(--cizgi); border-radius: .25rem; background: var(--hz);
+    font-family: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; }
+  :is(.defter td.yh, .yh-ornek)[data-d="var"], :is(.defter td.yh, .yh-ornek)[data-d="alinmadi"] { color: var(--soluk); }
+  :is(.defter td.yh, .yh-ornek)[data-d="yok"] { --hz: var(--dz-sorun); color: var(--d-sorun); font-weight: 700; }
+  :is(.defter td.yh, .yh-ornek)[data-d="gec"] { color: var(--d-duyuru); font-weight: 700;
+    background: repeating-linear-gradient(135deg, var(--dz-duyuru) 0 4px, var(--yuzey) 4px 7px); box-shadow: inset 0 0 0 1px var(--d-duyuru); }
+  :is(.defter td.yh, .yh-ornek)[data-d="yok"][data-ozurlu] { --hz: var(--dz-kilit); color: var(--d-kilit); outline: 1px dotted var(--d-kilit);
+    outline-offset: -3px; }
+  :is(.defter td.yh, .yh-ornek)[data-kapsam]::after { content: ""; position: absolute; inset-block-start: 2px; inset-inline-end: 2px;
+    inline-size: 5px; block-size: 5px; border-radius: 50%; background: var(--d-kilit); }
+  :is(.defter td.yh, .yh-ornek)[data-duz] > *, .yh-ornek[data-duz] { text-decoration: underline; text-decoration-thickness: 2px;
+    text-underline-offset: 3px; }
+
+  /* Gün şeridi ve "N gündür" rozeti */
+  .gun-seridi { font-family: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; letter-spacing: .08em; white-space: nowrap; }
+  .gun-seridi [data-s="hep"] { color: var(--d-sorun); }
+  .gun-seridi [data-s="kismen"] { color: var(--d-duyuru); }
+  .gun-seridi :is([data-s="tam"], [data-s="alinmadi"]) { color: var(--soluk); }
+  .son-gunler .gun-seridi { font-size: 1.125rem; }
+
+  /* Fırça ve düzeltme notu: tek satırlık yapışkan şerit (listede aşağıdayken de fırça ve not elin altında);
+     ipuçları açılır kutuda, tablonun önünde yer kaplamaz. */
+  .firca-serit { position: sticky; inset-block-start: 0; z-index: 5; box-sizing: border-box; display: flex; flex-wrap: wrap;
+    align-items: center; gap: .4rem 1rem; padding: .4rem .75rem; margin-block-end: .5rem; background: var(--yuzey2);
+    border: 1px solid var(--cizgi); border-radius: .75rem; }
+  .firca-serit .firca { margin: 0; padding: 0; border: 0; min-inline-size: 0; flex-wrap: nowrap; }
+  .firca-ad { font-weight: 600; font-size: .875rem; }
+  .firca-serit .firca-not { display: flex; flex: 1 1 16rem; align-items: center; gap: .5rem; min-inline-size: 0; }
+  .firca-serit .firca-not label { margin: 0; white-space: nowrap; font-size: .875rem; }
+  .firca-serit .firca-not input { flex: 1 1 8rem; inline-size: auto; min-inline-size: 6rem; }
+  .firca-yardim { position: relative; }
+  .firca-yardim > summary { cursor: pointer; white-space: nowrap; font-size: .875rem; }
+  .firca-yardim-ic { position: absolute; inset-inline-end: 0; inset-block-start: calc(100% + .5rem); z-index: 6;
+    inline-size: min(32rem, 90vw); padding: .75rem 1rem; background: var(--yuzey); border: 1px solid var(--cizgi);
+    border-radius: .5rem; box-shadow: 0 .5rem 1.5rem rgb(0 0 0 / .25); font-size: .8125rem; }
+  .firca-yardim-ic p + p { margin-block-start: .5rem; }
+  .alindi-onay { border-inline-start: 4px solid var(--d-duyuru); margin-block-end: .5rem; scroll-margin-block-start: 4.5rem; }
+  .alindi-onay .satir { margin-block: .5rem 0; }
+  .alindi-onay .dugme-satiri { margin-block-start: .75rem; }
+  .firca { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin: 0 0 .75rem; }
+  .firca > legend { font-weight: 600; font-size: .875rem; margin-block-end: .35rem; }
+  .firca-sec { display: inline-flex; align-items: center; gap: .4rem; margin: 0; padding: .3rem .7rem; min-block-size: 2.25rem;
+    border: 1px solid var(--cizgi); border-radius: .5rem; font-weight: 500; cursor: pointer; }
+  .firca-sec:has(input:checked) { border-color: var(--ana-yazi); box-shadow: inset 0 0 0 1px var(--ana-yazi); font-weight: 650; }
+  .firca-sec:has(input:focus-visible) { outline: 3px solid var(--odak); outline-offset: 2px; }
+  .firca-sec input:focus-visible { outline: none; }
+  .firca-not label { margin-block-start: 0; }
+  .firca-not .satir-ici { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  .defter-ileti:empty { display: none; }
+  .defter-ileti { font-weight: 600; margin-block-end: .35rem; }
+  .defter-ileti[data-hata] { color: var(--d-sorun); }
+
+  /* Mazeret formu, kayıt sayfasındaki geç kutusu, icmal işaretleri */
+  .mz-kapsam { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; margin-block: .75rem 0; }
+  .mz-kapsam > legend { font-weight: 600; font-size: .875rem; }
+  .mz-kapsam .ipucu { flex-basis: 100%; }
+  .gelmedi-kutu.gec-kutu { margin-inline-start: .5rem; }
+  .gelmedi-kutu.gec-kutu input { accent-color: var(--d-duyuru); }
+  .gelmedi-kutu.gec-kutu:has(input:checked) { background: var(--dz-duyuru); color: var(--d-duyuru); }
+  .yk-icmal-tablo .gec-isaret { font-weight: 700; color: var(--d-duyuru); }
+  .yk-icmal-tablo .ozurlu-isaret { color: var(--d-kilit); }
+
+  @media print {
+    /* Şube defteri yatay basılır (adlandırılmış sayfa; genel kural A4 dikeydir): 8 ders × 5 gün + Y / G sayfaya sığsın. */
+    @page genis { size: A4 landscape; margin: 8mm; }
+    body.genis-sayfa { page: genis; } /* gövdenin tamamı: main'e verilince öncesindeki boş kutu ayrı (dikey, boş) sayfa açıyordu */
+    .genis-sayfa main { max-inline-size: none; }
+    .defter-kap { overflow: visible; max-block-size: none; border: 0; }
+    .defter { font-size: 7.5pt; }
+    .defter .y1 { inline-size: 46px; min-inline-size: 46px; max-inline-size: 46px; }
+    .defter-bes .y2 { inline-size: 128px; min-inline-size: 128px; max-inline-size: 128px; }
+    .defter-bes .y3 { inline-size: 72px; min-inline-size: 72px; max-inline-size: 72px; }
+    .genis-sayfa .sekmeler { display: none; }
+    .defter-bes .y4 { inline-size: 46px; min-inline-size: 46px; max-inline-size: 46px; }
+    .defter-bes td.yh { inline-size: 18px; min-inline-size: 18px; block-size: 20px; }
+    .defter-bes td.yh > :is(a, span) { line-height: 19px; }
+    .defter-bes thead th.dh { padding-inline: 0; }
+    .defter-bes :is(td.ozet, th.ozet-bas) { padding-inline: 2px; }
+    .defter :is(th, td), .defter td.yh, .yh-ornek { position: static !important; background: #fff !important; color: #000 !important;
+      border-color: #999; box-shadow: none !important; }
+    .defter td.yh[data-d="gec"] { outline: 1px solid #000; outline-offset: -3px; }
+    .defter td.yh[data-d="yok"][data-ozurlu] { outline: 1px dotted #000; }
+    :is(.defter td.yh, .yh-ornek)[data-kapsam]::after { background: #000; }
+    .gun-seridi [data-s] { color: #000; }
+    .yk-icmal-tablo :is(.gec-isaret, .ozurlu-isaret) { color: #000; }
+  }
+  @media (forced-colors: active) {
+    :is(.defter td.yh, .yh-ornek):is([data-d="yok"], [data-d="gec"]) { outline: 1px solid CanvasText; outline-offset: -2px; }
+    .firca-sec:has(input:checked) { outline: 3px solid Highlight; }
+  }
+}
+/* ---- 0.14.0 sonu ---- */

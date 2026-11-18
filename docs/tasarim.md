@@ -820,8 +820,11 @@ ders saati bazındadır). Tahtadan alınan yoklama sınıftaki **kâğıt yoklam
 kayıttır**, onun yerine geçmez; arayüz ve icmal bunu yazar. İkili eğitimde ders numarası şubenin
 kendi devresinindir (sabahçının 3. dersi ile öğlencinin 3. dersi ayrıdır); ızgara ve icmal şubenin
 yanında devre adını gösterir. Tahta Kontrol e-Okul'a bağlanmaz, veri göndermez, ondan veri
-çekmez; resmî devamsızlık kaydı e-Okul'dadır. Özür, rapor, izin nedeni tutulmaz (sağlık verisi
-olabilir); "geç geldi" ayrı işaret değildir; yarım gün/tam gün hesabı yapılmaz.
+çekmez; resmî devamsızlık kaydı e-Okul'dadır. Yarım gün/tam gün hesabı yapılmaz. 0.6.0–0.13.1'de özür,
+rapor, izin nedeni tutulmuyor, "geç geldi" ayrı işaret sayılmıyordu; kullanıcının 18.11.2026 isteğiyle
+0.14.0'da ikisi de sınırlı biçimde eklendi (§14.2): geç yalnız devrenin ilk dersinde; mazeret yalnız
+panelde, sabit türle ve serbest metinsiz (sağlık verisi birikmesin). Aşağıdaki tahta akışı ve panel
+anlatımının 0.14.0'da değişen yerleri de §14.2'dedir.
 
 **Sınıf listesi:** e-Okul'un "OOG01001R020 — Sınıf/Şube Öğrenci Listesi" Excel çıktısı (`.XLS`,
 blok düzenli; şube yalnız blok başlığında) olduğu gibi yüklenir; elle hazırlanmış düz tablo
@@ -859,7 +862,10 @@ biliniyorsa liste hemen gelir; değilse öğretmen şubeyi ve başlamış bir de
 saati yoksa 1–12). Liste düğmeleri maskeli etiket taşır ("Ayşe Y.", çakışmada "Ayşe Y. (47)", yine çakışırsa
 yalnız o öğrenciler için "1047 A. Y."; ayarla hep "1047 A. Y."); tahtada ad ve okul numarası
 hiçbir zaman ikisi birden açık görünmez. Çakışma eki düğmede ikinci satırdadır: uzun ad üç
-noktayla kısalsa da ek kesilmez.
+noktayla kısalsa da ek kesilmez. **0.14.0:** varsayılan biçim okul no + ad + soyadın baş harfidir
+("123 Ayşe Y."; kullanıcı kararı 18.11.2026) ve liste okul no sırasındadır; "ad ve numara birlikte açık
+görünmez" hükmü yalnız ders yoklaması listesi için kalktı, sınav ekranlarında sürer; tam soyad ve T.C.
+kimlik no tahtaya hiçbir biçimde gitmez (§14.2).
 Öğretmen gelmeyenlere dokunur (kırmızı zemin + "YOK" yazısı), **Kaydet** → onay sayfası
 ("2 öğrenci yok yazılacak: …") → **Onayla**. Kayıt tek seferliktir: belirteç silinir, liste
 ve işaretler ekrandan ve servisin belleğinden atılır; "Kaydedildi" iletisi 3 sn görünür. Aynı
@@ -889,8 +895,8 @@ yazılmaz. Kilit davranışı değişmez.
 **Panel:** üst menüde **Yoklama**; sayfa içi sekmeler Günlük görünüm · Panelden gir ·
 Öğretmenler ve PIN · Öğrenci listesi. Günlük görünüm şube × ders saati ızgarasıdır: "0"
 (alındı, yok yok), "3 yok", "alınmadı" (programda ders var, bitişinden 15 dk geçti; program
-yoksa hiç üretilmez), "·". Aynı saatin birden çok kaydı (bölünmüş ders, panel kaydı) **birleşim**
-olarak gösterilir. Satır sonunda "e-Okul'a işlendi" kutusu (değişince kendiliğinden kaydedilir;
+yoksa hiç üretilmez), "·". Aynı saatin birden çok kaydı (bölünmüş ders, panel kaydı) 0.13.1'e kadar
+**birleşim** olarak gösterilirdi; 0.14.0'dan beri en son kaydedilen geçerlidir (§14.2 birleşim kuralı). Satır sonunda "e-Okul'a işlendi" kutusu (değişince kendiliğinden kaydedilir;
 JS'siz "Kaydet" düğmesi). Kayıt ayrıntısında düzeltme ve silme **gerekçe** ister (T.C. kimlik
 no reddedilir); gerekçe ve öğrenci kimlikli değişiklik izi yalnız `yoklama_iz`'de durur, işlem
 kaydına yalnız sayılar ve öğretmen kodu yazılır. Panelden yoklama bugün ve son 7 gün içindir.
@@ -983,6 +989,199 @@ Yerleşim: sunucu `usb_anahtar.py` (iş mantığı), `panel_usb.py` (panel ve `/
 uçları, SÖZLEŞME bloğu); ajan `usb_anahtar.py` (saf: ayrıştırıcı, mountinfo, metinler), `sistem.py`
 (izleme, okuma), `servis.py` (durum makinesi), `ekran.py` (usb-pin sayfası, yoklama PIN'inin USB kipi,
 kilit ekranı düğmesi, `UsbBildirimi`), `tani.py` (USB satırları).
+
+### 14.2 Yoklama yeniden tasarımı (0.14.0)
+
+Kullanıcının 18.11.2026 isteği: tahtadaki yoklama ekranı kullanışsızdı (şube seçilince ders saati için
+kaydırmak gerekiyordu); öğrenciler numara sırasıyla "numara + ad + soyadın baş harfi" görünsün; birinci
+derste "geç" işaretlenebilsin; saate göre o anın dersi seçili gelsin; panelde yoklama kolay görülsün,
+mazeret/izin girilebilsin, son beş gün görülsün. Bu bölüm §14'ün üç hükmünü değiştirir: "geç ayrı işaret
+değildir", "özür/rapor/izin tutulmaz" ve "tahtada ad ile numara birlikte açık görünmez" (yalnız ders
+yoklaması listesi için). Değişmeyenler: yoklama kâğıdın yanında yardımcı kayıttır (K5), yarım/tam gün
+hesabı yapılmaz (K2), e-Okul'a bağlanılmaz, liste tahtada diske yazılmaz, saklama öğretim yılı sonuna
+kadardır (K3), ikili eğitimde ders numarası devre başınadır (K1).
+
+**Kararlar (18.11.2026; varsayım olarak kullanıcıya bildirildi, itiraz gelmedi):** tahtada okul no + ad +
+soyadın baş harfi gösterilir, tam soyad ve T.C. kimlik no tahtaya gitmez; mazerette serbest açıklama yoktur,
+seçenekler sabittir; defterde mazeretli yokluk tek "Ö" ile görünür; idare düzeltmesi öğretmen kaydını
+silmez (ayrı katman); yok → var düzeltmesinde kısa not zorunludur; geç yalnız her devrenin ilk dersindedir;
+teneffüste hangi dersin kastedildiği belirsizse "biten / başlayacak" sorulur.
+
+**Tahta — seçim görünümü (kaydırmasız).** `yoklama-liste` sayfasının içindeki görünümdür; kaydırma alanı
+yoktur. Üst satırda öneri düğmesi ("10/A · 3. ders 09:50–10:30 → Listeyi aç") ve öne alınan şubeler (★,
+en çok 6; açıklama yazısı yok); solda düzey sütunu (yalnız şube sayısı 15'i geçince; düzey, şube adının
+"/" öncesidir); ortada 5 sütunlu (bir düzeyde 20'den çok şube varsa 6) homojen şube ızgarası; sağda iki
+sütunlu ders saatleri. Şimdiki ders "● 3. ders · şimdi" diye yazıyla da işaretlidir (renk tek başına
+anlam taşımaz); biten ders "bitti" yazar; başlamamış ders soluk ve dokunulamazdır. Çok devreli okulda
+başlıkta devre adı durur; devre bilinmiyorsa sütun "Önce şubeyi seçin" der; devresi hiç bulunamayan şubede
+saatsiz 1–12 düğmesi çıkar. Ölçüler sabit değildir: ızgaralar kalan alanı paylaşır, yalnız sütun × satır
+sayısı saf işlevle seçilir. Şubeye dokununca servis sunucudan o şubenin ders saatlerini ve ders önerisini
+alır; ders tekse liste hemen açılır (tek dokunuş). 0.13.1'de ajan şube elle seçilince ders önerisini
+atıyordu; ikinci dokunuş ve kaydırma bu yüzden gerekiyordu. Öğretmen ders saatine şubeden ÖNCE dokunduysa
+seçim "elle" sayılır ve şube değişince yalnız yeni şubede aynı numara VE aynı başlangıç saati varsa
+korunur (sabahın 3. dersi öğlenin 3. dersine dönüşmez); saatsiz görünümden hiç korunmaz. Üst satırda uzun
+düzey adı yalnız gösterimde kısalır ("Hazırlık/G" → "Hz/G"); ızgara düğmeleri tam adı taşır.
+
+**Ders ön seçimi (sunucu, tek saf kural `yoklama.ders_kurali`).** Şubenin devresinin o günkü ders saatleri
+üzerinde, sunucu saatiyle: (1) süren ders; (2) yoksa 5 dakika içinde başlayacak ders; (3) yoksa son 15
+dakikada bitmiş ders; (4) yoksa ön seçim yok. Teneffüste hem biten hem başlayacak ders tutuyorsa ve kimlik
+(öğretmen programı) hangisinin kastedildiğini göstermiyorsa ders seçilmez: yanıt iki aday taşır
+(`ders_adaylari`), liste doğrudan açılmaz, seçim görünümü iki dersi "biten 2. ders" / "başlayacak 3. ders"
+diye vurgular ve tek dokunuşla seçilir. Tahtanın derslik programı o şubeye yalnız birinde ders gösteriyorsa
+aday teke iner. Kimlik biliniyorsa (PIN ya da öğretmen USB anahtarı sonrası) öğretmenin programında biten
+derste satırı olup başlayacakta olmayana biten, tersine başlayacak ders seçilir. Listenin üst satırında
+ders numarası ve saat aralığı en büyük yazıyla durur: yanlış ön seçimin savunması budur.
+
+Devre: şube verilmişse önce derslik programından, bulunamazsa öğretmen programındaki o şube-gün
+satırlarının saatlerinden bulunur (sorgu yalnız şube, gün, ders no ve saatleri seçer; ders adı ve
+öğretmen adı sorguya girmez); yoksa saatsiz 1–12. Şubesiz istekte devre, penceresi (ilk ders − 5 dk … son
+ders + 15 dk) şu anı kapsayan TEK devredir; iki devre birden kapsıyorsa (devir saati) ya da hiçbiri
+kapsamıyorsa ders saatleri boş döner ve ön seçim yapılmaz.
+
+Şube önerisi: PIN'siz `/ajan/yoklama/oneri` yalnız tahtanın derslik programını ve şubelerini kullanır;
+yanıtı hiçbir öğretmene bağlı değildir. PIN/USB doğrulandıktan sonra `/baslat` ve `/ajan/usb/yoklama`
+öğretmenin bugünkü programından öneri ve en çok dört şube ekler (idare anahtarında yok). İkisi aynıysa
+ya da yalnız biri varsa ve ders tekse liste doğrudan açılır. İkisi farklıysa liste AÇILMAZ: seçim görünümü
+tahtanın şubesi seçili, öğretmeninki ★ satırında açılır (vekâlet ve ders değişimi olağandır). Bu karar
+serviste liste isteğinden önce verilir (kod + PIN, USB + PIN ve PIN'siz USB aynı yerden geçer). Hiçbir
+durumda şube ya da ders düğmesi programa göre kapatılmaz (0.13.0 kararı: program yalnız ön seçimdir).
+
+**Tahta — öğrenci listesi.** Sıra okul numarasıdır (sunucu sıralar, ajan sırayı korur; numarasız öğrenci
+sonda). Etiketin yeni varsayılan biçimi `no_ad_soyadbas`: "123 Ayşe Y."; bu biçimde çakışma çözümü
+çalışmaz (numara ayırır). Pango kısaltması soyadın baş harfini yuttuğu için ad kısmını sunucu kısaltır:
+eşikten uzunsa ikinci ve sonraki adlar baş harfe iner ("Muhammed E. Y."), hâlâ uzunsa ilk ad kesilir;
+soyadın baş harfi her zaman kalır. Eşik sütun sayısına bağlıdır (6 sütun: 16, 7 sütun: 13 karakter).
+Göç, kayıtlı `ad_soyadbas` ayarını `no_ad_soyadbas` yapar; "Ayşe Y." ve "1047 A. Y." biçimleri Ayarlar'da
+seçilebilir kalır. Etiket sunucuda kurulduğu için güncellenmemiş (eski ajanlı) tahtalarda da numara görünür.
+
+Liste kaydırmasızdır: homojen ızgara, mevcut ≤ 42 ise 6×7, 43–48 ise 6×8, 49–56 ise 7×8; 56'dan çok
+öğrenci 56'lık sayfalara bölünür. Sayfalı listede ana düğme bütün sayfalar en az bir kez gösterilene kadar
+"Sonraki sayfa ›" olarak çalışır, sonra KAYDET olur (görülmeyen sayfadaki öğrenciler sessizce "var"
+sayılmasın); işaretler sayfa değişince korunur. Öğrenci düğmesi iki satırdır: üstte okul no ve durum
+yazısı (YOK / GEÇ), altta ad. YOK koyu kırmızı, GEÇ koyu kehribar zemin ve kalın kenardır; yanıp sönme
+yoktur. Dokunuş ekranda hemen çizilir (servisin yanıtı beklenmez), servis aynı saf işlevle
+(`tahta_ajan/yoklama.sonraki_durum`) eşitler. Alt çubuk "Yok: n · Geç: m · Derste: k/toplam" yazar;
+"Temizle" KAYDET ve Vazgeç'ten uzakta, en soldadır ve iki dokunuş ister. Sonuç iletisi "Kaydedildi: n yok,
+m geç."dir. Listeden seçim görünümüne dönüp aynı şube ve derse gelince işaretler korunur.
+
+**Geç.** Yalnız şubenin devresinin o günkü planındaki en küçük numaralı derste seçilebilir (sabah ve öğle
+devresinin ilk dersi ayrı ayrı; devre bulunamazsa 1. ders). O derste dokunuş döngüsü var → yok → geç →
+var, diğer derslerde var ↔ yok'tur. Yeniden açılan listede var olan durum görünür: yok kayıtlı öğrenci tek
+dokunuşla geç, geç kayıtlı öğrenci tek dokunuşla var olur. Sunucu ilk ders dışındaki geçi ve aynı
+öğrencinin hem yok hem geç gönderilmesini 400 ile reddeder. Geç ayrı tablodadır (`yoklama_gec`), "yok"
+sayımına girmez, ayrı sayılır; panelde de aynı sınır geçerlidir.
+
+**Sunucu–ajan uyumu.** Ajan `durum.yetenekler`'e `yoklama_gec` ekler. Sözleşmenin örnek istek ve yanıtları
+`tests/yoklama_sozlesme.json`'dadır; iki tarafın testleri bu dosyadan beslenir. Karar tahtanın yeteneğine
+göredir: yetenekli ajan `/kaydet` gövdesinde `gec`'i her zaman yollar (boş liste dahil; yoksa 400);
+yeteneksiz ajanın kaydı var olan geçi silmez, ona geç öğrenci " (geç)" ekli etiketle gider, teneffüste
+biten ders ve iki aday önerilmez. Yeni ajan eski sunucuda geç sunmaz ve `gec` göndermez. `/liste`'deki
+`yok` ve `gec` o ders saatinin geçerli durumudur (aşağıdaki birleşim kuralı); kimin kaydı olduğu yanıtta
+yoktur. `/kaydet` gövdesi öğretmenin gördüğü tam durumdur ve kaydedenin kendi kaydına yazılır; başka
+öğretmenin kaydına dokunulmaz. Yeni alanların hiçbiri (`gec`, `subeler_once`, öneri, adaylar) tahtada
+`durum.json`'a, günlüğe, tanılamaya yazılmaz; öğretmene bağlı olanlar ekran yardımcısına yalnız belirteç
+varken gider; yoklama kapanınca bellekten atılır. Mazeret, geçmiş gün, tam soyad ve ders adı ajan
+yanıtlarına girmez; gelecek ya da bugünkü mazeret `/liste`'yi değiştirmez.
+
+**Panel — şube defteri** (`/yoklama/sube`; Yoklama sekmelerinde "Şube defteri", günlük görünümde şube adı
+buraya bağlanır). Varsayılan kip **son beş öğretim günüdür**: satırlar öğrenciler (okul no sırası, No + ad
+soyad), sütun grupları bitiş tarihinden geriye beş öğretim günü. Öğretim günü, şubenin devresine o gün
+ders veren ya da o şubenin yoklama kaydı bulunan gündür; hafta sonu, tatil ve "ders yok" günleri (kayıt
+yoksa) atlanır, en çok 30 takvim günü geriye bakılır. Plan dışı bir derse yazılmış kayıt başlığında `*`
+ile görünür. Sol yapışkan blok No · Ad · "N gündür" rozeti · beş işaretlik gün şerididir (gün başına tek
+işaret: alınan bütün derslerde yok, kısmen yok, tam, alınmadı; mazeretli gün ayrı işaret); sağda yapışkan
+yok/geç sayıları. Hücre simgeleri harf + renk + desendir: `·` var, `Y` yok, `G` geç, `Ö` yok ve geçerli
+mazeret, `V` idarenin "var" yaptığı hücre, `–` yoklama alınmadı, boş hücre o saatte ders yok (bugünün
+başlamamış dersi "henüz başlamadı"). 8 ders × 5 gün 1366 px'te yatay kaydırmasız sığar; sığan tabloda iç
+kaydırma yoktur (tek sayfa kaydırması, başlık satırı yapışkan), daha çok sütunda ve dar ekranda tablo kendi
+kabında kayar. "Yalnız yokluğu olanlar" süzgeci ve beşer günlük gezgin vardır. Yazdırma A4 yataydır.
+
+"N gündür derste görülmedi" rozeti türetilir, saklanmaz, dışa aktarılmaz, icmale girmez: bitişten geriye,
+yoklaması alınmış en az bir dersi olan ve alınan BÜTÜN derslerinde yok olduğu art arda gün sayısıdır.
+Yoklama alınmamış gün zinciri ne kırar ne sayılır; sayım beş günle sınırlı değildir (en çok 30 öğretim
+günü). Vurgu yalnız zincirde mazeretsiz en az bir gün varsa yapılır (N ≥ 2 düz, N ≥ 3 vurgulu); zincirin
+tamamı mazeret kapsamındaysa vurgusuz "N gündür yok (özürlü)" yazar, tür yazılmaz. Sayfa "e-Okul
+devamsızlık günü değildir" notunu taşır (K2, K5). Okul geneli kısa liste `/yoklama/son-gunler`'dedir
+(N ≥ 2; varsayılan olarak yalnız mazeretsiz günü olanlar). `/yoklama/ogrenci/{id}` bir öğrencinin son 20
+öğretim gününü ve mazeret kayıtlarını gösterir; salt okunurdur.
+
+**Gün kipi ve düzeltme katmanı.** Gün başlığından ya da hücreden o günün gün kipine geçilir. Düzenleme tek
+"fırça" modelidir ve JS'li ile JS'siz aynı çalışır: üstte yapışkan şeritte Yok / Geç / Var seçilir, hücreye
+tıklanınca o durum uygulanır, aynı durumdaki hücreye yeniden tıklamak düzeltmeyi kaldırır (alttaki kayıt
+geri görünür). JS yalnız yerinde güncelleme, ok tuşlarıyla gezinme ve `aria-live` iletisi ekler. Düzeltme
+öğretmenin/tahtanın kaydına DOKUNMAZ; `yoklama_duzeltme` tablosuna satır ekler (tablo kendi izidir: kim,
+ne zaman, hangi durum, not). Aynı kullanıcı aynı hücreyi 60 sn içinde yeniden değiştirirse yeni satır
+açılmaz. Yok/geç'i "var"a çeviren düzeltmede not zorunludur (en az 5 karakter, T.C. kimlik no reddedilir,
+"ad yazmayın" uyarısı); yok/geç eklemede isteğe bağlıdır. Not JS'siz gönderimler arasında adrese yazılmaz,
+sunucu belleğinde 30 dk tutulur. Geç yalnız devrenin ilk dersinde; gelecek ders reddedilir; bugün ve son 7
+gün düzenlenir, eskisi salt okunurdur.
+
+Yoklaması alınmamış (`–`) hücre tıklanamaz (409, satır oluşmaz): yalnız yok/geç satırı tutulduğu için kayıt
+açmak sınıfın geri kalanını "var" saymak olur. Kayıt panelden yalnız sütun başlığındaki "Alındı" düğmesiyle
+ve iki adımda açılır: düğme onay sorusunu tablonun üstünde açar ("işaretlenmeyen herkes derste sayılacak");
+o gün alınan bütün derslerde yok olan öğrenciler varsa, varsayılan işaretli seçenekle bu derste de yok
+yazılır. Satır işlemleri: "Bütün gün yok" (yalnız kaydı bulunan ders saatlerine; kaç dersin atlandığı
+iletide yazar), "Temizle" (satırın düzeltmelerini kaldırır), "Mazeret gir".
+
+**Birleşim kuralı (tek kod: `yoklama_defter.Veri.gecerli_duzeltmeler`/`kumeler`, `hucre_durumu`).** Bir
+ders saatinin geçerli durumu: o saatin EN SON KAYDEDİLEN yoklama kaydı; üstüne, o kayıttan eski olmayan en
+yeni panel düzeltmesi. Aynı ders saatinin iki kaydı artık birleştirilmez (0.6.0–0.13.1'de birleşimdi):
+tahta listeyi geçerli durumla açtığı ve kaydet tam durumu yazdığı için en son kayıt eksiksizdir. Örnek: A
+öğrenciyi yok kaydetti, sonra B geç kaydetti → hücre G; A'nın kaydı olduğu gibi durur. Günlük görünüm,
+icmal, metin, CSV, panelden giriş formu ve tahtanın `/liste` yanıtı aynı koddan geçer.
+
+Şartname panel düzeltmesinin her kaydı ezmesini öngörüyordu; uygulamada **"en son işlem geçerlidir"**
+seçildi: düzeltmeden SONRA tahtadan yeniden kaydedilen yoklama düzeltmenin üstüne geçer. Gerekçe: aksi
+halde öğretmene "Kaydedildi" denip kaydı gösterilmiyor, silinen bir kaydın düzeltmesi de sonradan alınan
+yeni yoklamayı eziyordu. Düzeltme ve iz satırları silinmez (kayıt silinip o ders saatinin başka kaydı
+kalmadıysa düzeltmeleri de silinir). Yan etkiler: kayıt ayrıntısındaki "Düzelt" eski bir kaydı düzeltince o
+kayıt en yeni olur ve öbür kaydı da panel düzeltmelerini de örter; aynı saniyedeki düzeltme ve kayıtta
+düzeltme kazanır; üstüne kayıt gelen (bayat) düzeltme hücrede görünmez, izi yalnız tablodadır. Bu seçim
+kullanıcıya sorulacaktır (§17 soru 65).
+
+**Mazeret/izin** (`/yoklama/mazeret`). Form: okul no(ları) (en çok 50), tarih aralığı, tam gün ya da ders
+aralığı, tür, isteğe bağlı dayanak. Türler: izinli, raporlu, mazeretli, görevli (nöbet, yarışma, gezi, okul
+görevi). **Serbest açıklama alanı yoktur** (sağlık verisi ve gerekçe metni birikmesin; belge e-Okul'da ve
+dosyasında durur); yerine sabit dayanak seçimi vardır: veli dilekçesi, kurum yazısı, belge sunuldu, idare
+izni. Tür saklanır ama mazeret sayfası ve öğrenci görünümünün mazeret bölümü dışında tek "özürlü" (`Ö`)
+olarak görünür: hücrede, icmalde, metinde, CSV'de, yazdırmada, erişilebilirlik metninde ve işlem kaydında
+tür yoktur. Tarih: bitiş başlangıçtan önce olamaz, en çok 31 gün; bitiş öğretim yılı bitişini (boşsa bugün +
+31 günü) geçemez; başlangıç en çok 7 gün geriye gider. Ders aralıklı mazerette bütün öğrenciler aynı
+devreden olmalıdır; kayıt giriş anındaki devreyi yazar. İki adımdır: önizleme (bulunan ve bulunamayan
+numaralar, kapsanan gün ve ders saati, kaçının yok kayıtlı olduğu) yalnız bellekte 10 dk durur, onay atomik
+yazar. Kaldırınca tür `iptal` yapılır, dayanak boşaltılır; kayıt listede tür göstermeden "kaldırıldı" diye
+30 gün görünür. Mazeret AYRI KATMANDIR: öğretmenin kaydını ve panel düzeltmesini değiştirmez; gösterimde
+yok + geçerli mazeret `Ö` olur, kaldırılınca asıl durum geri görünür. Tahtada mazeret hiç görünmez.
+
+**İcmal, e-Okul işareti, işlem kaydı, saklama.** İcmal hücrelerine `G` ve `Ö` eklendi; CSV'nin SONUNA
+"Geç Sayısı" ve "Özürlü Yok Sayısı" sütunları geldi (var olan sütunların sırası değişmedi; yok toplamı
+özürlü yokları içerir). "e-Okul'a işlendi" işareti, işaretten sonra o gün-şubede kayıt, düzeltme ya da
+mazeret değişirse "İşlendikten sonra değişti" olur. İşlem kaydına ad, numara, maske, mazeret türü ve tarih
+aralığı yazılmaz ("Şube defteri düzeltmesi: 16.11.2026 10/A, 3 hücre"; "Mazeret girildi: 2 öğrenci, 3
+gün"); öğrenci kimlikli iz yalnız `yoklama_iz`, `yoklama_duzeltme` ve `yoklama_mazeret`'tedir. Üçü de,
+`yoklama_gec` ile birlikte, öğretim yılı sonu imhasına ve "tümünü sil"e girer (aralığı sınırı aşan mazeret
+bütünüyle silinir); yalnız geç, düzeltme ya da mazeret kaydı olan pasif öğrenci imhaya kadar silinmez;
+şifreli yedek yeni tabloları taşır. Yeni sayfalar ve hücre yanıtı `no-store` döner, yönetici ve idareciye
+açıktır; beş günlük görünüm, son günler listesi, öğrenci görünümü ve mazeret listesi dışa aktarılmaz
+(yalnız yazdırılır). Şube defteri ve son günler aralığı toplu yükler: sorgu sayısı öğrenci ve şube
+sayısından bağımsızdır (uydurma 1200 öğrencide son günler listesi yaklaşık 65 ms).
+
+**Veri modeli (tek göç).** `yoklama.devre` (kayıt anındaki devre; eski satırda boş = türetilir),
+`yoklama_gec` (yoklama, öğrenci), `yoklama_iz`'e geç eklenen/çıkarılan sütunları, `yoklama_duzeltme` (tarih,
+şube, ders, öğrenci, durum var/yok/geç/kaldır, not, giren, zaman), `yoklama_mazeret` (öğrenci, tarih
+aralığı, ders aralığı ya da tam gün, devre, tür, dayanak, giren, oluşturma, iptal zamanı ve eden) ve maske
+ayarının çevrilmesi.
+
+**Dosyalar:** sunucu `yoklama.py`, `yoklama_defter.py` (yeni; defter, son günler, mazeret, birleşim),
+`panel_yoklama.py`, `panel_defter.py` (yeni uçlar), `maske.py`, `program.py` (`gun_planlari`), `vt.py`;
+ajan `servis.py`, `ekran.py`, `yoklama.py` (yeni; ortak saf kurallar); `scripts/ekran_olcum.py`.
+
+**Bilinen sınırlar ve denenmeyenler:** gerçek ETAP'ta dokunma ve gerçek sınıf listesiyle denenmedi; portre
+ekran yerleşimi yalnız ölçümle görüldü. Beş gün kipinde ad sütunu dardır (uzun soyad üç noktayla kesilir, tam
+ad ipucundadır); plan dışı dersle 40 sütunu aşan şubede tablo kendi kabında kayar. Hücre gezinmesi ok
+tuşlarıyladır; sekme sırası kısaltılmadı. Taslaktaki rehberlik/idari görüşme, nöbetçi ve faaliyet
+kategorileri, hücre aralığı seçimi ve ders arası yokluk uyarısı uygulanmadı
+(`docs/yoklama-yonetimi-tasarimi.md`). Saha adımları: `docs/saha-denemesi.md` §3.14.
 
 ## 15. Altyapı: şifreli yedek, sunucu adresleri, envanter, arıza (0.7.0)
 
@@ -1252,6 +1451,7 @@ izlenir. Kurulu (PyInstaller) programda sistem sertifika deposunun bulunduğu he
 | K | 16.11.2026 kararları (§17): ikili eğitim denetimi ve düzeltmeleri (yoklama önerisi, devre süzgeci, sınav şube duyurusu, ızgara/icmalde devre adı), öğretim yılı sonuna kadar saklama, acil yayını bütün idarecilere açma, yardımcı kayıt metinleri, boş ders uyarısı varsayılan açık + rapor; gün sonu oturum temizliği (K7, §12.1) | 0.8.0 — testlerle ve tarayıcıda denendi; oturum temizliği Debian 12 kabında (Xvfb + openbox, sahte profil) denendi; ETAP'ta denenecek |
 | 5B | USB anahtar: bellekteki anahtar dosyasıyla idare ve isteyen öğretmen için yoklama, ayarla kilit açma; tek seferlik indirme, iptal, kopya uyarısı (§14.1) | 0.11.0 — testlerle, tarayıcıda ve Debian 12 kabında loop bellekle (USB benzetimi) denendi; gerçek USB bellek, udisks ve ETAP'ta denenecek |
 | 3B | Zil düzenleyici (çizelgeler, haftalık düzen, tarihe özel çizelge, günü önizle, CSV; Okul Zili'nden alma aynı yapıya yazar) ve ders programını içe aktarma sihirbazı (aSc XML deneme, şablon CSV/XLSX, yapay zekâ istemi, önceki programlar) | 0.10.0 (§12.2–12.3) — testlerle ve tarayıcıda uydurma veriyle denendi; gerçek aSc dosyası ve okulun gerçek zil saatleriyle denenecek |
+| 5C | Yoklama yeniden tasarımı: tahtada kaydırmasız şube/ders seçimi, okul no sıralı liste, devrenin ilk dersinde geç, saate göre ders ön seçimi; panelde şube defteri (son beş öğretim günü, düzeltme katmanı), mazeret/izin, son günler listesi (§14.2) | 0.14.0 — testlerle, Debian 12 kabında (Xvfb) ekran ölçümüyle ve tarayıcıda uydurma veriyle denendi; ETAP'ta ve gerçek sınıfta denenecek |
 | 3C | Sihirbaza e-Okul "Haftalık Ders Programları" raporu (OOK11002_R01, .XLS): blok ayrıştırma, rapordan zil çizelgesi, zorunlu şube eşlemesi, şubenin tahtasına yazma (§12.4) | 0.12.0 — testlerle (uydurma matris) ve geliştirme bilgisayarında gerçek bir raporla (ayrı veri dizini, uydurma tahtalar) uçtan uca denendi; okulda denenecek |
 
 Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" ve "Seçili
@@ -1371,12 +1571,14 @@ Sınav kipi ve sınav yoklaması (0.5.0):
 
 Ders yoklaması (0.6.0):
 
-28. **"Geç geldi"** ayrı işaret olarak gerekli mi? (Şimdi tek durum: yok.)
+28. **"Geç geldi"** ayrı işaret olarak gerekli mi? (Karar, 18.11.2026, 0.14.0: evet; yalnız her devrenin
+    ilk dersinde, "yok" sayımına girmeden ayrı sayılır; §14.2.)
 29. **Kilitli tahtada doğru PIN kilidi de açsın mı?** Karar: açmaz; yoklama bitince kilit geri gelir.
 30. **PIN'i öğretmen kendisi değiştirebilsin mi?** Karar: hayır; idare yeni PIN üretir (sınıf
     önünde iki kez PIN yazdırmak gözetlenme riskini artırır).
 31. **Tahtadaki ad görünümü:** varsayılan "Ayşe Y." uygun mu? Seçenek: "1047 A. Y.". Ad soyadın
-    açık gösterimi bilerek kaldırıldı.
+    açık gösterimi bilerek kaldırıldı. (Karar, 18.11.2026, 0.14.0: varsayılan "123 Ayşe Y.", okul no
+    sırasıyla; eski iki biçim seçilebilir; tam soyad yine gösterilmez; §14.2.)
 33. **Aydınlatma:** okulun öğrenci/veli aydınlatma metni "ders yoklamasının etkileşimli tahtadan
     alınıp okul sunucusunda tutulmasını" kapsıyor mu?
 34. **Öğretmen listesi kaynağı:** öğretmenler elle ekleniyor; e-Okul personel listesi (OOK01001R1)
@@ -1395,6 +1597,15 @@ Ders yoklaması (0.6.0):
 40. **Program yokken icmal:** ders programı yüklenmemişse icmal, günlük ızgara gibi 8 ders
     saati varsayar ("ders programı yüklü değil, 8 saat varsayıldı"). Okulun günlük ders sayısı
     farklıysa programın yüklenmesi gerekir.
+65. **Düzeltmeden sonra tahtadan yeniden alınan yoklama** idarenin şube defterindeki düzeltmesinin üstüne
+    geçsin mi? (0.14.0'da böyle: "en son işlem geçerlidir"; gerekçe ve yan etkiler §14.2. Öbür seçenek:
+    idare düzeltmesi, kaldırılana kadar her kaydın üstünde kalır.)
+66. **Mazeret türleri** (izinli, raporlu, mazeretli, görevli) ve dayanak seçenekleri okulun uygulamasına
+    uyuyor mu? Defterde tür harfi görmek istenir mi? (Şimdi tek "Ö".)
+67. **Teneffüste ön seçim:** program hangi dersin kastedildiğini göstermiyorsa "biten / başlayacak"
+    sorulur. Her zaman başlayacak ders mi seçilsin?
+68. **Aydınlatma:** okulun aydınlatma metni tahtada okul numarası ile adın birlikte görünmesini ve mazeret
+    türünün (raporlu dahil) okul sunucusunda tutulmasını kapsıyor mu? (Soru 33'ün devamı.)
 
 Altyapı (0.7.0 ve 6B):
 
@@ -1462,6 +1673,9 @@ Arayüzde hiçbir mevzuat maddesine atıf yapılmaz. Belgeye dayanak olarak yaz�
   var; fıkra numarası yazılmadı (e-Okul'a ders saati bazında işlendiği K2 ile bilindi; yarım/tam güne
   çevirme yapılmaz). KVKK md. 12 (veri güvenliği) yoklama için de doğrulanacak. Aydınlatma metninin
   kapsamı (KVKK md. 10, soru 33) ve öğretim yılı sonuna kadar saklamanın imha politikasıyla uyumu (K3).
+- Mazeret kaydı (0.14.0): "raporlu" türünün özel nitelikli kişisel veri sayılıp sayılmayacağı (KVKK md. 6) ve
+  aydınlatma metninin kapsamı (md. 10; soru 68) — metinler yerelde doğrulanmadı; tedbir olarak serbest metin
+  alınmadı ve tür mazeret sayfası dışında gösterilmedi. Arayüz atıf yapmaz.
 - Şifreli yedek: KVKK md. 12 ve Kurul'un "yeterli önlemler" kararındaki kriptografik yöntem ve
   anahtarların ayrı tutulması önlemleri; metinleri yerelde usulünce yok, arayüz bunlara atıf yapmaz.
 - Demirbaş numarası biçimi için taşınır mal mevzuatındaki sicil/kod hükmü (soru 48).

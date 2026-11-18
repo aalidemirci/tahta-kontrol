@@ -1,5 +1,5 @@
 {# Yoklama sayfalarının ortak başı: başlık, sayfa içi sekmeler (menüye girmez; ortak sözlük §4) ve
-   öğrenci adı içeren sayfalarda KVKK notu. Bağlam: bolum (gunluk|gir|ogretmenler|ogrenciler|usb),
+   öğrenci adı içeren sayfalarda KVKK notu. Bağlam: bolum (gunluk|sube|mazeret|gir|ogretmenler|ogrenciler|usb|…),
    bas_baslik, bas_aciklama, adli_not (varsa). #}
 <div class="sayfa-bas">
   <div class="bas-yazi">
@@ -9,6 +9,8 @@
 </div>
 <nav class="sekmeler" aria-label="Yoklama bölümleri">
   <a href="/yoklama" {% if bolum == 'gunluk' %}aria-current="page"{% endif %}>Günlük görünüm</a>
+  <a href="/yoklama/sube" {% if bolum == 'sube' %}aria-current="page"{% endif %}>Şube defteri</a>
+  <a href="/yoklama/mazeret" {% if bolum == 'mazeret' %}aria-current="page"{% endif %}>Mazeret/izin</a>
   <a href="/yoklama/gir" {% if bolum == 'gir' %}aria-current="page"{% endif %}>Panelden gir</a>
   <a href="/ogretmenler" {% if bolum == 'ogretmenler' %}aria-current="page"{% endif %}>Öğretmenler ve PIN</a>
   <a href="/ogrenciler" {% if bolum == 'ogrenciler' %}aria-current="page"{% endif %}>Öğrenci listesi</a>

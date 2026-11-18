@@ -60,8 +60,8 @@ def durum(b, bugun: date) -> dict:
     gecti = bool(bitis and bugun > bitis)
     uyari = None
     if not bitis:
-        uyari = ("Öğretim yılı bitiş tarihi girilmedi: ders yoklaması, sınav listeleri ve boş ders uyarıları "
-                 "kendiliğinden silinmiyor.")  # fmt: skip
+        uyari = ("Öğretim yılı bitiş tarihi girilmedi: ders yoklaması (mazeret/izin kayıtları ve şube defteri "
+                 "düzeltmeleri dahil), sınav listeleri ve boş ders uyarıları kendiliğinden silinmiyor.")  # fmt: skip
     elif gecti:
         uyari = (f"Öğretim yılı bitiş tarihi ({tarih_metni(bitis)}) geçti; o tarihe kadarki kayıtlar silindi ya da "
                  "bir saat içinde silinecek. Yeni öğretim yılının bitiş tarihini girin.")  # fmt: skip

@@ -1,0 +1,196 @@
+{% extends "taban.html" %}
+{% import "_yoklama_hucre.html" as yh %}
+{% block baslik %}Şube defteri{% if sube %} · {{ sube }}{% endif %} · Tahta Kontrol{% endblock %}
+{% block govde_sinifi %}genis-sayfa{% endblock %}
+{% block icerik %}
+{# Şube defteri (0.14.0). Bağlam: panel_defter.py SÖZLEŞME. kip = bes (son beş öğretim günü; varsayılan) | gun | bos.
+   Gün kipinde tek form vardır ve JS'siz çalışır (fırça = radyo, hücre = gönder düğmesi); panel.js::defterKur yalnız
+   fetch + yerinde güncelleme ekler. Şube/tarih GET formu AYRIDIR (iç içe form yok); gizli alan adı "id" değildir. #}
+{% with bolum='sube', bas_baslik='Şube defteri' ~ (' · ' ~ sube if sube else ''),
+        bas_aciklama='Öğrenci × ders saati görünümü. Tahtadan alınan yoklama kâğıt yoklamanın yanında tutulan yardımcı kayıttır; e-Okul girişi idarece elle yapılır.' %}
+{% include "_yoklama_bas.html" %}
+{% endwith %}
+
+{% if kip == 'bos' %}
+<p class="bos-not">Öğrenci listesi yüklenmemiş. <a href="/ogrenciler">Öğrenci listesi</a> sekmesinden yükleyin.</p>
+{% else %}
+{% set tarih_iso = g.tarih if kip == 'gun' else d.bitis %}
+<div class="arac-cubugu yazdirma" role="toolbar" aria-label="Şube, gün ve görünüm">
+  <form method="get" action="/yoklama/sube" class="satir-ici tarih-sec">
+    <label for="df-sube">Şube</label>
+    <select id="df-sube" name="sube">{% for s in subeler %}<option {% if s == sube %}selected{% endif %}>{{ s }}</option>{% endfor %}{% if sube not in subeler %}<option selected>{{ sube }}</option>{% endif %}</select>
+    {% if kip == 'gun' %}<label for="df-tarih" class="gizli">Tarih</label><input id="df-tarih" type="date" name="tarih" value="{{ g.tarih }}" max="{{ bugun_iso }}" required>
+    {% else %}<input type="hidden" name="bitis" value="{{ d.bitis }}">
+    <label class="satir"><input type="checkbox" name="yalniz_yok" value="1" {% if d.yalniz_yok %}checked{% endif %}> Yalnız yokluğu olanlar</label>{% endif %}
+    <button>Göster</button>
+  </form>
+  <span class="ayrac" aria-hidden="true"></span>
+  {% if kip == 'gun' %}
+  <a class="dugme" href="/yoklama/sube?sube={{ sube | urlencode }}&amp;tarih={{ g.onceki }}">‹ Önceki gün</a>
+  <a class="dugme" href="/yoklama/sube?sube={{ sube | urlencode }}&amp;tarih={{ bugun_iso }}"{% if g.bugun %} aria-current="date"{% endif %}>Bugün</a>
+  {% if g.sonraki %}<a class="dugme" href="/yoklama/sube?sube={{ sube | urlencode }}&amp;tarih={{ g.sonraki }}">Sonraki gün ›</a>{% endif %}
+  {% else %}
+  <a class="dugme" href="/yoklama/sube?sube={{ sube | urlencode }}&amp;bitis={{ d.onceki }}{% if d.yalniz_yok %}&amp;yalniz_yok=1{% endif %}">‹ Önceki 5 gün</a>
+  <a class="dugme" href="/yoklama/sube?sube={{ sube | urlencode }}{% if d.yalniz_yok %}&amp;yalniz_yok=1{% endif %}"{% if d.bugun %} aria-current="date"{% endif %}>Bugüne dön</a>
+  {% if d.sonraki %}<a class="dugme" href="/yoklama/sube?sube={{ sube | urlencode }}&amp;bitis={{ d.sonraki }}{% if d.yalniz_yok %}&amp;yalniz_yok=1{% endif %}">Sonraki 5 gün ›</a>{% endif %}
+  {% endif %}
+  <span class="ayrac" aria-hidden="true"></span>
+  <span class="kip-dugmeleri" role="group" aria-label="Görünüm">
+    <a class="dugme" href="/yoklama/sube?sube={{ sube | urlencode }}&amp;bitis={{ tarih_iso }}"{% if kip == 'bes' %} aria-current="true"{% endif %}>5 gün</a>
+    <a class="dugme" href="/yoklama/sube?sube={{ sube | urlencode }}&amp;tarih={{ tarih_iso }}"{% if kip == 'gun' %} aria-current="true"{% endif %}>Gün</a>
+  </span>
+  <button type="button" data-yazdir hidden>Yazdır</button>
+  <a class="dugme" href="/yoklama/son-gunler">Okul geneli son günler</a>
+</div>
+{% endif %}
+
+{% if kip == 'bes' %}
+<h2 id="defter-baslik">{{ sube }}{% if d.devre_adi %} · {{ d.devre_adi }}{% endif %} · son {{ d.gunler | length }} öğretim günü <span class="not">({{ d.bitis_yazi }} ve öncesi)</span></h2>
+{% if not d.gunler %}
+<p class="bos-not">Bu aralıkta {{ sube }} için öğretim günü yok: zil saatleri girilmemiş ya da yoklama alınmamış.</p>
+{% elif not d.satirlar %}
+<p class="bos-not">{% if d.yalniz_yok %}Bu beş günde yok yazılan öğrenci yok.{% else %}Bu şubenin öğrenci listesi boş.{% endif %}</p>
+{% else %}
+<div class="defter-kap{% if d.ders_sayisi <= 40 %} sigar{% endif %}" role="region" tabindex="0" aria-label="{{ sube }} şube defteri, son {{ d.gunler | length }} öğretim günü; yatay kaydırılabilir">
+<table class="defter defter-bes">
+  <caption class="gizli">{{ sube }} şubesinin son {{ d.gunler | length }} öğretim günündeki yoklaması: satırlar öğrenciler, sütunlar günlere göre ders saatleri.</caption>
+  <colgroup><col class="c-no"><col class="c-ad"><col class="c-rozet"><col class="c-serit"></colgroup>
+  {% for gun in d.gunler %}<colgroup span="{{ gun.dersler | length }}" class="c-gun"></colgroup>{% endfor %}
+  <colgroup><col class="c-ozet"></colgroup>
+  <thead>
+    <tr>
+      <th scope="col" rowspan="2" class="yap y1">No</th>
+      <th scope="col" rowspan="2" class="yap y2">Ad Soyad</th>
+      <th scope="col" rowspan="2" class="yap y3"><abbr title="Alınan yoklamalara göre art arda kaç gündür derste görülmedi">Gün</abbr></th>
+      <th scope="col" rowspan="2" class="yap y4"><abbr title="Gün şeridi: gösterilen günlerin özeti">Şerit</abbr></th>
+      {% for gun in d.gunler %}<th scope="colgroup" colspan="{{ gun.dersler | length }}" class="gun-bas gun-ilk g{{ loop.index0 % 2 }}"><a href="/yoklama/sube?sube={{ sube | urlencode }}&amp;tarih={{ gun.tarih }}" title="{{ gun.yazi }}: gün görünümünü aç">{{ gun.kisa }}</a></th>{% endfor %}
+      <th scope="col" rowspan="2" class="sayi-hucre ozet-bas"><abbr title="Gösterilen günlerde yok / geç ders saati">Y / G</abbr></th>
+    </tr>
+    <tr>
+      {% for gun in d.gunler %}{% set gi = loop.index0 %}{% for ders in gun.dersler %}<th scope="col" class="dh g{{ gi % 2 }}{% if loop.first %} gun-ilk{% endif %}"><abbr title="{{ gun.kisa }} {{ ders.ders_no }}. ders{% if not ders.plan %} (programda yok){% endif %}">{{ ders.ders_no }}{% if not ders.plan %}*{% endif %}</abbr></th>{% endfor %}{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+  {% for o in d.satirlar %}
+  <tr{% if o.rozet and o.rozet.tur == 'vurgulu' %} class="vurgulu"{% elif o.pasif %} class="pasif"{% endif %}>
+    <td class="yap y1 kod">{{ o.okul_no }}</td>
+    <th scope="row" class="yap y2"><a href="/yoklama/ogrenci/{{ o.id }}" title="{{ o.ad_soyad }}">{{ o.ad_soyad }}</a>{% if o.pasif %} <span class="not">(listeden çıkmış)</span>{% endif %}</th>
+    <td class="yap y3">{{ yh.rozet(o.rozet) }}</td>
+    <td class="yap y4">{{ yh.serit(o.serit) }}</td>
+    {% for hucreler in o.gunler %}{% set gun = d.gunler[loop.index0] %}{% set gi = loop.index0 %}{% for h in hucreler %}{{ yh.salt(h, '/yoklama/sube?sube=' ~ (sube | urlencode) ~ '&tarih=' ~ gun.tarih ~ '#h-' ~ o.id ~ '-' ~ h.ders_no, 'g' ~ (gi % 2) ~ (' gun-ilk' if loop.first else '')) }}{% endfor %}{% endfor %}
+    <td class="sayi-hucre ozet">{{ o.yok }} / {{ o.gec }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="not">{{ d.satirlar | length }} öğrenci{% if d.yalniz_yok %} (yokluğu olanlar; şubede {{ d.ogrenci_sayisi }}){% endif %}. Düzeltmek için gün başlığına ya da hücreye dokunun: gün görünümü açılır. Bu görünüm dışa aktarılmaz; yalnız yazdırılır.</p>
+{% endif %}
+{{ yh.lejant(true, false, d.plan_disi_var) }}
+<p class="defter-lejant not">{{ yh.serit_lejanti() }}</p>
+<p class="not">{{ n_gun_notu }}</p>
+
+{% elif kip == 'gun' %}
+<h2 id="defter-baslik">{{ sube }}{% if g.devre_adi %} · {{ g.devre_adi }}{% endif %} · {{ g.tarih_yazi }}</h2>
+{% if g.tatil %}<p class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-takvim"/></svg>Tatil: {{ g.tatil }}.</p>{% endif %}
+{% if g.islendi %}<p class="bant{% if g.bayat %} uyari{% endif %}" role="note"><svg class="simge" aria-hidden="true"><use href="#{{ 's-sorun' if g.bayat else 's-tamam' }}"/></svg>
+  {% if g.bayat %}<strong>e-Okul'a işlendikten sonra değişti.</strong> İşaret: {{ g.islendi_metni }}. e-Okul girişini yeniden denetleyin.{% else %}e-Okul'a işlendi: {{ g.islendi_metni }}.{% endif %}</p>{% endif %}
+{% if not g.sutunlar %}
+<p class="bos-not">Bu gün {{ sube }} için ders saati yok (hafta sonu, tatil ya da zil saatleri girilmemiş) ve yoklama alınmamış.</p>
+{% elif not g.satirlar %}
+<p class="bos-not">Bu şubenin öğrenci listesi boş.</p>
+{% else %}
+{% if not g.duzenlenebilir %}<p class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Bu gün salt okunur: şube defteri yalnız bugün ve son {{ geri_gun }} gün için düzeltilebilir.</p>{% endif %}
+<form method="post" action="/yoklama/sube/hucre" id="defter-formu" class="defter-formu" data-defter>
+  <input type="hidden" name="tarih" value="{{ g.tarih }}"><input type="hidden" name="sube" value="{{ sube }}">
+  {% if g.duzenlenebilir %}
+  <div class="firca-serit yazdirma">
+    <fieldset class="firca">
+      <legend class="gizli">Fırça: hücreye dokununca uygulanacak durum</legend>
+      <span class="firca-ad" aria-hidden="true">Fırça</span>
+      <label class="firca-sec"><input type="radio" name="durum" value="yok" {% if firca == 'yok' %}checked{% endif %}><span class="yh-ornek" data-d="yok">Y</span> Yok</label>
+      {% if g.gec_var %}<label class="firca-sec"><input type="radio" name="durum" value="gec" {% if firca == 'gec' %}checked{% endif %}><span class="yh-ornek" data-d="gec">G</span> Geç <span class="not">(yalnız ilk ders)</span></label>{% endif %}
+      <label class="firca-sec"><input type="radio" name="durum" value="var" {% if firca == 'var' %}checked{% endif %}><span class="yh-ornek" data-d="var">·</span> Var</label>
+    </fieldset>
+    <div class="firca-not">
+      <label for="df-not">Düzeltme notu</label>
+      <input id="df-not" name="aciklama" maxlength="{{ not_en_uzun }}" value="{{ duzeltme_notu }}" aria-describedby="df-not-ipucu"
+        placeholder="“var” yaparken zorunlu; kişi adı yazmayın"> <button class="kucuk">Notu kaydet</button>
+    </div>
+    <details class="firca-yardim">
+      <summary>Nasıl çalışır?</summary>
+      <div class="firca-yardim-ic">
+        <p>Fırçayı seçip hücreye dokunun. Aynı durumdaki hücreye yeniden dokunmak düzeltmeyi kaldırır; öğretmenin kaydı hiç değişmez, düzeltme ayrı tutulur. Öğretmen sonradan tahtadan yeniden kaydederse en son kaydedilen geçerli olur.</p>
+        <p id="df-not-ipucu">Düzeltme notu bu sayfadaki bütün tıklamalara uygulanır. Yok ya da geç yazılmış öğrenciyi <strong>var</strong> yaparken zorunludur (en az {{ not_en_kisa }} karakter). Öğrenci ya da kişi adı, kimlik numarası yazmayın.</p>
+        {% if g.alinabilir_var %}<p>Yoklaması alınmamış (–) hücreye dokunulamaz. Önce sütun başlığındaki “Alındı” düğmesine basıp onaylayın, sonra olmayanları fırçayla işaretleyin.</p>{% endif %}
+      </div>
+    </details>
+  </div>
+  {% endif %}
+  {% if alindi_onay %}
+  <div class="kutu alindi-onay yazdirma" id="alindi-onay" role="group" aria-labelledby="alindi-soru">
+    <p id="alindi-soru"><strong>{{ alindi_onay.ders_no }}. ders{% if alindi_onay.aralik %} ({{ alindi_onay.aralik }}){% endif %} “alındı” sayılsın mı?</strong> Bu ders saatinde işaretlenmeyen herkes derste sayılacak.</p>
+    {% if g.gun_boyu_yok %}<label class="satir"><input type="checkbox" name="alindi_yoklar" value="1" checked> Bu gün alınan diğer bütün derslerde yok yazılan {{ g.gun_boyu_yok }} öğrenci bu derste de <strong>yok</strong> yazılsın.</label>{% endif %}
+    <div class="dugme-satiri"><button name="alindi" value="{{ alindi_onay.ders_no }}" formaction="/yoklama/sube/toplu">Evet, alındı say</button>
+      <a class="dugme" href="/yoklama/sube?sube={{ sube | urlencode }}&amp;tarih={{ g.tarih }}">Vazgeç</a></div>
+  </div>
+  {% endif %}
+  <p id="defter-ileti" class="not defter-ileti" role="status" aria-live="polite"></p>
+  <div class="defter-kap{% if g.sutunlar | length <= 12 %} sigar{% endif %}" role="region" tabindex="0" aria-label="{{ sube }} şube defteri, {{ g.tarih_yazi }}; yatay kaydırılabilir">
+  <table class="defter defter-gun">
+    <caption class="gizli">{{ sube }} şubesinin {{ g.tarih_yazi }} günü yoklaması: satırlar öğrenciler, sütunlar ders saatleri.</caption>
+    <thead>
+      <tr>
+        <th scope="col" class="yap y1">No</th>
+        <th scope="col" class="yap y2">Ad Soyad</th>
+        {% for s in g.sutunlar %}
+        <th scope="col" class="dh">
+          <abbr title="{{ s.ders_no }}. ders{% if s.aralik %} {{ s.aralik }}{% endif %}{% if not s.plan %} (programda yok){% endif %}{% if s.gelecek %}: henüz başlamadı{% elif not s.alindi %}: yoklama alınmadı{% endif %}">{{ s.ders_no }}{% if not s.plan %}*{% endif %}</abbr>
+          {% if s.aralik %}<span class="saat">{{ s.aralik.split('–')[0] }}</span>{% endif %}
+          {% if s.alinabilir %}<button name="sutun" value="{{ s.ders_no }}" formaction="/yoklama/sube/toplu" class="kucuk yazdirma" aria-label="{{ s.ders_no }}. ders: alındı say (herkes var)">Alındı</button>{% endif %}
+        </th>
+        {% endfor %}
+        <th scope="col" class="sayi-hucre"><abbr title="Yok / geç ders saati">Y / G</abbr></th>
+        {% if g.duzenlenebilir %}<th scope="col" class="yazdirma">İşlem</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+    {% for o in g.satirlar %}
+    <tr{% if o.pasif %} class="pasif"{% endif %}>
+      <td class="yap y1 kod">{{ o.okul_no }}</td>
+      <th scope="row" class="yap y2"><a href="/yoklama/ogrenci/{{ o.id }}">{{ o.ad_soyad }}</a>{% if o.pasif %} <span class="not">(listeden çıkmış)</span>{% endif %}</th>
+      {% for h in o.hucreler %}
+      <td class="yh" {{ yh.nitelik(h) }}>
+        {%- if h.tiklanir -%}<button name="hucre" value="{{ o.id }}:{{ h.ders_no }}" id="h-{{ o.id }}-{{ h.ders_no }}" aria-label="{{ h.etiket }}">{{ h.simge }}</button>
+        {%- else -%}<span id="h-{{ o.id }}-{{ h.ders_no }}" aria-label="{{ h.etiket }}" role="img">{{ h.simge }}</span>
+        {%- endif -%}
+      </td>
+      {% endfor %}
+      <td class="sayi-hucre ozet" data-satir-ozet>{{ o.yok }} / {{ o.gec }}</td>
+      {% if g.duzenlenebilir %}
+      <td class="yazdirma defter-islem">
+        <button name="satir" value="{{ o.id }}:butun_gun" formaction="/yoklama/sube/toplu" class="kucuk" title="Yoklaması alınmış bütün ders saatlerinde yok yapar">Bütün gün yok<span class="gizli"> ({{ o.ad_soyad }})</span></button>
+        <button name="satir" value="{{ o.id }}:temizle" formaction="/yoklama/sube/toplu" class="kucuk" title="Bu satırdaki düzeltmeleri kaldırır" data-temizle{% if not o.duzeltme_var %} hidden{% endif %}>Temizle<span class="gizli"> ({{ o.ad_soyad }})</span></button>
+        <a href="/yoklama/mazeret?ogrenci={{ o.id }}&amp;bas={{ g.tarih }}">Mazeret gir<span class="gizli"> ({{ o.ad_soyad }})</span></a>
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td class="yap y1"></td>
+        <th scope="row" class="yap y2">Yok / geç</th>
+        {% for s in g.sutunlar %}<td class="sayi-hucre ozet" data-sutun-ozet="{{ s.ders_no }}">{% if s.alindi %}{{ s.yok_sayisi }} / {{ s.gec_sayisi }}{% else %}–{% endif %}</td>{% endfor %}
+        <td></td>{% if g.duzenlenebilir %}<td class="yazdirma"></td>{% endif %}
+      </tr>
+    </tfoot>
+  </table>
+  </div>
+</form>
+{{ yh.lejant(g.gec_var, true, g.plan_disi_var) }}
+<p class="not">{{ g.satirlar | length }} öğrenci · {{ g.alinan }} / {{ g.sutunlar | length }} ders saatinin yoklaması alındı.
+  <a href="/yoklama/icmal?tarih={{ g.tarih }}&amp;sube={{ sube | urlencode }}">İcmal</a> · <a href="/yoklama?tarih={{ g.tarih }}">Günlük görünüm</a></p>
+{% endif %}
+{% endif %}
+{% endblock %}

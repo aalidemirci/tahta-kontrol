@@ -109,7 +109,8 @@ def test_goc_acil_yetkisini_herkese_verir_ve_gun_sayili_saklamayi_kaldirir(tmp_p
     vt.hazirla()
     with vt.islem() as b:
         assert b.execute("SELECT acil_yetki FROM kullanici").fetchone()[0] == 1
-        assert vt.ayar_al(b, "yoklama") == {"etkin": True, "maske": "ad_soyadbas"}
+        # saklama_gun 0.8.0 göçüyle kalkar; maske 0.14.0 göçüyle "123 Ayşe Y." biçimine çevrilir.
+        assert vt.ayar_al(b, "yoklama") == {"etkin": True, "maske": "no_ad_soyadbas"}
         # Yöneticinin açıkça kapattığı boş ders uyarısı göçle açılmaz; yalnız varsayılan açıktır.
         assert vt.ayar_al(b, "bos_ders_uyarisi")["etkin"] is False
         assert vt.ayar_al(b, "ogretim_yili_bitis") is None  # tarih kendiliğinden konmaz (yanlış silmeyi önler)

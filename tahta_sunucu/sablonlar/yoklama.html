@@ -25,6 +25,7 @@
   <span class="ayrac" aria-hidden="true"></span>
   <a class="dugme" href="/yoklama/icmal?tarih={{ g.tarih }}">İcmal (tüm şubeler)</a>
   <a class="dugme" href="/yoklama/icmal.csv?tarih={{ g.tarih }}" download>CSV</a>
+  <a class="dugme" href="/yoklama/son-gunler">Son günler</a>
   <span class="ayrac" aria-hidden="true"></span>
   <a class="dugme" href="/yoklama?tarih={{ g.tarih }}">Yenile</a>
 </div>
@@ -45,11 +46,11 @@
   <tbody>
   {% for s in g.satirlar %}
   <tr{% if s.islendi %} class="islendi"{% endif %}>
-    <th scope="row">{{ s.sube }}{% if s.devre_adi %} <span class="not">{{ s.devre_adi }}</span>{% endif %}</th>
+    <th scope="row"><a href="/yoklama/sube?sube={{ s.sube | urlencode }}" title="{{ s.sube }} şube defteri (son beş gün)">{{ s.sube }}</a>{% if s.devre_adi %} <span class="not">{{ s.devre_adi }}</span>{% endif %}</th>
     {% for h in s.hucreler %}
     <td class="yk-hucre" {% if h.baslik %}title="{{ h.baslik }}"{% endif %}>
       {%- if h.durum == 'alindi' -%}
-      <a class="rozet" data-durum="{{ 'sorun' if h.yok else 'tamam' }}" href="/yoklama/kayit/{{ h.kayit_id }}" aria-label="{{ s.sube }} {{ h.ders_no }}. ders: {{ h.yok ~ ' öğrenci yok' if h.yok else 'yok yazılan yok' }}{% if h.kayit_sayisi > 1 %}, {{ h.kayit_sayisi }} yoklama birleştirildi{% endif %}">{{ h.yok ~ ' yok' if h.yok else '0' }}{% if h.kayit_sayisi > 1 %}<span class="birlesik" aria-hidden="true">×{{ h.kayit_sayisi }}</span>{% endif %}</a>
+      <a class="rozet" data-durum="{{ 'sorun' if h.yok else 'tamam' }}" href="/yoklama/kayit/{{ h.kayit_id }}" aria-label="{{ s.sube }} {{ h.ders_no }}. ders: {{ h.yok ~ ' öğrenci yok' if h.yok else 'yok yazılan yok' }}{% if h.gec %}, {{ h.gec }} öğrenci geç{% endif %}{% if h.kayit_sayisi > 1 %}, {{ h.kayit_sayisi }} kayıt{% endif %}">{{ h.yok ~ ' yok' if h.yok else '0' }}{% if h.gec %}<span class="birlesik"> +{{ h.gec }} geç</span>{% endif %}{% if h.kayit_sayisi > 1 %}<span class="birlesik" aria-hidden="true">×{{ h.kayit_sayisi }}</span>{% endif %}</a>
       {%- elif h.durum == 'alinmadi' -%}
       <a class="rozet" data-durum="uyari" href="/yoklama/gir?tarih={{ g.tarih }}&amp;sube={{ s.sube | urlencode }}&amp;ders_no={{ h.ders_no }}" aria-label="{{ s.sube }} {{ h.ders_no }}. ders: yoklama alınmadı; panelden gir">alınmadı</a>
       {%- else -%}<span class="bos-hucre" aria-hidden="true">·</span>
@@ -64,6 +65,7 @@
         <button class="kucuk" data-js-gizle aria-label="{{ s.sube }}: işlendi bilgisini kaydet">Kaydet</button>
       </form>
       <span class="not" id="islendi-{{ loop.index }}">{{ s.islendi_metni }}</span>
+      {% if s.bayat %}<a class="rozet" data-durum="uyari" href="/yoklama/sube?sube={{ s.sube | urlencode }}&amp;tarih={{ g.tarih }}"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>İşlendikten sonra değişti</a>{% endif %}
       <a href="/yoklama/icmal?tarih={{ g.tarih }}&amp;sube={{ s.sube | urlencode }}" aria-label="{{ s.sube }} icmali">İcmal</a>
     </td>
   </tr>
@@ -76,7 +78,7 @@
 <p class="not yk-lejant"><span class="rozet" data-durum="tamam">0</span> alındı, yok yazılan yok ·
   <span class="rozet" data-durum="sorun">3 yok</span> alındı ·
   <span class="rozet" data-durum="uyari">alınmadı</span> programda ders var, bitişinden 15 dk geçti ·
-  · ders yok, henüz bitmedi ya da program bilinmiyor. Aynı saatin birden çok kaydı (bölünmüş ders) birleştirilir.</p>
+  · ders yok, henüz bitmedi ya da program bilinmiyor. Aynı saatin birden çok kaydı varsa (×2) en son kaydedilen geçerlidir; idare düzeltmeleri <a href="/yoklama/sube">şube defterinde</a> ayrı tutulur. Mazeretli yokluk da "yok" sayılır.</p>
 
 <details class="kutu" open>
   <summary><h2 class="satir-ici" id="ogrenci-baslik">Öğrenci bazında</h2> <span class="not">({{ g.ogrenciler | length }})</span></summary>

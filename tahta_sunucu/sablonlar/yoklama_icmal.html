@@ -46,7 +46,7 @@
     <tbody>
     {% for o in s.ogrenciler %}
     <tr><td class="kod">{{ o.okul_no }}</td><td>{{ o.ad_soyad }}</td>
-      {%- for h in o.hucreler %}<td class="isaret-hucre{% if h == 'Y' %} yok-isaret{% elif h == '-' %} alinmadi-isaret{% endif %}">{{ h }}</td>{% endfor -%}
+      {%- for h in o.hucreler %}<td class="isaret-hucre{% if h == 'Y' %} yok-isaret{% elif h == 'Ö' %} yok-isaret ozurlu-isaret{% elif h == 'G' %} gec-isaret{% elif h == '-' %} alinmadi-isaret{% endif %}">{{ h }}</td>{% endfor -%}
       <td class="sayi-hucre"><strong>{{ o.sayi }}</strong></td></tr>
     {% endfor %}
     </tbody>
@@ -56,7 +56,7 @@
   <p class="bos-not">Bu şubede bu gün yok yazılan öğrenci yok.</p>
   {% endif %}
   {% if s.alinan_sayisi %}
-  <p class="not icmal-lejant">Y: yok · .: derste · -: yoklama alınmadı</p>
+  <p class="not icmal-lejant">Y: yok · Ö: yok, özürlü (mazeret/izin girilmiş; "Yok" toplamına dahildir) · G: geç · .: derste · -: yoklama alınmadı</p>
   <p class="not">Yoklamayı alan: {% for a in s.alanlar %}{{ a.ders_no }}. {{ a.metin }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</p>
   {% endif %}
   <p class="icmal-not">Bu çizelge e-Okul girişine yardımcı çalışma belgesidir: tahtadan alınan yoklama kâğıt yoklamanın yanında tutulan yardımcı kayıttır, onun yerine geçmez; resmî devamsızlık kaydı e-Okul'dadır.</p>

@@ -1,4 +1,27 @@
-# Yoklama yönetimi — taslak (uygulanmadı)
+# Yoklama yönetimi — taslak (0.14.0'da kısmen uygulandı)
+
+> **0.14.0 notu (18.11.2026).** Kullanıcının 18.11.2026 isteğiyle bu taslağın bir bölümü, yer yer farklı
+> biçimde uygulandı. Bağlayıcı metin `docs/tasarim.md` §14.2 ve `docs/surum-0.14.0.md`'dir; bu belge
+> taslak olarak kalır ve aşağıdaki gövdesi değiştirilmedi.
+>
+> **Uygulanan kısımlar:** tahtada "geç" (taslaktan farklı: yalnız her devrenin ilk dersinde; ayrı sayaç,
+> gün dönüşümü yok); idarede öğrenci × ders tablosu (şube defteri; ayrıca son beş öğretim günü kipi);
+> öğretmenin kaydı ile idarenin düzeltmesinin ayrı tutulması; numarayla toplu giriş, önizleme ve atomik
+> onay (yalnız mazeret için); alınmayan dersin kendiliğinden "var" sayılmaması; işlem kaydına ad, numara
+> ve tür yazılmaması; mazeret ve geçmişin ajan yanıtına hiç girmemesi; eski ajan / yeni sunucu uyumu;
+> icmal ve CSV'de ayrı geç ve özürlü sayıları; değişiklikten sonra "e-Okul'a işlendi" işaretinin
+> "İşlendikten sonra değişti" olması; yıl sonu imhası, tümünü silme ve yedeğin yeni tabloları kapsaması.
+>
+> **Farklı uygulananlar:** idari durum tek katman değil iki ayrı katmandır — hücre düzeltmesi (yok / geç /
+> var) ve mazeret (izinli, raporlu, mazeretli, görevli). Mazeret türü defterde, icmalde ve CSV'de ayrı
+> sütun değil, tek "özürlü" (Ö) olarak görünür; özürlü yok, yok toplamına dahildir. Hücre seçimi Shift ile
+> dikdörtgen değil, tek hücrelik "fırça"dır (Yok / Geç / Var).
+>
+> **Uygulanmayanlar:** Rehberlik Görüşmesi, İdari Görüşme, Nöbetçi ve Faaliyet kategorileri (nöbet, gezi,
+> yarışma "görevli" türüyle girilir); tahtada Nöbetçi/Faaliyet etiketi (tahtaya hiçbir idari durum
+> gitmez); ders arası yokluk uyarıları ve inceleme geçmişi (yerine türetilen "N gündür derste görülmedi"
+> rozeti ve son günler listesi var); eşzamanlı düzenleme çakışması gösterimi; çakışan mazeretlerin
+> önizlemede açık onayı (aynı saate düşen mazeretlerden en yenisi sayılır).
 
 > **Taslak, uygulanmadı.** Bağlayıcı kararlar `docs/tasarim.md` §17'dedir; ders yoklamasının
 > yürürlükteki tasarımı §14'tür ("yalnız yok" işareti, kategori tutulmaz). Bu belge onları

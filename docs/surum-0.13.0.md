@@ -67,7 +67,8 @@ güncelleyin. Tahtada yeni ekran yardımcısının yüklenmesi için oturumu yen
 
 Bu sürüm yoklama yönetimi taslağındaki yeni idari durumlar, toplu faaliyet,
 Geç ve ders arası yokluk uyarılarını içermez; onlar `yoklama-yonetimi-tasarimi.md`
-içinde uygulanmamış taslak olarak durur (kararlar `tasarim.md` §17'dedir).
+içinde uygulanmamış taslak olarak durur (kararlar `tasarim.md` §17'dedir). Bir bölümü
+[0.14.0](surum-0.14.0.md)'da uygulandı.
 
 Düzeltmeler: [0.13.1](surum-0.13.1.md) — seçmeli hücrede öğretmen adının ders başlığına
 karışması dahil. 0.13.0 ile aktarım yapıldıysa 0.13.1'de program yeniden aktarılır.

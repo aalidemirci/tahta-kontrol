@@ -176,7 +176,7 @@ def test_goc_bozuk_ders_adini_genel_basliga_indirir(tmp_path, monkeypatch):
         b.execute(ekle, (2, "Spor Uydurma İkinci - Müzik"))
         b.execute(ekle, (2, "Seçmeli ders"))
         b.execute(ekle, (3, "Kur`an-ı Kerim"))
-        b.executescript(vt.GOCLER[-1])
+        b.executescript(next(g for g in vt.GOCLER if "'Seçmeli ders'" in g))  # 0.13.1 göçü
         assert [tuple(s) for s in b.execute("SELECT ders_no, ders_adi FROM ogretmen_program ORDER BY ders_no")] == [
             (1, "Seçmeli ders"), (2, "Seçmeli ders"), (3, "Kur`an-ı Kerim")]
 

@@ -447,6 +447,49 @@ GOCLER = [
     UPDATE OR IGNORE ogretmen_program SET ders_adi = 'Seçmeli ders' WHERE ders_adi LIKE '% - %';
     DELETE FROM ogretmen_program WHERE ders_adi LIKE '% - %';
     """,
+    # 0.14.0 — yoklama: "geç" (ayrı tablo; yoklama_yok değişmez), kayıt anındaki devre, panel düzeltme
+    # katmanı (öğretmen/tahta kaydına dokunmaz; kendi izidir) ve mazeret/izin katmanı (serbest açıklama
+    # YOK; iptalde tür 'iptal' olur, dayanak boşalır). Üç yeni tablo da öğrenci kimliği taşır: yıl sonu
+    # imhasına girer (kural 24), işlem kaydına yazılmaz. Zaman alanları epoch. Kayıtlı sınıf listesi biçimi
+    # "Ayşe Y." ise "123 Ayşe Y." olur (kullanıcı kararı 18.11.2026; eski biçim Ayarlar'da durur).
+    """
+    ALTER TABLE yoklama ADD COLUMN devre TEXT NOT NULL DEFAULT '';   -- kayıt anındaki devre; eski satır '' = türet
+    CREATE INDEX yoklama_sube_tarih ON yoklama (sube, tarih);
+    CREATE TABLE yoklama_gec (
+        yoklama_id INTEGER NOT NULL REFERENCES yoklama(id) ON DELETE CASCADE,
+        ogrenci_id INTEGER NOT NULL REFERENCES ogrenci(id),
+        PRIMARY KEY (yoklama_id, ogrenci_id));
+    CREATE INDEX yoklama_gec_ogrenci ON yoklama_gec (ogrenci_id);
+    ALTER TABLE yoklama_iz ADD COLUMN gec_eklenen TEXT NOT NULL DEFAULT '[]';    -- ogrenci_id JSON listesi
+    ALTER TABLE yoklama_iz ADD COLUMN gec_cikarilan TEXT NOT NULL DEFAULT '[]';
+    CREATE TABLE yoklama_duzeltme (
+        id INTEGER PRIMARY KEY,
+        tarih TEXT NOT NULL,                    -- 'YYYY-MM-DD'
+        sube TEXT NOT NULL,
+        ders_no INTEGER NOT NULL,
+        ogrenci_id INTEGER NOT NULL REFERENCES ogrenci(id),
+        durum TEXT NOT NULL CHECK (durum IN ('var', 'yok', 'gec', 'kaldir')),   -- 'kaldir' = düzeltme geri alındı
+        aciklama TEXT NOT NULL DEFAULT '',      -- düzeltme notu (ad yazılmaz)
+        giren TEXT NOT NULL,                    -- panel kullanıcı adı
+        zaman INTEGER NOT NULL);
+    CREATE INDEX yoklama_duzeltme_hucre ON yoklama_duzeltme (sube, tarih, ders_no, ogrenci_id);
+    CREATE TABLE yoklama_mazeret (
+        id INTEGER PRIMARY KEY,
+        ogrenci_id INTEGER NOT NULL REFERENCES ogrenci(id),
+        bas_tarih TEXT NOT NULL, bit_tarih TEXT NOT NULL,          -- 'YYYY-MM-DD'
+        ders_bas INTEGER, ders_bit INTEGER,                        -- ikisi de NULL = tam gün
+        devre TEXT NOT NULL DEFAULT '',                            -- ders aralıklıysa giriş anındaki devre
+        tur TEXT NOT NULL CHECK (tur IN ('izinli', 'raporlu', 'mazeretli', 'gorevli', 'iptal')),
+        dayanak TEXT NOT NULL DEFAULT '' CHECK (dayanak IN ('', 'dilekce', 'yazi', 'belge', 'idare')),
+        giren TEXT NOT NULL, olusturma INTEGER NOT NULL,
+        iptal_zamani INTEGER, iptal_eden TEXT,
+        CHECK (bit_tarih >= bas_tarih),
+        CHECK ((ders_bas IS NULL AND ders_bit IS NULL) OR (ders_bas IS NOT NULL AND ders_bit IS NOT NULL AND ders_bas >= 1 AND ders_bit >= ders_bas)));
+    CREATE INDEX yoklama_mazeret_ogrenci ON yoklama_mazeret (ogrenci_id, bas_tarih, bit_tarih);
+    UPDATE ayar SET deger = json_set(deger, '$.maske', 'no_ad_soyadbas')
+        WHERE anahtar = 'yoklama' AND json_valid(deger) AND json_type(deger) = 'object'
+          AND json_extract(deger, '$.maske') = 'ad_soyadbas';
+    """,
 ]
 GOC_ONCESI_KALAN = 3
 # Göç (ve göç öncesi kopya), yedek alma ve geri yükleme aynı anda çalışmaz (A6 K-B2).

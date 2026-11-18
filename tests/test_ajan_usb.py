@@ -468,6 +468,30 @@ def test_yoklama_al_anahtarla_pin_adimini_atlar(servis):
     assert "GIZLI-BELIRTEC-usb" not in metin(*servis.gelen)
 
 
+def test_usb_pinsiz_akista_program_tahtadan_farkliysa_liste_acilmaz(servis):
+    """0.14.0 §2.3: karar _yoklama_oturum_acildi içinde, liste isteğinden ÖNCE verilir (USB + PIN'siz akış dahil)."""
+    servis.istemci.yanitlar["/ajan/yoklama/oneri"] = (200, dict(ONERI, subeler=["10/A", "11/C"], subeler_once=["10/A"]))
+    servis.istemci.yanitlar["/ajan/usb/yoklama"] = (
+        200, dict(BASLAT, oneri={"sube": "11/C", "ders_no": 2, "ders_adaylari": []}, subeler_once=["11/C"]))  # fmt: skip
+    tak(servis)
+    servis.ekran_mesaji(1, {"tur": "yoklama_ac"})
+    y = servis.gorunum()["yoklama"]
+    assert servis.istemci.yollar()[-2:] == ["/ajan/yoklama/oneri", "/ajan/usb/yoklama"]  # liste istenmedi
+    assert y["asama"] == "liste" and not y["liste_yuklu"] and (y["sube"], y["ders_no"]) == ("10/A", 2)
+    assert y["subeler_once"] == ["10/A", "11/C"]
+    servis.ekran_mesaji(1, {"tur": "yoklama_sec", "sube": "11/C"})  # ★ 11/C: şubenin dersi istenir, liste açılır
+    assert servis.istemci.yollar()[-2:] == ["/ajan/yoklama/oneri", "/ajan/yoklama/liste"]
+    assert servis.istemci.istekler[-1][1] == {"belirtec": "GIZLI-BELIRTEC-usb", "sube": "11/C", "ders_no": 2}
+
+
+def test_usb_idare_anahtarinda_oneri_yok_tahtanin_onerisi_gecerli(servis):
+    servis.istemci.yanitlar["/ajan/usb/yoklama"] = (200, dict(BASLAT, tur="idare", oneri=None, subeler_once=[]))
+    tak(servis)
+    servis.ekran_mesaji(1, {"tur": "yoklama_ac"})
+    y = servis.gorunum()["yoklama"]
+    assert y["liste_yuklu"] and (y["sube"], y["ders_no"]) == ("10/A", 2) and y["subeler_once"] == []
+
+
 def test_pin_gerekiyorsa_usb_kipi(servis):
     servis.istemci.yanitlar["/ajan/usb/tani"] = (200, dict(TANI, pin_gerek=True))
     tak(servis)

@@ -10,6 +10,11 @@ göndereceği biçimde UYDURMA bir durum iletisi verir, sayfa çizilince şunlar
   yalnız uzun liste/metin senaryolarında kabul), "TAŞTI" (en sığmaz ya da kısa içerik kaydırılıyor),
   "OYNADI" (kilit ekranındaki gün programında sayfa değişince tuş takımı ya da Önceki/Sonraki
   düğmeleri yer değiştirdi; kilit-program-* senaryoları bütün sayfaları gezerek ölçer).
+- ders yoklaması (0.14.0; "ky" işaretli senaryolar): seçim ve liste görünümü KAYDIRMASIZDIR. Sayfada
+  görünen kaydırma alanı olmamalı; her düğmenin yerleşimi sayfanın içinde ve alt çubuğun üstünde kalmalı,
+  düğme boyu en küçük dokunma ölçüsünün altına inmemeli, hiçbir etiket "…" ile kesilmemeli. Aksi "TAŞTI"dır
+  ve neden satırın sonuna yazılır; en küçük düğmenin eni x boyu (px) da yazılır. Liste senaryolarında bir
+  düğmeye gerçekten dokunulur: var → YOK → (ilk derste) GEÇ → var döngüsü yazı ve renkle birlikte denetlenir.
 
 Kullanım (Docker'da: debian:12 + python3-gi gir1.2-gtk-3.0 xvfb openbox imagemagick):
     Xvfb :9 -screen 0 1366x768x24 & DISPLAY=:9 openbox &
@@ -81,17 +86,67 @@ def sinav(evre="suruyor", gozetmen=None, liste=0) -> dict:
     }  # fmt: skip
 
 
+def ders_saatleri(n=10, ilk=8 * 60 + 30, baslamamis=0, saatsiz=False) -> list:
+    """Servisin görünümündeki ders saatleri (40 dk ders, 10 dk teneffüs); son `baslamamis` ders seçilemez."""
+    dersler = []
+    for i in range(n):
+        bas, bit = ilk + i * 50, ilk + i * 50 + 40
+        b, t = ("", "") if saatsiz else (f"{bas // 60:02d}:{bas % 60:02d}", f"{bit // 60:02d}:{bit % 60:02d}")
+        dersler.append({"ders_no": i + 1, "baslangic": b, "bitis": t, "secilebilir": i < n - baslamamis,
+                        "metin": f"{i + 1}. ders" + (f" ({b}–{t})" if b else "")})  # fmt: skip
+    return dersler
+
+
+def subeler(duzeyler=(9, 10, 11, 12), harfler="ABC") -> list:
+    return [f"{d}/{h}" for d in duzeyler for h in harfler]
+
+
 def yoklama(asama, **ek) -> dict:
+    """Servisin `_yoklama_gorunumu` çıktısı biçiminde uydurma görünüm (0.14.0 alanlarıyla)."""
     y = {
         "asama": asama, "oturum": 1, "tarih_yazi": "16.11.2026 Pazartesi", "ogretmen": {"kod": "101", "etiket": "A. Örnek"},
-        "sube": "10/A", "ders_no": 3, "ders_adi": "Coğrafya", "ders_metni": "3. ders (09:50–10:30)",
-        "ders_saatleri": [{"ders_no": i, "metin": f"{i}. ders ({8 + i}:10–{8 + i}:50)", "secilebilir": True} for i in range(1, 11)],
-        "subeler": [f"{s}/{h}" for s in (9, 10, 11, 12) for h in "ABC"], "liste_yuklu": False, "ogrenciler": [], "yok": [],
+        "sube": "10/A", "ders_no": 3, "ders_adi": "", "ders_metni": "3. ders (10:10–10:50)",
+        "ders_saatleri": ders_saatleri(10, baslamamis=6), "subeler": subeler(), "liste_yuklu": False, "ogrenciler": [],
+        "yok": [], "gec": [], "gec_secilebilir": False, "subeler_once": [], "ders_adaylari": [], "devre_adi": "",
+        "simdiki_ders_no": 3, "sayfa": 0, "sayfa_sayisi": 1, "tum_sayfalar_goruldu": True,
         "mevcut": 0, "baska_yoklama": False, "liste_ileti": "", "kalan": 300, "uyari": False, "ileti": "", "hata": "",
         "bekleme": 0, "istek": False,
     }  # fmt: skip
     y.update(ek)
     return y
+
+
+# Uydurma öğrenci adları. Etiketi SUNUCU üretir (maske.sinif_etiketi: numara + ad + soyadın baş harfi, ad sütun
+# sayısına göre kısaltılır); betik aynı işlevi kullanır ki ölçülen etiketler tahtaya gidecek olanlarla aynı olsun.
+KISA_ADLAR = [("Ayşe", "YILMAZ"), ("Can", "DEMİR"), ("Elif Naz", "AKSOY"), ("Mehmet Ali", "YILDIRIM"), ("Zeynep Su", "KAYA"),
+              ("Ahmet Yasin", "TOPRAK"), ("Fatma Nur", "ÖZTÜRK"), ("Defne", "KURT"), ("Burak", "ÇELİK"), ("İpek", "IŞIK")]  # fmt: skip
+UZUN_ADLAR = [("Muhammed Emin", "YILDIRIM"), ("Abdurrahman Muhammed Emin", "KAYA"), ("Abdülkadir Selahattin", "ÖZDEMİR"),
+              ("Zeynep Gülsüm Nur", "KARA ÖZ"), ("Muhammed Mustafa", "ÇALIŞKAN"), ("Hatice Kübra", "ŞAHİNOĞLU")]  # fmt: skip
+
+
+def ogrenci_listesi(n, adlar=None, ilk_no=101) -> list:
+    """n kişilik liste, okul no sırasıyla; etiket sunucunun işleviyle (yoksa aynı biçimde elle)."""
+    adlar = adlar or KISA_ADLAR
+    try:
+        from tahta_sunucu import maske
+
+        esik = maske.ad_esigi(maske.yoklama_yerlesim(n)[0])
+
+        def etiket(ad, soyad, no):
+            return maske.sinif_etiketi(ad, soyad, no, "no_ad_soyadbas", esik)
+    except Exception:  # sunucu paketi yoksa (yalnız ajan kopyalanmışsa) aynı biçim elle
+
+        def etiket(ad, soyad, no):
+            return f"{no} {ad} {soyad[0]}."[:40]
+
+    return [{"id": i + 1, "etiket": etiket(*adlar[i % len(adlar)], str(ilk_no + i * 3))} for i in range(n)]
+
+
+def liste(n, sayfa=0, goruldu=True, adlar=None, ilk_no=101, **ek) -> dict:
+    """Liste görünümü: n öğrenci; yok/geç işaretleri verilmezse birkaç uydurma işaret."""
+    ek.setdefault("yok", [2, 5] if n >= 5 else [])
+    return yoklama("liste", liste_yuklu=True, ogrenciler=ogrenci_listesi(n, adlar, ilk_no), mevcut=n, sayfa=sayfa,
+                   sayfa_sayisi=max(1, -(-n // 56)), tum_sayfalar_goruldu=goruldu, **ek)  # fmt: skip
 
 
 def gun_programi(ders_sayisi=10, ileti="") -> dict:
@@ -104,7 +159,11 @@ def gun_programi(ders_sayisi=10, ileti="") -> dict:
     return {"tarih": time.strftime("%Y-%m-%d"), "dersler": dersler, "ileti": ileti}
 
 
-OGRENCILER = [{"id": i + 1, "etiket": ADLAR[i % len(ADLAR)]} for i in range(40)]
+ESKI_BICIM = [{"id": i + 1, "etiket": ADLAR[i % len(ADLAR)]} for i in range(40)]  # "ad + soyad baş harfi" (çakışma ekli)
+# Çok şubeli okul: 5 düzey x 12. Hazırlık sınıfı sunucunun kanonik adıyla ("Hazırlık/G"; metin.sube_duzelt):
+# "Hz/C" gibi kısa uydurma ad, üst satırdaki ★ düğmelerinin kesilmesini gizliyordu.
+SUBE_60 = subeler(("Hazırlık", 9, 10, 11, 12), "ABCDEFGHIJKL")
+SUBE_40 = subeler((9, 10, 11, 12), "ABCDEFGHIJ")
 GOZETMEN_LISTE = [{"k": i, "a": MASKE[i % 5], "n": f"{i:02d}", "s": "12/C"} for i in range(1, 36)]
 OTURMA = "Sınav oturma listesi · 9/A\n\n" + "\n".join(f"Ab*** Cd**** …{i:02d}  →  10/B Dersliği, koltuk {i}" for i in range(60))
 
@@ -147,13 +206,66 @@ SENARYOLAR = [
                                                              "gelmeyen": [3, 7], "bekleme": 0})),
      "gozetmen-yoklama", False, None),  # fmt: skip
     ("yoklama-pin", taban(kilitli=True, yoklama=yoklama("pin", hata="PIN hatalı. Kalan deneme: 2")), "yoklama-pin", False, None),
-    ("yoklama-secim", taban(yoklama=yoklama("liste", sube="", ders_no=None)), "yoklama-liste", False, None),
-    ("yoklama-liste", taban(yoklama=yoklama("liste", liste_yuklu=True, ogrenciler=OGRENCILER, yok=[1, 2, 5], mevcut=40,
-                                            baska_yoklama=True)), "yoklama-liste", True, None),  # fmt: skip
-    ("yoklama-onay", taban(yoklama=yoklama("onay", liste_yuklu=True, ogrenciler=OGRENCILER, yok=list(range(1, 16)),
-                                           mevcut=40)), "yoklama-onay", False, None),  # fmt: skip
-    ("yoklama-ileti", taban(yoklama=yoklama("ileti", ileti="Yoklama kaydedildi. 3 öğrenci yok yazıldı; e-Okul'a idare işler.")),
-     "yoklama-ileti", False, None),  # fmt: skip
+    # ---- ders yoklaması 0.14.0: "ky" = kaydırmasız görünüm denetimi (bkz. yoklama_denetle) ----
+    # Seçim: az şubeli okul (düzey sütunu yok), şube seçili değil, şimdiki ders ön seçili.
+    ("yk-secim-az", taban(yoklama=yoklama("liste", sube=None, ders_no=3)), "yoklama-liste", False, "ky"),
+    # Kabul ölçütü 1: 40 şube + 12 ders saati; tahtanın şubesi ve öğretmenin şubeleri öne alınmış, öneri düğmesi.
+    ("yk-secim-40", taban(yoklama=yoklama("liste", subeler=SUBE_40, ders_saatleri=ders_saatleri(12, baslamamis=8),
+                                          simdiki_ders_no=4, ders_no=4, subeler_once=["10/A", "11/C", "9/B"])),
+     "yoklama-liste", False, "ky"),  # fmt: skip
+    # Çok şubeli okul: 60 şube (5 düzey x 12), 6 öne alınan şube, uzun gün (12 ders).
+    ("yk-secim-60", taban(yoklama=yoklama("liste", subeler=SUBE_60, sube="11/G", ders_saatleri=ders_saatleri(12, baslamamis=3),
+                                          simdiki_ders_no=9, ders_no=9,
+                                          subeler_once=["11/G", "12/A", "9/B", "10/K", "Hazırlık/C", "12/L"])),
+     "yoklama-liste", False, "ky"),  # fmt: skip
+    # Hazırlık şubesi seçili + 6 öne alınan (ikisi Hazırlık): öneri düğmesi ve ★ düğmeleri kesilmemeli, ayırt edilmeli.
+    ("yk-secim-hazirlik", taban(yoklama=yoklama("liste", subeler=SUBE_60, sube="Hazırlık/G",
+                                                ders_saatleri=ders_saatleri(12, baslamamis=3), simdiki_ders_no=9, ders_no=9,
+                                                subeler_once=["Hazırlık/G", "Hazırlık/C", "12/A", "9/B", "10/K", "12/L"])),
+     "yoklama-liste", False, "ky"),  # fmt: skip
+    # Az önce biten ders ön seçili: "şimdi" değil "bitti" yazar.
+    ("yk-secim-bitti", taban(yoklama=yoklama("liste", subeler=SUBE_40, ders_saatleri=ders_saatleri(12, baslamamis=7),
+                                             simdiki_ders_no=5, simdiki_bitti=True, ders_no=5, subeler_once=["10/A"])),
+     "yoklama-liste", False, "ky"),  # fmt: skip
+    # Teneffüs: biten / başlayacak iki aday vurgulu, liste açılmadı.
+    ("yk-secim-teneffus", taban(yoklama=yoklama("liste", subeler=SUBE_40, ders_no=None, simdiki_ders_no=None,
+                                                ders_adaylari=[2, 3], subeler_once=["10/A"])),
+     "yoklama-liste", False, "ky"),  # fmt: skip
+    # İkili eğitim, devir saati: şubesiz açılış, ders saatleri bilinmiyor ("Önce şubeyi seçin").
+    ("yk-secim-ikili-bos", taban(yoklama=yoklama("liste", subeler=SUBE_40, sube=None, ders_no=None, simdiki_ders_no=None,
+                                                 ders_saatleri=ders_saatleri(12, saatsiz=True))),
+     "yoklama-liste", False, "ky"),  # fmt: skip
+    # İkili eğitim: öğle şubesi seçildi; devre adı başlıkta, öğlenin dersleri (hepsi başlamamış: soluk).
+    ("yk-secim-ikili-ogle", taban(yoklama=yoklama("liste", subeler=SUBE_40, sube="11/C", ders_no=None, simdiki_ders_no=None,
+                                                  devre_adi="Öğle", ders_saatleri=ders_saatleri(7, ilk=13 * 60 + 30, baslamamis=7),
+                                                  hata="Bu ders saati henüz başlamadı.")),
+     "yoklama-liste", False, "ky"),  # fmt: skip
+    # Devresi bulunamayan şube: saatsiz 1–12.
+    ("yk-secim-saatsiz", taban(yoklama=yoklama("liste", ders_no=None, simdiki_ders_no=None,
+                                               ders_saatleri=ders_saatleri(12, saatsiz=True))),
+     "yoklama-liste", False, "ky"),  # fmt: skip
+    # Liste: 30 / 42 (6x7), 48 (6x8), 56 (7x8), 70 (iki sayfa).
+    ("yk-liste-30", taban(yoklama=liste(30)), "yoklama-liste", False, "ky"),
+    ("yk-liste-42", taban(yoklama=liste(42, baska_yoklama=True)), "yoklama-liste", False, "ky"),
+    ("yk-liste-48", taban(yoklama=liste(48)), "yoklama-liste", False, "ky"),
+    ("yk-liste-56", taban(yoklama=liste(56)), "yoklama-liste", False, "ky"),
+    # 4 haneli okul no + iki/üç adlı 56 öğrenci (sunucu adı 7 sütuna göre kısaltır).
+    ("yk-liste-56-uzun", taban(yoklama=liste(56, adlar=UZUN_ADLAR, ilk_no=1003, yok=[1, 9, 30], uyari=True)),
+     "yoklama-liste", False, "ky"),  # fmt: skip
+    ("yk-liste-48-uzun", taban(yoklama=liste(48, adlar=UZUN_ADLAR, ilk_no=1003)), "yoklama-liste", False, "ky"),
+    # Devrenin ilk dersi: geç seçilebilir; yok ve geç işaretli öğrenciler.
+    ("yk-liste-gec", taban(yoklama=liste(34, sube="9/B", ders_no=1, gec_secilebilir=True, yok=[2, 5, 20], gec=[3, 8, 14, 33],
+                                         simdiki_ders_no=1, ders_metni="1. ders (08:30–09:10)")),
+     "yoklama-liste", False, "ky"),  # fmt: skip
+    ("yk-liste-70-s1", taban(yoklama=liste(70, sayfa=0, goruldu=False)), "yoklama-liste", False, "ky"),
+    ("yk-liste-70-s2", taban(yoklama=liste(70, sayfa=1, goruldu=True, yok=[2, 5, 60])), "yoklama-liste", False, "ky"),
+    # Eski sunucu / eski biçim ("ad + soyad baş harfi", çakışma ekli): ek numara satırında görünür.
+    ("yk-liste-eski", taban(yoklama=yoklama("liste", liste_yuklu=True, ogrenciler=ESKI_BICIM, yok=[1, 2, 5], mevcut=40)),
+     "yoklama-liste", False, "ky"),  # fmt: skip
+    ("yoklama-onay", taban(yoklama=dict(liste(40, gec_secilebilir=True, yok=list(range(1, 9)), gec=[20, 21, 22]), asama="onay")),
+     "yoklama-onay", False, None),  # fmt: skip
+    ("yoklama-onay-70", taban(yoklama=dict(liste(70, yok=list(range(1, 19))), asama="onay")), "yoklama-onay", True, None),
+    ("yoklama-ileti", taban(yoklama=yoklama("ileti", ileti="Kaydedildi: 3 yok, 2 geç.")), "yoklama-ileti", False, None),
 ]
 
 
@@ -198,6 +310,81 @@ def olc_sayfa(sayfa) -> tuple[int, int, bool]:
     return gerekli_en, gerekli_boy, yatay_tasti
 
 
+def torunlar(oge) -> list:
+    bulunan = [oge]
+    if isinstance(oge, Gtk.Container):
+        for cocuk in oge.get_children():
+            bulunan.extend(torunlar(cocuk))
+    return bulunan
+
+
+def yoklama_denetle(nesne, sayfa) -> tuple[list[str], tuple[int, int]]:
+    """Ders yoklaması görünümü kaydırmasız mı? (sorunlar, en küçük düğmenin eni x boyu).
+
+    - sayfada görünen ScrolledWindow yok;
+    - ızgaralardaki her düğme sayfanın içinde, alt çubuğun (Vazgeç/KAYDET satırı) üstünde;
+    - düğme boyu en küçük dokunma ölçüsünden (ölçekli) küçük değil;
+    - gövdede (okul bandı dışında) hiçbir etiket "…" ile kesilmemiş (numara, ad, şube, ders saati, sayılar, üst satır).
+    """
+    sorunlar = []
+    if any(k.get_mapped() for k in kaydirmalar(sayfa)):
+        sorunlar.append("kaydırma alanı var")
+    sayfa_en, sayfa_boy = sayfa.get_allocated_width(), sayfa.get_allocated_height()
+    alt = nesne.yl_alt
+    alt_ust = alt.translate_coordinates(sayfa, 0, 0)[1]
+    en_az = ekran.olcekle(ekran.YOKLAMA_DOKUNMA_EN_AZ, nesne.olcek)
+    en_kucuk, disarida, kisa, kesik = None, 0, 0, 0
+    for kap in (nesne.yl_izgara, nesne.yl_once, nesne.yl_duzeyler, nesne.yl_subeler, nesne.yl_dersler):  # yl_once: öneri + ★
+        for oge in torunlar(kap):
+            if not isinstance(oge, Gtk.Button) or not oge.get_mapped():
+                continue
+            x, y = oge.translate_coordinates(sayfa, 0, 0)
+            en, boy = oge.get_allocated_width(), oge.get_allocated_height()
+            if en_kucuk is None or (boy, en) < (en_kucuk[1], en_kucuk[0]):
+                en_kucuk = (en, boy)
+            disarida += x < 0 or y < 0 or x + en > sayfa_en or y + boy > alt_ust
+            kisa += boy < en_az
+    for oge in torunlar(alt.get_parent()):
+        if isinstance(oge, Gtk.Label) and oge.get_mapped() and oge.get_text() and oge.get_layout().is_ellipsized():
+            kesik += 1
+    if alt_ust + alt.get_allocated_height() > sayfa_boy:
+        sorunlar.append("alt çubuk sayfanın dışında")
+    for sayi, ad in ((disarida, "düğme alanın dışında"), (kisa, f"düğme {en_az} px'ten kısa"), (kesik, "etiket kesik")):
+        if sayi:
+            sorunlar.append(f"{sayi} {ad}")
+    return sorunlar, en_kucuk or (0, 0)
+
+
+def dokunus_denetle(nesne) -> list[str]:
+    """Liste görünümünde gerçek düğmeye dokunur (clicked): yazı ve renk sınıfı servis beklenmeden değişmeli,
+    servise her dokunuşta `yoklama_isaret` gitmeli. Geç seçilebiliyorsa var → YOK → GEÇ → var, değilse var ↔ YOK."""
+    yoklama = nesne.durum.get("yoklama") or {}
+    isaretli = set(yoklama.get("yok") or []) | set(yoklama.get("gec") or [])
+    kimlik = next((k for k in nesne.yk_dugmeler if k not in isaretli), None)
+    if kimlik is None:
+        return ["dokunulacak düğme yok"]
+    kayit, giden = nesne.yk_dugmeler[kimlik], []
+    asil, nesne.baglanti.gonder = nesne.baglanti.gonder, giden.append
+    beklenen = ["YOK", "GEÇ", ""] if yoklama.get("gec_secilebilir") else ["YOK", "", "YOK", ""]
+    gorulen = []
+    try:
+        for _ in beklenen:
+            kayit["dugme"].clicked()
+            pompala(0.1)
+            sinif = [c for c in ("yok", "gec") if kayit["dugme"].get_style_context().has_class(c)]
+            gorulen.append((kayit["durum"].get_text(), sinif))
+    finally:
+        nesne.baglanti.gonder = asil
+    sorunlar = []
+    if [g[0] for g in gorulen] != beklenen:
+        sorunlar.append(f"dokunuş döngüsü {[g[0] for g in gorulen]}")
+    if [g[1] for g in gorulen] != [[{"YOK": "yok", "GEÇ": "gec"}[b]] if b else [] for b in beklenen]:
+        sorunlar.append("renk sınıfı yazıyla uyuşmuyor")
+    if giden != [{"tur": "yoklama_isaret", "id": kimlik}] * len(beklenen):
+        sorunlar.append("servise giden ileti yanlış")
+    return sorunlar
+
+
 def program_sayfalari_oynadi_mi(nesne) -> bool:
     """Gün programının bütün sayfalarını gezer; tuş takımı, program kutusu ya da gezgin yer değiştirdiyse True."""
 
@@ -231,6 +418,8 @@ def ekran_olc(arg) -> int:
     def calis():
         nesne = next(o for o in gc.get_objects() if type(o).__name__ == "Ekran" and hasattr(o, "yigin"))
         for ad, durum, beklenen, uzun, is_ in SENARYOLAR:
+            if arg.yalniz and arg.yalniz not in ad:
+                continue
             nesne.gozetmen_kod_acik = False
             nesne._mesaj(taban())  # önce gizle: senaryolar birbirini etkilemesin
             pompala(0.3)
@@ -249,6 +438,14 @@ def ekran_olc(arg) -> int:
                 sonuc = "kaydırma" if uzun else "TAŞTI"
             else:
                 sonuc = "sığdı"
+            ek = ""
+            if is_ == "ky":
+                sorunlar, (d_en, d_boy) = yoklama_denetle(nesne, nesne.yigin.get_visible_child())
+                if nesne.yk_dugmeler:
+                    sorunlar += dokunus_denetle(nesne)
+                ek = f"  en küçük düğme {d_en}x{d_boy}" + ("  [" + "; ".join(sorunlar) + "]" if sorunlar else "")
+                if sorunlar or sonuc != "sığdı":
+                    sonuc = "TAŞTI"
             ekran_goruntusu(arg.cikti, en, boy, ad)
             if is_ == "program_sayfalari":
                 if not nesne.kilit_program_kutu.get_mapped():
@@ -257,7 +454,7 @@ def ekran_olc(arg) -> int:
                     sonuc = "OYNADI"
                 ad_son = ad + "-son"
                 ekran_goruntusu(arg.cikti, en, boy, ad_son)
-            sonuclar.append((ad, sayfa_adi, en, boy, nesne.olcek, p_en, p_boy, gerekli_en, gerekli_boy, sonuc))
+            sonuclar.append((ad, sayfa_adi, en, boy, nesne.olcek, p_en, p_boy, gerekli_en, gerekli_boy, sonuc, ek))
         Gtk.main_quit()
 
     ekran.Baglanti.calis = lambda self: None  # servis yok: ileti gönderilmez, kopma bildirilmez
@@ -272,9 +469,9 @@ def ekran_olc(arg) -> int:
     Gtk.main = main
     ekran.calistir()
     print(f"{'senaryo':<21} {'sayfa':<17} {'ekran':>10} {'ölçek':>6} {'pencere':>10} {'gerekli':>10}  sonuç")
-    for ad, sayfa_adi, en, boy, olcek, p_en, p_boy, g_en, g_boy, sonuc in sonuclar:
-        print(f"{ad:<21} {sayfa_adi:<17} {en:>4}x{boy:<5} {olcek:>6.3f} {p_en:>4}x{p_boy:<5} {g_en:>4}x{g_boy:<5}  {sonuc}")
-    return 1 if any(s[-1] in ("TAŞTI", "OYNADI") for s in sonuclar) else 0
+    for ad, sayfa_adi, en, boy, olcek, p_en, p_boy, g_en, g_boy, sonuc, ek in sonuclar:
+        print(f"{ad:<21} {sayfa_adi:<17} {en:>4}x{boy:<5} {olcek:>6.3f} {p_en:>4}x{p_boy:<5} {g_en:>4}x{g_boy:<5}  {sonuc}{ek}")
+    return 1 if any(s[-2] in ("TAŞTI", "OYNADI") for s in sonuclar) else 0
 
 
 def ariza_olc(arg) -> int:
@@ -317,6 +514,7 @@ def main() -> int:
     arg = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     arg.add_argument("--cikti", default="", help="ekran görüntülerinin yazılacağı dizin")
     arg.add_argument("--ariza", action="store_true", help="tahta ekranı yerine arıza penceresini ölç")
+    arg.add_argument("--yalniz", default="", help="yalnız adında bu metin geçen senaryoları ölç (ör. yk-)")
     a = arg.parse_args()
     if a.cikti:
         os.makedirs(a.cikti, exist_ok=True)

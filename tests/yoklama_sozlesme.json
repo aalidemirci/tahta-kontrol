@@ -1,0 +1,447 @@
+{
+  "surum": 1,
+  "aciklama": "Sunucu-ajan ders yoklaması sözleşmesi (0.14.0). Sunucu testleri de ajan testleri de bu dosyadan beslenir; değişiklik önce burada yapılır. Bütün adlar, numaralar, kodlar ve belirteçler UYDURMADIR.",
+  "yetenek": "yoklama_gec",
+  "kurallar": [
+    "Karar tahtanın bildirdiği yeteneğe (durum.yetenekler içinde yoklama_gec) göre verilir, istekteki anahtarın varlığına göre değil.",
+    "Etiket YALNIZ sunucuda üretilir (tahta_sunucu/maske.py); ajan etiketi olduğu gibi gösterir, kendisi kısaltmaz, sıralamaz. Ajan yalnız 'etiket_ayirma' kuralıyla numarayı üst satıra alır.",
+    "Sunucu ogrenciler listesini okul numarası sırasıyla gönderir (sayısal; numarasız öğrenci sonda); ajan sırayı korur.",
+    "Ajan bilinmeyen alanı yok sayar, eksik alanda düşmez (eski sunucu). Sunucu yanıtlarının anahtar kümesi yeteneğe göre DEĞİŞMEZ; yalnız değerler değişir.",
+    "Yanıtlarda ders adı, öğretmen adı, tam soyad, T.C. kimlik no, mazeret, geçmiş gün YOKTUR. oneri.ders_adi her zaman \"\", oneri.ogretmen her zaman null.",
+    "oneri.sube her zaman tahtanın önerisidir (istekteki şubeden bağımsız); oneri.ders_no ve oneri.ders_adaylari istekte şube varsa O şubenin, yoksa oneri.sube'nin dersidir (0.13.1 ile aynı anlam).",
+    "PIN'siz /ajan/yoklama/oneri yanıtı hiçbir öğretmene bağlı değildir; öğretmen programından gelen bilgi yalnız /baslat ve /ajan/usb/yoklama yanıtındadır.",
+    "Yeni alanların hiçbiri (gec, subeler_once, oneri, ders_adaylari, simdiki_ders_no) ajanda durum.json'a, günlüğe, tanılamaya yazılmaz.",
+    "/liste yanıtında gec_secilebilir false ise gec her zaman [] gelir (ilk ders dışındaki geç işareti tahtaya inmez; ajan o derste gec: [] gönderir).",
+    "Yeteneksiz (eski) ajana /oneri yanıtında şube önerisi (oneri.sube) eskisi gibi gelir; yalnız 'son 15 dk içinde biten ders' kuralı ve ders_adaylari uygulanmaz (oneri.ders_no null kalır)."
+  ],
+  "durumlar": {
+    "ogrenci": ["var", "yok", "gec"],
+    "hucre": ["var", "yok", "gec", "alinmadi", "bos"],
+    "duzeltme": ["var", "yok", "gec", "kaldir"],
+    "mazeret_turleri": ["izinli", "raporlu", "mazeretli", "gorevli"],
+    "mazeret_iptal_turu": "iptal",
+    "mazeret_dayanaklari": ["", "dilekce", "yazi", "belge", "idare"],
+    "asamalar": ["yukleniyor", "pin", "liste", "onay", "kaydediliyor", "ileti"]
+  },
+  "sinirlar": {
+    "etiket_en_uzun": 40,
+    "okul_no_en_uzun": 12,
+    "gec_eki": " (geç)",
+    "kesme_isareti": "…",
+    "subeler_once_oneri": 3,
+    "subeler_once_baslat": 4,
+    "subeler_once_toplam": 6,
+    "ders_adaylari": 2,
+    "sayfa_boyu": 56,
+    "liste_siniri": 300,
+    "simdiki_ders_once_sn": 300,
+    "biten_ders_sonra_sn": 900
+  },
+  "dongu": {
+    "aciklama": "sonraki_durum(durum, gec_secilebilir). Ekran dokunuşu ve servis aynı saf işlevi kullanır.",
+    "tablo": [
+      {"durum": "var", "gec_secilebilir": false, "sonraki": "yok"},
+      {"durum": "yok", "gec_secilebilir": false, "sonraki": "var"},
+      {"durum": "gec", "gec_secilebilir": false, "sonraki": "var"},
+      {"durum": "var", "gec_secilebilir": true, "sonraki": "yok"},
+      {"durum": "yok", "gec_secilebilir": true, "sonraki": "gec"},
+      {"durum": "gec", "gec_secilebilir": true, "sonraki": "var"}
+    ]
+  },
+  "yerlesim": {
+    "aciklama": "yoklama_yerlesim(n): bir sayfadaki ızgara. Sunucu (maske.yoklama_yerlesim) etiket eşiğini, ajan (ekran.yoklama_yerlesim) ızgarayı aynı tablodan seçer. n > 56 ise 56'lık sayfalar.",
+    "tablo": [
+      {"n": 0, "sutun": 6, "satir": 7, "sayfa_sayisi": 1},
+      {"n": 1, "sutun": 6, "satir": 7, "sayfa_sayisi": 1},
+      {"n": 30, "sutun": 6, "satir": 7, "sayfa_sayisi": 1},
+      {"n": 42, "sutun": 6, "satir": 7, "sayfa_sayisi": 1},
+      {"n": 43, "sutun": 6, "satir": 8, "sayfa_sayisi": 1},
+      {"n": 48, "sutun": 6, "satir": 8, "sayfa_sayisi": 1},
+      {"n": 49, "sutun": 7, "satir": 8, "sayfa_sayisi": 1},
+      {"n": 56, "sutun": 7, "satir": 8, "sayfa_sayisi": 1},
+      {"n": 57, "sutun": 7, "satir": 8, "sayfa_sayisi": 2},
+      {"n": 70, "sutun": 7, "satir": 8, "sayfa_sayisi": 2},
+      {"n": 113, "sutun": 7, "satir": 8, "sayfa_sayisi": 3}
+    ],
+    "ad_esigi": {"6": 16, "7": 13}
+  },
+  "etiket": {
+    "aciklama": "Biçim no_ad_soyadbas (yeni varsayılan): '<okul no> <ad kısmı>'. Ad kısmı eşikten (sütuna göre) uzunsa ikinci ve sonraki adlar baş harfe iner; hâlâ uzunsa ilk ad '…' ile kesilir; soyadın baş harfi her zaman kalır. Okul no boşsa yalnız ad kısmı. Bu biçimde çakışma çözümü çalışmaz.",
+    "ornekler": [
+      {"ad": "Ayşe", "soyad": "YILMAZ", "okul_no": "123", "sutun": 6, "etiket": "123 Ayşe Y."},
+      {"ad": "Ayşe Nur", "soyad": "YILMAZ", "okul_no": "1047", "sutun": 6, "etiket": "1047 Ayşe Nur Y."},
+      {"ad": "Muhammed Emin", "soyad": "YILDIRIM", "okul_no": "9", "sutun": 6, "etiket": "9 Muhammed Emin Y."},
+      {"ad": "Muhammed Emin", "soyad": "YILDIRIM", "okul_no": "9", "sutun": 7, "etiket": "9 Muhamm… E. Y."},
+      {"ad": "Abdurrahman Muhammed Emin", "soyad": "KAYA", "okul_no": "2001", "sutun": 6, "etiket": "2001 Abdurr… M. E. K."},
+      {"ad": "Abdurrahman Muhammed Emin", "soyad": "KAYA", "okul_no": "2001", "sutun": 7, "etiket": "2001 Abd… M. E. K."},
+      {"ad": "Abdurrahman Ali Can Efe", "soyad": "KARA ÖZ", "okul_no": "77", "sutun": 7, "etiket": "77 Abdurr… K. Ö."},
+      {"ad": "Elif Su", "soyad": "DEMİR ÖZ", "okul_no": "0215", "sutun": 6, "etiket": "0215 Elif Su D. Ö."},
+      {"ad": "İpek", "soyad": "ışık", "okul_no": "55", "sutun": 6, "etiket": "55 İpek I."},
+      {"ad": "Cemre", "soyad": "DOĞAN", "okul_no": "", "sutun": 6, "etiket": "Cemre D."},
+      {"ad": "Deniz", "soyad": "ÇELİK", "okul_no": " 20 01 ", "sutun": 6, "etiket": "2001 Deniz Ç."}
+    ],
+    "gec_eki_ornekleri": [
+      {"etiket": "123 Ayşe Y.", "eski_ajana": "123 Ayşe Y. (geç)"},
+      {"etiket": "123456789012 Muhammed Emin Y.", "eski_ajana": "123456789012 Muhammed Emin Y. (geç)"},
+      {"etiket": "1234567890123456789012345678901234567890", "eski_ajana": "1234567890123456789012345678901234 (geç)"}
+    ]
+  },
+  "etiket_ayirma": {
+    "aciklama": "Ajan (ekran.ogrenci_dugme_metni): etiketin ilk belirteci rakamla başlıyorsa VE ardından en az bir belirteç varsa o belirteç numaradır (üst satır, kalın), kalanı addır (alt satır). Değilse numara boş, etiketin tamamı addır.",
+    "ornekler": [
+      {"etiket": "123 Ayşe Y.", "no": "123", "ad": "Ayşe Y."},
+      {"etiket": "0215 Elif Su D. Ö.", "no": "0215", "ad": "Elif Su D. Ö."},
+      {"etiket": "1047 A. Y.", "no": "1047", "ad": "A. Y."},
+      {"etiket": "Cemre D.", "no": "", "ad": "Cemre D."},
+      {"etiket": "Ayşe Y. (47)", "no": "", "ad": "Ayşe Y. (47)"},
+      {"etiket": "A-9 Ayşe Y.", "no": "", "ad": "A-9 Ayşe Y."},
+      {"etiket": "123", "no": "", "ad": "123"},
+      {"etiket": "", "no": "", "ad": ""}
+    ]
+  },
+  "hatalar": {
+    "gec_ilk_ders_degil": {"kod": 400, "govde": {"hata": "Geç yalnız ilk derste işaretlenir."}},
+    "hem_yok_hem_gec": {"kod": 400, "govde": {"hata": "Bir öğrenci hem yok hem geç işaretlenemez."}},
+    "gec_anahtari_eksik": {"kod": 400, "govde": {"hata": "Geçersiz istek."}},
+    "liste_degisti": {"kod": 409, "govde": {"hata": "Sınıf listesi değişti; yoklamayı yeniden açın."}},
+    "oturum_bitti": {"kod": 401, "govde": {"hata": "Yoklama oturumu sona erdi; PIN'i yeniden girin."}}
+  },
+  "uclar": {
+    "/ajan/yoklama/oneri": {
+      "aciklama": "PIN'siz. İstek {} ya da {\"sube\": \"10/A\"}. subeler_once: YALNIZ tahtanın derslik programı şubeleri + tahta önerisi (en çok 3). devre_adi yalnız çok devreli okulda dolu. simdiki_ders_no: dönen ders_saatleri üzerinde ders kuralının (süren → 5 dk içinde başlayacak → son 15 dk içinde bitmiş) TEK sonucu; iki aday ya da hiç yoksa null (ders sütunundaki 'şimdi' işareti; ajan kendi saatine güvenmez). simdiki_bitti: o ders az önce bitmiş bir dersse (kural 3) true; ajan '● 5. ders · şimdi' yerine '● 5. ders · bitti' yazar (eski sunucuda yoktur: false). oneri.ders_no yalnız şube biliniyorsa dolar; teneffüste iki aday varsa null ve oneri.ders_adaylari = [biten, baslayacak]. Yeteneksiz ajana ders_adaylari hep [] gider ve 'biten ders' önerilmez.",
+      "yanit_anahtarlari": ["etkin", "tarih", "tarih_yazi", "ders_saatleri", "ders_no_en_cok", "oneri", "subeler", "subeler_once", "devre_adi", "simdiki_ders_no", "simdiki_bitti"],
+      "ders_saati_anahtarlari": ["ders_no", "baslangic", "bitis", "secilebilir"],
+      "oneri_anahtarlari": ["sube", "ders_no", "ders_adi", "ogretmen", "ders_adaylari"],
+      "ornekler": {
+        "ders_suruyor": {
+          "not": "Tek devre; tahtanın şubesi 10/A; saat 10:05, 3. ders sürüyor. Öneri tam ve tek: PIN'den sonra liste doğrudan açılabilir.",
+          "istek": {},
+          "yanit": {
+            "etkin": true,
+            "tarih": "2026-11-16",
+            "tarih_yazi": "16.11.2026 Pazartesi",
+            "ders_saatleri": [
+              {"ders_no": 1, "baslangic": "08:20", "bitis": "09:00", "secilebilir": true},
+              {"ders_no": 2, "baslangic": "09:10", "bitis": "09:50", "secilebilir": true},
+              {"ders_no": 3, "baslangic": "10:00", "bitis": "10:40", "secilebilir": true},
+              {"ders_no": 4, "baslangic": "10:50", "bitis": "11:30", "secilebilir": false}
+            ],
+            "ders_no_en_cok": 4,
+            "oneri": {"sube": "10/A", "ders_no": 3, "ders_adi": "", "ogretmen": null, "ders_adaylari": []},
+            "subeler": ["9/A", "9/B", "10/A", "10/B", "11/C"],
+            "subeler_once": ["10/A"],
+            "devre_adi": "",
+            "simdiki_ders_no": 3,
+            "simdiki_bitti": false
+          }
+        },
+        "teneffus_iki_aday": {
+          "not": "Saat 09:56: 2. ders 09:50'de bitti, 3. ders 10:00'da başlayacak. Kimlik yok: ders_no null, iki aday [biten, baslayacak]; liste doğrudan AÇILMAZ.",
+          "istek": {"sube": "10/A"},
+          "yanit": {
+            "etkin": true,
+            "tarih": "2026-11-16",
+            "tarih_yazi": "16.11.2026 Pazartesi",
+            "ders_saatleri": [
+              {"ders_no": 1, "baslangic": "08:20", "bitis": "09:00", "secilebilir": true},
+              {"ders_no": 2, "baslangic": "09:10", "bitis": "09:50", "secilebilir": true},
+              {"ders_no": 3, "baslangic": "10:00", "bitis": "10:40", "secilebilir": true},
+              {"ders_no": 4, "baslangic": "10:50", "bitis": "11:30", "secilebilir": false}
+            ],
+            "ders_no_en_cok": 4,
+            "oneri": {"sube": "10/A", "ders_no": null, "ders_adi": "", "ogretmen": null, "ders_adaylari": [2, 3]},
+            "subeler": ["9/A", "9/B", "10/A", "10/B", "11/C"],
+            "subeler_once": ["10/A"],
+            "devre_adi": "",
+            "simdiki_ders_no": null,
+            "simdiki_bitti": false
+          }
+        },
+        "ikili_egitim_subeli": {
+          "not": "İki devre; istenen şube öğle devresinde, saat 13:35, öğlenin 1. dersi sürüyor (devrenin ilk dersi: geç seçilebilir olacak).",
+          "istek": {"sube": "11/C"},
+          "yanit": {
+            "etkin": true,
+            "tarih": "2026-11-16",
+            "tarih_yazi": "16.11.2026 Pazartesi",
+            "ders_saatleri": [
+              {"ders_no": 1, "baslangic": "13:30", "bitis": "14:10", "secilebilir": true},
+              {"ders_no": 2, "baslangic": "14:20", "bitis": "15:00", "secilebilir": false},
+              {"ders_no": 3, "baslangic": "15:10", "bitis": "15:50", "secilebilir": false}
+            ],
+            "ders_no_en_cok": 3,
+            "oneri": {"sube": null, "ders_no": 1, "ders_adi": "", "ogretmen": null, "ders_adaylari": []},
+            "subeler": ["9/A", "9/B", "10/A", "10/B", "11/C"],
+            "subeler_once": [],
+            "devre_adi": "Öğle",
+            "simdiki_ders_no": 1,
+            "simdiki_bitti": false
+          }
+        },
+        "subesiz_devir_saati": {
+          "not": "İki devre, şubesiz istek, iki devrenin penceresi çakışıyor (ya da hiçbiri kapsamıyor): ders saatleri boş, ön seçim yok. Ajan ders sütununda 'Önce şubeyi seçin' gösterir.",
+          "istek": {},
+          "yanit": {
+            "etkin": true,
+            "tarih": "2026-11-16",
+            "tarih_yazi": "16.11.2026 Pazartesi",
+            "ders_saatleri": [],
+            "ders_no_en_cok": 12,
+            "oneri": {"sube": null, "ders_no": null, "ders_adi": "", "ogretmen": null, "ders_adaylari": []},
+            "subeler": ["9/A", "9/B", "10/A", "10/B", "11/C"],
+            "subeler_once": [],
+            "devre_adi": "",
+            "simdiki_ders_no": null,
+            "simdiki_bitti": false
+          }
+        }
+      }
+    },
+    "/ajan/yoklama/baslat": {
+      "aciklama": "İstek {kod, pin}. Yanıta eklenen: oneri (öğretmen programından; {sube, ders_no|null, ders_adaylari} ya da null) ve subeler_once (öğretmenin bugünkü şubeleri, en çok 4). Ad ve ders adı yok. Servis iki subeler_once'yi bellekte birleştirir (tahtanınkiler önce, yinelenmeden, en çok 6).",
+      "yanit_anahtarlari": ["belirtec", "kalan_sn", "bosta_sn", "ogretmen", "oneri", "subeler_once"],
+      "oneri_anahtarlari": ["sube", "ders_no", "ders_adaylari"],
+      "ornekler": {
+        "program_tahtayla_ayni": {
+          "not": "Öğretmenin programı da 10/A 3. ders: tahta önerisiyle aynı → liste doğrudan açılır.",
+          "istek": {"kod": "112", "pin": "000000"},
+          "yanit": {
+            "belirtec": "UYDURMA-BELIRTEC-0001",
+            "kalan_sn": 480,
+            "bosta_sn": 180,
+            "ogretmen": {"kod": "112", "etiket": "A. Örnek"},
+            "oneri": {"sube": "10/A", "ders_no": 3, "ders_adaylari": []},
+            "subeler_once": ["10/A", "11/C"]
+          }
+        },
+        "program_tahtadan_farkli": {
+          "not": "Tahtanın önerisi 10/A, öğretmenin programı 11/C: liste AÇILMAZ; seçim görünümü tahtanın şubesi seçili, 11/C öne alınmış açılır.",
+          "istek": {"kod": "112", "pin": "000000"},
+          "yanit": {
+            "belirtec": "UYDURMA-BELIRTEC-0002",
+            "kalan_sn": 480,
+            "bosta_sn": 180,
+            "ogretmen": {"kod": "112", "etiket": "A. Örnek"},
+            "oneri": {"sube": "11/C", "ders_no": 3, "ders_adaylari": []},
+            "subeler_once": ["11/C", "9/B"]
+          }
+        },
+        "programsiz_ogretmen": {
+          "not": "Öğretmenin bugün program satırı yok.",
+          "istek": {"kod": "113", "pin": "000000"},
+          "yanit": {
+            "belirtec": "UYDURMA-BELIRTEC-0003",
+            "kalan_sn": 480,
+            "bosta_sn": 180,
+            "ogretmen": {"kod": "113", "etiket": "B. Deneme"},
+            "oneri": null,
+            "subeler_once": []
+          }
+        }
+      }
+    },
+    "/ajan/usb/yoklama": {
+      "aciklama": "/baslat ile aynı biçim + tur. İdare anahtarında (kullanici_id; ogretmen_id yok) oneri null, subeler_once [].",
+      "yanit_anahtarlari": ["belirtec", "kalan_sn", "bosta_sn", "ogretmen", "tur", "oneri", "subeler_once"],
+      "oneri_anahtarlari": ["sube", "ders_no", "ders_adaylari"],
+      "ornekler": {
+        "idare_anahtari": {
+          "yanit": {
+            "belirtec": "UYDURMA-BELIRTEC-0004",
+            "kalan_sn": 480,
+            "bosta_sn": 180,
+            "ogretmen": {"kod": "", "etiket": "İdare"},
+            "tur": "idare",
+            "oneri": null,
+            "subeler_once": []
+          }
+        },
+        "ogretmen_anahtari": {
+          "yanit": {
+            "belirtec": "UYDURMA-BELIRTEC-0005",
+            "kalan_sn": 480,
+            "bosta_sn": 180,
+            "ogretmen": {"kod": "112", "etiket": "A. Örnek"},
+            "tur": "ogretmen",
+            "oneri": {"sube": "10/A", "ders_no": null, "ders_adaylari": [2, 3]},
+            "subeler_once": ["10/A"]
+          }
+        }
+      }
+    },
+    "/ajan/yoklama/liste": {
+      "aciklama": "İstek {belirtec, sube, ders_no}. ogrenciler okul no sırasıyla. yok ve gec o ders saatinin GEÇERLİ durumudur (en son kaydedilen kayıt + ondan eski olmayan panel düzeltmesi; kaydet tam durumu yazdığı için düzeltmeden sonra kaydedilen yoklama geçerlidir; kimin kaydı olduğu yanıtta yok); bir id ikisinde birden olamaz. gec_secilebilir: seçilen ders, şubenin devresinin o günkü İLK dersi mi (devre bulunamadıysa ders_no == 1). Yeteneksiz ajana gec yine gider (yok sayar) ve geç öğrencinin etiketi ' (geç)' ekiyle gider. 'ileti' anahtarı yalnız liste boşken vardır.",
+      "yanit_anahtarlari": ["sube", "ders_no", "ders_adi", "ogrenciler", "yok", "gec", "gec_secilebilir", "baska_yoklama", "kalan_sn", "mevcut"],
+      "istege_bagli_anahtarlar": ["ileti"],
+      "ogrenci_anahtarlari": ["id", "etiket"],
+      "ornekler": {
+        "ilk_ders": {
+          "not": "Devrenin ilk dersi; 0215 daha önce GEÇ, 1102 YOK kaydedilmiş. Sıra: 9 < 215 < 1047 < 1102, numarasız sonda.",
+          "istek": {"belirtec": "UYDURMA-BELIRTEC-0001", "sube": "10/A", "ders_no": 1},
+          "yanit": {
+            "sube": "10/A",
+            "ders_no": 1,
+            "ders_adi": "",
+            "ogrenciler": [
+              {"id": 14, "etiket": "9 Muhammed Emin Y."},
+              {"id": 11, "etiket": "0215 Elif Su D. Ö."},
+              {"id": 12, "etiket": "1047 Ayşe Nur Y."},
+              {"id": 13, "etiket": "1102 Burak K."},
+              {"id": 15, "etiket": "Cemre D."}
+            ],
+            "yok": [13],
+            "gec": [11],
+            "gec_secilebilir": true,
+            "baska_yoklama": false,
+            "kalan_sn": 455,
+            "mevcut": 5
+          }
+        },
+        "ucuncu_ders": {
+          "not": "İlk ders değil: geç sunulmaz, gec boş.",
+          "istek": {"belirtec": "UYDURMA-BELIRTEC-0001", "sube": "10/A", "ders_no": 3},
+          "yanit": {
+            "sube": "10/A",
+            "ders_no": 3,
+            "ders_adi": "",
+            "ogrenciler": [
+              {"id": 14, "etiket": "9 Muhammed Emin Y."},
+              {"id": 11, "etiket": "0215 Elif Su D. Ö."},
+              {"id": 12, "etiket": "1047 Ayşe Nur Y."},
+              {"id": 13, "etiket": "1102 Burak K."},
+              {"id": 15, "etiket": "Cemre D."}
+            ],
+            "yok": [],
+            "gec": [],
+            "gec_secilebilir": false,
+            "baska_yoklama": true,
+            "kalan_sn": 455,
+            "mevcut": 5
+          }
+        },
+        "ilk_ders_yeteneksiz_ajana": {
+          "not": "Aynı durum, yoklama_gec bildirmeyen (0.13.1) ajana: geç öğrencinin etiketi ekli gider.",
+          "istek": {"belirtec": "UYDURMA-BELIRTEC-0001", "sube": "10/A", "ders_no": 1},
+          "yanit": {
+            "sube": "10/A",
+            "ders_no": 1,
+            "ders_adi": "",
+            "ogrenciler": [
+              {"id": 14, "etiket": "9 Muhammed Emin Y."},
+              {"id": 11, "etiket": "0215 Elif Su D. Ö. (geç)"},
+              {"id": 12, "etiket": "1047 Ayşe Nur Y."},
+              {"id": 13, "etiket": "1102 Burak K."},
+              {"id": 15, "etiket": "Cemre D."}
+            ],
+            "yok": [13],
+            "gec": [11],
+            "gec_secilebilir": true,
+            "baska_yoklama": false,
+            "kalan_sn": 455,
+            "mevcut": 5
+          }
+        }
+      }
+    },
+    "/ajan/yoklama/kaydet": {
+      "aciklama": "Gövde öğretmenin gördüğü TAM durumdur ve kaydedenin kendi kaydına yazılır; başka kayda dokunulmaz. Yetenek VARSA gec anahtarı zorunludur (boş liste dahil; yoksa 400). Yetenek YOKSA anahtar beklenmez: geçerli durumdaki geç öğrenciler bu kayda da geç yazılır, yalnız yeni yok'a girenler geçten çıkar. Yeni ajan eski sunucuya (liste yanıtında gec_secilebilir anahtarı yoksa) gec GÖNDERMEZ.",
+      "istek_anahtarlari": ["belirtec", "sube", "ders_no", "yok", "gec"],
+      "yanit_anahtarlari": ["tamam", "yok_sayisi", "gec_sayisi", "mevcut"],
+      "ornekler": {
+        "ilk_ders_yok_ve_gec": {
+          "istek": {"belirtec": "UYDURMA-BELIRTEC-0001", "sube": "10/A", "ders_no": 1, "yok": [13], "gec": [11, 12]},
+          "kod": 200,
+          "yanit": {"tamam": true, "yok_sayisi": 1, "gec_sayisi": 2, "mevcut": 5}
+        },
+        "ucuncu_ders_bos_gec": {
+          "istek": {"belirtec": "UYDURMA-BELIRTEC-0001", "sube": "10/A", "ders_no": 3, "yok": [13], "gec": []},
+          "kod": 200,
+          "yanit": {"tamam": true, "yok_sayisi": 1, "gec_sayisi": 0, "mevcut": 5}
+        },
+        "ucuncu_derste_gec_reddedilir": {
+          "istek": {"belirtec": "UYDURMA-BELIRTEC-0001", "sube": "10/A", "ders_no": 3, "yok": [], "gec": [11]},
+          "kod": 400,
+          "yanit": {"hata": "Geç yalnız ilk derste işaretlenir."}
+        },
+        "hem_yok_hem_gec_reddedilir": {
+          "istek": {"belirtec": "UYDURMA-BELIRTEC-0001", "sube": "10/A", "ders_no": 1, "yok": [11], "gec": [11]},
+          "kod": 400,
+          "yanit": {"hata": "Bir öğrenci hem yok hem geç işaretlenemez."}
+        },
+        "yetenekli_ajan_gec_anahtarsiz": {
+          "istek": {"belirtec": "UYDURMA-BELIRTEC-0001", "sube": "10/A", "ders_no": 1, "yok": [13]},
+          "kod": 400,
+          "yanit": {"hata": "Geçersiz istek."}
+        },
+        "yeteneksiz_ajan_gec_korunur": {
+          "not": "0.13.1 ajanı; geçerli durumda 11 geç. Gövdede gec yok: 11 bu kayda da geç yazılır (yanıtta gec_sayisi 1). 11 yok listesinde gelseydi geçten çıkardı.",
+          "istek": {"belirtec": "UYDURMA-BELIRTEC-0001", "sube": "10/A", "ders_no": 1, "yok": [13]},
+          "kod": 200,
+          "yanit": {"tamam": true, "yok_sayisi": 1, "gec_sayisi": 1, "mevcut": 5}
+        }
+      }
+    }
+  },
+  "eski_sunucu": {
+    "aciklama": "0.13.1 sunucusunun yanıtları (yeni alan yok). Yeni ajan bunlarla düşmez: geç sunmaz, gec göndermez, subeler_once boş, ders_adaylari boş, bugünkü davranış.",
+    "/ajan/yoklama/oneri": {
+      "etkin": true,
+      "tarih": "2026-11-16",
+      "tarih_yazi": "16.11.2026 Pazartesi",
+      "ders_saatleri": [
+        {"ders_no": 1, "baslangic": "08:20", "bitis": "09:00", "secilebilir": true},
+        {"ders_no": 2, "baslangic": "09:10", "bitis": "09:50", "secilebilir": true}
+      ],
+      "ders_no_en_cok": 2,
+      "oneri": {"sube": "10/A", "ders_no": 2, "ders_adi": "", "ogretmen": null},
+      "subeler": ["10/A", "10/B"]
+    },
+    "/ajan/yoklama/baslat": {
+      "belirtec": "UYDURMA-BELIRTEC-0006",
+      "kalan_sn": 480,
+      "bosta_sn": 180,
+      "ogretmen": {"kod": "112", "etiket": "A. Örnek"}
+    },
+    "/ajan/yoklama/liste": {
+      "sube": "10/A",
+      "ders_no": 2,
+      "ders_adi": "",
+      "ogrenciler": [
+        {"id": 12, "etiket": "Ayşe Nur Y."},
+        {"id": 13, "etiket": "Burak K."}
+      ],
+      "yok": [13],
+      "baska_yoklama": false,
+      "kalan_sn": 455,
+      "mevcut": 2
+    },
+    "/ajan/yoklama/kaydet": {
+      "istek": {"belirtec": "UYDURMA-BELIRTEC-0006", "sube": "10/A", "ders_no": 2, "yok": [13]},
+      "yanit": {"tamam": true, "yok_sayisi": 1, "mevcut": 2}
+    }
+  },
+  "ajan": {
+    "aciklama": "Ajanın iç sözleşmesi (servis <-> ekran yardımcısı). Belirteç görünüme GİRMEZ.",
+    "yoklama_yeni_ek_alanlar": {
+      "gec": "set()",
+      "gec_secilebilir": false,
+      "subeler_once": [],
+      "ders_adaylari": [],
+      "ders_elle": false,
+      "sayfa": 0,
+      "gorulen_sayfalar": "set()"
+    },
+    "gorunum_ek_anahtarlar": ["gec", "gec_secilebilir", "subeler_once", "ders_adaylari", "devre_adi", "simdiki_ders_no", "simdiki_bitti", "sayfa", "sayfa_sayisi", "tum_sayfalar_goruldu"],
+    "gorunum_kurallari": [
+      "gec yalnız liste yüklüyken doludur (yok ile aynı koşul).",
+      "subeler_once'nin öğretmene bağlı kısmı yalnız belirteç varken (PIN/USB sonrası) görünüme girer; yukleniyor/pin aşamasında yalnız tahtanın şubeleri.",
+      "Elle ders seçimi (ders_elle): şube değişince yalnız yeni şubenin ders_saatleri içinde AYNI numara VE aynı başlangıç saati varsa korunur; saatsiz (1-12) görünümden saatli görünüme geçişte hiç korunmaz."
+    ],
+    "ekran_iletileri": {
+      "yoklama_isaret": {"tur": "yoklama_isaret", "id": 11},
+      "yoklama_temizle": {"tur": "yoklama_temizle"},
+      "yoklama_sayfa": {"tur": "yoklama_sayfa", "yon": 1}
+    },
+    "cozucu_sinirlari": {"subeler_once": 6, "ders_adaylari": 2, "gec": 300, "gec_idleri_listede_olmali": true}
+  }
+}

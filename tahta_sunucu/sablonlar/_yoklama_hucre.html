@@ -1,0 +1,41 @@
+{# Şube defteri hücre makroları ve lejant (0.14.0). Renk tek başına anlam taşımaz: her durum harf/simge + desen taşır.
+   hucre = {durum: var|yok|gec|alinmadi|bos, ozurlu, kapsam, duzeltme, ders_no, simge, etiket}. Mazeret TÜRÜ burada yoktur. #}
+{% macro nitelik(h) -%}
+data-d="{{ h.durum }}"{% if h.ozurlu %} data-ozurlu{% endif %}{% if h.kapsam and h.durum in ('var', 'alinmadi') %} data-kapsam{% endif %}{% if h.duzeltme %} data-duz{% endif %}{% if h.gelecek %} data-gelecek{% endif %}
+{%- endmacro %}
+
+{# Salt okunur hücre (beş gün kipi, öğrenci görünümü). adres verilirse hücre gün kipine bağlantıdır. #}
+{% macro salt(h, adres='', ek_sinif='') -%}
+<td class="yh{% if ek_sinif %} {{ ek_sinif }}{% endif %}" {{ nitelik(h) }}>
+  {%- if h.durum == 'bos' -%}
+  {%- elif adres -%}<a href="{{ adres }}" aria-label="{{ h.etiket }}">{{ h.simge }}</a>
+  {%- else -%}<span aria-label="{{ h.etiket }}" role="img">{{ h.simge }}</span>
+  {%- endif -%}
+</td>
+{%- endmacro %}
+
+{% macro lejant(gec=true, duzeltme=false, plan_disi=false) -%}
+<ul class="defter-lejant not" aria-label="Simgeler">
+  <li><span class="yh-ornek" data-d="var">·</span> derste</li>
+  <li><span class="yh-ornek" data-d="yok">Y</span> yok</li>
+  {% if gec %}<li><span class="yh-ornek" data-d="gec">G</span> geç (yalnız ilk derste)</li>{% endif %}
+  <li><span class="yh-ornek" data-d="yok" data-ozurlu>Ö</span> yok, özürlü (mazeret/izin girilmiş)</li>
+  <li><span class="yh-ornek" data-d="var" data-kapsam>·</span> köşe noktası: mazeret kapsamında</li>
+  <li><span class="yh-ornek" data-d="alinmadi">–</span> yoklama alınmadı</li>
+  <li>boş: o saatte ders yok</li>
+  {% if duzeltme %}<li><span class="yh-ornek" data-d="yok" data-duz>Y</span> <span class="yh-ornek" data-d="var" data-duz>V</span> alt çizgi: idare düzeltmesi (V: idare “var” yaptı)</li>{% endif %}
+  {% if plan_disi %}<li><strong>*</strong> programda yok</li>{% endif %}
+</ul>
+{%- endmacro %}
+
+{% macro serit(parcalar) -%}
+<span class="gun-seridi">{% for s in parcalar %}<span data-s="{{ s.durum }}" title="{{ s.metin }}"><span aria-hidden="true">{{ s.simge }}</span><span class="gizli">{{ s.metin }}. </span></span>{% endfor %}</span>
+{%- endmacro %}
+
+{% macro rozet(r, uzun=false) -%}
+{% if r %}<span class="rozet gun-rozeti" data-tur="{{ r.tur }}"{% if r.tur == 'vurgulu' %} data-durum="sorun"{% elif r.tur == 'duz' %} data-durum="uyari"{% else %} data-durum="bilgi"{% endif %} title="{{ r.metin }}">{% if r.tur == 'vurgulu' %}<svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{% endif %}<span aria-hidden="true">{{ r.uzun if uzun else r.kisa }}</span><span class="gizli">{{ r.metin }}</span></span>{% endif %}
+{%- endmacro %}
+
+{% macro serit_lejanti() -%}
+<span class="not">Gün şeridi: <span aria-hidden="true">■</span> alınan bütün derslerde yok · <span aria-hidden="true">□</span> hepsi özürlü · <span aria-hidden="true">◧</span> bazı derslerde yok · <span aria-hidden="true">·</span> yokluk yok · <span aria-hidden="true">–</span> yoklama alınmadı</span>
+{%- endmacro %}
