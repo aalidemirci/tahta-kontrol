@@ -465,6 +465,19 @@ evet/hayır yazılır. Tahtanın pencere yöneticisinin adını not edin (`wmctr
 | O3 | "Vazgeç"; sonra yeniden yükleyip 15 dk bekleyin | Vazgeç'te önizleme hemen silinir; 15 dk sonra onay kabul edilmez, dosya yeniden yüklenir | |
 | O4 | Onaydan sonra işlem kaydı ve bir öğretmenin başka sınıfta yoklama alması | İşlem kaydında ad yok, yalnız sayılar; başka sınıf/ders yoklaması engellenmez | |
 
+### 3.13 Yeni sürüm denetimi (0.13.1)
+
+Sunucu günde en çok bir kez GitHub'a bakar; tahtalar internete çıkmaz. Kurulu hizmette ve okul ağında
+henüz denenmedi.
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| S1 | Kurulumdan birkaç dakika sonra Ayarlar › Güncelleme denetimi | "Son denetim: gg.aa.yyyy ss:dd" ve sonuç ("Kurulu sürüm güncel." ya da "Yeni sürüm x.y.z yayımlanmış.") | |
+| S2 | Okul ağı GitHub'a ulaşamıyorsa (süzgeç, vekil, internet yok) | Ayarlar'da "GitHub'a ulaşılamadı."; panoda hiçbir uyarı çıkmaz, panel ve tahtalar olağan çalışır; sonraki deneme ertesi gün | |
+| S3 | "Şimdi denetle" (GitHub'a ulaşılamıyorken) | En geç birkaç saniyede yanıt; panel donmaz | |
+| S4 | Kutuyu kaldırıp "Güncelleme ayarını kaydet" | "Denetim kapalı"; "Şimdi denetle" düğmesi görünmez; panodaki yeni sürüm notu (varsa) kalkar | |
+| S5 | Yeni sürüm yayımlandığında yönetici ve idareci hesabıyla pano | Not yalnız yöneticide; bağlantı GitHub'daki sürüm sayfasını açar; program kendiliğinden hiçbir şey indirmez | |
+
 ### 3.7 Windows hizmeti (K8, 0.8.0)
 
 Hazırlık: bu denemeler yönetici yetkisi ister ve **önce deneme bilgisayarında** yapılmalıdır.

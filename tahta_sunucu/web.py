@@ -32,6 +32,7 @@ from . import (
     ayar,
     dugme,
     duyuru,
+    guncelleme,
     guvenlik,
     hedef,
     kilit_program,
@@ -172,8 +173,10 @@ def gecen_sure(epoch) -> str:
     return f"{fark // 86400} gün önce"
 
 
-def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
+def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
+    """guncelleme_getirici: GitHub sürüm denetiminin getiricisi (testler sahte verir; yoksa gerçek ağ)."""
     vt.hazirla()
+    guncelleme_denetleyici = guncelleme.Denetleyici(guncelleme_getirici)
     uygulama = FastAPI(title="Tahta Kontrol", docs_url=None, redoc_url=None, openapi_url=None)
     uygulama.mount("/statik", StaticFiles(directory=ayar.SUNUCU_DIZINI / "statik"), name="statik")
     sablonlar = Jinja2Templates(directory=ayar.SUNUCU_DIZINI / "sablonlar")
@@ -562,6 +565,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             sinavlar = sinav.pencere_haritasi(b, vt.simdi())
             altyapi = altyapi_verisi(b)
             uyarilar = altyapi_uyarilari(b, k)
+            # Yeni sürüm notu yalnız yöneticiye; sayfa çizilirken ağ çağrısı yapılmaz (saklanan durum okunur).
+            yeni_surum = guncelleme.gorunum(b)["yeni"] if k["rol"] == "yonetici" else None
         tahtalar = [tahta_gorunumu(s, gorenler, uyelik, bos_dersler, sinavlar, altyapi) for s in satirlar]
         return sayfa(
             istek,
@@ -574,6 +579,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             kacirilan_sayisi=kacirilan,
             program=program_ozeti,
             altyapi_uyarilari=uyarilar,
+            yeni_surum=yeni_surum,
         )
 
     def acil_gorenler(b) -> set[int] | None:
@@ -1089,6 +1095,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             acilis_eski = sum(
                 1 for t in b.execute("SELECT * FROM tahta WHERE durum = 'onayli'") if not acilis_kilidi.yetenekli(t)
             )
+            guncelleme_durumu = guncelleme.gorunum(b)
         uretilen = tema.uret(ana, vurgu)
         logo_bilgi = None
         if logo:
@@ -1132,6 +1139,7 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             https_port=ayar.HTTPS_PORT,
             parmak_izi=parmak_izi,
             veri_dizini=str(ayar.veri_dizini()),
+            guncelleme=guncelleme_durumu,
             acil_sablonlar=acil_sablonlar,
             acil_sablon_ornek=acil_sablon_ornek,
             acil_sablon_en_cok=acil.SABLON_EN_COK,
@@ -1363,6 +1371,40 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             mesaj += " Ders yoklaması kapalı; USB anahtar yalnız kilit açmada işe yarar."
         return yonlendir("/ayarlar?yer=usb_anahtar#ileti", mesaj)
 
+    def guncelleme_ayarini_kaydet(k, form, ip: str):
+        """Ayarlar › Güncelleme denetimi (bolum=guncelleme): yalnız `guncelleme_denetimi` anahtarı yazılır.
+
+        Kaydetmek ağ çağrısı yapmaz; açıldıysa ilk denetim zamanlayıcının sonraki turunda arka planda yürür.
+        """
+        yeni = form.get("gd_acik") == "1"
+        with vt.islem() as b:
+            vt.ayar_yaz(b, guncelleme.AYAR_ANAHTARI, yeni)
+            vt.kayit_dus(b, k["ad"], "Güncelleme denetimi ayarı kaydedildi", "açık" if yeni else "kapalı", ip)
+        mesaj = (
+            "Güncelleme denetimi açık: sunucu günde bir kez GitHub'daki son sürüme bakar."
+            if yeni
+            else "Güncelleme denetimi kapalı; GitHub'a istek gönderilmez."
+        )
+        return yonlendir("/ayarlar?yer=guncelleme#ileti", mesaj)
+
+    @uygulama.post("/ayarlar/guncelleme/denetle")
+    async def guncelleme_simdi_denetle(istek: Request):
+        """Şimdi denetle: yalnız yönetici; ayar kapalıyken istek çıkmaz. Ağ çağrısı olay döngüsünü tutmaz."""
+        k = kullanici(istek)
+        if not k or k["rol"] != "yonetici":
+            return yetkisiz_reddet(istek, k, "Ayarlar")
+        adres = "/ayarlar?yer=guncelleme#ileti"
+        durum = await asyncio.to_thread(guncelleme_denetleyici.simdi_denetle)
+        if durum is None:
+            return yonlendir(adres, "Güncelleme denetimi kapalı; GitHub'a istek gönderilmedi.", hata=True)
+        with vt.islem() as b:
+            sonuc = guncelleme.gorunum(b)["sonuc"]
+            if not durum.get("taze"):
+                vt.kayit_dus(b, k["ad"], "Güncelleme denetimi yapıldı", sonuc, istemci_ip(istek))
+        if durum.get("taze"):
+            return yonlendir(adres, f"Az önce denetlendi; yeniden istek gönderilmedi. {sonuc}")
+        return yonlendir(adres, sonuc, hata=durum["sonuc"] != "tamam")
+
     def adresleri_kaydet(istek: Request, k, form, ip: str):
         """Ayarlar › Sunucu adresleri (bolum=adresler): `sunucu_adresleri` (satır başına bir adres, en çok 5).
 
@@ -1408,6 +1450,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
             return acilis_kilidi_kaydet(k, form, istemci_ip(istek))
         if bolum == "usb_anahtar":
             return usb_anahtar_kaydet(k, form, istemci_ip(istek))
+        if bolum == "guncelleme":
+            return guncelleme_ayarini_kaydet(k, form, istemci_ip(istek))
         if bolum != "genel":
             return yonlendir("/ayarlar", "Bilinmeyen ayar bölümü.", hata=True)
         with vt.islem() as b:
@@ -2069,7 +2113,10 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         ("usb_bekleyen", uygulama.state.usb_bekleyen_temizle),
         # 0.13.1: süresi dolan öğretmen programı önizlemesi (ham adlar) bellekte beklemez.
         ("ogretmen_program_onizleme", uygulama.state.ogretmen_program_onizleme.suresi_dolanlari_sil),
+        # GitHub'dan yeni sürüm denetimi: günde en çok bir kez; ağ çağrısını kendi arka plan işinde yapar.
+        ("guncelleme", guncelleme_denetleyici.zamanla),
     ]
+    uygulama.state.guncelleme = guncelleme_denetleyici
     # Otomatik yedeğin "program ≥ 5 dk açık" ölçüsü (testler ilerletebilir).
     uygulama.state.acilis = acilis
     uygulama.state.yedek_zamanlayici = yedek_zamanlayici

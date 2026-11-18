@@ -1,7 +1,7 @@
 {% extends "taban.html" %}
 {% block baslik %}Ayarlar · Tahta Kontrol{% endblock %}
 {# Okul kimliği işlemlerinin iletisi sayfa başında değil, #kimlik bölümünde çizilir (yönlendirme oraya kayar). #}
-{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in ('kimlik', 'acil', 'sinav', 'adresler', 'saklama', 'temizlik', 'dugme', 'acilis', 'yoklama', 'usb_anahtar') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
+{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in ('kimlik', 'acil', 'sinav', 'adresler', 'saklama', 'temizlik', 'dugme', 'acilis', 'yoklama', 'usb_anahtar', 'guncelleme') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}
 <div class="sayfa-bas"><h1>Ayarlar</h1></div>
 {% if saklama_durumu.uyari %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ saklama_durumu.uyari }} <a href="#saklama">Kişisel veri saklama</a></p>{% endif %}
@@ -265,6 +265,32 @@
       {% if acilis_eski %}{{ acilis_eski }} tahtada ajan güncellenmeli (eski ajan açılışta kilitlenmez).{% endif %}</p>
     <p class="dugme-satiri"><button class="ana">Açılış ayarını kaydet</button></p>
   </form>
+</section>
+
+{# Güncelleme denetimi: ayrı form (bolum=guncelleme); yalnız `guncelleme_denetimi` anahtarını yazar. Varsayılan açık.
+   Tarayıcı dış kaynağa istek atmaz; denetimi sunucu yapar. Kapalıyken "Şimdi denetle" düğmesi çizilmez. #}
+<h2 id="guncelleme-denetimi">Güncelleme denetimi</h2>
+<section class="kutu" aria-labelledby="guncelleme-denetimi" id="guncelleme">
+  {% if mesaj and ileti_yeri == 'guncelleme' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <p class="ipucu" id="guncelleme-ipucu">Sunucu günde en çok bir kez GitHub'daki sürüm sayfasına bakar; yeni sürüm yayımlanmışsa
+    panoda yalnız yöneticiye haber verir. Kendiliğinden indirme ya da kurma yapılmaz. İstekle birlikte okul adı, tahta sayısı,
+    kurulu sürüm ya da başka bir bilgi gönderilmez; GitHub yalnız isteğin geldiği internet adresini görür. Tahtalar internete
+    çıkmaz. İnternet yoksa program etkilenmez.</p>
+  <p>Kurulu sürüm: <strong>{{ guncelleme.kurulu }}</strong>.
+    {% if not guncelleme.acik %}Denetim kapalı; GitHub'a istek gönderilmez.
+    {% elif guncelleme.denetlendi %}Son denetim: {{ guncelleme.zaman }} — {{ guncelleme.sonuc }}
+      {% if guncelleme.yeni %}<a href="{{ guncelleme.yeni.adres }}" rel="noopener noreferrer">Sürüm sayfası</a>{% endif %}
+    {% else %}{{ guncelleme.sonuc }}{% endif %}</p>
+  <form method="post" action="/ayarlar" class="form-dar">
+    <input type="hidden" name="bolum" value="guncelleme">
+    <div class="onay-alani"><label class="satir"><input type="checkbox" name="gd_acik" value="1" {% if guncelleme.acik %}checked{% endif %} aria-describedby="guncelleme-ipucu"> Yeni sürümü GitHub'dan denetle</label></div>
+    <p class="dugme-satiri"><button class="ana">Güncelleme ayarını kaydet</button></p>
+  </form>
+  {% if guncelleme.acik %}
+  <form method="post" action="/ayarlar/guncelleme/denetle" class="form-dar">
+    <p class="dugme-satiri"><button>Şimdi denetle</button></p>
+  </form>
+  {% endif %}
 </section>
 
 {# Tahtadaki yüzer düğme (0.9.0, G3): ayrı form (bolum=dugme); yalnız `tahta_dugmesi` anahtarını yazar. Varsayılan açık. #}

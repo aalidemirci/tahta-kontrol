@@ -3,7 +3,8 @@
 Yerel geliştirme 0.13.1: 0.13.0'ın bağımsız incelemesinde doğrulanan bulguların düzeltmesi
 (seçmeli hücrede öğretmen adının ders başlığına karışması, kilit ekranı gün programı, önizleme
 belleği, yüzer düğme). `docs/surum-0.13.1.md`. Dağıtılmadı; gerçek ETAP'ta denenmedi; 0.13.0 ile
-öğretmen programı aktarılmışsa yeniden aktarılır.
+öğretmen programı aktarılmışsa yeniden aktarılır. Aynı sürümde tek yeni özellik: sunucu GitHub'dan yeni
+sürüm denetimi yapar (yalnız haber verir, kapatılabilir; kural 32, `docs/tasarim.md` §9.1).
 
 0.13.0 kullanıcı kararı (17.11.2026): öğretmen programı bilgilendirme için
 ayrı `/ogretmen-programi` yolunda PDF/XLS'den eşlenir; eski dolu/boş okuyucu
@@ -30,7 +31,8 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
 - Durum: **0.13.1, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.13.1: 0.13.0
-  inceleme bulguları, yukarıda; 0.13.0: öğretmen programı aktarımı (`/ogretmen-programi`, XLS + PDF ya da
+  inceleme bulguları, yukarıda, ve GitHub'dan yeni sürüm denetimi — gerçek ağla yalnız geliştirme ortamında
+  denendi, kurulu hizmette ve okul ağında denenmedi; 0.13.0: öğretmen programı aktarımı (`/ogretmen-programi`, XLS + PDF ya da
   şube listesi) ve kilit ekranında bugünün şube/ders/saat programı, tasarım §12.5; yüzer düğme ve kilit
   programı yalnız Debian 12 kabında (Xvfb) ölçüldü; 0.12.0: ders programı sihirbazına beşinci kaynak — e-Okul
   "Haftalık Ders Programları" raporu (OOK11002_R01, .XLS): şube blokları ayrıştırılır, zil çizelgesi yoksa ya
@@ -112,6 +114,10 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                     bekleyen indirmeler, tanıma, PIN (öğretmen PIN'i ya da anahtar PIN'i), kopya uyarısı, iptal, yıl sonu
   panel_altyapi.py  /yedekler (parola, ayar, al, indir, geri-yukle + onay/uygula), /envanter (+ .csv),
                     /tahta/{id}/envanter, /tahta/{id}/donanim-goruldu, /arizalar, /ariza/{id}, /yerel/durum
+  guncelleme.py GitHub'dan yeni sürüm denetimi (0.13.1, FastAPI'siz; kural 32): surum_coz/yanit_coz (saf), github_getir
+                (tek GET, urllib), denetle (toplam ≤ 5 sn, hata dışarı çıkmaz), durum_al/gorunum (saklanan durum
+                yeniden doğrulanır), Denetleyici (zamanla: günde bir, daemon iş parçacığı; simdi_denetle; durdur
+                beklemez); uçlar web.py'de: Ayarlar › Güncelleme denetimi, POST /ayarlar/guncelleme/denetle
   yedek_is.py   otomatik yedeği ana zamanlayıcıyı bekletmeden ayrı tek işte yürütür (0.12.1; YedekIsleyici)
   yedek.py      şifreli yedek .tkyedek (scrypt → X25519 → HKDF → AES-GCM), saklama, ikinci kopya, geri yükleme
                 (denetle → onay → açılışta bekleyeni_uygula); yedek.KILIT = vt.KILIT (göç ve yedek aynı kilitte)
@@ -369,8 +375,29 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    15 dk sonra zamanlayıcıda, "Vazgeç"te ve onayda silinir; diske, işlem kaydına yazılmaz. Program
    hiçbir öğretmenin başka sınıf/ders yoklamasını engellemez. Testler uydurma adla yazılır.
 
+32. **Yeni sürüm denetimi yalnız sunucudadır, hiçbir veri göndermez, yalnız haber verir** (0.13.1;
+   `docs/tasarim.md` §9.1, `guncelleme.py`). Programın internete çıkan TEK işi budur; tahtalar ve tarayıcı
+   internete çıkmaz (ajana, `panel.js`'e, CSP'ye GitHub adresi girmez). Tek bir GET (GitHub "son sürüm"
+   kaydı); istekte yalnız genel `User-Agent: tahta-kontrol` ve `Accept` vardır: okul adı, tahta sayısı,
+   kimlik, KURULU SÜRÜM, sorgu parametresi, telemetri eklenmez. Yanıt güvenilmez girdidir: TLS doğrulaması
+   kapatılmaz, yönlendirme izlenmez, ≤ 256 KiB, toplam ≤ 5 sn; yalnız `tag_name`/`draft`/`prerelease` okunur,
+   etiket yalnız `^v?\d+(\.\d+){1,3}$` ise kabul edilir. Bağlantı yanıttaki `html_url`'den değil, doğrulanmış
+   sürümden SABİT kalıpla kurulur; sürüm notu sayfaya basılmaz. Kendiliğinden indirme/kurma eklenmez. Not
+   panoda yalnız yöneticiye çıkar. Ayar (`guncelleme_denetimi`, varsayılan açık) kapalıyken HİÇ istek çıkmaz
+   ("Şimdi denetle" dahil). Günde en çok bir kez; başarısız deneme de günlük hakkı tüketir; başarısızlık
+   sessizdir (panoda hata yok, yalnız Ayarlar'da "ulaşılamadı"). Ağ çağrısı olay döngüsünde, `vt.KILIT`
+   altında ya da veritabanı bağlantısı açıkken yapılmaz; kapanış onu beklemez. İşlem kaydına yalnız elle
+   denetim ve ayar değişikliği yazılır. Yeni bağımlılık (requests, certifi…) eklenmez.
+
 ## Bilinen tuzaklar
 
+- **Testler gerçek ağa çıkmaz (0.13.1):** `tests/conftest.py::ag_kapali` (autouse) her testte
+  `guncelleme.github_getir` ve `guncelleme._ac` adlarını sahtesiyle değiştirir. Denetimi sınayan test
+  getiriciyi `uygulama_olustur(..., guncelleme_getirici=...)` ya da `guncelleme.Denetleyici(getirici)` ile
+  verir; asıl `github_getir` yalnız sahte `ac` ile çağrılır. Bu fikstürü kaldırma ya da daraltma.
+- **Soket zaman aşımı toplam süre değildir (0.13.1):** her soket okumasında yeniden başlar, ad çözümlemesine
+  hiç uygulanmaz; yanıtı bayt bayt damlatan ağ aygıtı `urlopen(timeout=5)`'i dakikalarca tutar. Toplam süreyi
+  `guncelleme._sinirli_getir` (kısa ömürlü daemon iş parçacığı + süre + kapanış olayı) sınırlar.
 - **e-Okul hücresinde iki seçmeli grup çift boşlukla ayrılır (0.13.1):** "KİŞİ - DERS  KİŞİ - DERS" tek
   satırda gelir; boşluklar bölmeden ÖNCE sadeleştirilirse ikinci kişinin adı ders başlığına karışır
   (0.13.0 kusuru; kilit ekranına ad sızdırabilirdi). Önce böl, sonra sadeleştir (`hucre_coz`). Göç,

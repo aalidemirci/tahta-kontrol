@@ -172,7 +172,7 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
   yürürlüğe girer; ders numarası kayan çizelgede derslik programları için ayrıca onay istenir.
 - **Ders programını içe aktarma sihirbazı:** aSc Timetables XML (deneme etiketli; gerçek bir dosyayla
   henüz doğrulanmadı), Tahta Kontrol şablonu (CSV, XLSX, XLS) ve "yapay zekâ ile dönüştür"
-  (hazır istem; Tahta Kontrol hiçbir dış hizmete bağlanmaz, yapay zekâ aracını kullanıcı kendisi
+  (hazır istem; Tahta Kontrol hiçbir yapay zekâ hizmetine bağlanmaz, yapay zekâ aracını kullanıcı kendisi
   çalıştırır ve çıktıyı yapıştırır). Derslik, sınıf ve ders saati eşlemesi hatırlanır; önizleme
   eklenecek, silinecek ve değişecek ders saatlerini tahta tahta gösterir. Öğretmen ve ders adı
   okunmaz, saklanmaz. Her içe aktarmadan önce bütün derslik programı saklanır; son 10 sürüm
@@ -195,6 +195,11 @@ olursa olsun okunur kalacak biçimde sunucuda hesaplanır.
   yapıştırabilirsiniz); her şubenin dersi şubenin kendi tahtasına yazılır, ikili eğitimde aynı tahtaya
   sabahçı ve öğlenci şube düşer. Zil saatleri tanımlı değilse ya da uymuyorsa zil çizelgesi de rapordaki
   saatlerden oluşturulabilir. Öğretmen adları okunmaz ve saklanmaz; Tahta Kontrol e-Okul'a bağlanmaz.
+
+0.13.1 ile:
+
+- **Yeni sürüm denetimi:** sunucu günde en çok bir kez GitHub'daki son sürüme bakar; yeni sürüm varsa
+  panoda yalnız yöneticiye haber verir. Kendiliğinden indirme ya da kurma yapmaz; Ayarlar'dan kapatılır.
 
 ## Çalıştırma (geliştirme)
 
@@ -231,6 +236,9 @@ Windows hizmeti olarak kaydeder (pywin32; ayrı bir hizmet aracı kullanılmaz).
   geri çevrilemez özetini saklar. Dosya kopyalanabilir (bellek tahtada takılıyken tahtadaki oturumdan
   görülebilir); bu yüzden PIN, iptal, kısa tanıma süresi (10 dk) ve "iki tahtada kısa arayla kullanıldı"
   uyarısı vardır. Anahtar yalnız yoklama ve kilit açmaya yetkilidir; panel, ayar, duyuru, kapatma, sınav yok.
+- Programın internete çıkan tek işi sunucudaki yeni sürüm denetimidir: istekle okul adı, tahta sayısı,
+  kurulu sürüm ya da başka bir bilgi gönderilmez (GitHub yalnız isteğin geldiği internet adresini görür);
+  tahtalar internete çıkmaz; denetim Ayarlar'dan kapatılabilir ve internet yokken program etkilenmez.
 - Panel dış kaynak (font, CDN, analitik) yüklemez; satır içi betik ve stil
   içermez, içerik güvenliği politikası (CSP) bunu zorlar. Logo yalnız PNG ya da
   JPEG olarak kabul edilir.

@@ -6,7 +6,8 @@ Sürüm 0.5.0 · 16.11.2026
 
 Okul idaresinin etkileşimli tahtaları tek panelden yönetmesi: durum izleme,
 kilitleme, duyuru, kapatma; orta vadede kelebek sınav duyurusu, sınav yoklaması
-ve ders yoklaması. Veri okulda kalır, internet gerekmez.
+ve ders yoklaması. Veri okulda kalır, internet gerekmez
+(internete çıkan tek iş, kapatılabilen yeni sürüm denetimidir: §9.1).
 
 Benzer amaçlı bir kiosk tarayıcı denemesinden çıkan dersler tasarıma işlendi:
 sunucudan tahtaya komut kanalı, işletim sistemi oturumunun üstünde duran kilit,
@@ -306,6 +307,44 @@ diye görünür ve "Ajanı güncelle" komutuyla paketi sunucudan indirip kurar
 (özet denetimiyle). Kurulum servisten bağımsız bir birimde koşar. Otomatik ve
 kademeli yayma ile başarısız güncellemede geri dönüş henüz yoktur.
 
+### 9.1 Yeni sürüm denetimi (sunucu, GitHub)
+
+Sunucu, yeni bir Tahta Kontrol sürümü yayımlanıp yayımlanmadığını öğrenmek için günde en çok bir kez
+GitHub'daki deponun "son sürüm" kaydına bakar (`tahta_sunucu/guncelleme.py`). Programın internete çıkan
+tek işi budur; ayar (`guncelleme_denetimi`, varsayılan açık) Ayarlar › Güncelleme denetimi'nden kapatılır
+ve kapalıyken hiç istek çıkmaz ("Şimdi denetle" de çalışmaz, düğmesi çizilmez).
+
+- **Yalnız sunucu sorar.** Tahtalar internete çıkmaz, ajan değişmedi; tarayıcı da dış kaynağa istek atmaz
+  (CSP aynı kalır). İnternet yoksa program hiçbir şekilde etkilenmez.
+- **Giden veri yok.** Tek bir GET (`https://api.github.com/repos/aalidemirci/tahta-kontrol/releases/latest`);
+  istekte yalnız genel `User-Agent: tahta-kontrol` ve `Accept` başlığı vardır. Okul adı, tahta sayısı,
+  kimlik, kurulu sürüm numarası gönderilmez; sorgu parametresi, çerez, telemetri yoktur. Karşılaştırma
+  sunucuda yapılır. GitHub, her internet isteğinde olduğu gibi, isteğin geldiği internet adresini görür.
+- **Gelen veri güvenilmez girdidir.** TLS doğrulaması açıktır (Windows'ta sistem sertifika deposu), yanıt
+  en çok 256 KiB, yönlendirme izlenmez. Bir denetimin TOPLAM süresi 5 sn ile sınırlıdır (ad çözümlemesi,
+  bağlantı, başlıklar ve gövde birlikte): soket zaman aşımı her okumada yeniden başladığı için yanıtı bayt
+  bayt damlatan bir ağ aygıtı tek başına onunla durdurulamaz; ağ çağrısı kısa ömürlü bir iş parçacığında
+  yürür ve süre dolunca bırakılır. Yanıttan yalnız `tag_name`, `draft`, `prerelease`
+  okunur; etiket yalnız `^v?\d+(\.\d+){1,3}$` ise kabul edilir, taslak ve ön sürüm yok sayılır. Sürüm
+  sayfası bağlantısı yanıttaki `html_url`'den değil, doğrulanmış sürümden sabit kalıpla kurulur; sürüm
+  notu metni hiçbir yere basılmaz. Saklanan durum (sürüm ve denetim zamanı) okunurken de yeniden doğrulanır;
+  bozuk ya da başka yerden geri yüklenmiş kayıt panoyu ve Ayarlar'ı düşüremez.
+- **Yalnız haber verir.** Yeni sürüm varsa (sayısal karşılaştırma: 0.13.10 > 0.13.9) panoda yalnız
+  yöneticiye kısa not ve sürüm sayfası bağlantısı çıkar. Kendiliğinden indirme ya da kurma yoktur.
+- **Zamanlama.** İş zamanlayıcı listesindedir ama ağ çağrısını kendi (daemon) iş parçacığında yapar: olay
+  döngüsünü, 20 sn'lik zamanlayıcıyı ve `vt.KILIT`'i tutmaz; ağ çağrısı sırasında veritabanı bağlantısı
+  açık değildir; kapanış onu beklemez (16 sn bütçesi değişmez; süren "Şimdi denetle" de kapanışta hemen
+  bırakılır ve kapanıştan sonra ağ çağrısına başlanmaz). "Denetlensin mi" kararı ile işin başlatılması
+  tek kilit bloğundadır; istek kilidi alındıktan sonra karar yeniden verilir, bu yüzden süren bir denetim
+  varken basılan "Şimdi denetle" ikinci isteği çıkarmaz, onun sonucunu gösterir. Son denemenin zamanı ve sonucu
+  `ayar.guncelleme_durumu`'ndadır (şema değişmedi); başarısız deneme de günlük hakkı tüketir, sonraki
+  deneme ertesi gündür. Başarısızlık panoda görünmez, yalnız Ayarlar'da "GitHub'a ulaşılamadı" yazar;
+  bilinen son sürüm korunur.
+- **İşlem kaydı.** Yalnız elle "Şimdi denetle" ve ayar değişikliği yazılır; kendiliğinden denetim yazılmaz.
+  "Şimdi denetle" 60 sn içinde yeniden basılırsa yeni istek çıkmaz.
+- **Testler ağa çıkmaz.** `tests/conftest.py::ag_kapali` her testte ağ kapısını sahtesiyle değiştirir;
+  getirici `uygulama_olustur(..., guncelleme_getirici=...)` ile verilir.
+
 ## 10. Platforma taşınabilirlik
 
 - Sunucu saf Python'dır; Windows'a özgü tek parça paketleme ve denetim
@@ -557,7 +596,7 @@ saatleri tanımlı olmalı). Adımlar: kaynak → eşleme → önizleme ve onay.
   gün, ders saati öznitelikleri okunur, öğretmen ve ders adı bölümleri hiç okunmaz; DTD/varlık reddi,
   boyut/derinlik sınırları, `guvenli_xml.py`), Tahta Kontrol şablonu (CSV/XLSX/XLS, sürüm 2: derslik
   boşsa şubenin tahtası), **yapay zekâ ile dönüştür** (hazır istem + KVKK uyarısı; kullanıcı kendi
-  aracında çalıştırır, Tahta Kontrol hiçbir dış hizmete bağlanmaz; çıktı güvenilmeyen girdi sayılır)
+  aracında çalıştırır, Tahta Kontrol hiçbir yapay zekâ hizmetine bağlanmaz; çıktı güvenilmeyen girdi sayılır)
   ve elle giriş (tahta sayfası). 0.12.0'dan beri beşinci kaynak **e-Okul "Haftalık Ders Programları"
   raporu** (OOK11002_R01, .XLS; §12.4).
 - **Eşleme:** derslik → tahta, sınıf → şube, aSc ders saati → (devre, ders no), şube → tahta; onayda
@@ -1185,6 +1224,18 @@ aynı kapıyı tutamaz (ikincisi "kullanımda" ile açılmaz).
 **Bilinen sınırlar:** bilgisayar uyku/hazırda beklemeye geçerse hizmet durmuş sayılır (pencere ve
 kurucu uyarır, güç ayarı değiştirilmez). Gerçek hizmet kurulumu ve PyInstaller paketinde pywin32'nin
 hizmet olarak çalışması henüz yönetici yetkili bir denemede doğrulanmadı (saha-denemesi.md §3.7).
+
+### 15.7 Yeni sürüm denetimi (0.13.1)
+
+Sunucu günde en çok bir kez GitHub'daki "son sürüm" kaydına bakar ve yeni sürüm varsa panoda yalnız
+yöneticiye haber verir; indirme ve kurma yapmaz. İstekle hiçbir bilgi gitmez, tahtalar internete çıkmaz,
+ayar kapatılabilir, internet yoksa program etkilenmez (yalnız Ayarlar'da "GitHub'a ulaşılamadı" yazar).
+Şema değişmedi: `ayar.guncelleme_denetimi` ve `ayar.guncelleme_durumu`. Ayrıntı ve gerekçeler §9.1'dedir.
+
+Bilinen sınırlar: hizmet Yerel Hizmet hesabıyla çalıştığı için kullanıcıya özgü vekil (proxy) ayarını
+görmez; vekil zorunlu ya da GitHub'ı engelleyen ağda sonuç hep "ulaşılamadı" olur ve yeni sürüm elle
+izlenir. Kurulu (PyInstaller) programda sistem sertifika deposunun bulunduğu henüz denenmedi
+(saha-denemesi.md §3.13).
 
 ## 16. Yol haritası
 

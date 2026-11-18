@@ -109,6 +109,9 @@ class Sunucu:
         bitis = time.monotonic() + 16
         self._durdu.set()
         self._yedek_isleyici.durdur()
+        guncelleme = getattr(self.uygulama.state, "guncelleme", None)
+        if guncelleme is not None:
+            guncelleme.durdur()  # beklemez: süren ağ çağrısı (daemon iş parçacığı) kapanışı tutmaz
         for sunucu in self.sunucular:
             sunucu.should_exit = True
         for parca in self.is_parcalari:
