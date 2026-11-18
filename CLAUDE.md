@@ -1,5 +1,15 @@
 # CLAUDE.md — Tahta Kontrol
 
+Yerel geliştirme 0.16.0 (kullanıcı onayı 19.11.2026): panel arayüzünün yeniden düzeninde 2. aşama, Ayarlar.
+`/ayarlar` giriş sayfasıdır (11 bölüm kartı ve o anki değer özetleri, kurulum kontrol listesi, Ayarlar içi arama;
+`?ara=` JS'siz), `/ayarlar/{bölüm}` bölüm sayfalarıdır; her kart kendi Kaydet'iyle yalnız kendi anahtarını yazar.
+Yeni gönderim bölümleri `bolum=okul`, `kapatma`, `kilit_kodu`; `bolum=genel` yalnız uyumluluk için durur.
+Kullanıcılar Ayarlar'ın bölümü (menü 9 öğe; GET /kullanicilar → /ayarlar/kullanicilar), acil şablonları
+`/acil?sekme=sablonlar`. Ayar anahtarları, öbür uçlar, şema ve ajan aynı (sürüm statik dosya önbelleği için
+yükseldi). `docs/surum-0.16.0.md`, tasarım §11.1 (3–6. aşamalar AYRI onay ister). Testlerle ve deneme sunucusunda
+başsız Edge ile (uydurma veri; JS açık/kapalı kayıt denemesi) denendi; dağıtılmadı, okul bilgisayarında ve kurulu
+hizmette denenmedi.
+
 Yerel geliştirme 0.15.0 (kullanıcı onayı 18.11.2026): panel arayüzünün yeniden düzeninde 1. aşama, "kabuk".
 Sol kenar menüsü (üç küme, en çok on öğe, role göre çizilir), dar ekranda çekmece + yapışkan üst çubuk,
 telefonda alt çubuk, Acil durum en üstte, ölçek belirteçleri, şekilli rozet, 44 px dokunma hedefi. YALNIZ
@@ -46,7 +56,9 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.15.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.15.0: panel
+- Durum: **0.16.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.16.0: panel
+  arayüzü 2. aşama — Ayarlar giriş sayfası ve 11 bölüm; yalnız sunucu; yalnız deneme sunucusunda başsız
+  tarayıcıyla denendi; 0.15.0: panel
   arayüzü 1. aşama — sol menü, çekmece, alt çubuk, ölçek belirteçleri; yalnız sunucu, ajan değişmedi;
   testlerle ve başsız tarayıcı ölçümüyle (1366 ve 390 px, açık/koyu, uydurma veri) denendi, okul
   bilgisayarında ve gerçek telefonda denenmedi; tasarım §11.1; 0.14.0: ders yoklaması
@@ -142,6 +154,11 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                     bekleyen indirmeler, tanıma, PIN (öğretmen PIN'i ya da anahtar PIN'i), kopya uyarısı, iptal, yıl sonu
   panel_altyapi.py  /yedekler (parola, ayar, al, indir, geri-yukle + onay/uygula), /envanter (+ .csv),
                     /tahta/{id}/envanter, /tahta/{id}/donanim-goruldu, /arizalar, /ariza/{id}, /yerel/durum
+  ayar_bolumleri.py  Ayarlar'ın tek listesi (0.16.0, FastAPI'siz): BOLUMLER, BASKA_YERDE, ESKI_YER, ESKI_PARCA,
+                ara (Türkçe küçültme + harf katlama; panel.js ile aynı harita), ozetler (sır taşımaz), kurulum, menu;
+                uçlar web.py'de: GET /ayarlar (giriş, `?ara=`), GET /ayarlar/{bölüm}, POST /ayarlar `bolum=…`;
+                şablonlar ayarlar.html (giriş), ayar_bolum.html, _ayar.html (makrolar), _ayar_<bölüm>.html;
+                /yedekler/parola ve /yedekler/ayar isteğe bağlı `donus=ayarlar` alır (yalnız dönüş adresi)
   guncelleme.py GitHub'dan yeni sürüm denetimi (0.13.1, FastAPI'siz; kural 32): surum_coz/yanit_coz (saf), github_getir
                 (tek GET, urllib), denetle (toplam ≤ 5 sn, hata dışarı çıkmaz), durum_al/gorunum (saklanan durum
                 yeniden doğrulanır), Denetleyici (zamanla: günde bir, daemon iş parçacığı; simdi_denetle; durdur
@@ -485,6 +502,20 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
 
 ## Bilinen tuzaklar
 
+- **İşaretsiz onay kutusu gönderilmez; "formda yok" ile "kapalı" ayırt edilemez (0.16.0):** bir bölümün POST'u
+  eksik gövdeyle gelirse kutular kapalı sayılıp ayar ezilir. Yeni bölümler (`okul`, `kapatma`, `kilit_kodu`) formun
+  o form olduğunu gösteren nöbetçi alanı ister, yoksa hiçbir şey yazmaz; `bolum=genel` otomatik kapatmayı yalnız
+  `ok_saatler` formdayken yazar. Yeni birleşik form yazma; bir form bir uca gider, yalnız kendi anahtarını yazar.
+- **Boş kilit kodu kodu silmez (0.16.0):** silme yalnız açık `kilit_kodu_sil=1` ile. Kod, özeti ve uzunluğu
+  sayfaya, özete, iletiye, kayda geri yazılmaz.
+- **Ayar bölümü eklemek = `ayar_bolumleri.BOLUMLER`'e bir öğe + `_ayar_<anahtar>.html` (0.16.0):** menü, giriş
+  kartı, özet, arama ve test listesi oradan türer; şablona ya da `web.py`'ye ikinci liste yazılmaz.
+- **Onaylı düğme `type="button"` + `data-onay`'dır ve JS'siz gönderilmez (0.16.0, bilerek):** "Kodu kaldır…",
+  "Logoyu kaldır…". `type="submit"` yapıp "JS'siz de çalışsın" diye düzeltme; `<noscript>` notu durur.
+- **Kart çapası ile alan kimliği çakışmasın (0.16.0):** Veri bölümünde kart `#saklama`, yedek saklama girdisinin
+  kimliği `yedek_saklama`'dır (`name` yine `saklama`). Yedek parolası formuna `data-kirli-izle` konmaz.
+- **Git Bash'te `panel_olcum.mjs --yol=/ayarlar/...` yolu Windows yoluna çevrilir (0.16.0):** `MSYS_NO_PATHCONV=1`
+  ile çalıştır. Başsız Edge'in `AssistantLoadState` hatası tarayıcının kendi betiğidir, panelin değil.
 - **Panel kabuğunun kipi CSS'tedir (0.15.0):** çekmece / sabit menü ayrımı `stil.css`'te `--kb-*` özellikleriyle
   durur (sabit: ≥ 64rem; şube defteri `genis-sayfa` için ≥ 100rem). `panel.js` kipi `--kb-kip`'ten okur; genişlik
   eşiğini JS'e ya da başka bir kurala kopyalama.
