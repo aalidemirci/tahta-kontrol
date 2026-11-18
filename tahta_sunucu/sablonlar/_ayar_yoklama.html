@@ -1,0 +1,45 @@
+{% from "_ayar.html" import ileti, nedir, kaydet_cubugu with context %}
+{# Ders yoklaması (A5): tek form (bolum=yoklama); yalnız `yoklama` anahtarını yazar. Tahtaya yalnız açık/kapalı bayrağı
+   gider (ayar.yoklama_etkin); maske ve süreler sunucuda uygulanır. Maske seçeneklerinde "tam" YOKTUR (kural 18). #}
+<section class="kutu ayar-kart" id="yoklama" aria-labelledby="yoklama-baslik">
+  <div class="kutu-bas">
+    <h2 id="yoklama-baslik">Ders yoklaması</h2>
+    <span class="rozet" data-durum="{{ 'tamam' if yoklama_ayari.etkin else 'cevrimdisi' }}">{{ 'Açık' if yoklama_ayari.etkin else 'Kapalı' }}</span>
+  </div>
+  {{ ileti('yoklama') }}
+  <p class="not">Öğretmen tahtada öğretmen kodu ve PIN ile girer, yalnız derste olmayanlara dokunur. Tahtadan alınan yoklama
+    sınıftaki kâğıt yoklamanın yanında tutulan yardımcı kayıttır; onun yerine geçmez.</p>
+  {% if not yoklama_ogrenci_sayisi %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Öğrenci listesi henüz yüklenmedi (<a href="/ogrenciler">Kişiler ve anahtarlar › Öğrenci listesi</a>). Etkinleştirilebilir; tahtada liste "yüklenmemiş" der.</p>{% endif %}
+  <form method="post" action="/ayarlar" data-kirli-izle>
+    <input type="hidden" name="bolum" value="yoklama">
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="yk_etkin">Ders yoklaması etkin</label><p class="not">Tahtalarda "Yoklama al" düğmesi ve kısayolu çalışır.</p></div>
+      <div class="ayar-denetim"><input type="checkbox" name="yk_etkin" value="1" {% if yoklama_ayari.etkin %}checked{% endif %} id="yk_etkin" class="anahtar"></div>
+    </div>
+    {# Gizlilik ayarı: üç seçeneğin hepsi örneğiyle açık durur (açılır listede seçili değer kesiliyordu). Alan adı ve
+       değerler aynıdır (yk_maske); seçenekler maske.SINIF_BICIMLERI'nden gelir. #}
+    <fieldset class="radyo-alani" aria-describedby="yk-maske-not">
+      <legend>Tahtada öğrenci adının görünümü</legend>
+      <p class="not" id="yk-maske-not">Tahta bütün sınıfa açık ekrandır; gerektiğinden fazla bilgi göstermeyin. Liste yalnız PIN ya da USB anahtarla açılır ve okul numarası sırasıyla gelir. <strong>Tam soyad ve T.C. kimlik numarası hiçbir biçimde tahtaya gitmez.</strong></p>
+      <div class="radyo-kartlar">
+        {% for s in yoklama_maske_secenekleri %}
+        <label class="radyo-kart"><input type="radio" name="yk_maske" value="{{ s.kod }}" {% if yoklama_ayari.maske == s.kod %}checked{% endif %}><span><b>{{ s.ad }}</b>{% if s.ornek %}<small>Tahtada: {{ s.ornek }}</small>{% endif %}</span></label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="yk_oturum_dk">Yoklama oturumu en çok (dk)</label>
+        <p class="not" id="yk-oturum-not">{{ yoklama_sinirlari.oturum_dk[0] }}–{{ yoklama_sinirlari.oturum_dk[1] }} dk; süre bitimine 1 dk kala tahta uyarır.</p></div>
+      <div class="ayar-denetim"><input id="yk_oturum_dk" name="yk_oturum_dk" type="number" required class="alan-sayi" min="{{ yoklama_sinirlari.oturum_dk[0] }}" max="{{ yoklama_sinirlari.oturum_dk[1] }}" value="{{ yoklama_ayari.oturum_dk }}" aria-describedby="yk-oturum-not"></div>
+    </div>
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="yk_bosta_dk">Dokunulmazsa kapanma (dk)</label>
+        <p class="not" id="yk-bosta-not">{{ yoklama_sinirlari.bosta_dk[0] }}–{{ yoklama_sinirlari.bosta_dk[1] }} dk.</p></div>
+      <div class="ayar-denetim"><input id="yk_bosta_dk" name="yk_bosta_dk" type="number" required class="alan-sayi" min="{{ yoklama_sinirlari.bosta_dk[0] }}" max="{{ yoklama_sinirlari.bosta_dk[1] }}" value="{{ yoklama_ayari.bosta_dk }}" aria-describedby="yk-bosta-not"></div>
+    </div>
+    <p class="not">Yoklamalar öğretim yılı sonuna kadar saklanır (<a href="/ayarlar/veri#saklama">Veri saklama ve yedek</a>).</p>
+    {{ kaydet_cubugu('Yoklama ayarlarını kaydet') }}
+  </form>
+</section>
+
+<p class="ilgili">İlgili: <a href="/ogrenciler">Öğrenci listesi</a> · <a href="/ogretmenler">Öğretmenler ve PIN</a> · <a href="/ayarlar/usb">USB anahtar</a> · <a href="/yoklama">Yoklama</a></p>

@@ -1,8 +1,13 @@
-{% extends "taban.html" %}
-{% block baslik %}Kullanıcılar · Tahta Kontrol{% endblock %}
-{% block icerik %}
-<div class="sayfa-bas"><h1 id="kullanici-baslik">Kullanıcılar</h1></div>
-<div class="tablo-kap" role="region" tabindex="0" aria-labelledby="kullanici-baslik">
+{% from "_ayar.html" import ileti with context %}
+{# Panel kullanıcıları (0.16.0'dan beri Ayarlar'ın bölümü; eski /kullanicilar buraya yönlenir). Uç aynı: POST /kullanicilar.
+   Satır formlarında name="id" alanı vardır: data-kirli-izle ve data-onay KONMAZ (form.id o alanı döndürür).
+   İletiler kartın içinde çizilir: satır işlemleri "Hesaplar"da (yer=hesaplar), ekleme "Kullanıcı ekle"de (yer=ekle).
+   Ekleme reddedilince sayfa 400 ile yeniden çizilir; `ekle_formu` ad soyad, kullanıcı adı ve yetkiyi taşır (parola ASLA). #}
+{% set ef = ekle_formu if ekle_formu is defined else {} %}
+<section class="kutu ayar-kart" id="hesaplar" aria-labelledby="hesaplar-baslik">
+<div class="kutu-bas"><h2 id="hesaplar-baslik">Hesaplar</h2></div>
+{{ ileti('hesaplar') }}
+<div class="tablo-kap" role="region" tabindex="0" aria-label="Panel kullanıcıları">
 <table class="kullanicilar-tablo">
   <caption class="gizli">Panel kullanıcıları</caption>
   <thead><tr><th scope="col">Kullanıcı adı</th><th scope="col">Ad soyad</th><th scope="col">Yetki</th><th scope="col">Durum</th><th scope="col">İşlem</th></tr></thead>
@@ -29,22 +34,23 @@
 </table>
 </div>
 <p class="not">Acil durum ve tatbikat yayınını bütün yönetici ve idareciler başlatabilir; yayın parolanızı ve açık onayı ister.</p>
+</section>
 
-<div class="kutu">
-  <h2>Kullanıcı ekle</h2>
+<section class="kutu ayar-kart" id="kullanici-ekle" aria-labelledby="kullanici-ekle-baslik">
+  <div class="kutu-bas"><h2 id="kullanici-ekle-baslik">Kullanıcı ekle</h2></div>
+  {{ ileti('ekle') }}
   <form method="post" action="/kullanicilar" class="form-dar">
     <label for="gorunen_ad">Ad soyad</label>
-    <input type="text" id="gorunen_ad" name="gorunen_ad" maxlength="80" required>
+    <input type="text" id="gorunen_ad" name="gorunen_ad" value="{{ ef.get('gorunen_ad', '') }}" maxlength="80" required>
     <label for="ad">Kullanıcı adı</label>
-    <input type="text" id="ad" name="ad" minlength="3" maxlength="40" required autocomplete="off">
+    <input type="text" id="ad" name="ad" value="{{ ef.get('ad', '') }}" minlength="3" maxlength="40" required autocomplete="off">
     <label for="parola">Parola (en az 8 karakter)</label>
     <input type="password" id="parola" name="parola" minlength="8" required autocomplete="new-password">
     <label for="rol">Yetki</label>
     <select id="rol" name="rol">
       <option value="idareci">İdareci — tahtaları yönetir, duyuru gönderir</option>
-      <option value="yonetici">Yönetici — ayrıca kullanıcı, ayar ve tahta kaydını yönetir</option>
+      <option value="yonetici"{% if ef.get('rol') == 'yonetici' %} selected{% endif %}>Yönetici — ayrıca kullanıcı, ayar ve tahta kaydını yönetir</option>
     </select>
-    <p class="dugme-satiri"><button name="eylem" value="ekle" class="ana">Kullanıcıyı ekle</button></p>
+    <div class="dugme-satiri"><button name="eylem" value="ekle" class="ana">Kullanıcıyı ekle</button></div>
   </form>
-</div>
-{% endblock %}
+</section>

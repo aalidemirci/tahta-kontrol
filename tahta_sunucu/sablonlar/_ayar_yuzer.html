@@ -1,0 +1,40 @@
+{% from "_ayar.html" import ileti, nedir, kaydet_cubugu with context %}
+{# Tahtadaki yüzer düğme (0.9.0, G3): tek form (bolum=dugme); yalnız `tahta_dugmesi` anahtarını yazar. Açık/kapalı kutusu
+   ve işlem kutularının HEPSİ aynı formdadır (işaretsiz kutu gönderilmez; bölünürse öbür yarı "kapalı" yazılır). #}
+<section class="kutu ayar-kart" id="dugme" aria-labelledby="dugme-baslik">
+  <div class="kutu-bas">
+    <h2 id="dugme-baslik">Tahtadaki yüzer düğme</h2>
+    <span class="rozet" data-durum="{{ 'tamam' if dugme_ayari.acik else 'cevrimdisi' }}">{{ 'Açık' if dugme_ayari.acik else 'Kapalı' }}</span>
+  </div>
+  {{ ileti('dugme') }}
+  <p class="not" id="dugme-ipucu">Tahtanın köşesinde küçük, soluk, parmakla taşınabilen bir düğme durur; dokununca seçilen işlemlerin
+    menüsü açılır.</p>
+  {% if dugme_kilit_kodu_yok %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg><strong>Kilit kodu belirlenmedi:</strong> tahtadan kilitlenen
+    tahta yalnız panelden açılabileceği için tahtada “Kilitle” soluk görünür ve çalışmaz; kodu
+    <a href="/ayarlar/kilit">Kilit ve güvenlik</a> bölümünden belirleyin.</p>{% endif %}
+  {% if dugme_yoklama_kapali %}<p class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>“Yoklama al” ders yoklaması kapalıyken görünmez (<a href="/ayarlar/yoklama">Ders yoklaması</a>).</p>{% endif %}
+  {% if dugme_eski %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ dugme_eski }} tahtada ajan güncellenmeli (eski ajan düğmeyi göstermez).</p>{% endif %}
+  <form method="post" action="/ayarlar" data-kirli-izle>
+    <input type="hidden" name="bolum" value="dugme">
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="dg_acik">Tahtalarda yüzer düğmeyi göster</label></div>
+      <div class="ayar-denetim"><input type="checkbox" name="dg_acik" value="1" {% if dugme_ayari.acik %}checked{% endif %} id="dg_acik" class="anahtar" aria-describedby="dugme-ipucu"></div>
+    </div>
+    <fieldset class="olcut">
+      <legend>Menüdeki işlemler</legend>
+      <div class="secenekler">{% for kod, ad in dugme_islemleri.items() %}<label><input type="checkbox" name="dg_{{ kod }}" value="1" {% if dugme_ayari.islemler[kod] %}checked{% endif %}> {{ ad }}</label>{% endfor %}</div>
+    </fieldset>
+    <p class="not">“Kilitle” tahtayı hemen kilitler; sunucu kapalıyken de çalışır. Kilit panelden, kilit koduyla ya da sunucuya
+      90 saniye ulaşılamazsa tahtadan açılır. “Kapat” ve “Yeniden başlat” yanlış dokunuşa karşı 10 saniyelik geri sayımla onay ister.</p>
+    {% call nedir('Nerede görünür, ne kaydedilir?') %}
+    <ul>
+      <li>Kilit, duyuru, acil yayın, sınav ve kapatma uyarısı ekranlarında gizlenir.</li>
+      <li>Öğretmen, öğrenci, yönetici (etapadmin) ve kişisel hesap oturumlarında aynı işlemler görünür.</li>
+      <li>Tahtadan yapılan her işlem İşlem kaydına “Tahta olayı” olarak düşer (kullanıcı adı gönderilmez).</li>
+    </ul>
+    {% endcall %}
+    {{ kaydet_cubugu('Düğme ayarını kaydet') }}
+  </form>
+</section>
+
+<p class="ilgili">İlgili: <a href="/ayarlar/kilit">Kilit ve güvenlik</a> · <a href="/ayarlar/yoklama">Ders yoklaması</a> · <a href="/kayit">İşlem kaydı</a></p>

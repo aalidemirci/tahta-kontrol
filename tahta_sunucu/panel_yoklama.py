@@ -56,10 +56,14 @@ def eksik_tahtalar(b) -> list[dict]:
 
 
 def ayar_baglami(b) -> dict:
-    """Ayarlar sayfasındaki "Ders yoklaması" bölümünün bağlamı (web.ayarlar_sayfasi çağırır)."""
+    """Ayarlar sayfasındaki "Ders yoklaması" bölümünün bağlamı (web.bolum_baglami çağırır)."""
     return {
         "yoklama_ayari": yk.ayar_al(b),
         "yoklama_maskeleri": maske.SINIF_BICIMLERI,
+        "yoklama_maske_secenekleri": [
+            {"kod": kod, "ad": maske.bicim_parcalari(kod)[0], "ornek": maske.bicim_parcalari(kod)[1]}
+            for kod in maske.SINIF_BICIMLERI
+        ],
         "yoklama_sinirlari": yk.SINIRLAR,
         "yoklama_ogrenci_sayisi": b.execute("SELECT COUNT(*) FROM ogrenci WHERE aktif = 1").fetchone()[0],
     }
@@ -754,7 +758,7 @@ def kaydet(uygulama, y) -> None:
 # ogrenci_onizleme.html: plan{subeler[{sube,dosyada,eklenecek[metin],sube_degisecek[metin],pasiflesecek[metin],guncellenecek}],
 #   toplam{dosyada,eklenecek,sube_degisecek,pasiflesecek,guncellenecek}}, ayristirma{bicim,bicim_adi,notlar[],uyarilar[],
 #   atlanan[{satir,neden}]}, onizleme (belirteç), omur_dk. Onay: POST /ogrenciler/aktar {onizleme}.
-# ayarlar.html (bolum=yoklama): yoklama_ayari{etkin,maske,oturum_dk,bosta_dk}, yoklama_maskeleri{kod:ad},
+# _ayar_yoklama.html (/ayarlar/yoklama; bolum=yoklama): yoklama_ayari{etkin,maske,oturum_dk,bosta_dk}, yoklama_maskeleri{kod:ad},
 #   yoklama_sinirlari{alan:(en_az,en_cok)}, yoklama_ogrenci_sayisi. Alanlar: yk_etkin=1, yk_maske, yk_oturum_dk, yk_bosta_dk.
 #   Saklama 0.8.0'dan beri ayrı bölümdür (bolum=saklama, `saklama.py`).
 #

@@ -1,0 +1,59 @@
+{# Ayarlar (0.16.0) ortak makroları. `with context` ile içe aktarılır (mesaj, ileti_yeri, ayar_kumeleri okunur).
+   Makro bağımsız değişkeni adı "on…" ile başlamaz (CSP testi ` on…=` desenini olay işleyicisi sayar). #}
+
+{# Kartın iletisi: yönlendirme `?yer=<yer>#ileti` ile gelir; bant kartın başında çizilir ve odaklanır. #}
+{% macro ileti(yer) -%}
+{% if mesaj and ileti_yeri == yer %}
+<div class="bant{% if mesaj_hata %} hata{% endif %}" role="{{ 'alert' if mesaj_hata else 'status' }}" id="ileti" tabindex="-1" data-odakla>
+  {%- if mesaj_hata %}<svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span class="gizli">Hata: </span>{% endif %}{{ mesaj -}}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{# Katlı açıklama ("Nasıl çalışır?"): güvenlik/KVKK uyarısı buraya KONMAZ, kartta açık durur. #}
+{% macro nedir(baslik) -%}
+<details class="nedir"><summary><svg class="simge" aria-hidden="true"><use href="#s-soru"/></svg>{{ baslik }}</summary>
+  <div class="nedir-ic">{{ caller() }}</div></details>
+{%- endmacro %}
+
+{# Kaydet çubuğu: JS'siz yalnız düğme(ler) görünür. panel.js form[data-kirli-izle]'de durum yazılarını ve Vazgeç'i
+   yönetir; değişiklik varken çubuk ekranın altına yapışır. Kaydet hiçbir zaman disabled olmaz.
+   call bloğu verilirse içeriği Kaydet'ten SONRA gelir (ikinci gönderim düğmeleri; Enter ilk düğmeyi, Kaydet'i seçer). #}
+{% macro kaydet_cubugu(metin, ad='', deger='') -%}
+<div class="kaydet-cubugu">
+  <span class="kc-yok" hidden>Değişiklik yok.</span>
+  <span class="kc-var" role="status" hidden><svg class="simge" aria-hidden="true"><use href="#s-kalem"/></svg>Kaydedilmemiş değişiklik var</span>
+  <button type="reset" class="kc-vazgec" hidden>Vazgeç</button>
+  <button class="ana"{% if ad %} name="{{ ad }}" value="{{ deger }}"{% endif %}>{{ metin }}</button>
+  {%- if caller %}{{ caller() }}{% endif %}
+</div>
+{%- endmacro %}
+
+{# Bölüm listesi: giriş sayfasındaki kartların ve yan menünün tek kaynağı (ayar_bolumleri.menu). #}
+{% macro bolum_listesi(etkin) -%}
+{% for kume in ayar_kumeleri %}
+<p class="ayar-menu-kume">{{ kume.ad }}</p>
+<ul>
+  {% for b in kume.bolumler %}
+  <li><a href="/ayarlar/{{ b.anahtar }}"{% if b.anahtar == etkin %} aria-current="page"{% endif %}><svg class="simge" aria-hidden="true"><use href="#{{ b.simge }}"/></svg><span class="ad">{{ b.baslik }}</span>{{ deger(b.ozet, true) }}</a></li>
+  {% endfor %}
+</ul>
+{% endfor %}
+{%- endmacro %}
+
+{# Değer özeti: uyarı tonu yalnız renkle anlatılmaz (simge + ekran okuyucuya "Dikkat: "). Dar yan menüde kısa
+   karşılığı (ozet.kisa) yazılır; giriş sayfasındaki kartta tam özet (ozet.metin), telefonda yine kısası (ikisi de çizilir,
+   stil.css genişliğe göre birini gösterir; gizlenen display:none ile erişilebilirlik ağacında da yoktur). #}
+{% macro deger(ozet, kisa=false) -%}
+<span class="ayar-deger{% if ozet.ton == 'uyari' %} uyari{% endif %}">{% if ozet.ton == 'uyari' %}<svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span class="gizli">Dikkat: </span>{% endif %}{% if kisa %}{{ ozet.kisa }}{% elif ozet.kisa != ozet.metin %}<span class="uzun">{{ ozet.metin }}</span><span class="kisa">{{ ozet.kisa }}</span>{% else %}{{ ozet.metin }}{% endif %}</span>
+{%- endmacro %}
+
+{# Ayarlar içi arama kutusu (JS'siz: GET /ayarlar?ara=…). #}
+{% macro arama(kimlik, deger_='', canli=false) -%}
+<form class="ayar-ara" method="get" action="/ayarlar" role="search">
+  <svg class="simge" aria-hidden="true"><use href="#s-ara"/></svg>
+  <label class="gizli" for="{{ kimlik }}">Ayarlarda ara</label>
+  <input type="search" id="{{ kimlik }}" name="ara" value="{{ deger_ }}" maxlength="{{ ara_en_uzun }}" placeholder="{{ 'Ara: kilit kodu, kvkk, zil…' if canli else 'Ayarlarda ara' }}" autocomplete="off"{% if canli %} data-ayar-ara aria-describedby="ayar-ara-sonuc"{% endif %}>
+  {% if canli %}<button>Ara</button>{% endif %}
+</form>
+{%- endmacro %}

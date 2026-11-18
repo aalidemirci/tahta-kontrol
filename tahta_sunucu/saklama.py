@@ -45,7 +45,7 @@ def silinme_metni(b, kayit_tarihi: date | None = None) -> str:
     """Arayüz notu: bu (ya da bugünkü) kayıt ne zaman silinir? Örn. "öğretim yılı sonunda (26.06.2027'den sonra)"."""
     bitis = bitis_al(b)
     if not bitis:
-        return "öğretim yılı bitiş tarihi girilmediği için kendiliğinden silinmez (Ayarlar › Kişisel veri saklama)"
+        return "öğretim yılı bitiş tarihi girilmediği için kendiliğinden silinmez (Ayarlar › Veri saklama ve yedek)"
     if kayit_tarihi and kayit_tarihi > bitis:
         return "bir sonraki öğretim yılının bitiş tarihi geçince silinir"
     return f"öğretim yılı bitiş tarihi ({tarih_metni(bitis)}) geçince kendiliğinden silinir"

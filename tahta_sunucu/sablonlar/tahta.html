@@ -78,7 +78,7 @@
       <dt>Oturum</dt><dd>{{ t.oturum }}</dd>
       <dt>Ekran yardımcısı</dt><dd>{{ 'Bağlı' if t.ekran_bagli else 'Bağlı değil' }}</dd>
       {# 0.9.0 (G3): yüzer düğme yalnız `dugme` yeteneği bildiren ajanda görünür. #}
-      <dt>Yüzer düğme</dt><dd>{% if t.dugme_yetenegi %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Destekleniyor</span> <a href="/ayarlar#yuzer-dugme">Ayarlar</a>
+      <dt>Yüzer düğme</dt><dd>{% if t.dugme_yetenegi %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Destekleniyor</span> <a href="/ayarlar/yuzer">Ayarlar</a>
         {%- elif ham.surum %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Yüzer düğme için ajan güncellenmeli</span>{% else %}—{% endif %}</dd>
       <dt>Ders yoklaması</dt><dd>{% if t.yoklama_yetenegi %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Yoklama: destekleniyor</span>{% if t.yoklama_acik %} <span class="rozet" data-durum="duyuru"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Şu an yoklama alınıyor</span>{% endif %}
         {%- elif ham.surum %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Yoklama: ajan güncellenmeli</span>{% else %}—{% endif %}
@@ -202,7 +202,7 @@
   {% if mesaj and ileti_yeri == 'temizlik' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
   <dl class="ozellikler">
     <dt>Gün sonu temizliği</dt><dd>{% if temizlik.ayar.etkin %}Açık · {{ temizlik_zamanlari[temizlik.ayar.zaman] }}{% if temizlik.ayar.zaman == 'saat' %} ({{ temizlik.ayar.saat }}){% endif %}{% else %}Kapalı{% endif %}
-      {%- if kullanici.rol == 'yonetici' %} · <a href="/ayarlar#oturum-temizligi">Ayarlar</a>{% endif %}</dd>
+      {%- if kullanici.rol == 'yonetici' %} · <a href="/ayarlar/gunsonu#temizlik">Ayarlar</a>{% endif %}</dd>
     <dt>Son temizlik</dt><dd>{% if temizlik.son %}{{ temizlik.son.zaman | zaman }} · {{ temizlik.son.sonuc }}{% if temizlik.son.olusturan != 'sistem' %} (elle: {{ temizlik.son.olusturan }}){% endif %}{% else %}Henüz yapılmadı.{% endif %}</dd>
     {% if temizlik.bekleyen %}<dt>Şu an</dt><dd><span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Temizlik sürüyor ya da tahtada uyarı gösteriliyor</span></dd>{% endif %}
     {% if not temizlik.yetenekli %}<dt>Ajan</dt><dd><span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Oturum temizliği için ajan güncellenmeli</span></dd>{% endif %}

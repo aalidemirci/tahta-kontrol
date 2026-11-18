@@ -1,0 +1,82 @@
+{% from "_ayar.html" import ileti, nedir, kaydet_cubugu with context %}
+{# Kilit ve güvenlik: ortak kilit kodu (bolum=kilit_kodu; boş alan kodu DEĞİŞTİRMEZ, silme yalnız açık
+   kilit_kodu_sil=1 + onay penceresi) ve açılışta kilit (bolum=acilis_kilidi). Kodun değeri hiçbir zaman geri yazılmaz. #}
+<section class="kutu ayar-kart" id="kod" aria-labelledby="kod-baslik">
+  <div class="kutu-bas">
+    <h2 id="kod-baslik">Ortak kilit kodu</h2>
+    {% if kilit_kodu_var %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Tanımlı</span>
+    {% else %}<span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Tanımsız</span>{% endif %}
+  </div>
+  {{ ileti('kod') }}
+  <p class="not">Bu kod bütün tahtalarda ortaktır ve öğretmenlerin kilitli tahtayı açması içindir.
+    Sınıfın önünde ekrandan girildiği için öğrencilerce görülebilir; düzenli aralıklarla değiştirin.</p>
+  <form method="post" action="/ayarlar" data-kirli-izle>
+    <input type="hidden" name="bolum" value="kilit_kodu">
+    <label for="kilit_kodu">{{ 'Yeni kod' if kilit_kodu_var else 'Kilit kodu' }}</label>
+    <p class="ipucu" id="kilit-ipucu">4–8 rakam. Boş bırakılırsa kod değişmez.</p>
+    <input type="password" id="kilit_kodu" name="kilit_kodu" inputmode="numeric" pattern="[0-9]{4,8}" autocomplete="new-password"
+      aria-describedby="kilit-ipucu" class="alan-dar">
+    <p class="hata-ileti" id="kilit-hata">Hata: Kilit kodu 4–8 rakamdan oluşmalı.</p>
+    {# Yanlış yazılan kod bütün tahtalara gider: panel.js kutuyu görünür kılar, işaretlenince alan düz metne döner.
+       Kutunun adı yoktur (gönderilmez, değişiklik sayılmaz). JS'siz gizli kalır. #}
+    <label class="satir" hidden><input type="checkbox" data-goster="kilit_kodu"> Kodu göster</label>
+    {% call nedir('Kod nasıl çalışır?') %}
+    <p>Kod tahtalara özet olarak gider ve sunucu kapalıyken de çalışır. Sınav ekranında ortak kod kabul edilmez.</p>
+    <p>Kod tanımlı değilken: kilitlenen tahta yalnız panelden açılır, tahtadaki yüzer düğmenin “Kilitle” işlemi soluk
+      görünür ve çalışmaz, açılışta kilit uygulanmaz.</p>
+    {% endcall %}
+    {{ kaydet_cubugu('Kodu kaydet') }}
+  </form>
+</section>
+
+<section class="kutu ayar-kart" id="acilis" aria-labelledby="acilis-baslik">
+  <div class="kutu-bas">
+    <h2 id="acilis-baslik">Açılışta kilit</h2>
+    <span class="rozet" data-durum="{{ 'tamam' if acilis_kilidi_acik else 'cevrimdisi' }}">{{ 'Açık' if acilis_kilidi_acik else 'Kapalı' }}</span>
+  </div>
+  {{ ileti('acilis') }}
+  {% if acilis_kilidi_acik and not kilit_kodu_var %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg><strong>Kilit kodu belirlenmedi:</strong> açılışta kilit uygulanmıyor. Kodsuz kilitlenen tahta yalnız panelden açılabilir; kodu yukarıdaki <a href="#kod">Ortak kilit kodu</a> kartından belirleyin.</p>{% endif %}
+  {% if acilis_eski %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ acilis_eski }} tahtada ajan güncellenmeli (eski ajan açılışta kilitlenmez).</p>{% endif %}
+  <form method="post" action="/ayarlar" data-kirli-izle>
+    <input type="hidden" name="bolum" value="acilis_kilidi">
+    <div class="ayar-satir">
+      <div class="ayar-etiket">
+        <label for="ak_acik">Tahta açılınca kilitli başlasın</label>
+        <p class="not" id="acilis-ipucu">Tahta açılınca ya da tahtada oturum açılınca, tahta sunucuya ulaşabiliyorsa kendiliğinden kilitlenir;
+          öğretmen kilidi kilit koduyla açar. Sunucuya ulaşılamıyorsa tahta açık başlar (ders bölünmez). Aynı oturum bir kez kilitlenir:
+          kodla ya da panelden açılan tahta yeniden kilitlenmez.</p>
+      </div>
+      <div class="ayar-denetim"><input type="checkbox" name="ak_acik" value="1" {% if acilis_kilidi_acik %}checked{% endif %} id="ak_acik" class="anahtar" aria-describedby="acilis-ipucu"></div>
+    </div>
+    {% call nedir('Ne zaman uygulanmaz?') %}
+    <ul>
+      <li>Yönetici (etapadmin) oturumunda.</li>
+      <li>Oturum açıldıktan {{ acilis_en_yasli_sn }} saniye sonra hâlâ sunucuya ulaşılamamışsa (ders başlamış olabilir).</li>
+      <li>Acil yayın ve sınav penceresinde.</li>
+      <li>Program kilidinin yönettiği tahtada ders saatleri içinde (o saatlerde derste açık, teneffüste kilitli kararını program kilidi verir).</li>
+      <li>Kilit kodu tanımlı değilken.</li>
+    </ul>
+    {% endcall %}
+    {# Salt bilgi: form alanı DEĞİLDİR (ayar USB anahtar bölümündedir; burada yalnız durumu görünür). #}
+    <div class="ayar-satir bilgi">
+      <div class="ayar-etiket"><b>USB anahtar kilidi açar</b><p class="not">Bu ayar USB anahtar bölümündedir; burada yalnız durumu görünür.</p></div>
+      <div class="ayar-denetim"><span class="rozet" data-durum="{{ 'tamam' if usb_ayari.etkin and usb_ayari.kilit_acar else 'cevrimdisi' }}">{{ 'Açık' if usb_ayari.etkin and usb_ayari.kilit_acar else 'Kapalı' }}</span> <a href="/ayarlar/usb">USB anahtar ayarına git</a></div>
+    </div>
+    {{ kaydet_cubugu('Açılış ayarını kaydet') }}
+  </form>
+</section>
+
+{% if kilit_kodu_var %}
+<section class="kutu dikkat-kutu" aria-labelledby="dikkat-baslik">
+  <h2 id="dikkat-baslik"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Dikkat gerektirir</h2>
+  {# Onaylı iş: JS yoksa gönderilmez (type="button"); onay penceresindeki düğme kilit_kodu_sil=1 yollar. #}
+  <form method="post" action="/ayarlar" id="kilit-kodu-sil-formu" class="dikkat-satir">
+    <input type="hidden" name="bolum" value="kilit_kodu">
+    <div><b>Kilit kodunu kaldır</b><p class="not">Kod kaldırılırsa kilitli tahta yalnız panelden açılır; öğretmenler tahtayı kendileri açamaz. Yeni kod belirleyince eski düzen döner.</p></div>
+    <button type="button" class="tehlike" data-onay="kilit_kodu_sil" aria-haspopup="dialog">Kodu kaldır…</button>
+    <noscript><p class="not">Bu işlem onay penceresiyle yapılır; tarayıcıda JavaScript açık olmalıdır.</p></noscript>
+  </form>
+</section>
+{% endif %}
+
+<p class="ilgili">İlgili: <a href="/ayarlar/gunsonu">Kapatma ve gün sonu</a> · <a href="/ayarlar/yuzer">Yüzer düğme</a> · <a href="/ayarlar/usb">USB anahtar</a> · <a href="/program?bolum=kurallar">Program kilidi (Program › Kurallar)</a></p>

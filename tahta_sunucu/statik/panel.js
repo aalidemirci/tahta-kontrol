@@ -2,7 +2,8 @@
    Sayfa kancalarına göre bölümler: onay (tehlikeli işlem dialogu), pano (canlı durum,
    seçim, süzgeç, duyurucu, acil rozetleri), menu (açılır grupların kapanışı), sayac,
    duyuru formu (koşullu alanlar, hedef önizlemesi), acil (tür, şablon, teslim sayacı),
-   yazdir, acil şablonları, ayarlar (renk önizlemesi, logo), kopyala, dogrulama,
+   yazdir, acil şablonları, ayarlar (renk önizlemesi, logo; 0.16.0: kaydedilmemiş değişiklik çubuğu, Ayarlar içi
+   arama, eski parça adresleri), kopyala, dogrulama,
    program (pano şeridi ve kart rozetleri pano bölümünde; tahta ızgarasında "Tümünü işaretle"),
    sinav (sınav sayfasının canlı salon durumu, sınavdaki tahtaya duyuru/kilit açma ek onayı,
    salon yoklamasında gelmeyen sayısı), yoklama (Aşama 5: "e-Okul'a işlendi" kutusunun kendiliğinden
@@ -135,6 +136,17 @@
       ad: "eylem", deger: "sil", evet: "Sınavı sil",
       metin: "Sınav, salonları ve öğrenci listesi tamamen silinir; icmal de üretilemez. Geri alınamaz.",
       baslik: function () { return "Sınav silinsin mi?"; }
+    },
+    /* Ayarlar (0.16.0): dikkat gerektiren iki iş. JS yoksa düğmeler (type="button") hiçbir şey göndermez. */
+    kilit_kodu_sil: {
+      ad: "kilit_kodu_sil", deger: "1", evet: "Kodu kaldır",
+      metin: "Kilitli tahtalar yalnız panelden açılır; öğretmenler tahtayı kendileri açamaz. Yeni kod belirleyince eski düzen döner.",
+      baslik: function () { return "Kilit kodu kaldırılsın mı?"; }
+    },
+    logo_sil: {
+      ad: "eylem", deger: "sil", evet: "Logoyu kaldır",
+      metin: "Panelde okul adının baş harfleri, tahtada yalnız okul adı görünür.",
+      baslik: function () { return "Okul logosu kaldırılsın mı?"; }
     }
   };
   // Sınavdaki tahtaya duyuru / kilit açma: düz gönderim düğmeleridir; sınav sürüyorsa araya ek onay girer.
@@ -708,6 +720,168 @@
         if (cerceve) cerceve.hidden = false;
       });
     }
+  }
+
+  /* ---- ayarlar (0.16.0): kaydedilmemiş değişiklik çubuğu, Ayarlar içi arama, eski parça adresleri ----------
+     Hepsi ilerlemeli iyileştirmedir: JS yokken her form kendi Kaydet düğmesiyle gönderilir, arama GET ?ara= ile
+     sunucuda süzülür, eski parça adresinde giriş sayfası açılır. */
+
+  // Formun durumu: ad=değer çiftleri. Dosya ve gizli alan sayılmaz; parola alanının değeri SAKLANMAZ (yalnız "dolu mu").
+  // varsayilan=true ise sunucunun çizdiği değerler okunur (tarayıcı geri dönüşte alanları eski yazılanla doldurabilir).
+  function formDurumu(form, varsayilan) {
+    var parcalar = [];
+    Array.prototype.forEach.call(form.elements, function (e) {
+      var tur = (e.type || "").toLowerCase();
+      if (!e.name || tur === "file" || tur === "hidden" || tur === "submit" || tur === "button" || tur === "reset") return;
+      var deger;
+      if (tur === "checkbox" || tur === "radio") {
+        deger = (varsayilan ? e.defaultChecked : e.checked) ? "1" : "";
+        parcalar.push(e.name + ":" + e.value + "=" + deger);
+        return;
+      }
+      if (tur === "select-one" || tur === "select-multiple") {
+        deger = Array.prototype.filter.call(e.options, function (o) { return varsayilan ? o.defaultSelected : o.selected; })
+          .map(function (o) { return o.value; }).join(",");
+        if (varsayilan && !deger && tur === "select-one" && e.options.length) deger = e.options[0].value;
+      } else {
+        deger = varsayilan ? e.defaultValue : e.value;
+      }
+      if (tur === "password") deger = deger ? "dolu" : "";
+      parcalar.push(e.name + "=" + deger);
+    });
+    return parcalar.join("\u0001");
+  }
+
+  function ayarKirliKur() {
+    var formlar = document.querySelectorAll("form[data-kirli-izle]");
+    if (!formlar.length) return;
+    var gonderilen = null;
+    Array.prototype.forEach.call(formlar, function (form) {
+      var ilk = formDurumu(form, true);
+      var yok = form.querySelector(".kc-yok");
+      var degisti = form.querySelector(".kc-var");
+      var vazgec = form.querySelector(".kc-vazgec");
+      form.classList.add("izleniyor");
+      function guncelle() {
+        var kirli = formDurumu(form, false) !== ilk;
+        form.classList.toggle("kirli", kirli);
+        if (yok) yok.hidden = kirli;
+        if (degisti) degisti.hidden = !kirli;
+        if (vazgec) vazgec.hidden = !kirli;
+      }
+      form.addEventListener("input", guncelle);
+      form.addEventListener("change", guncelle);
+      form.addEventListener("reset", function () {
+        // Alanlar reset olayından SONRA ilk değerine döner; renk çıktıları, önizleme ve sayaçlar "input" dinler.
+        setTimeout(function () {
+          Array.prototype.forEach.call(form.querySelectorAll('input[type="color"], textarea'), function (alan) {
+            alan.dispatchEvent(new Event("input", { bubbles: true }));
+          });
+          guncelle();
+        }, 0);
+      });
+      guncelle();
+    });
+    // Gönderilen formun kendisi uyarmaz (Kaydet, onay penceresi); sayfadaki BAŞKA bir formda değişiklik kaldıysa uyarır.
+    document.addEventListener("submit", function (olay) {
+      gonderilen = olay.target;
+      setTimeout(function () { gonderilen = null; }, 2000); // kullanıcı sayfada kalmayı seçerse uyarı yeniden çalışsın
+    });
+    window.addEventListener("beforeunload", function (olay) {
+      var kalan = Array.prototype.some.call(formlar, function (f) { return f !== gonderilen && f.classList.contains("kirli"); });
+      if (!kalan) return;
+      olay.preventDefault();
+      olay.returnValue = "";
+    });
+  }
+
+  // "Kodu göster" (Ayarlar › Kilit ve güvenlik): adsız onay kutusu, data-goster'deki parola alanını düz metne çevirir.
+  // Kutu JS'siz gizlidir; "Vazgeç" (reset) kutuyu boşaltınca alan yeniden gizlenir.
+  function kodGosterKur() {
+    Array.prototype.forEach.call(document.querySelectorAll("input[data-goster]"), function (kutu) {
+      var alan = document.getElementById(kutu.getAttribute("data-goster"));
+      if (!alan) return;
+      var etiket = kutu.closest("label");
+      if (etiket) etiket.hidden = false;
+      function uygula() { alan.type = kutu.checked ? "text" : "password"; }
+      kutu.addEventListener("change", uygula);
+      if (kutu.form) kutu.form.addEventListener("reset", function () { setTimeout(uygula, 0); });
+      uygula();
+    });
+  }
+
+  // Harf katlama: ayar_bolumleri.KATLA_KAYNAK / KATLA_HEDEF ile AYNI dizgiler (test karşılaştırır).
+  var AYAR_KATLA_KAYNAK = "çğıöşüâîû";
+  var AYAR_KATLA_HEDEF = "cgiosuaiu";
+  function ayarKatla(metin) {
+    return metin.replace(/[^\u0000-\u007f]/g, function (h) {
+      var sira = AYAR_KATLA_KAYNAK.indexOf(h);
+      return sira < 0 ? h : AYAR_KATLA_HEDEF.charAt(sira);
+    });
+  }
+  function ayarSozcukleri(metin) {
+    return metin.toLocaleLowerCase("tr").split(/[^0-9a-zçğıöşüâîû-]+/).filter(Boolean);
+  }
+
+  // Kural sunucudakiyle (ayar_bolumleri.ara) aynıdır: her sorgu sözcüğü samanlıktaki bir sözcüğün BAŞINDA geçmeli;
+  // önce data-ara (Türkçe küçük harf), hiçbir satır eşleşmezse harf katlanarak data-ara-kat.
+  function ayarAraKur() {
+    var kutu = document.querySelector("input[data-ayar-ara]");
+    var kapsam = $("ayar-kapsam");
+    if (!kutu || !kapsam) return;
+    var satirlar = Array.prototype.slice.call(kapsam.querySelectorAll("li[data-ara]"));
+    var kartlar = Array.prototype.slice.call(kapsam.querySelectorAll(".ayar-kume, .baska-yerde"));
+    var baska = $("baska-yerde");
+    var sonuc = $("ayar-ara-sonuc");
+    var bos = $("ayar-ara-bos");
+    var kumeler = kapsam.querySelector(".ayar-kumeler");
+    var kurulum = $("kurulum");
+    function uyar(sorgu, saman) {
+      var sozcukler = saman.split(" ");
+      return sorgu.every(function (q) { return sozcukler.some(function (s) { return s.indexOf(q) === 0; }); });
+    }
+    function suz() {
+      var sorgu = ayarSozcukleri(kutu.value);
+      var etkin = sorgu.length > 0;
+      var eslesen = [];
+      if (etkin) {
+        eslesen = satirlar.filter(function (s) { return uyar(sorgu, s.getAttribute("data-ara") || ""); });
+        if (!eslesen.length) {
+          var katli = sorgu.map(ayarKatla);
+          eslesen = satirlar.filter(function (s) { return uyar(katli, s.getAttribute("data-ara-kat") || ""); });
+        }
+      }
+      satirlar.forEach(function (s) {
+        s.hidden = etkin ? eslesen.indexOf(s) < 0 : !!(baska && baska.contains(s));
+      });
+      kartlar.forEach(function (k) { k.hidden = !k.querySelector("li[data-ara]:not([hidden])"); });
+      if (bos) bos.hidden = !etkin || eslesen.length > 0;
+      if (sonuc) sonuc.textContent = etkin ? eslesen.length + " sonuç" : "";
+      if (kumeler) kumeler.classList.toggle("suzulu", etkin);
+      if (kurulum) kurulum.hidden = etkin;
+    }
+    kutu.addEventListener("input", suz);
+    // Tek satır eşleşiyorsa Enter doğrudan oraya götürür; yoksa form (GET ?ara=) sunucuda süzer.
+    kutu.form.addEventListener("submit", function (olay) {
+      var gorunen = satirlar.filter(function (s) { return !s.hidden; });
+      var baglanti = gorunen.length === 1 && ayarSozcukleri(kutu.value).length ? gorunen[0].querySelector("a") : null;
+      if (!baglanti) return;
+      olay.preventDefault();
+      location.assign(baglanti.getAttribute("href"));
+    });
+    if (kutu.value) suz(); // geri dönüşte tarayıcının doldurduğu sorgu
+  }
+
+  // Eski tek sayfanın parça adresi (/ayarlar#saklama …) sunucuya gitmez: giriş sayfasındaki eşlemeyle yönlendirilir.
+  function ayarEskiParcaKur() {
+    var veri = $("ayar-eski-parca");
+    var parca = (location.hash || "").slice(1);
+    if (!veri || !parca) return;
+    var harita;
+    try { harita = JSON.parse(veri.textContent || "{}"); } catch (e) { return; }
+    if (!Object.prototype.hasOwnProperty.call(harita, parca)) return;
+    var hedef = harita[parca];
+    if (typeof hedef === "string" && hedef.charAt(0) === "/" && hedef.charAt(1) !== "/") location.replace(hedef);
   }
 
   /* ---- kopyala ------------------------------------------------------------------ */
@@ -1674,6 +1848,10 @@
   sablonKur();
   onayKur();
   ayarlarKur();
+  ayarKirliKur();
+  kodGosterKur();
+  ayarAraKur();
+  ayarEskiParcaKur();
   kopyalaKur();
   dogrulamaKur();
   iletiKur();

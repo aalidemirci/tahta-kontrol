@@ -142,7 +142,7 @@ def test_ayar_sinirlari_ve_tam_ad_secenegi_reddedilir(panel, tahta):
         assert yk.ayar_al(b)["etkin"] is True
         vt.ayar_yaz(b, "yoklama", {"etkin": True, "maske": "tam"})  # elle yazılmış eski değer
         assert yk.ayar_al(b)["maske"] == maske.VARSAYILAN_SINIF_BICIMI == "no_ad_soyadbas"
-    assert 'name="yk_maske"' in panel.get("/ayarlar").text
+    assert 'name="yk_maske"' in panel.get("/ayarlar/yoklama").text
 
 
 def test_tahtaya_giden_ayar_yalniz_yoklama_etkin_tasir(panel, tahta):

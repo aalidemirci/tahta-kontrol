@@ -30,6 +30,7 @@ from . import (
     acilis_kilidi,
     adresler,
     ayar,
+    ayar_bolumleri,
     dugme,
     duyuru,
     guncelleme,
@@ -93,8 +94,8 @@ MENU = [
     {"kume": "Yönetim", "ogeler": [
         {"ad": "Yedekler", "yol": "/yedekler", "simge": "yedek", "esler": ["/yedekler"], "rol": "yonetici"},
         {"ad": "İşlem kaydı", "yol": "/kayit", "simge": "kayit", "esler": ["/kayit"]},
-        {"ad": "Kullanıcılar", "yol": "/kullanicilar", "simge": "kullanici", "esler": ["/kullanicilar"], "rol": "yonetici"},
-        {"ad": "Ayarlar", "yol": "/ayarlar", "simge": "ayar", "esler": ["/ayarlar"], "rol": "yonetici"},
+        # 0.16.0: Kullanıcılar Ayarlar'ın bir bölümüdür (/ayarlar/kullanicilar); eski adres oraya yönlenir.
+        {"ad": "Ayarlar", "yol": "/ayarlar", "simge": "ayar", "esler": ["/ayarlar", "/kullanicilar"], "rol": "yonetici"},
     ]},
 ]
 # Kümelerin dışında, en üstte; iki role de çizilir (K4).
@@ -281,9 +282,12 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             logo_v = marka.logo_surumu(b)
             aktif_acil = acil_ozeti(b) if k else None
             menu_sayilari = {"ariza": ariza_mod.suren_toplam(b)} if k else {}
+        # menu_yolu: sayfa başka bir uçta (POST /ayarlar → Acil › Şablonlar) yeniden çizilirken etkin menü öğesi
+        # isteğin değil, çizilen sayfanın yoluna göre seçilir.
+        menu_yolu = baglam.pop("menu_yolu", None) or istek.url.path
         baglam.update(
-            menu=menu_gorunumu(k, istek.url.path, menu_sayilari) if k else MENU_BOS,
-            menu_acil={**MENU_ACIL, "secili": _secili(MENU_ACIL, istek.url.path)},
+            menu=menu_gorunumu(k, menu_yolu, menu_sayilari) if k else MENU_BOS,
+            menu_acil={**MENU_ACIL, "secili": _secili(MENU_ACIL, menu_yolu)},
             aktif_acil=aktif_acil,
             acil_yetkili=acil.yetkili(k),
             istek_yolu=istek.url.path,
@@ -443,7 +447,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                 "tur": "uyari",
                 "metin": f"Bu bilgisayarın adresi ({ipler[0]}) tahtalara bildirilen listede yok. "
                 "Tahtalar eski adresi kullanıyor olabilir.",
-                "yol": "/ayarlar?yer=adresler#adresler" if yonetici else "", "yol_adi": "Ayarlar",
+                "yol": "/ayarlar/sunucu#adresler" if yonetici else "", "yol_adi": "Ayarlar",
             })  # fmt: skip
         return uyarilar[:3]
 
@@ -999,9 +1003,8 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             return yonlendir("/giris")
         if k["rol"] != "yonetici":
             return yonlendir("/", "Bu sayfa için yönetici yetkisi gerekir.", hata=True)
-        with vt.islem() as b:
-            satirlar = b.execute("SELECT * FROM kullanici ORDER BY ad").fetchall()
-        return sayfa(istek, "kullanicilar.html", k, kullanicilar=satirlar)
+        # 0.16.0: sayfa Ayarlar › Panel kullanıcıları bölümüdür; eski adres (yer imi, eski yönlendirme) oraya gider.
+        return yonlendir("/ayarlar/kullanicilar", istek.query_params.get("m", ""), hata=istek.query_params.get("t") == "hata")
 
     def yetkisiz_reddet(istek: Request, k, islem: str):
         """Yönetici olmayanın yetkili işlem denemesini kayda düşürüp reddeder (oturum yoksa girişe)."""
@@ -1018,15 +1021,32 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             return yetkisiz_reddet(istek, k, "Kullanıcı işlemi")
         form = await istek.form()
         eylem = str(form.get("eylem", ""))
+        # İleti ilgili kartta çizilir: ekleme "Kullanıcı ekle" kartında, satır işlemleri "Hesaplar" kartında.
+        ekle_adresi = "/ayarlar/kullanicilar?yer=ekle#ileti"
+        hesap_adresi = "/ayarlar/kullanicilar?yer=hesaplar#ileti"
+        if eylem == "ekle":
+            ad = str(form.get("ad", "")).strip().lower()
+            parola = str(form.get("parola", ""))
+            rol = str(form.get("rol", "idareci"))
+            ekle_hatasi = ""
+            if len(ad) < 3 or len(parola) < 8 or rol not in ROLLER:
+                ekle_hatasi = "Kullanıcı adı en az 3, parola en az 8 karakter olmalı."
+            else:
+                with vt.islem() as b:
+                    if b.execute("SELECT 1 FROM kullanici WHERE ad = ?", (ad,)).fetchone():
+                        ekle_hatasi = "Bu kullanıcı adı zaten var."
+            if ekle_hatasi:
+                # Sayfa aynı yanıtta (400) yeniden çizilir: yazılan ad soyad, kullanıcı adı ve yetki kaybolmaz.
+                # Parola hiçbir zaman geri yazılmaz.
+                return bolum_sayfasi(
+                    istek, k, "kullanicilar", yer="ekle", hata=ekle_hatasi,
+                    ekle_formu={"gorunen_ad": str(form.get("gorunen_ad", "")).strip()[:80], "ad": ad[:40],
+                                "rol": rol if rol in ROLLER else "idareci"},
+                )  # fmt: skip
         with vt.islem() as b:
             if eylem == "ekle":
-                ad = str(form.get("ad", "")).strip().lower()
-                parola = str(form.get("parola", ""))
-                rol = str(form.get("rol", "idareci"))
-                if len(ad) < 3 or len(parola) < 8 or rol not in ROLLER:
-                    return yonlendir("/kullanicilar", "Kullanıcı adı en az 3, parola en az 8 karakter olmalı.", hata=True)
-                if b.execute("SELECT 1 FROM kullanici WHERE ad = ?", (ad,)).fetchone():
-                    return yonlendir("/kullanicilar", "Bu kullanıcı adı zaten var.", hata=True)
+                if b.execute("SELECT 1 FROM kullanici WHERE ad = ?", (ad,)).fetchone():  # iki işlem arasında eklendiyse
+                    return yonlendir(ekle_adresi, "Bu kullanıcı adı zaten var.", hata=True)
                 # acil_yetki 0.8.0'dan beri okunmaz (K4: bütün kullanıcılar yetkili); eski sürüme dönülürse
                 # aynı davranış sürsün diye 1 yazılır.
                 b.execute(
@@ -1034,13 +1054,13 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                     (ad, str(form.get("gorunen_ad", "")).strip() or ad, guvenlik.parola_ozetle(parola), rol, vt.simdi()),
                 )
                 vt.kayit_dus(b, k["ad"], "Kullanıcı eklendi", f"{ad} ({ROLLER[rol]})", istemci_ip(istek))
-                return yonlendir("/kullanicilar", "Kullanıcı eklendi.")
+                return yonlendir(ekle_adresi, "Kullanıcı eklendi.")
             hedef = b.execute("SELECT * FROM kullanici WHERE id = ?", (str(form.get("id", "")),)).fetchone()
             if not hedef:
-                return yonlendir("/kullanicilar", "Kullanıcı bulunamadı.", hata=True)
+                return yonlendir(hesap_adresi, "Kullanıcı bulunamadı.", hata=True)
             if eylem == "durum":
                 if hedef["id"] == k["id"]:
-                    return yonlendir("/kullanicilar", "Kendi hesabınızı kapatamazsınız.", hata=True)
+                    return yonlendir(hesap_adresi, "Kendi hesabınızı kapatamazsınız.", hata=True)
                 b.execute("UPDATE kullanici SET aktif = ? WHERE id = ?", (0 if hedef["aktif"] else 1, hedef["id"]))
                 b.execute("DELETE FROM oturum WHERE kullanici_id = ?", (hedef["id"],))
                 vt.kayit_dus(
@@ -1049,7 +1069,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             elif eylem == "parola":
                 parola = str(form.get("parola", ""))
                 if len(parola) < 8:
-                    return yonlendir("/kullanicilar", "Parola en az 8 karakter olmalı.", hata=True)
+                    return yonlendir(hesap_adresi, "Parola en az 8 karakter olmalı.", hata=True)
                 b.execute(
                     "UPDATE kullanici SET parola_ozet = ? WHERE id = ?", (guvenlik.parola_ozetle(parola), hedef["id"])
                 )
@@ -1060,11 +1080,15 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                 # 0.8.0 (K4): ayrı acil yetkisi yoktur; eski bir sekmeden gelen istek reddedilir ve kayda düşer.
                 vt.kayit_dus(b, k["ad"], "Acil yetkisi değişikliği reddedildi", f"{hedef['ad']}: ayrı yetki kaldırıldı",
                              istemci_ip(istek))  # fmt: skip
-                return yonlendir("/kullanicilar", "Acil yayın yetkisi artık ayrı verilmez: bütün yönetici ve idareciler "
+                return yonlendir(hesap_adresi, "Acil yayın yetkisi artık ayrı verilmez: bütün yönetici ve idareciler "
                                  "parola ve onayla başlatabilir.", hata=True)  # fmt: skip
             else:
-                return yonlendir("/kullanicilar", "Bilinmeyen işlem.", hata=True)
-        return yonlendir("/kullanicilar", "Kaydedildi.")
+                return yonlendir(hesap_adresi, "Bilinmeyen işlem.", hata=True)
+        return yonlendir(hesap_adresi, "Kaydedildi.")
+
+    # ---- Ayarlar (0.16.0): giriş sayfası + 11 bölüm; liste, özetler ve arama `ayar_bolumleri.py`'dedir ----
+    def bugun_tarihi():
+        return datetime.fromtimestamp(vt.simdi(), ISTANBUL).date()
 
     @uygulama.get("/ayarlar", response_class=HTMLResponse)
     async def ayarlar(istek: Request):
@@ -1073,22 +1097,109 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             return yonlendir("/giris")
         if k["rol"] != "yonetici":
             return yonlendir("/", "Bu sayfa için yönetici yetkisi gerekir.", hata=True)
-        return ayarlar_sayfasi(istek, k)
-
-    def ayarlar_sayfasi(
-        istek: Request,
-        k,
-        sablon_formu: list | None = None,
-        sablon_hata: str = "",
-        sinav_formu: str | None = None,
-        adres_formu: str | None = None,
-    ) -> HTMLResponse:
-        """Ayarlar sayfası. sablon_formu/sablon_hata: acil şablonu doğrulama hatasında gönderilen
-        değerler aynı yanıtta (400) yeniden çizilir; düzenlemeler kaybolmaz. sinav_formu: sınav
-        kuralları reddedildiğinde gönderilen metin (ileti sablon_hata'da). adres_formu: A6 adres listesi
-        reddedildiğinde gönderilen metin (ileti sablon_hata'da, ileti_yeri "adresler")."""
+        # Eski tek sayfanın `?yer=` adresi (yer imi, açık sekmedeki eski yönlendirme) yeni bölüme taşınır.
+        yer = istek.query_params.get("yer", "")
+        hedef = ayar_bolumleri.ESKI_YER.get(yer)
+        if hedef:
+            m = istek.query_params.get("m", "")
+            if hedef.startswith("/"):
+                adres = hedef + ("#ileti" if m else "")
+            else:
+                adres = f"/ayarlar/{hedef}" + (f"?yer={yer}#ileti" if m else "")
+            return yonlendir(adres, m, hata=istek.query_params.get("t") == "hata")
+        sonuc = ayar_bolumleri.ara(istek.query_params.get("ara", ""))
         with vt.islem() as b:
-            kilit_kodu_var = bool(vt.ayar_al(b, "kilit_kodu"))
+            ozet = ayar_bolumleri.ozetler(b, bugun_tarihi())
+            kurulum = ayar_bolumleri.kurulum(b, bugun_tarihi())
+        return sayfa(
+            istek,
+            "ayarlar.html",
+            k,
+            ara=sonuc,
+            ayar_kumeleri=ayar_bolumleri.menu(ozet, sonuc["bolumler"] if sonuc["etkin"] else None),
+            baska_yerde=ayar_bolumleri.baska_yerde(sonuc["baska"] if sonuc["etkin"] else None),
+            kurulum=kurulum,
+            eski_parca=ayar_bolumleri.ESKI_PARCA,
+            ara_en_uzun=ayar_bolumleri.SORGU_EN_UZUN,
+        )
+
+    @uygulama.get("/ayarlar/{anahtar}", response_class=HTMLResponse)
+    async def ayar_bolumu(istek: Request, anahtar: str):
+        k = kullanici(istek)
+        if not k:
+            return yonlendir("/giris")
+        if k["rol"] != "yonetici":
+            return yonlendir("/", "Bu sayfa için yönetici yetkisi gerekir.", hata=True)
+        if not ayar_bolumleri.bolum(anahtar):
+            return yonlendir("/ayarlar", "Bilinmeyen ayar bölümü.", hata=True)
+        return bolum_sayfasi(istek, k, anahtar)
+
+    def eski_ajan_sayisi(b, yetenekli) -> int:
+        return sum(1 for t in b.execute("SELECT * FROM tahta WHERE durum = 'onayli'") if not yetenekli(t))
+
+    def bolum_baglami(b, anahtar: str) -> dict:
+        """Yalnız o bölümün şablon bağlamı (değişken adları 0.15.0 tek sayfasındakilerle aynıdır)."""
+        kilit_kodu_var = bool(vt.ayar_al(b, "kilit_kodu"))
+        if anahtar == "okul":
+            ana, vurgu = tema.tema_al(b)
+            uretilen = tema.uret(ana, vurgu)
+            logo = marka.logo_oku(b)
+            logo_bilgi = None
+            if logo:
+                bilgi = logo[1]
+                logo_bilgi = {
+                    "tur": "PNG" if bilgi.get("tur") == "png" else "JPEG",
+                    "en": bilgi.get("en"),
+                    "boy": bilgi.get("boy"),
+                    "kb": max(1, round(int(bilgi.get("boyut") or 0) / 1024)),
+                    "zaman": datetime.fromtimestamp(int(bilgi.get("zaman") or 0), ISTANBUL).strftime("%d.%m.%Y %H:%M"),
+                }
+            return {
+                "tema_ana": ana,
+                "tema_vurgu": vurgu,
+                "varsayilan_vurgu": tema.VARSAYILAN_VURGU,
+                "tema_notlar": uretilen["notlar"],
+                "tema_rapor": uretilen["rapor"],
+                "logo": logo_bilgi,
+            }
+        if anahtar == "kilit":
+            return {
+                "kilit_kodu_var": kilit_kodu_var,
+                "acilis_kilidi_acik": acilis_kilidi.ayar_al(b),
+                "acilis_eski": eski_ajan_sayisi(b, acilis_kilidi.yetenekli),
+                "acilis_en_yasli_sn": acilis_kilidi.EN_YASLI_OTURUM_SN,
+                "usb_ayari": usb_anahtar.ayar_al(b),
+            }
+        if anahtar == "gunsonu":
+            temizlik_ayari = temizlik_mod.ayar_al(b)
+            return {
+                "kapatma": vt.ayar_al(b, "otomatik_kapatma") or {},
+                "temizlik_ayari": temizlik_ayari,
+                "temizlik_zamani": temizlik_mod.zaman_ozeti(b, bugun_tarihi()),
+                "temizlik_zamanlari": temizlik_mod.ZAMANLAR,
+                "temizlik_eski": eski_ajan_sayisi(b, temizlik_mod.yetenekli),
+            }
+        if anahtar == "yuzer":
+            return {
+                "dugme_ayari": dugme.ayar_al(b),
+                "dugme_islemleri": dugme.ISLEMLER,
+                "dugme_eski": eski_ajan_sayisi(b, dugme.yetenekli),
+                "dugme_yoklama_kapali": not yoklama_mod.etkin(b),
+                "dugme_kilit_kodu_yok": not kilit_kodu_var,
+            }
+        if anahtar == "yoklama":
+            return panel_yoklama.ayar_baglami(b)
+        if anahtar == "usb":
+            return panel_usb.ayar_baglami(b)
+        if anahtar == "sinav":
+            return {
+                "sinav_kurallari": sinav.kurallar(b),
+                "sinav_kurallari_ozel": isinstance(vt.ayar_al(b, "sinav_kurallari"), str),
+                "sinav_kurallari_en_uzun": sinav.KURALLAR_EN_UZUN,
+            }
+        if anahtar == "veri":
+            return {"saklama_durumu": saklama.durum(b, bugun_tarihi()), **panel_altyapi.yedek_ayar_baglami(b)}
+        if anahtar == "sunucu":
             adres_listesi = adresler.al(b)
             adres_ozeti = adresler.ozet(adres_listesi)
             adres_durumu = {"onayli": 0, "yetenekli": 0, "alan": 0}
@@ -1099,95 +1210,40 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                     adres_durumu["yetenekli"] += 1
                     if adres_listesi and durum_.get("adres_listesi_ozet") == adres_ozeti:
                         adres_durumu["alan"] += 1
-            kapatma = vt.ayar_al(b, "otomatik_kapatma") or {}
-            ana, vurgu = tema.tema_al(b)
-            logo = marka.logo_oku(b)
-            acil_sablonlar = acil.sablonlar(b)
-            acil_sablon_ornek = not isinstance(vt.ayar_al(b, "acil_sablonlar"), list)
-            sinav_kurallari = sinav.kurallar(b)
-            sinav_kurallari_ozel = isinstance(vt.ayar_al(b, "sinav_kurallari"), str)
-            yoklama_baglami = panel_yoklama.ayar_baglami(b)
-            usb_baglami = panel_usb.ayar_baglami(b)
-            saklama_durumu = saklama.durum(b, datetime.fromtimestamp(vt.simdi(), ISTANBUL).date())
-            temizlik_ayari = temizlik_mod.ayar_al(b)
-            temizlik_zamani = temizlik_mod.zaman_ozeti(b, datetime.fromtimestamp(vt.simdi(), ISTANBUL).date())
-            temizlik_eski = sum(
-                1 for t in b.execute("SELECT * FROM tahta WHERE durum = 'onayli'") if not temizlik_mod.yetenekli(t)
-            )
-            dugme_ayari = dugme.ayar_al(b)
-            dugme_eski = sum(1 for t in b.execute("SELECT * FROM tahta WHERE durum = 'onayli'") if not dugme.yetenekli(t))
-            dugme_yoklama_kapali = not yoklama_mod.etkin(b)
-            acilis_kilidi_acik = acilis_kilidi.ayar_al(b)
-            acilis_eski = sum(
-                1 for t in b.execute("SELECT * FROM tahta WHERE durum = 'onayli'") if not acilis_kilidi.yetenekli(t)
-            )
-            guncelleme_durumu = guncelleme.gorunum(b)
-        uretilen = tema.uret(ana, vurgu)
-        logo_bilgi = None
-        if logo:
-            bilgi = logo[1]
-            logo_bilgi = {
-                "tur": "PNG" if bilgi.get("tur") == "png" else "JPEG",
-                "en": bilgi.get("en"),
-                "boy": bilgi.get("boy"),
-                "kb": max(1, round(int(bilgi.get("boyut") or 0) / 1024)),
-                "zaman": datetime.fromtimestamp(int(bilgi.get("zaman") or 0), ISTANBUL).strftime("%d.%m.%Y %H:%M"),
+            return {
+                "sunucu_adresleri": adres_listesi,
+                "sunucu_adresleri_metni": "\n".join(adres_listesi),
+                "adres_en_cok": adresler.EN_COK,
+                "adres_durumu": adres_durumu,
+                "ipler": guvenlik.yerel_ipler(),
+                "https_port": ayar.HTTPS_PORT,
+                "parmak_izi": parmak_izi,
+                "veri_dizini": str(ayar.veri_dizini()),
             }
-        ek: dict = {}
-        if sablon_formu is not None:
-            acil_sablonlar = sablon_formu
-            ek = {"mesaj": sablon_hata, "mesaj_hata": True, "ileti_yeri": "acil"}
-        elif sinav_formu is not None:
-            sinav_kurallari = sinav_formu
-            ek = {"mesaj": sablon_hata, "mesaj_hata": True, "ileti_yeri": "sinav"}
-        elif adres_formu is not None:
-            ek = {"mesaj": sablon_hata, "mesaj_hata": True, "ileti_yeri": "adresler"}
+        if anahtar == "guncelleme":
+            return {"guncelleme": guncelleme.gorunum(b)}  # saklanan durum; sayfa çizimi ağ çağrısı yapmaz (kural 32)
+        if anahtar == "kullanicilar":
+            return {"kullanicilar": b.execute("SELECT * FROM kullanici ORDER BY ad").fetchall()}
+        return {}
+
+    def bolum_sayfasi(istek: Request, k, anahtar: str, hata: str = "", yer: str = "", **ustune) -> HTMLResponse:
+        """Ayarlar'ın bir bölüm sayfası. hata: doğrulama hatasında sayfa aynı yanıtta (400) yeniden çizilir;
+        `ustune` gönderilen değeri taşır (yazılan kaybolmaz), ileti `yer` kartının başında çizilir."""
+        with vt.islem() as b:
+            baglam = bolum_baglami(b, anahtar)
+            ozet = ayar_bolumleri.ozetler(b, bugun_tarihi())
+        baglam.update(ustune)
+        if hata:
+            baglam.update(mesaj=hata, mesaj_hata=True, ileti_yeri=yer)
         return sayfa(
             istek,
-            "ayarlar.html",
+            "ayar_bolum.html",
             k,
-            durum_kodu=400 if sablon_formu is not None or sinav_formu is not None or adres_formu is not None else 200,
-            **ek,
-            tema_ana=ana,
-            tema_vurgu=vurgu,
-            varsayilan_vurgu=tema.VARSAYILAN_VURGU,
-            tema_notlar=uretilen["notlar"],
-            tema_rapor=uretilen["rapor"],
-            logo=logo_bilgi,
-            kilit_kodu_var=kilit_kodu_var,
-            # A6 adres listesi (bolum=adresler): metin alanı satır başına bir adres
-            sunucu_adresleri=adres_listesi,
-            sunucu_adresleri_metni=adres_formu if adres_formu is not None else "\n".join(adres_listesi),
-            adres_en_cok=adresler.EN_COK,
-            adres_durumu=adres_durumu,
-            kapatma=kapatma,
-            ipler=guvenlik.yerel_ipler(),
-            https_port=ayar.HTTPS_PORT,
-            parmak_izi=parmak_izi,
-            veri_dizini=str(ayar.veri_dizini()),
-            guncelleme=guncelleme_durumu,
-            acil_sablonlar=acil_sablonlar,
-            acil_sablon_ornek=acil_sablon_ornek,
-            acil_sablon_en_cok=acil.SABLON_EN_COK,
-            sinav_kurallari=sinav_kurallari,
-            sinav_kurallari_ozel=sinav_kurallari_ozel,
-            sinav_kurallari_varsayilan=sinav.SINAV_KURALLARI_VARSAYILAN,
-            sinav_kurallari_en_uzun=sinav.KURALLAR_EN_UZUN,
-            **yoklama_baglami,
-            **usb_baglami,
-            saklama_durumu=saklama_durumu,
-            temizlik_ayari=temizlik_ayari,
-            temizlik_zamani=temizlik_zamani,
-            temizlik_zamanlari=temizlik_mod.ZAMANLAR,
-            temizlik_eski=temizlik_eski,
-            dugme_ayari=dugme_ayari,
-            dugme_islemleri=dugme.ISLEMLER,
-            dugme_eski=dugme_eski,
-            dugme_yoklama_kapali=dugme_yoklama_kapali,
-            dugme_kilit_kodu_yok=not kilit_kodu_var,
-            acilis_kilidi_acik=acilis_kilidi_acik,
-            acilis_eski=acilis_eski,
-            acilis_en_yasli_sn=acilis_kilidi.EN_YASLI_OTURUM_SN,
+            durum_kodu=400 if hata else 200,
+            bolum=ayar_bolumleri.bolum(anahtar),
+            ayar_kumeleri=ayar_bolumleri.menu(ozet),
+            ara_en_uzun=ayar_bolumleri.SORGU_EN_UZUN,
+            **baglam,
         )
 
     def acil_sablonlarini_kaydet(istek: Request, k, form, ip: str):
@@ -1197,7 +1253,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
         silinmiş sayılır. eylem=varsayilan örnek şablonlara döndürür. Doğrulama hatasında
         sayfa gönderilen değerlerle yeniden çizilir (düzenlemeler kaybolmaz).
         """
-        adres = "/ayarlar?yer=acil#ileti"  # ileti şablon bölümünün içinde çizilir ve odaklanır
+        adres = "/acil?sekme=sablonlar#ileti"  # 0.16.0: şablonlar Acil › Şablonlar görünümündedir; ileti orada çizilir ve odaklanır
         if form.get("eylem") == "varsayilan":
             with vt.islem() as b:
                 vt.ayar_yaz(b, "acil_sablonlar", None)
@@ -1228,7 +1284,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
         if not hata and len(yeni) > acil.SABLON_EN_COK:
             hata = f"En çok {acil.SABLON_EN_COK} şablon tanımlanabilir."
         if hata:
-            return ayarlar_sayfasi(istek, k, sablon_formu=gonderilen[: acil.SABLON_EN_COK], sablon_hata=hata)
+            return y.acil_sablon_sayfasi(istek, k, sablon_formu=gonderilen[: acil.SABLON_EN_COK], hata=hata)
         with vt.islem() as b:
             vt.ayar_yaz(b, "acil_sablonlar", yeni)
             vt.kayit_dus(b, k["ad"], "Acil şablonları kaydedildi", f"{len(yeni)} şablon", ip)
@@ -1238,22 +1294,23 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
         """Ayarlar › Sınav ekranı (bolum=sinav): `sinav_kurallari` (≤ 1500 karakter, ≤ 8 satır); boş ya
         da eylem=varsayilan ise varsayılan metin. T.C. kimlik numarasına benzeyen sayı reddedilir.
         Hatada sayfa gönderilen metinle yeniden çizilir (yazılan kaybolmaz)."""
-        adres = "/ayarlar?yer=sinav#ileti"
+        adres = "/ayarlar/sinav?yer=sinav#ileti"
         metin_ = str(form.get("sinav_kurallari", "")).replace("\r\n", "\n").strip()
         if form.get("eylem") == "varsayilan":
             metin_ = ""
         gonderilen = metin_[: sinav.KURALLAR_EN_UZUN * 2]
         if len(metin_) > sinav.KURALLAR_EN_UZUN:
-            return ayarlar_sayfasi(istek, k, sinav_formu=gonderilen,
-                                   sablon_hata=f"Sınav kuralları en çok {sinav.KURALLAR_EN_UZUN} karakter olabilir.")  # fmt: skip
+            return bolum_sayfasi(istek, k, "sinav", yer="sinav", sinav_kurallari=gonderilen,
+                                     hata=f"Sınav kuralları en çok {sinav.KURALLAR_EN_UZUN} karakter olabilir.")  # fmt: skip
         if len(metin_.split("\n")) > sinav.KURALLAR_EN_COK_SATIR:
-            return ayarlar_sayfasi(istek, k, sinav_formu=gonderilen,
-                                   sablon_hata=f"Sınav kuralları en çok {sinav.KURALLAR_EN_COK_SATIR} satır olabilir "
+            return bolum_sayfasi(istek, k, "sinav", yer="sinav", sinav_kurallari=gonderilen,
+                                     hata=f"Sınav kuralları en çok {sinav.KURALLAR_EN_COK_SATIR} satır olabilir "
                                    "(tahtada sayacın altına sığsın).")  # fmt: skip
         if guvenlik.tc_kimlik_var(metin_):
             with vt.islem() as b:
                 vt.kayit_dus(b, k["ad"], "Sınav kuralları reddedildi", "T.C. kimlik numarasına benzeyen sayı", ip)
-            return ayarlar_sayfasi(istek, k, sinav_formu=gonderilen, sablon_hata=guvenlik.TC_KIMLIK_ILETISI)
+            return bolum_sayfasi(istek, k, "sinav", yer="sinav", sinav_kurallari=gonderilen,
+                                     hata=guvenlik.TC_KIMLIK_ILETISI)
         with vt.islem() as b:
             vt.ayar_yaz(b, "sinav_kurallari", metin_ or None)
             vt.kayit_dus(b, k["ad"], "Sınav kuralları kaydedildi", f"{len(metin_)} karakter" if metin_ else "varsayılan metin", ip)
@@ -1262,7 +1319,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
 
     def yoklama_ayarlarini_kaydet(k, form, ip: str):
         """Ayarlar › Ders yoklaması (bolum=yoklama): yalnız `yoklama` anahtarı yazılır."""
-        adres = "/ayarlar?yer=yoklama#ileti"
+        adres = "/ayarlar/yoklama?yer=yoklama#ileti"
         try:
             yeni = yoklama_mod.ayar_coz(form)
         except ValueError as hata:
@@ -1283,18 +1340,19 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             mesaj += " Uyarı: öğrenci listesi henüz yüklenmedi; tahtada liste boş görünür."
         return yonlendir(adres, mesaj)
 
-    def saklama_kaydet(k, form, ip: str):
-        """Ayarlar › Kişisel veri saklama (bolum=saklama): `ogretim_yili_bitis` (K3, `saklama.py`).
+    def saklama_kaydet(istek: Request, k, form, ip: str):
+        """Ayarlar › Veri saklama ve yedek (bolum=saklama): `ogretim_yili_bitis` (K3, `saklama.py`).
 
         Geçmiş tarih (bugünden önce) o tarihe kadarki kayıtları bir sonraki imha turunda siler; bu yüzden
         `sk_onay` ister ve silinecek kayıt sayılarını iletide gösterir. Boş tarih silmeyi durdurur.
         """
-        adres = "/ayarlar?yer=saklama#ileti"
+        adres = "/ayarlar/veri?yer=saklama#ileti"
         bugun = datetime.fromtimestamp(vt.simdi(), ISTANBUL).date()
         try:
             yeni = saklama.bitis_coz(form.get("oneri_kullan") or form.get("ogretim_yili_bitis"), bugun)
         except ValueError as hata:
             return yonlendir(adres, str(hata), hata=True)
+        onaysiz = ""
         with vt.islem() as b:
             onceki = saklama.bitis_al(b)
             if yeni == onceki:
@@ -1308,17 +1366,20 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                     if (g := sinav._sinav_gunu(s)) is not None and g.date() <= yeni
                 )  # fmt: skip
                 vt.kayit_dus(b, k["ad"], "Saklama tarihi reddedildi", f"geçmiş tarih {saklama.tarih_metni(yeni)}, onay yok", ip)
-                return yonlendir(
-                    adres,
+                onaysiz = (
                     f"{saklama.tarih_metni(yeni)} geçmiş bir tarih: {yoklama_} yoklama, {sinav_} sınavın öğrenci listesi ve "
-                    f"{uyari_} boş ders uyarısı bir saat içinde kalıcı silinir. Eminseniz onay kutusunu işaretleyip yeniden kaydedin.",
-                    hata=True,
+                    f"{uyari_} boş ders uyarısı bir saat içinde kalıcı silinir. Eminseniz onay kutusunu işaretleyip yeniden kaydedin."
                 )
-            vt.ayar_yaz(b, saklama.AYAR_ANAHTARI, yeni.isoformat() if yeni else None)
-            vt.kayit_dus(
-                b, k["ad"], "Öğretim yılı bitiş tarihi kaydedildi",
-                f"{saklama.tarih_metni(onceki) or 'yok'} → {saklama.tarih_metni(yeni) or 'yok (silme yapılmaz)'}", ip,
-            )  # fmt: skip
+            else:
+                vt.ayar_yaz(b, saklama.AYAR_ANAHTARI, yeni.isoformat() if yeni else None)
+                vt.kayit_dus(
+                    b, k["ad"], "Öğretim yılı bitiş tarihi kaydedildi",
+                    f"{saklama.tarih_metni(onceki) or 'yok'} → {saklama.tarih_metni(yeni) or 'yok (silme yapılmaz)'}", ip,
+                )  # fmt: skip
+        if onaysiz:
+            # Hiçbir şey yazılmadı. Sayfa aynı yanıtta (400) yeniden çizilir: gönderilen tarih alanda kalır, yönetici
+            # yalnız onay kutusunu işaretler (kutu kendiliğinden işaretlenmez).
+            return bolum_sayfasi(istek, k, "veri", yer="saklama", hata=onaysiz, saklama_gonderilen=yeni.isoformat())
         if not yeni:
             return yonlendir(adres, "Öğretim yılı bitiş tarihi kaldırıldı; kayıtlar kendiliğinden silinmeyecek.")
         mesaj = f"Öğretim yılı bitiş tarihi kaydedildi: {saklama.tarih_metni(yeni)}."
@@ -1329,7 +1390,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
 
     def temizlik_ayarini_kaydet(k, form, ip: str):
         """Ayarlar › Oturum temizliği (bolum=temizlik, K7): yalnız `oturum_temizligi` anahtarı yazılır."""
-        adres = "/ayarlar?yer=temizlik#ileti"
+        adres = "/ayarlar/gunsonu?yer=temizlik#ileti"
         try:
             yeni = temizlik_mod.ayar_coz(form)
         except ValueError as hata:
@@ -1362,7 +1423,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             mesaj = "Yüzer düğme ayarı kaydedildi. Hiçbir işlem seçilmediği için düğme tahtalarda görünmez."
         else:
             mesaj = "Yüzer düğme ayarı kaydedildi."
-        return yonlendir("/ayarlar?yer=dugme#ileti", mesaj)
+        return yonlendir("/ayarlar/yuzer?yer=dugme#ileti", mesaj)
 
     def acilis_kilidi_kaydet(k, form, ip: str):
         """Ayarlar › Açılışta kilit (bolum=acilis_kilidi, 0.9.0): yalnız `acilis_kilidi` anahtarı yazılır."""
@@ -1377,7 +1438,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             mesaj = "Açılışta kilit açık, ama kilit kodu belirlenmediği için uygulanmaz. Kilit kodunu belirleyin."
         else:
             mesaj = "Açılışta kilit açık: tahta açılınca ya da oturum açılınca, sunucuya ulaşabiliyorsa kilitli başlar."
-        return yonlendir("/ayarlar?yer=acilis#ileti", mesaj, hata=yeni and not kod_var)
+        return yonlendir("/ayarlar/kilit?yer=acilis#ileti", mesaj, hata=yeni and not kod_var)
 
     def usb_anahtar_kaydet(k, form, ip: str):
         """Ayarlar › USB anahtar (bolum=usb_anahtar, 0.11.0): yalnız `usb_anahtar` anahtarı yazılır.
@@ -1395,7 +1456,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
         mesaj = "USB anahtar ayarı kaydedildi." if yeni["etkin"] else "USB anahtar kapalı; tahtalar takılan belleklere bakmaz."
         if yeni["etkin"] and yoklama_kapali:
             mesaj += " Ders yoklaması kapalı; USB anahtar yalnız kilit açmada işe yarar."
-        return yonlendir("/ayarlar?yer=usb_anahtar#ileti", mesaj)
+        return yonlendir("/ayarlar/usb?yer=usb_anahtar#ileti", mesaj)
 
     def guncelleme_ayarini_kaydet(k, form, ip: str):
         """Ayarlar › Güncelleme denetimi (bolum=guncelleme): yalnız `guncelleme_denetimi` anahtarı yazılır.
@@ -1411,7 +1472,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             if yeni
             else "Güncelleme denetimi kapalı; GitHub'a istek gönderilmez."
         )
-        return yonlendir("/ayarlar?yer=guncelleme#ileti", mesaj)
+        return yonlendir("/ayarlar/guncelleme?yer=guncelleme#ileti", mesaj)
 
     @uygulama.post("/ayarlar/guncelleme/denetle")
     async def guncelleme_simdi_denetle(istek: Request):
@@ -1419,7 +1480,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
         k = kullanici(istek)
         if not k or k["rol"] != "yonetici":
             return yetkisiz_reddet(istek, k, "Ayarlar")
-        adres = "/ayarlar?yer=guncelleme#ileti"
+        adres = "/ayarlar/guncelleme?yer=guncelleme#ileti"
         durum = await asyncio.to_thread(guncelleme_denetleyici.simdi_denetle)
         if durum is None:
             return yonlendir(adres, "Güncelleme denetimi kapalı; GitHub'a istek gönderilmedi.", hata=True)
@@ -1440,7 +1501,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
         try:
             liste = adresler.dogrula(gonderilen)
         except ValueError as hata:
-            return ayarlar_sayfasi(istek, k, adres_formu=gonderilen, sablon_hata=str(hata))
+            return bolum_sayfasi(istek, k, "sunucu", yer="adresler", sunucu_adresleri_metni=gonderilen, hata=str(hata))
         with vt.islem() as b:
             onceki = adresler.al(b)
             adresler.yaz(b, liste)
@@ -1448,7 +1509,95 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                          ", ".join(liste) if liste else "boş (bu bilgisayarın ilk ağ adresi)", ip)  # fmt: skip
         onayli_tahtalari_uyandir()
         mesaj = "Sunucu adresleri kaydedildi." if liste != onceki else "Sunucu adresleri değişmedi."
-        return yonlendir("/ayarlar?yer=adresler#ileti", mesaj)
+        return yonlendir("/ayarlar/sunucu?yer=adresler#ileti", mesaj)
+
+    FORM_EKSIK = "Form eksik gönderildi; ayar değişmedi."
+
+    def kapatma_coz(form) -> dict | None:
+        """Otomatik kapatma alanlarını (`ok_*`) ayar değerine çevirir; saat biçimi bozuksa None.
+        `bolum=kapatma` ile uyumluluk bölümü `genel` aynı ayrıştırmayı kullanır."""
+        saatler = [s.strip().replace(".", ":") for s in str(form.get("ok_saatler", "")).split(",") if s.strip()]
+        if any(not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", s) for s in saatler):
+            return None
+        try:
+            hafta_sonu_dk = max(10, min(600, int(str(form.get("ok_hafta_sonu_dk", "60")) or "60")))
+        except ValueError:
+            hafta_sonu_dk = 60
+        return {
+            "etkin": form.get("ok_etkin") == "1" and bool(saatler),
+            "saatler": sorted(set(saatler)),
+            "hafta_sonu": form.get("ok_hafta_sonu") == "1",
+            "hafta_sonu_dk": hafta_sonu_dk,
+        }
+
+    KAPATMA_SAAT_HATASI = "Kapatma saatleri SS:DD biçiminde, virgülle ayrılarak yazılmalı (ör. 19:15)."
+
+    def okul_adini_kaydet(k, form, ip: str):
+        """Ayarlar › Okul kimliği › Okulun adı (bolum=okul, 0.16.0): yalnız `okul_adi` anahtarı yazılır.
+
+        Nöbetçi alan: `okul_adi` formda yoksa istek bu form değildir; hiçbir şey yazılmaz."""
+        adres = "/ayarlar/okul?yer=ad#ileti"
+        if form.get("okul_adi") is None:
+            return yonlendir(adres, FORM_EKSIK, hata=True)
+        yeni = str(form.get("okul_adi", "")).strip()[:120]
+        with vt.islem() as b:
+            if yeni == vt.ayar_al(b, "okul_adi", ""):
+                return yonlendir(adres, "Okul adı değişmedi.")
+            vt.ayar_yaz(b, "okul_adi", yeni)
+            vt.kayit_dus(b, k["ad"], "Okul adı kaydedildi", "", ip)
+        onayli_tahtalari_uyandir()
+        return yonlendir(adres, "Okul adı kaydedildi.")
+
+    def kapatmayi_kaydet(k, form, ip: str):
+        """Ayarlar › Kapatma ve gün sonu › Otomatik kapatma (bolum=kapatma, 0.16.0): yalnız `otomatik_kapatma`.
+
+        Nöbetçi alanlar `ok_saatler` ve `ok_hafta_sonu_dk`: işaretsiz onay kutusu hiç gönderilmediği için formun
+        kimliği metin alanlarından anlaşılır; ikisi yoksa ayar sıfırlanmaz. Saat hatasında hiçbir şey yazılmaz."""
+        adres = "/ayarlar/gunsonu?yer=kapatma#ileti"
+        if form.get("ok_saatler") is None or form.get("ok_hafta_sonu_dk") is None:
+            return yonlendir(adres, FORM_EKSIK, hata=True)
+        yeni = kapatma_coz(form)
+        if yeni is None:
+            return yonlendir(adres, KAPATMA_SAAT_HATASI, hata=True)
+        with vt.islem() as b:
+            onceki = vt.ayar_al(b, "otomatik_kapatma")
+            vt.ayar_yaz(b, "otomatik_kapatma", yeni)
+            vt.kayit_dus(b, k["ad"], "Otomatik kapatma ayarı kaydedildi", kapatma_ozeti(yeni) or "kapalı", ip)
+        if onceki != yeni:
+            onayli_tahtalari_uyandir()
+        mesaj = "Otomatik kapatma ayarı kaydedildi."
+        if form.get("ok_etkin") == "1" and not yeni["saatler"]:
+            mesaj += " Saat girilmediği için hafta içi kapatma kapalı."
+        return yonlendir(adres, mesaj)
+
+    def kilit_kodunu_kaydet(k, form, ip: str):
+        """Ayarlar › Kilit ve güvenlik › Ortak kilit kodu (bolum=kilit_kodu, 0.16.0): yalnız `kilit_kodu`.
+
+        Sıra: açık `kilit_kodu_sil=1` kodu kaldırır → dolu kod doğrulanıp yazılır → boş alan HİÇBİR ŞEY yazmaz
+        (boş gönderim kodu silmez). Kod iletiye, kayda, adrese yazılmaz."""
+        adres = "/ayarlar/kilit?yer=kod#ileti"
+        if form.get("kilit_kodu") is None and form.get("kilit_kodu_sil") is None:
+            return yonlendir(adres, FORM_EKSIK, hata=True)
+        kod = str(form.get("kilit_kodu") or "").strip()
+        with vt.islem() as b:
+            if form.get("kilit_kodu_sil") == "1":
+                if not vt.ayar_al(b, "kilit_kodu"):
+                    return yonlendir(adres, "Kilit kodu zaten tanımlı değil.")
+                vt.ayar_yaz(b, "kilit_kodu", None)
+                vt.kayit_dus(b, k["ad"], "Kilit kodu kaldırıldı", "", ip)
+                mesaj = "Kilit kodu kaldırıldı; kilitlenen tahta yalnız panelden açılır."
+                if acilis_kilidi.ayar_al(b):
+                    mesaj += " Açılışta kilit kod olmadan uygulanmaz."
+            elif kod:
+                if not (kod.isdigit() and 4 <= len(kod) <= 8):
+                    return yonlendir(adres, "Kilit kodu 4-8 haneli rakamlardan oluşmalı.", hata=True)
+                vt.ayar_yaz(b, "kilit_kodu", guvenlik.kilit_kodu_ozetle(kod))
+                vt.kayit_dus(b, k["ad"], "Kilit kodu değiştirildi", "", ip)
+                mesaj = "Kilit kodu kaydedildi."
+            else:
+                return yonlendir(adres, "Kilit kodu değişmedi.")
+        onayli_tahtalari_uyandir()
+        return yonlendir(adres, mesaj)
 
     @uygulama.post("/ayarlar")
     async def ayarlar_kaydet(istek: Request):
@@ -1467,7 +1616,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
         if bolum == "adresler":
             return adresleri_kaydet(istek, k, form, istemci_ip(istek))
         if bolum == "saklama":
-            return saklama_kaydet(k, form, istemci_ip(istek))
+            return saklama_kaydet(istek, k, form, istemci_ip(istek))
         if bolum == "temizlik":
             return temizlik_ayarini_kaydet(k, form, istemci_ip(istek))
         if bolum == "dugme":
@@ -1478,28 +1627,33 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             return usb_anahtar_kaydet(k, form, istemci_ip(istek))
         if bolum == "guncelleme":
             return guncelleme_ayarini_kaydet(k, form, istemci_ip(istek))
+        # 0.16.0: eski "genel" üç ayrı bölüme ayrıldı; her biri yalnız kendi anahtarını yazar.
+        if bolum == "okul":
+            return okul_adini_kaydet(k, form, istemci_ip(istek))
+        if bolum == "kapatma":
+            return kapatmayi_kaydet(k, form, istemci_ip(istek))
+        if bolum == "kilit_kodu":
+            return kilit_kodunu_kaydet(k, form, istemci_ip(istek))
         if bolum != "genel":
             return yonlendir("/ayarlar", "Bilinmeyen ayar bölümü.", hata=True)
+        # "genel" yalnız UYUMLULUK içindir (0.15.0 sayfası açık kalmış sekme, eski betik): okul adı, otomatik
+        # kapatma ve kilit kodunu birlikte yazar; hiçbir şablon kullanmaz. Tek sertleştirme: `okul_adi` alanı hiç
+        # yoksa istek eski form değildir (gizli `bolum` unutulmuş bir form buraya düşebilir) → yazmadan reddedilir;
+        # yoksa okul adı boşalır, otomatik kapatma kapanırdı. İkinci sertleştirme: otomatik kapatma yalnız `ok_saatler`
+        # metin alanı formda varken yazılır (0.15.0 formu onu HER ZAMAN gönderir; yalnız `okul_adi` taşıyan, gizli
+        # `bolum`u düşmüş bir "Okulun adı" formu kapatma ayarını sıfırlamasın).
+        if form.get("okul_adi") is None:
+            return yonlendir("/ayarlar", FORM_EKSIK, hata=True)
+        kapatma_ = None
+        if form.get("ok_saatler") is not None:
+            kapatma_ = kapatma_coz(form)
+            if kapatma_ is None:
+                return yonlendir("/ayarlar", KAPATMA_SAAT_HATASI, hata=True)
         with vt.islem() as b:
             vt.ayar_yaz(b, "okul_adi", str(form.get("okul_adi", "")).strip()[:120])
             # Sunucu adresi A6'dan beri ayrı bölümdür (bolum=adresler); genel bölüm ona dokunmaz.
-            saatler = [s.strip().replace(".", ":") for s in str(form.get("ok_saatler", "")).split(",") if s.strip()]
-            if any(not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", s) for s in saatler):
-                return yonlendir("/ayarlar", "Kapatma saatleri SS:DD biçiminde, virgülle ayrılarak yazılmalı (ör. 19:15).", hata=True)
-            try:
-                hafta_sonu_dk = max(10, min(600, int(str(form.get("ok_hafta_sonu_dk", "60")) or "60")))
-            except ValueError:
-                hafta_sonu_dk = 60
-            vt.ayar_yaz(
-                b,
-                "otomatik_kapatma",
-                {
-                    "etkin": form.get("ok_etkin") == "1" and bool(saatler),
-                    "saatler": sorted(set(saatler)),
-                    "hafta_sonu": form.get("ok_hafta_sonu") == "1",
-                    "hafta_sonu_dk": hafta_sonu_dk,
-                },
-            )
+            if kapatma_ is not None:
+                vt.ayar_yaz(b, "otomatik_kapatma", kapatma_)
             kod = str(form.get("kilit_kodu", "")).strip()
             if form.get("kilit_kodu_sil") == "1":
                 vt.ayar_yaz(b, "kilit_kodu", None)
@@ -1529,7 +1683,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                 vt.ayar_yaz(b, "tema", None)
                 vt.kayit_dus(b, k["ad"], "Görünüm varsayılana döndürüldü", "", istemci_ip(istek))
             onayli_tahtalari_uyandir()
-            return yonlendir("/ayarlar?yer=kimlik#ileti", "Renkler varsayılana döndürüldü.")
+            return yonlendir("/ayarlar/okul?yer=kimlik#ileti", "Renkler varsayılana döndürüldü.")
         ana = tema.renk_dogrula(form.get("ana_renk"))
         vurgu = None
         if form.get("vurgu_kullan") == "1":
@@ -1537,12 +1691,12 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             if not vurgu:
                 ana = None
         if not ana:
-            return yonlendir("/ayarlar?yer=kimlik#ileti", "Renk #rrggbb biçiminde olmalı.", hata=True)
+            return yonlendir("/ayarlar/okul?yer=kimlik#ileti", "Renk #rrggbb biçiminde olmalı.", hata=True)
         with vt.islem() as b:
             vt.ayar_yaz(b, "tema", {"ana": ana, "vurgu": vurgu})
             vt.kayit_dus(b, k["ad"], "Görünüm değiştirildi", f"{ana} {vurgu or '-'}", istemci_ip(istek))
         onayli_tahtalari_uyandir()
-        return yonlendir("/ayarlar?yer=kimlik#ileti", "Renkler kaydedildi.")
+        return yonlendir("/ayarlar/okul?yer=kimlik#ileti", "Renkler kaydedildi.")
 
     @uygulama.post("/ayarlar/logo")
     async def logo_yukle(istek: Request):
@@ -1555,26 +1709,26 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
         boyut_iletisi = "Logo dosyası en çok 256 KB olabilir."
         try:
             if int(istek.headers.get("content-length") or 0) > 600_000:
-                return yonlendir("/ayarlar?yer=kimlik#ileti", boyut_iletisi, hata=True)
+                return yonlendir("/ayarlar/okul?yer=logo#ileti", boyut_iletisi, hata=True)
         except ValueError:
-            return yonlendir("/ayarlar?yer=kimlik#ileti", "Logo dosyası okunamadı.", hata=True)
+            return yonlendir("/ayarlar/okul?yer=logo#ileti", "Logo dosyası okunamadı.", hata=True)
         try:
             form = await istek.form(max_files=1, max_fields=2)
         except Exception:
-            return yonlendir("/ayarlar?yer=kimlik#ileti", "Logo dosyası okunamadı.", hata=True)
+            return yonlendir("/ayarlar/okul?yer=logo#ileti", "Logo dosyası okunamadı.", hata=True)
         dosya = form.get("logo")
         if not isinstance(dosya, UploadFile):
-            return yonlendir("/ayarlar?yer=kimlik#ileti", "Logo dosyası seçilmedi.", hata=True)
+            return yonlendir("/ayarlar/okul?yer=logo#ileti", "Logo dosyası seçilmedi.", hata=True)
         veri = await dosya.read(marka.LOGO_SINIRI + 1)
         await form.close()
         if not veri:
-            return yonlendir("/ayarlar?yer=kimlik#ileti", "Logo dosyası seçilmedi.", hata=True)
+            return yonlendir("/ayarlar/okul?yer=logo#ileti", "Logo dosyası seçilmedi.", hata=True)
         if len(veri) > marka.LOGO_SINIRI:
-            return yonlendir("/ayarlar?yer=kimlik#ileti", boyut_iletisi, hata=True)
+            return yonlendir("/ayarlar/okul?yer=logo#ileti", boyut_iletisi, hata=True)
         try:
             tur, en, boy = marka.logo_dogrula(veri)
         except ValueError as hata:
-            return yonlendir("/ayarlar?yer=kimlik#ileti", str(hata), hata=True)
+            return yonlendir("/ayarlar/okul?yer=logo#ileti", str(hata), hata=True)
         marka.logo_yaz(veri)
         with vt.islem() as b:
             vt.ayar_yaz(
@@ -1591,7 +1745,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             )
             vt.kayit_dus(b, k["ad"], "Okul logosu yüklendi", f"{tur} {en}x{boy} {len(veri)} bayt", istemci_ip(istek))
         onayli_tahtalari_uyandir()
-        return yonlendir("/ayarlar?yer=kimlik#ileti", "Logo yüklendi.")
+        return yonlendir("/ayarlar/okul?yer=logo#ileti", "Logo yüklendi.")
 
     @uygulama.post("/ayarlar/logo/sil")
     async def logo_kaldir(istek: Request):
@@ -1605,7 +1759,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             vt.ayar_yaz(b, "logo", None)
             vt.kayit_dus(b, k["ad"], "Okul logosu kaldırıldı", "", istemci_ip(istek))
         onayli_tahtalari_uyandir()
-        return yonlendir("/ayarlar?yer=kimlik#ileti", "Logo kaldırıldı.")
+        return yonlendir("/ayarlar/okul?yer=logo#ileti", "Logo kaldırıldı.")
 
     @uygulama.get("/marka/tema.css")
     async def tema_css(istek: Request):

@@ -1,0 +1,105 @@
+{% from "_ayar.html" import ileti, nedir, kaydet_cubugu with context %}
+{# Okul kimliği: üç ayrı ayar, üç ayrı form. Okulun adı (bolum=okul; yalnız okul_adi), renkler (/ayarlar/gorunum),
+   logo (/ayarlar/logo, /ayarlar/logo/sil). Kimlikler (gorunum-formu, ana_renk, vurgu_renk, onizleme, logo,
+   logo-hata, logo-secilen…) panel.js kancalarıdır. #}
+<section class="kutu ayar-kart" id="ad" aria-labelledby="ad-baslik">
+  <div class="kutu-bas"><h2 id="ad-baslik">Okulun adı</h2></div>
+  {{ ileti('ad') }}
+  <form method="post" action="/ayarlar" data-kirli-izle>
+    <input type="hidden" name="bolum" value="okul">
+    <label for="okul_adi">Okulun adı</label>
+    <p class="ipucu" id="okul-adi-ipucu">Kilit ve duyuru ekranında, panelin menüsünde görünür.</p>
+    <input type="text" id="okul_adi" name="okul_adi" value="{{ okul_adi }}" maxlength="120" class="form-dar" aria-describedby="okul-adi-ipucu">
+    {{ kaydet_cubugu('Adı kaydet') }}
+  </form>
+</section>
+
+<section class="kutu ayar-kart" id="kimlik" aria-labelledby="kimlik-baslik">
+  <div class="kutu-bas"><h2 id="kimlik-baslik">Renkler</h2></div>
+  {{ ileti('kimlik') }}
+  <div class="ayar-iki">
+    <div>
+      <form method="post" action="/ayarlar/gorunum" id="gorunum-formu" data-kirli-izle>
+        <label for="ana_renk">Ana renk</label>
+        <div class="renk-alani"><input type="color" id="ana_renk" name="ana_renk" value="{{ tema_ana }}">
+          <output for="ana_renk" class="kod">{{ tema_ana }}</output></div>
+        <label class="satir"><input type="checkbox" name="vurgu_kullan" value="1" {% if tema_vurgu %}checked{% endif %}> İkinci okul rengi (vurgu) kullan</label>
+        <div class="renk-alani"><input type="color" id="vurgu_renk" name="vurgu_renk" value="{{ tema_vurgu or varsayilan_vurgu }}" aria-label="Vurgu rengi">
+          <output for="vurgu_renk" class="kod">{{ tema_vurgu or varsayilan_vurgu }}</output></div>
+        <p class="not">Ana renk panelin menüsünde, birincil düğmelerde ve tahta ekranının üst bandında görünür; vurgu rengi
+          menüdeki etkin öğenin çizgisinde ve duyuru başlığında. Durum renkleri (açık, kilitli, sorun…) her okulda aynıdır.</p>
+        {{ kaydet_cubugu('Renkleri kaydet', 'eylem', 'kaydet') }}
+      </form>
+      {# Aynı formun ikinci gönderim düğmesi (form="gorunum-formu"), ama kaydet çubuğunun DIŞINDA: "Renkleri kaydet"e
+         bitişik durunca yanlışlıkla basılıp okulun renkleri siliniyordu. JS'siz de çalışır. #}
+      <div class="dikkat-satir renk-varsayilan">
+        <div><b>Varsayılan renkler</b><p class="not">Okulun renkleri silinir; panel ve tahtalar programın kendi renklerine döner.</p></div>
+        <button form="gorunum-formu" name="eylem" value="varsayilan">Varsayılan renklere dön</button>
+      </div>
+      {% if tema_notlar %}
+      <div class="bant" role="status"><ul>{% for n in tema_notlar %}<li>{{ n }}</li>{% endfor %}</ul></div>
+      {% endif %}
+      <details class="nedir">
+        <summary><svg class="simge" aria-hidden="true"><use href="#s-soru"/></svg>Kontrast raporu</summary>
+        <ul class="rapor">
+          {% for r in tema_rapor %}
+          <li>{{ r.ad }}: <span class="gecti">{{ ('%.1f' | format(r.oran)).replace('.', ',') }}:1</span> (en az {{ (r.esik | string).replace('.', ',') }}:1)</li>
+          {% endfor %}
+        </ul>
+      </details>
+    </div>
+    <div class="onizleme" id="onizleme">
+      <h3>Önizleme</h3>
+      <div class="o-panel" role="img" aria-label="Panel görünümü örneği">
+        <div class="o-serit">{% include "_logo.html" %}<span>{{ okul_adi or 'Tahta Kontrol' }}</span></div>
+        <div class="o-icerik">
+          <span class="dugme o-dugme">Örnek düğme</span>
+          <span class="o-baglanti">Örnek bağlantı</span>
+        </div>
+      </div>
+      <div class="o-tahta" aria-label="Tahta kilit ekranı örneği" role="img">
+        <div class="o-bant"><span>{{ okul_adi or 'Tahta Kontrol' }}</span><span>11-A · 2. kat</span></div>
+        <div class="o-govde">
+          <div>
+            <div class="o-saat">10:42</div>
+            <div class="o-kilit">Bu tahta kilitlidir</div>
+            <div class="o-bilgi">Açmak için kodu girin</div>
+          </div>
+          <span class="o-ac">Aç</span>
+        </div>
+      </div>
+      <p class="not">Önizleme kaydetmeden önce yaklaşıktır; kesin renkler ve kontrast raporu kaydettikten sonra gösterilir.</p>
+    </div>
+  </div>
+</section>
+
+<section class="kutu ayar-kart" id="logo-karti" aria-labelledby="logo-baslik">
+  <div class="kutu-bas"><h2 id="logo-baslik">Logo</h2></div>
+  {{ ileti('logo') }}
+  {% if logo %}
+  <div class="logo-durum">
+    <span class="logo-cerceve"><img class="logo-onizleme" src="/marka/logo?v={{ logo_v }}" alt="Mevcut logo"></span>
+    <p class="not">{{ logo.tur }} · {{ logo.en }}×{{ logo.boy }} px · {{ logo.kb }} KB · {{ logo.zaman }}</p>
+  </div>
+  {% else %}
+  <p class="not">Logo yüklenmedi. Panelde okul adının baş harfleri, tahtada yalnız okul adı görünür.</p>
+  {% endif %}
+  <form method="post" action="/ayarlar/logo" enctype="multipart/form-data">
+    <label for="logo">{{ 'Yeni logo' if logo else 'Logo dosyası' }}</label>
+    <p class="ipucu" id="logo-ipucu">PNG ya da JPEG, en çok 256 KB, kenarlar 64–2048 piksel. Kare ya da yatay logo önerilir.</p>
+    <input type="file" id="logo" name="logo" accept="image/png,image/jpeg" required aria-describedby="logo-ipucu">
+    <p class="hata-ileti" id="logo-hata" hidden></p>
+    <span class="logo-cerceve" id="logo-secilen-cerceve" hidden><img id="logo-secilen" class="logo-onizleme" alt="Seçilen logo önizlemesi"></span>
+    <div class="dugme-satiri"><button class="ana">Logoyu yükle</button></div>
+  </form>
+  {% if logo %}
+  {# Onaylı iş: JS yoksa gönderilmez (type="button"); onay penceresi formu gönderir. #}
+  <form method="post" action="/ayarlar/logo/sil" id="logo-sil-formu" class="dikkat-satir">
+    <div><b>Logoyu kaldır</b><p class="not">Panelde okul adının baş harfleri, tahtada yalnız okul adı görünür.</p></div>
+    <button type="button" class="tehlike" data-onay="logo_sil" aria-haspopup="dialog">Logoyu kaldır…</button>
+    <noscript><p class="not">Bu işlem onay penceresiyle yapılır; tarayıcıda JavaScript açık olmalıdır.</p></noscript>
+  </form>
+  {% endif %}
+</section>
+
+<p class="ilgili">İlgili: <a href="/ayarlar/kilit">Kilit ve güvenlik</a> · <a href="/ayarlar/sunucu">Sunucu ve ağ</a></p>

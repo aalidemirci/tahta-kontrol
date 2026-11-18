@@ -12,7 +12,7 @@
 {% include "_yoklama_bas.html" %}
 {% endwith %}
 
-{% if ozellik_kapali %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ kapali_iletisi }}{% if yonetici %} <a href="/ayarlar#usb-anahtar">Ayarlar'da aç</a>{% endif %}</p>{% endif %}
+{% if ozellik_kapali %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ kapali_iletisi }}{% if yonetici %} <a href="/ayarlar/usb">Ayarlar'da aç</a>{% endif %}</p>{% endif %}
 {% if yoklama_kapali and not ozellik_kapali %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Ders yoklaması kapalı; USB anahtar yalnız kilit açmada işe yarar.</p>{% endif %}
 
 {% macro uret_ipucu(kimlik) -%}

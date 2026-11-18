@@ -48,7 +48,7 @@ def test_dugme_varsayilan_acik_yeniden_baslat_kapali_yoklama_ozellikle_birlikte(
 def test_dugme_ayari_yalniz_kendi_anahtarini_yazar_ve_kayda_duser(panel, tahta, okul):
     panel.post("/ayarlar", data={"bolum": "genel", "okul_adi": "Örnek Anadolu Lisesi", "ok_saatler": ""})
     yanit = kaydet(panel, dg_acik="1", dg_kilitle="1", dg_yeniden_baslat="1")
-    assert yanit.headers["location"].startswith("/ayarlar?yer=dugme")
+    assert yanit.headers["location"].startswith("/ayarlar/yuzer?yer=dugme")
     assert ileti(yanit) == "Yüzer düğme ayarı kaydedildi."
     assert dugme_ayari(tahta, okul["yeni"]) == {"acik": True, "islemler": ["kilitle", "yeniden_baslat"]}
     with vt.islem() as b:
@@ -56,8 +56,8 @@ def test_dugme_ayari_yalniz_kendi_anahtarini_yazar_ve_kayda_duser(panel, tahta, 
         assert vt.ayar_al(b, "tahta_dugmesi")["islemler"]["kapat"] is False
     kayit = sorgu("SELECT * FROM kayit WHERE islem = 'Yüzer düğme ayarı kaydedildi'")
     assert kayit and kayit[-1]["ayrinti"] == "açık · Kilitle, Yeniden başlat"
-    sayfa = panel.get("/ayarlar").text
-    assert 'id="yuzer-dugme"' in sayfa and 'name="dg_yeniden_baslat" value="1" checked' in sayfa
+    sayfa = panel.get("/ayarlar/yuzer").text
+    assert 'id="dugme"' in sayfa and 'name="dg_yeniden_baslat" value="1" checked' in sayfa
     assert 'name="dg_kapat" value="1"' in sayfa and 'name="dg_kapat" value="1" checked' not in sayfa
 
 
@@ -80,12 +80,12 @@ def test_dugme_ayarini_yalniz_yonetici_degistirir(panel, tahta, okul):
 
 
 def test_dugme_ayarlar_notlari_kilit_kodu_yoklama_eski_ajan(panel, tahta, okul):
-    sayfa = panel.get("/ayarlar").text
+    sayfa = panel.get("/ayarlar/yuzer").text
     assert "Kilit kodu belirlenmedi:" in sayfa
     assert "“Yoklama al” ders yoklaması kapalıyken görünmez" in sayfa
     assert "1 tahtada ajan güncellenmeli (eski ajan düğmeyi göstermez)." in sayfa
     panel.post("/ayarlar", data={"bolum": "genel", "okul_adi": "Örnek", "ok_saatler": "", "kilit_kodu": "4826"})
-    assert "Kilit kodu belirlenmedi:" not in panel.get("/ayarlar").text
+    assert "Kilit kodu belirlenmedi:" not in panel.get("/ayarlar/yuzer").text
 
 
 def test_tahtadan_kilitleme_ve_kapatma_olayi_kayda_ve_duruma_isler(panel, tahta, okul):

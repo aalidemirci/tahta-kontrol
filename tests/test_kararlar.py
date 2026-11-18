@@ -22,13 +22,13 @@ def saklama_kaydet(panel, tarih: str, onay: bool = False, **ek):
 # ---- K3: öğretim yılı bitiş tarihi ---------------------------------------------------------------------
 def test_tarih_girilmemisse_ayarlarda_uyari_cikar_ve_kaydedilir(panel, tahta, saat):
     kur_ve_gir(panel)
-    sayfa = panel.get("/ayarlar").text
+    sayfa = panel.get("/ayarlar/veri").text
     assert "Öğretim yılı bitiş tarihi girilmedi" in sayfa and 'name="ogretim_yili_bitis"' in sayfa
     assert 'name="yk_saklama_gun"' not in sayfa  # gün sayılı saklama ayarı kalktı
     assert "Şifreli yedekler bu verinin kopyasını" in sayfa
     assert ileti(saklama_kaydet(panel, "2027-06-25")) == "Öğretim yılı bitiş tarihi kaydedildi: 25.06.2027."
     assert vt_ayar("ogretim_yili_bitis") == "2027-06-25"
-    sayfa = panel.get("/ayarlar").text
+    sayfa = panel.get("/ayarlar/veri").text
     assert "Öğretim yılı bitiş tarihi girilmedi" not in sayfa and 'value="2027-06-25"' in sayfa
     assert sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Öğretim yılı bitiş tarihi kaydedildi'")[0]["ayrinti"] == (
         "yok → 25.06.2027"
@@ -49,11 +49,13 @@ def test_gecmis_tarih_onay_ister_ve_silinecekleri_sayar(panel, tahta, saat):
         b.execute("INSERT INTO yoklama (tarih, ders_no, sube, kaynak, kaydeden, mevcut, olusturma, guncelleme) "
                   "VALUES ('2026-06-20', 1, '9/A', 'panel', 'yonetici', 30, 1, 1)")  # fmt: skip
     yanit = saklama_kaydet(panel, "2026-06-26")
-    assert "1 yoklama, 0 sınavın öğrenci listesi ve 0 boş ders uyarısı" in ileti(yanit) and "t=hata" in yanit.headers["location"]
+    # 0.16.0: reddedilen gönderim aynı yanıtta (400) yeniden çizilir; gönderilen tarih alanda kalır.
+    assert yanit.status_code == 400 and "1 yoklama, 0 sınavın öğrenci listesi ve 0 boş ders uyarısı" in ileti(yanit)
+    assert 'name="ogretim_yili_bitis" value="2026-06-26"' in yanit.text
     assert vt_ayar("ogretim_yili_bitis") is None
     assert sorgu("SELECT * FROM kayit WHERE islem = 'Saklama tarihi reddedildi'")
     assert ileti(saklama_kaydet(panel, "2026-06-26", onay=True)).startswith("Öğretim yılı bitiş tarihi kaydedildi")
-    sayfa = panel.get("/ayarlar").text
+    sayfa = panel.get("/ayarlar/veri").text
     assert "26.06.2026) geçti" in sayfa and "Yeni öğretim yılının bitiş tarihini girin" in sayfa
     assert panel.app.state.yoklama_zamanlayici() is True
     assert sorgu("SELECT * FROM yoklama") == []
@@ -73,11 +75,11 @@ def test_okul_zili_takviminden_tarih_onerilir(panel, tahta, saat):
     kur_ve_gir(panel)
     with vt.islem() as b:
         vt.ayar_yaz(b, "zil_takvimi", {"ogretim": {"bas": "2026-09-07", "bit": "2027-06-25"}})
-    sayfa = panel.get("/ayarlar").text
+    sayfa = panel.get("/ayarlar/veri").text
     assert "Okul Zili takviminde öğretimin bitişi: 25.06.2027" in sayfa and 'name="oneri_kullan" value="2027-06-25"' in sayfa
     yanit = panel.post("/ayarlar", data={"bolum": "saklama", "ogretim_yili_bitis": "", "oneri_kullan": "2027-06-25"})
     assert ileti(yanit) == "Öğretim yılı bitiş tarihi kaydedildi: 25.06.2027."
-    assert "Bu tarihi kullan" not in panel.get("/ayarlar").text
+    assert "Bu tarihi kullan" not in panel.get("/ayarlar/veri").text
 
 
 def test_onceki_tarih_gecmeden_ileri_tasinirsa_uyarir(panel, tahta, saat):
@@ -122,7 +124,7 @@ def test_goc_acil_yetkisini_herkese_verir_ve_gun_sayili_saklamayi_kaldirir(tmp_p
 def test_yoklama_sayfalari_kagidin_yaninda_yardimci_kayit_der(panel, tahta, saat):
     kur_ve_gir(panel)
     assert "kâğıt yoklamanın yanında tutulan yardımcı kayıttır" in panel.get("/yoklama").text
-    assert "kâğıt yoklamanın yanında tutulan yardımcı kayıttır" in panel.get("/ayarlar").text
+    assert "kâğıt yoklamanın yanında tutulan yardımcı kayıttır" in panel.get("/ayarlar/yoklama").text
     with vt.islem() as b:
         b.execute("INSERT INTO ogrenci (sube, okul_no, ad, soyad, guncelleme) VALUES ('9/A', '901', 'Ali', 'ÖRNEK', 1)")
     assert "yerine geçmez" in panel.get("/yoklama/icmal?tarih=2026-11-16").text

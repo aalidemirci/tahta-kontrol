@@ -531,7 +531,7 @@ def test_sunucu_adresleri_dogrulanir(kurulu):
     assert json.loads(sorgu("SELECT deger FROM ayar WHERE anahtar = 'sunucu_adresleri'")[0]["deger"]) == [
         "https://10.0.0.5:8788", "https://tahta.okul.local:8788"]  # fmt: skip
     kurulu.post("/ayarlar", data={"bolum": "genel", "okul_adi": "Başka"})  # genel bölüm listeye dokunmaz
-    assert "https://tahta.okul.local:8788" in kurulu.get("/ayarlar").text
+    assert "https://tahta.okul.local:8788" in kurulu.get("/ayarlar/sunucu").text
 
 
 def test_eski_sunucu_adresi_anahtari_listeye_donusur(kurulu, tahta):
@@ -593,10 +593,10 @@ def test_ayarlar_adres_listesini_alan_tahta_sayisi(kurulu, tahta):
 
     kurulu.post("/ayarlar", data={"bolum": "adresler", "sunucu_adresleri": "https://10.0.0.5:8788"})
     basliklar = tahta_ekle(kurulu, tahta, "Tahta 9-A", durum=yeni_durum())
-    assert "0/1 tahta güncel adres listesini aldı" in kurulu.get("/ayarlar").text
+    assert "0/1 tahta güncel adres listesini aldı" in kurulu.get("/ayarlar/sunucu").text
     bekle(tahta, basliklar, yeni_durum(adres_listesi_ozet=adresler.ozet(["https://10.0.0.5:8788"]),
                                        sunucu_adresi="https://10.0.0.5:8788"))  # fmt: skip
-    assert "1/1 tahta güncel adres listesini aldı" in kurulu.get("/ayarlar").text
+    assert "1/1 tahta güncel adres listesini aldı" in kurulu.get("/ayarlar/sunucu").text
     sayfa = kurulu.get(f"/tahta/{kimlik(basliklar)}").text
     assert "https://10.0.0.5:8788" in sayfa and "güncel" in sayfa
 
@@ -824,10 +824,13 @@ def test_eski_ajan_yeni_sunucuyla_calisir(kurulu, tahta):
 
 
 def test_yeni_sablonlar_hatasiz_cizilir(kurulu, tahta):
+    from tahta_sunucu import ayar_bolumleri
+
     tahta_ekle(kurulu, tahta, "Tahta 9-A", durum=yeni_durum())
     parola_belirle(kurulu)
     kurulu.post("/yedekler/al")
-    for yol in ("/yedekler", "/envanter", "/arizalar", "/arizalar?durum=hepsi", "/ayarlar"):
+    for yol in ("/yedekler", "/envanter", "/arizalar", "/arizalar?durum=hepsi", "/ayarlar",
+                *(f"/ayarlar/{b}" for b in ayar_bolumleri.ANAHTARLAR), "/acil?sekme=sablonlar"):
         yanit = kurulu.get(yol)
         assert yanit.status_code == 200, yol
 

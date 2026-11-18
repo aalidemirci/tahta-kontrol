@@ -1,0 +1,44 @@
+{% from "_ayar.html" import ileti, nedir, kaydet_cubugu with context %}
+{# USB anahtar (0.11.0): tek form (bolum=usb_anahtar); yalnız `usb_anahtar` anahtarını yazar. Varsayılan kapalı.
+   DÖRT kutu da aynı formdadır (ua_etkin, ua_kilit_acar, ua_pin_idare, ua_pin_ogretmen): işaretsiz kutu gönderilmez,
+   kutular bölünürse öbür yarı "kapalı" yazılır. Tahtaya yalnız açık/kapalı bayrağı gider. #}
+<section class="kutu ayar-kart" id="usb_anahtar" aria-labelledby="usb-baslik">
+  <div class="kutu-bas">
+    <h2 id="usb-baslik">USB anahtar</h2>
+    <span class="rozet" data-durum="{{ 'tamam' if usb_ayari.etkin else 'cevrimdisi' }}">{{ 'Açık' if usb_ayari.etkin else 'Kapalı' }}</span>
+  </div>
+  {{ ileti('usb_anahtar') }}
+  <p class="not" id="usb-ipucu">İdareciler ve isteyen öğretmenler belleğe kopyaladıkları küçük bir anahtar dosyasıyla tahtada yoklama alır.</p>
+  {# Güvenlik uyarısı: her zaman açık durur, katlanmaz. #}
+  <p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Anahtar bir dosyadır ve kopyalanabilir. Bellek tahtada takılıyken dosya, tahtadaki oturumdan görülebilir.
+    PIN, kopyalanan dosyayı tek başına işe yaramaz kılar. Kaybolan anahtarı hemen iptal edin.</p>
+  {% if usb_ayari.etkin and usb_yoklama_kapali %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Ders yoklaması kapalı; USB anahtar yalnız kilit açmada işe yarar (<a href="/ayarlar/yoklama">Ders yoklaması</a>).</p>{% endif %}
+  {% if usb_ayari.etkin and usb_destek.eski %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ usb_destek.eski }} tahtada ajan güncellenmeli (eski ajan belleğe bakmaz).</p>{% endif %}
+  <form method="post" action="/ayarlar" data-kirli-izle>
+    <input type="hidden" name="bolum" value="usb_anahtar">
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="ua_etkin">USB anahtar kullanılsın</label><p class="not" id="ua-etkin-not">Kapalıyken tahtalar takılan belleklere hiç bakmaz. Kapalıyken aşağıdaki seçenekler de uygulanmaz.</p></div>
+      <div class="ayar-denetim"><input type="checkbox" name="ua_etkin" value="1" {% if usb_ayari.etkin %}checked{% endif %} id="ua_etkin" class="anahtar" aria-describedby="ua-etkin-not"></div>
+    </div>
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="ua_kilit_acar">USB anahtar kilitli tahtayı açabilsin</label><p class="not" id="ua-kilit-not">Ortak kilit kodunun yaptığını yapar; sınav ekranında çalışmaz. İdare ve öğretmen anahtarlarının ikisi de açar.</p></div>
+      <div class="ayar-denetim"><input type="checkbox" name="ua_kilit_acar" value="1" {% if usb_ayari.kilit_acar %}checked{% endif %} id="ua_kilit_acar" class="anahtar" aria-describedby="ua-kilit-not"></div>
+    </div>
+    <fieldset class="olcut">
+      <legend>Anahtarla birlikte PIN de sorulsun</legend>
+      <div class="secenekler"><label><input type="checkbox" name="ua_pin_idare" value="1" {% if usb_ayari.pin_idare %}checked{% endif %}> İdare anahtarlarında (önerilen)</label><label><input type="checkbox" name="ua_pin_ogretmen" value="1" {% if usb_ayari.pin_ogretmen %}checked{% endif %}> Öğretmen anahtarlarında</label></div>
+    </fieldset>
+    <p class="not">Öğretmen anahtarında PIN, öğretmenin kendi yoklama PIN'idir.</p>
+    {% call nedir('Bellek nasıl kullanılır?') %}
+    <p>Bellek biçimlendirilmez ve anahtar olarak işgal edilmez: dosya belleğin en üst klasöründe öteki dosyaların yanında durur.
+      Takılınca hiçbir ekran kendiliğinden açılmaz; tahtada küçük bir bildirim çıkar, yoklama ve kilit açma dokunuşla başlar.
+      Anahtarlar <a href="/usb-anahtarlar">Kişiler ve anahtarlar › USB anahtarlar</a> sekmesinden üretilir ve iptal edilir.</p>
+    {% endcall %}
+    {% call nedir('Sunucuya ulaşılamazsa?') %}
+    <p>Sunucuya ulaşılamayan tahtada USB anahtar çalışmaz (kilit, sunucu 90 saniye görülmezse tahtadan açılır).</p>
+    {% endcall %}
+    {{ kaydet_cubugu('USB anahtar ayarını kaydet') }}
+  </form>
+</section>
+
+<p class="ilgili">İlgili: <a href="/usb-anahtarlar">USB anahtarlar (üret, iptal)</a> · <a href="/ayarlar/yoklama">Ders yoklaması</a> · <a href="/ayarlar/kilit">Kilit ve güvenlik</a></p>

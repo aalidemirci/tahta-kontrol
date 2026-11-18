@@ -83,7 +83,7 @@ def test_gorunum_kaydedilir_ve_tema_css_sunulur(ortam):
     kur_ve_gir(panel)
     yanit = panel.post("/ayarlar/gorunum", data={"eylem": "kaydet", "ana_renk": "#7A1F2B", "vurgu_kullan": "1", "vurgu_renk": "#d4a017"})
     assert yanit.status_code == 303 and ileti(yanit) == "Renkler kaydedildi."
-    assert yanit.headers["location"].startswith("/ayarlar?yer=kimlik&m=") and yanit.headers["location"].endswith("#ileti")
+    assert yanit.headers["location"].startswith("/ayarlar/okul?yer=kimlik&m=") and yanit.headers["location"].endswith("#ileti")
     sayfa = panel.get("/").text
     v = tema.surum("#7a1f2b", "#d4a017")
     assert f'/marka/tema.css?v={v}"' in sayfa
@@ -94,7 +94,7 @@ def test_gorunum_kaydedilir_ve_tema_css_sunulur(ortam):
     assert panel.get("/marka/tema.css?v=eski").headers["cache-control"] == "no-cache"
     assert "Görünüm değiştirildi" in panel.get("/kayit").text
     # Ayarlar sayfası seçili renkleri ve raporu gösterir.
-    ayarlar = panel.get("/ayarlar").text
+    ayarlar = panel.get("/ayarlar/okul").text
     assert 'value="#7a1f2b"' in ayarlar and "Kontrast raporu" in ayarlar
 
 
@@ -155,7 +155,7 @@ def test_logo_jpeg_yuklenir(ortam):
     assert ileti(yanit) == "Logo yüklendi.", ileti(yanit)
     logo = panel.get("/marka/logo")
     assert logo.content == veri and logo.headers["content-type"] == "image/jpeg"
-    assert "JPEG · 300×120 px" in panel.get("/ayarlar").text
+    assert "JPEG · 300×120 px" in panel.get("/ayarlar/okul").text
 
 
 def test_logo_svg_gif_ve_sahte_uzanti_reddedilir(ortam):
@@ -362,12 +362,12 @@ def test_kimlik_iletisi_kimlik_bolumunde(ortam):
     kur_ve_gir(panel)
     yanit = yukle(panel, png(3000, 3000))
     konum = yanit.headers["location"]
-    assert konum.startswith("/ayarlar?yer=kimlik&") and konum.endswith("#ileti")
+    assert konum.startswith("/ayarlar/okul?yer=logo&") and konum.endswith("#ileti")
     sayfa = panel.get(konum.split("#", 1)[0]).text
-    kimlik = sayfa.index('<h2 id="kimlik">')
+    kimlik = sayfa.index('id="logo-karti"')
     bant = sayfa.index('class="bant hata" role="alert" id="ileti" tabindex="-1" data-odakla')
     assert bant > kimlik and sayfa.count("Logonun kenarları 64–2048 piksel olmalı.") == 1
     # Genel ayarların iletisi yine sayfa başında çizilir.
     sayfa = panel.get(panel.post("/ayarlar", data={"okul_adi": "Deneme"}).headers["location"]).text
-    assert sayfa.index("Ayarlar kaydedildi.") < sayfa.index('<h2 id="kimlik">')
+    assert sayfa.index("Ayarlar kaydedildi.") < sayfa.index('id="ayar-kapsam"')  # 0.16.0: genel → giriş sayfası
     assert "data-odakla" not in sayfa

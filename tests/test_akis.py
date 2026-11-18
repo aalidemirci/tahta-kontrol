@@ -142,6 +142,7 @@ def test_idareci_yonetici_islemlerini_yapamaz(ortam):
     panel.post("/giris", data={"ad": "idareci1", "parola": "uzun-parola"})
     assert panel.get("/ayarlar").headers["location"].startswith("/?m=")
     assert panel.get("/kullanicilar").headers["location"].startswith("/?m=")
+    assert panel.get("/ayarlar/okul").headers["location"].startswith("/?m=")
     panel.post("/ekle", data={"eylem": "ac"})
     assert "buyuk-kod" not in panel.get("/ekle").text
 

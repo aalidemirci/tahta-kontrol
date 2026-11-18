@@ -103,7 +103,7 @@ def test_her_sayfada_tek_etkin_oge(uygulama):
 def test_menu_gorunumu_rol_sayi_ve_icinde():
     yonetici = web.menu_gorunumu(YONETICI, "/arizalar", {"ariza": 3})
     idareci = web.menu_gorunumu(IDARECI, "/gruplar", {"ariza": 3})
-    assert len(ust_ogeler(yonetici)) == 10 and len(ust_ogeler(idareci)) == 7
+    assert len(ust_ogeler(yonetici)) == 9 and len(ust_ogeler(idareci)) == 7  # 0.16.0: Kullanıcılar Ayarlar'ın bölümü
     tahtalar = ust_ogeler(yonetici)[0]
     assert (tahtalar["ad"], tahtalar["secili"], tahtalar["icinde"], tahtalar["sayi"]) == ("Tahtalar", False, True, 3)
     assert [a["ad"] for a in tahtalar["alt"]] == ["Arızalar", "Envanter", "Gruplar", "Tahta ekle"]
@@ -189,7 +189,7 @@ def test_her_menu_adresinde_html_de_tek_etkin_oge(uygulama, panel, tahta):
     kimlik = tahta_ekle(panel, tahta, "T-1")["X-Tahta-Id"]
     assert panel.post("/arizalar", data={"tahta_id": kimlik, "kategori": "acilis", "aciklama": ""}).status_code == 303
     yollar = [o["yol"] for k in web.MENU for u in k["ogeler"] for o in [u, *u.get("alt", [])]] + [web.MENU_ACIL["yol"]]
-    assert len(yollar) == 15
+    assert len(yollar) == 14
     for yol in yollar:
         sayfa = panel.get(yol)
         assert sayfa.status_code == 200, yol
@@ -434,6 +434,6 @@ def test_eski_kabuk_artigi_metin_yok(uygulama, panel, tahta):
     kimlik = tahta_ekle(panel, tahta, "T-1")["X-Tahta-Id"]
     assert '<a href="/">← Tahtalar</a>' in panel.get(f"/tahta/{kimlik}").text
     assert "<title>Tahtalar · Tahta Kontrol</title>" in panel.get("/").text
-    ayarlar = panel.get("/ayarlar").text
+    ayarlar = panel.get("/ayarlar/okul").text
     assert "üst şeritte" not in ayarlar and "Ana renk panelin menüsünde" in ayarlar
     assert sorgu("SELECT count(*) AS n FROM tahta")[0]["n"] == 1

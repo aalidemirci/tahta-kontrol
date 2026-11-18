@@ -9,7 +9,7 @@
 {% endwith %}
 {% if not yoklama_etkin %}
 <p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Ders yoklaması kapalı: tahtalarda "Yoklama al" düğmesi görünmez.
-  {% if kullanici.rol == 'yonetici' %}<a href="/ayarlar#ders-yoklamasi">Ayarlar › Ders yoklaması</a> bölümünden açın.{% else %}Yönetici Ayarlar'dan açar.{% endif %}</p>
+  {% if kullanici.rol == 'yonetici' %}<a href="/ayarlar/yoklama">Ayarlar › Ders yoklaması</a> bölümünden açın.{% else %}Yönetici Ayarlar'dan açar.{% endif %}</p>
 {% endif %}
 {% if not ogrenci_var %}
 <p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Öğrenci listesi yüklenmemiş; tahtada liste açılmaz. <a href="/ogrenciler">Öğrenci listesi</a> sekmesinden e-Okul dosyasını yükleyin.</p>

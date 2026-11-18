@@ -218,7 +218,7 @@ def test_acil_rapor_sayfasi_ve_panel_bandi(okul, panel, tahta, saat):
 
 def test_ayri_acil_yetkisi_kaldirildi(okul, panel):
     """K4: kullanıcılar sayfasında acil yetkisi sütunu ve düğmesi yok; eski sekmeden gelen istek reddedilip kayda düşer."""
-    sayfa = panel.get("/kullanicilar").text
+    sayfa = panel.get("/ayarlar/kullanicilar").text
     assert "Acil yetkisi ver" not in sayfa and "Acil yetkisini al" not in sayfa
     assert "bütün yönetici ve idareciler başlatabilir" in sayfa
     kullanici_ekle(panel, "yonetici2", "yonetici")
@@ -231,7 +231,7 @@ def test_ayri_acil_yetkisi_kaldirildi(okul, panel):
 
 
 def test_acil_sablonlari_ayri_bolumde_kaydedilir(okul, panel):
-    sayfa = panel.get("/ayarlar").text
+    sayfa = panel.get("/acil?sekme=sablonlar").text
     assert 'value="acil_sablonlari"' in sayfa and "Çök — kapan — tutun." in sayfa
     panel.post("/ayarlar", data={"bolum": "genel", "okul_adi": "Örnek Anadolu Lisesi"})
     yanit = panel.post("/ayarlar", data={"bolum": "acil_sablonlari", "s_ad": ["Tahliye", "", "Sel baskını"],

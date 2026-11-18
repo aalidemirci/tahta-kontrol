@@ -43,7 +43,7 @@ def ogretmen_secenekleri(b) -> list[dict]:
 
 
 def ayar_baglami(b) -> dict:
-    """Ayarlar › USB anahtar bölümünün bağlamı (web.ayarlar_sayfasi çağırır)."""
+    """Ayarlar › USB anahtar bölümünün bağlamı (web.bolum_baglami çağırır)."""
     return {
         "usb_ayari": ua.ayar_al(b),
         "usb_destek": ua.tahta_destegi(b),
@@ -392,8 +392,8 @@ def kaydet(uygulama, y) -> None:
 # usb_anahtar_uretildi.html (POST yanıtı, no-store): kimlik, tur (idare|ogretmen), sahip_metni, etiket, indir_adresi,
 #   pin ("482 913" | None; yalnız idare anahtarında), pin_sorulur (bool, şu anki ayara göre), omur_dk (5), dosya_adi,
 #   ozellik_kapali. İndirme: GET {indir_adresi} → application/octet-stream, attachment; filename="tahta-kontrol.anahtar".
-# ayarlar.html (bolum=usb_anahtar, web.py): usb_ayari, usb_destek{onayli,destekleyen,eski}, usb_yoklama_kapali.
-#   Alanlar: ua_etkin, ua_kilit_acar, ua_pin_idare, ua_pin_ogretmen (=1). Yönlendirme /ayarlar?yer=usb_anahtar#ileti.
+# _ayar_usb.html (/ayarlar/usb; bolum=usb_anahtar, web.py): usb_ayari, usb_destek{onayli,destekleyen,eski}, usb_yoklama_kapali.
+#   Alanlar: ua_etkin, ua_kilit_acar, ua_pin_idare, ua_pin_ogretmen (=1). Yönlendirme /ayarlar/usb?yer=usb_anahtar#ileti.
 # ogretmenler.html: ek bağlam usb_sayilari {ogretmen_id: n} → "USB anahtar" sütunu; yönetici bağlantısı
 #   /usb-anahtarlar?ogretmen_id=<id>#ogretmen.
 #

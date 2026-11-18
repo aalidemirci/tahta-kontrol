@@ -1,0 +1,92 @@
+{% from "_ayar.html" import ileti, nedir, kaydet_cubugu with context %}
+{# Veri saklama ve yedek: öğretim yılı bitişi (bolum=saklama, K3; yalnız ogretim_yili_bitis), yedek parolası
+   (POST /yedekler/parola; hesap parolası ister, kural 21) ve yedek saklama + ikinci kopya (POST /yedekler/ayar; iki
+   alan da AYNI formda, uç ikisini birlikte yazar). Yedek formları Yedekler sayfasında da durur; buradakiler gizli
+   `donus=ayarlar` ile bu sayfaya döner. Parola hiçbir alana geri yazılmaz; parola formu kirli izlenmez. #}
+<section class="kutu ayar-kart" id="saklama" aria-labelledby="saklama-baslik">
+  <div class="kutu-bas">
+    <h2 id="saklama-baslik">Öğrenci verisinin saklanması</h2>
+    {% if saklama_durumu.uyari %}<span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ 'Tarih geçti' if saklama_durumu.gecti else 'Tarih yok' }}</span>
+    {% else %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>{{ saklama_durumu.bitis_metni }}</span>{% endif %}
+  </div>
+  {{ ileti('saklama') }}
+  {% if saklama_durumu.uyari %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ saklama_durumu.uyari }}</p>{% endif %}
+  <p class="not" id="saklama-ipucu">Ders yoklaması (mazeret/izin kayıtları ve şube defteri düzeltmeleri dahil), sınav listeleri ve sınav yoklaması, boş ders uyarıları öğretim yılı sonuna kadar saklanır.
+    Bitiş tarihi geçince (ertesi gün) o tarihe kadar oluşan kayıtlar kalıcı olarak silinir. Tarih boşsa hiçbir kayıt kendiliğinden silinmez.</p>
+  <form method="post" action="/ayarlar" data-kirli-izle>
+    <input type="hidden" name="bolum" value="saklama">
+    <label for="ogretim_yili_bitis">Öğretim yılı bitiş tarihi</label>
+    <input type="date" id="ogretim_yili_bitis" name="ogretim_yili_bitis" value="{{ saklama_gonderilen if saklama_gonderilen is defined else saklama_durumu.bitis }}" max="{{ saklama_durumu.en_gec }}" aria-describedby="saklama-ipucu" class="alan-oto">
+    <div class="onay-alani"><label class="satir"><input type="checkbox" name="sk_onay" value="1"> Geçmiş bir tarih giriyorsam o tarihe kadarki kayıtların bir saat içinde kalıcı olarak silineceğini biliyorum</label></div>
+    <p class="not">Onay kutusu yalnız geçmiş tarih girilince gerekir.</p>
+    {% call nedir('Neler kalır, yedeklerde ne olur?') %}
+    <ul>
+      <li>Tarihten sonra oluşan kayıtlar bir sonraki yılın bitişine kadar kalır. Tarih geçtikten sonra yeni öğretim yılının bitiş tarihini girin.</li>
+      <li>Öğrenci listesi bu silmeye girmez; yıl sonunda <a href="/ogrenciler">Öğrenci listesi</a> sekmesinden silinir ya da yeni yılın listesiyle değiştirilir.</li>
+      <li>Şifreli yedekler bu verinin kopyasını, kayıt silindikten sonra da yedek saklama süresi kadar
+        (<a href="/yedekler">Yedekler</a> sayfasındaki günlük yedek sayısı kadar gün) taşır.</li>
+    </ul>
+    {% endcall %}
+    {{ kaydet_cubugu('Saklama tarihini kaydet') }}
+    {# "Bu tarihi kullan" aynı formun ikinci gönderim düğmesidir ve Kaydet'ten SONRA gelir: tarih alanında Enter
+       ilk gönderim düğmesini (Kaydet) seçer, yazılan tarih yerine öneri kaydedilmez. #}
+    {% if saklama_durumu.oneri %}
+    <div class="oneri-satir"><p class="not">Okul Zili takviminde öğretimin bitişi: {{ saklama_durumu.oneri_metni }}. Öneri kendiliğinden yazılmaz; düğmeye basınca kaydedilir.</p>
+      <button name="oneri_kullan" value="{{ saklama_durumu.oneri }}" formnovalidate>Bu tarihi kullan</button></div>
+    {% endif %}
+  </form>
+</section>
+
+<section class="kutu ayar-kart" id="yedek" aria-labelledby="yedek-baslik">
+  <div class="kutu-bas">
+    <h2 id="yedek-baslik">Yedek parolası</h2>
+    {% if yedek_ayari.parola_var %}
+    <span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Belirlendi · {{ yedek_ayari.parola_zamani | tarih }}</span>
+    {% else %}
+    <span class="rozet" data-durum="sorun"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Belirlenmedi</span>
+    {% endif %}
+  </div>
+  {{ ileti('parola') }}
+  {% if not yedek_ayari.parola_var %}
+  <p class="bant hata" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>Yedek parolası belirlenmedi; otomatik yedek alınmıyor.</span></p>
+  {% endif %}
+  <p class="bant uyari"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>Yedek parolası unutulursa yedekler hiçbir yolla açılamaz. Kâğıda yazıp okulun kasasında saklayın.
+    Parola değişince eski yedekler eski parolayla açılır.</span></p>
+  {# Reddedilen gönderimde (yanlış hesap parolası, uyuşmayan parola…) form açık gelir: hata ile alanlar birlikte görünür. #}
+  <details class="ozet-satir"{% if not yedek_ayari.parola_var or (mesaj_hata and ileti_yeri == 'parola') %} open{% endif %}>
+    <summary><span class="ad"><b>{{ 'Parolayı değiştir' if yedek_ayari.parola_var else 'Parolayı belirle' }}</b><small>Veritabanı ve sunucu sertifikası bu parolayla şifrelenerek yedeklenir.</small></span><span class="degistir"><span class="ac">Aç</span><span class="kapa">Kapat</span></span></summary>
+    <form method="post" action="/yedekler/parola" class="form-dar">
+      <input type="hidden" name="donus" value="ayarlar">
+      <label for="hesap_parolasi">Hesap parolanız</label>
+      <p class="ipucu" id="hesap-ipucu">Panele girdiğiniz parola; kimliğinizi doğrulamak içindir.</p>
+      <input type="password" id="hesap_parolasi" name="hesap_parolasi" autocomplete="current-password" aria-describedby="hesap-ipucu" required>
+      <label for="yedek_parola">Yeni yedek parolası (en az {{ parola_en_kisa }} karakter)</label>
+      <input type="password" id="yedek_parola" name="parola" minlength="{{ parola_en_kisa }}" autocomplete="new-password" required>
+      <label for="yedek_parola2">Yeni yedek parolası (yeniden)</label>
+      <input type="password" id="yedek_parola2" name="parola2" minlength="{{ parola_en_kisa }}" autocomplete="new-password" required>
+      <div class="dugme-satiri"><button class="ana">{{ 'Parolayı değiştir' if yedek_ayari.parola_var else 'Parolayı belirle' }}</button></div>
+    </form>
+  </details>
+</section>
+
+<section class="kutu ayar-kart" id="yedek-ayar" aria-labelledby="yedek-ayar-baslik">
+  <div class="kutu-bas"><h2 id="yedek-ayar-baslik">Saklama ve ikinci kopya</h2></div>
+  {{ ileti('ayar') }}
+  <form method="post" action="/yedekler/ayar" data-kirli-izle>
+    <input type="hidden" name="donus" value="ayarlar">
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="yedek_saklama">Saklanacak günlük yedek sayısı ({{ saklama_aralik[0] }}–{{ saklama_aralik[1] }})</label>
+        <p class="not" id="yedek-saklama-ipucu">Daha eski günlük yedekler silinir. Elle alınan yedeklerden en yeni 10 tanesi ayrıca tutulur; bu sayı kadar günden eski olanlar silinir.</p></div>
+      <div class="ayar-denetim"><input type="number" id="yedek_saklama" name="saklama" class="alan-sayi" min="{{ saklama_aralik[0] }}" max="{{ saklama_aralik[1] }}" value="{{ yedek_ayari.saklama }}" aria-describedby="yedek-saklama-ipucu" required></div>
+    </div>
+    <label for="kopya_dizini">İkinci kopya klasörü (isteğe bağlı)</label>
+    <p class="ipucu" id="kopya-ipucu">Yedeği aynı diskte tutmak disk bozulmasına karşı korumaz. Başka bir disk ya da sürekli takılı bir sürücü seçin; boş bırakılırsa ikinci kopya alınmaz. Klasöre yazılamazsa ayar kaydedilmez.</p>
+    <input type="text" id="kopya_dizini" name="kopya_dizini" value="{{ yedek_ayari.kopya_dizini }}" placeholder="D:\TahtaYedek" aria-describedby="kopya-ipucu" class="form-dar">
+    {% call nedir('Yazma izni nasıl verilir?') %}
+    <p>Klasöre yazma izni veren komut <a href="/yedekler#ayar">Yedekler › Saklama ve ikinci kopya</a> bölümünde, kopyalanabilir olarak durur.</p>
+    {% endcall %}
+    {{ kaydet_cubugu('Yedek ayarını kaydet') }}
+  </form>
+</section>
+
+<p class="ilgili">İlgili: <a href="/yedekler">Yedekler (yedek al, indir, geri yükle)</a> · <a href="/ogrenciler">Öğrenci listesi</a> · <a href="/ayarlar/yoklama">Ders yoklaması</a></p>

@@ -28,7 +28,34 @@ def kaydet(uygulama, y) -> None:
         k = y.kullanici(istek)
         if not k:
             return y.yonlendir("/giris")
+        if istek.query_params.get("sekme") == "sablonlar":
+            # 0.16.0: şablon düzenleyici Ayarlar'dan buraya taşındı; yalnız yönetici (POST ucu aynı: /ayarlar).
+            if k["rol"] != "yonetici":
+                return y.yonlendir("/acil", "Şablonları yalnız yönetici düzenler.", hata=True)
+            return sablon_ciz(istek, k)
         return ciz(istek, k)
+
+    def sablon_ciz(istek: Request, k, sablon_formu: list | None = None, hata: str = "") -> HTMLResponse:
+        """Acil › Şablonlar görünümü (yalnız yönetici). Doğrulama hatasında (hata) gönderilen değerlerle aynı
+        yanıtta 400 ile yeniden çizilir; düzenlemeler kaybolmaz."""
+        with vt.islem() as b:
+            sablonlar = acil.sablonlar(b)
+            ornek = not isinstance(vt.ayar_al(b, "acil_sablonlar"), list)
+        ek: dict = {"mesaj": hata, "mesaj_hata": True} if hata else {}
+        return y.sayfa(
+            istek,
+            "acil.html",
+            k,
+            durum_kodu=400 if hata else 200,
+            **ek,
+            menu_yolu="/acil",  # hata çizimi POST /ayarlar yanıtıdır; menüde yine "Acil durum" etkin görünür
+            sekme="sablonlar",
+            acil_sablonlar=sablon_formu if sablon_formu is not None else sablonlar,
+            acil_sablon_ornek=ornek,
+            acil_sablon_en_cok=acil.SABLON_EN_COK,
+        )
+
+    y.acil_sablon_sayfasi = sablon_ciz  # web.acil_sablonlarini_kaydet doğrulama hatasında bunu çizer
 
     def ciz(istek: Request, k, girilen: dict | None = None, hata: str = "") -> HTMLResponse:
         """Acil sayfası. Başlatma reddedilince (hata) sayfa aynı yanıtta 400 ile yeniden çizilir:
@@ -61,6 +88,7 @@ def kaydet(uygulama, y) -> None:
             "acil.html",
             k,
             durum_kodu=400 if hata else 200,
+            sekme="",
             girilen=girilen or {},
             **ek,
             aktif=aktif,

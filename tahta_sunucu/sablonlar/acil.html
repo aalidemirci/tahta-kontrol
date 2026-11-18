@@ -1,12 +1,26 @@
 {% extends "taban.html" %}
 {% block baslik %}Acil durum · Tahta Kontrol{% endblock %}
+{# 0.16.0: yöneticiye iki görünüm (sekme şeridi): "Yayın başlat" ve "Şablonlar" (/acil?sekme=sablonlar; şablon
+   düzenleyici Ayarlar'dan buraya taşındı). İdareciye şerit çizilmez; sayfa eskisi gibidir. Şablonlar görünümünde
+   ileti düzenleyicinin içinde çizilir ve odaklanır. #}
+{% block mesaj_yeri %}{% if mesaj and sekme != 'sablonlar' %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}
 <div class="sayfa-bas">
   <div class="bas-yazi">
     <h1>Acil durum ve tatbikat yayını</h1>
-    <p>Yayın bütün onaylı tahtalara ({{ hedef_sayisi }}) birkaç saniye içinde iner; kilitli tahtada da görünür ve tahtadan kapatılamaz.</p>
+    {% if sekme == 'sablonlar' %}<p>Yayın başlatırken seçilen hazır metinler. Yalnız yönetici düzenler.</p>
+    {% else %}<p>Yayın bütün onaylı tahtalara ({{ hedef_sayisi }}) birkaç saniye içinde iner; kilitli tahtada da görünür ve tahtadan kapatılamaz.</p>{% endif %}
   </div>
 </div>
+{% if kullanici.rol == 'yonetici' %}
+<nav class="sekmeler" aria-label="Acil durum bölümleri">
+  <a href="/acil"{% if sekme != 'sablonlar' %} aria-current="page"{% endif %}>Yayın başlat</a>
+  <a href="/acil?sekme=sablonlar"{% if sekme == 'sablonlar' %} aria-current="page"{% endif %}>Şablonlar</a>
+</nav>
+{% endif %}
+{% if sekme == 'sablonlar' %}
+{% include "_acil_sablonlar.html" %}
+{% else %}
 
 {% if aktif %}
 {# Süren yayın: teslim sayacı ve kalan süre panel.js ile 4 sn'de bir /api/durum'dan güncellenir. #}
@@ -57,7 +71,7 @@
 
     <fieldset class="secim-grubu">
       <legend>2. Şablon</legend>
-      <p class="ipucu">Seçilen şablon başlık ve metni doldurur; yayından önce düzeltebilirsiniz.{% if kullanici.rol == 'yonetici' %} Şablonlar <a href="/ayarlar#acil-sablonlari">Ayarlar</a>'dan düzenlenir.{% endif %}</p>
+      <p class="ipucu">Seçilen şablon başlık ve metni doldurur; yayından önce düzeltebilirsiniz.{% if kullanici.rol == 'yonetici' %} Şablonlar <a href="/acil?sekme=sablonlar">Şablonlar</a> sekmesinden düzenlenir.{% endif %}</p>
       <div class="secenekler sablonlar">
         <label><input type="radio" name="sablon" value=""{% if not girilen.sablon or girilen.sablon not in sablonlar | map(attribute='kod') | list %} checked{% endif %}> Şablonsuz</label>
         {% for s in sablonlar %}
@@ -121,5 +135,6 @@
 </div>
 {% else %}
 <p class="bos-not">Henüz yayın yapılmadı.</p>
+{% endif %}
 {% endif %}
 {% endblock %}

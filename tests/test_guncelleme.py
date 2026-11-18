@@ -218,7 +218,7 @@ def test_basarisizlikta_firtina_yok_ve_sonraki_deneme_ertesi_gun(tmp_path, monke
     # Yeniden başlatma (yeni Denetleyici) da aynı gün yeniden denemez: son deneme veritabanındadır.
     assert guncelleme.Denetleyici(getirici).zamanla() is False
     assert "ulaşılamadı" not in panel.get("/").text  # panoda hata yok
-    assert "GitHub'a ulaşılamadı." in panel.get("/ayarlar").text.replace("&#39;", "'")
+    assert "GitHub'a ulaşılamadı." in panel.get("/ayarlar/guncelleme").text.replace("&#39;", "'")
     saat.ilerlet(86400)
     assert d.zamanla() is True and d.bekle()
     assert getirici.cagri == 2
@@ -295,7 +295,7 @@ def test_ayar_kapaliyken_hic_istek_cikmaz(tmp_path, monkeypatch, saat):
     y = panel.post("/ayarlar/guncelleme/denetle")
     assert "kapalı" in ileti(y) and "t=hata" in y.headers["location"]
     assert getirici.cagri == 0
-    sayfa = panel.get("/ayarlar").text
+    sayfa = panel.get("/ayarlar/guncelleme").text
     assert "Şimdi denetle" not in sayfa and "Denetim kapalı" in sayfa
     assert kayitlar().count("Güncelleme denetimi ayarı kaydedildi") == 1
     assert "Güncelleme denetimi yapıldı" not in kayitlar()
@@ -309,7 +309,7 @@ def test_varsayilan_acik(uygulama, panel):
     kur_ve_gir(panel)
     with vt.islem() as b:
         assert guncelleme.etkin(b) and guncelleme.gorunum(b)["sonuc"] == "Henüz denetlenmedi."
-    sayfa = panel.get("/ayarlar").text
+    sayfa = panel.get("/ayarlar/guncelleme").text
     assert "Şimdi denetle" in sayfa and 'name="gd_acik" value="1" checked' in sayfa
 
 
@@ -320,13 +320,13 @@ def test_simdi_denetle_yeni_surum(tmp_path, monkeypatch, saat):
     assert y.status_code == 303 and ileti(y) == "Yeni sürüm 99.0.1 yayımlanmış."
     assert kayitlar()[-1] == "Güncelleme denetimi yapıldı"
     adres = "https://github.com/aalidemirci/tahta-kontrol/releases/tag/v99.0.1"
-    for yol in ("/", "/ayarlar"):
+    for yol in ("/", "/ayarlar/guncelleme"):
         sayfa = panel.get(yol).text
         assert f'<a href="{adres}" rel="noopener noreferrer">Sürüm sayfası</a>' in sayfa, yol
         assert "kotu.example" not in sayfa and "alert(1)" not in sayfa and "sürüm notu" not in sayfa
         dis = set(re.findall(r'(?:href|src|action)="(https?://[^"]+)"', sayfa))
         assert dis == {adres}, yol
-    assert "Son denetim: 16.11.2026 09:00" in panel.get("/ayarlar").text
+    assert "Son denetim: 16.11.2026 09:00" in panel.get("/ayarlar/guncelleme").text
     # Art arda basış yeni istek çıkarmaz ve işlem kaydını şişirmez.
     y = panel.post("/ayarlar/guncelleme/denetle")
     assert "Az önce denetlendi" in ileti(y) and getirici.cagri == 1
@@ -350,7 +350,7 @@ def test_ayni_ve_eski_surum_guncel(tmp_path, monkeypatch, saat, etiket):
 def test_yok_sayilan_yanit_not_uretmez(tmp_path, monkeypatch, saat, ham):
     _, panel = panel_kur(tmp_path, monkeypatch, Getirici(ham))
     assert ileti(panel.post("/ayarlar/guncelleme/denetle")) == "Kurulu sürüm güncel."
-    for yol in ("/", "/ayarlar"):
+    for yol in ("/", "/ayarlar/guncelleme"):
         sayfa = panel.get(yol).text
         assert "data-yeni-surum" not in sayfa and "Sürüm sayfası" not in sayfa
         assert "v9<script>" not in sayfa and "v9&lt;script&gt;" not in sayfa

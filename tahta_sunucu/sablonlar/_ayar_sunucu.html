@@ -1,0 +1,44 @@
+{% from "_ayar.html" import ileti, nedir, kaydet_cubugu with context %}
+{# Sunucu ve ağ: sunucu adresleri (A6; bolum=adresler, yalnız `sunucu_adresleri`) ve salt bilgi "Bu sunucu" kartı.
+   Doğrulama hatasında sayfa gönderilen metinle (400) yeniden çizilir. #}
+<section class="kutu ayar-kart" id="adresler" aria-labelledby="adresler-baslik">
+  <div class="kutu-bas">
+    <h2 id="adresler-baslik">Sunucu adresleri</h2>
+    {% if sunucu_adresleri %}
+    <span class="rozet" data-durum="{{ 'tamam' if adres_durumu.alan == adres_durumu.onayli else 'uyari' }}"><svg class="simge" aria-hidden="true"><use href="#{{ 's-tamam' if adres_durumu.alan == adres_durumu.onayli else 's-onay' }}"/></svg>{{ adres_durumu.alan }}/{{ adres_durumu.onayli }} tahta güncel adres listesini aldı</span>
+    {% endif %}
+  </div>
+  {{ ileti('adresler') }}
+  {# Her zaman açık durur, katlanmaz: adres değişiminde sıra yanlışsa bütün tahtalar kopar. #}
+  <p class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Sunucu bilgisayarının IP'si değişecekse yeni adresi taşımadan
+    ÖNCE ekleyin ve bütün tahtalar listeyi alana kadar bekleyin.</p>
+  <form method="post" action="/ayarlar" data-kirli-izle>
+    <input type="hidden" name="bolum" value="adresler">
+    <label for="sunucu_adresleri">Tahtalara bildirilen adresler (satır başına bir adres, en çok {{ adres_en_cok }})</label>
+    <p class="ipucu" id="adres-ipucu">İlk satır birincil adrestir (kurulum betiği bunu kullanır). Tahta bir adrese 3 kez ulaşamazsa
+      sıradakini dener ve ulaştığı adresi kalıcı yapar.</p>
+    <textarea id="sunucu_adresleri" name="sunucu_adresleri" rows="5" aria-describedby="adres-ipucu" class="form-dar" placeholder="https://{{ ipler[0] if ipler else '10.0.0.5' }}:{{ https_port }}">{{ sunucu_adresleri_metni }}</textarea>
+    <p class="not">Boş bırakılırsa bu bilgisayarın ilk ağ adresi kullanılır. Bu bilgisayarın adresleri:
+      {% for ip in ipler %}<span class="kod">{{ ip }}</span>{% if not loop.last %}, {% endif %}{% else %}bulunamadı{% endfor %}.
+      {% if sunucu_adresleri and adres_durumu.yetenekli < adres_durumu.onayli %}{{ adres_durumu.onayli - adres_durumu.yetenekli }} tahtada ajan güncellenmeli (eski ajan listeyi almaz).{% endif %}</p>
+    {% call nedir('Adres nasıl seçilir?') %}
+    <p>Okul DNS'inde bir ad tanımlıysa onu da ekleyin: IP değişse de ad aynı kalır.</p>
+    {% endcall %}
+    {% call nedir('Tahtalar yeni adrese ulaşamıyorsa') %}
+    <p>Tahtalar yeni adrese ulaşamıyorsa tahtada yönetici olarak: <span class="kod">sudo tahta-ajan sunucu https://YENİ-ADRES:{{ https_port }}</span></p>
+    {% endcall %}
+    {{ kaydet_cubugu('Adresleri kaydet') }}
+  </form>
+</section>
+
+<section class="kutu ayar-kart" id="bu-sunucu" aria-labelledby="bu-sunucu-baslik">
+  <div class="kutu-bas"><h2 id="bu-sunucu-baslik">Bu sunucu</h2></div>
+  <dl class="ozellikler">
+    <dt>Sertifika parmak izi</dt><dd><span class="kod">{{ parmak_izi }}</span></dd>
+    <dt>Veri klasörü</dt><dd><span class="kod">{{ veri_dizini }}</span></dd>
+  </dl>
+  <p class="not">Veritabanı ve sunucu sertifikası <a href="/yedekler">Yedekler</a> sayfasından şifreli olarak yedeklenir.
+    <strong>Sertifika kaybolursa bütün tahtalara ajan yeniden kurulur.</strong></p>
+</section>
+
+<p class="ilgili">İlgili: <a href="/ekle">Tahta ekle</a> · <a href="/yedekler">Yedekler</a> · <a href="/ayarlar/guncelleme">Güncelleme denetimi</a></p>

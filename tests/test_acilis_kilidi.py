@@ -70,29 +70,29 @@ def test_uygulanmayan_oturumlar(panel, tahta, okul, durum):
 def test_kilit_kodu_yoksa_uygulanmaz_ve_ayarlarda_uyari(panel, tahta, okul):
     panel.post("/ayarlar", data={"bolum": "genel", "okul_adi": "Örnek", "ok_saatler": "", "kilit_kodu_sil": "1"})
     assert kilitler(bekle(tahta, okul, oturum("k1"), surum="0.9.0")) == []
-    sayfa = panel.get("/ayarlar").text
-    assert 'id="acilis-kilidi"' in sayfa and "açılışta kilit uygulanmıyor" in sayfa
+    sayfa = panel.get("/ayarlar/kilit").text
+    assert 'id="acilis"' in sayfa and "açılışta kilit uygulanmıyor" in sayfa
     assert 'name="ak_acik" value="1" checked' in sayfa
     yanit = panel.post("/ayarlar", data={"bolum": "acilis_kilidi", "ak_acik": "1"})
     assert "kilit kodu belirlenmediği için uygulanmaz" in ileti(yanit)
     kilit_kodu(panel)
-    assert "açılışta kilit uygulanmıyor" not in panel.get("/ayarlar").text
+    assert "açılışta kilit uygulanmıyor" not in panel.get("/ayarlar/kilit").text
 
 
 def test_ayar_kapatilinca_uygulanmaz_ve_kayda_duser(panel, tahta, okul):
     yanit = panel.post("/ayarlar", data={"bolum": "acilis_kilidi"})
-    assert yanit.headers["location"].startswith("/ayarlar?yer=acilis")
+    assert yanit.headers["location"].startswith("/ayarlar/kilit?yer=acilis")
     assert ileti(yanit) == "Açılışta kilit kapatıldı; tahtalar açılınca açık başlar."
     assert kilitler(bekle(tahta, okul, oturum("c1"), surum="0.9.0")) == []
     assert sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Açılışta kilit ayarı kaydedildi'")[-1]["ayrinti"] == "kapalı"
-    assert 'name="ak_acik" value="1" checked' not in panel.get("/ayarlar").text
+    assert 'name="ak_acik" value="1" checked' not in panel.get("/ayarlar/kilit").text
     panel.post("/ayarlar", data={"bolum": "acilis_kilidi", "ak_acik": "1"})
     assert len(kilitler(bekle(tahta, okul, oturum("c2"), surum="0.9.0"))) == 1
 
 
 def test_eski_ajan_sayisi_ayarlarda(panel, tahta, okul):
     tahta_ekle(panel, tahta, "T-02", {"kilitli": False, "yetenekler": ["acil"], "ekranlar": []}, surum="0.8.0")
-    assert "1 tahtada ajan güncellenmeli (eski ajan açılışta kilitlenmez)." in panel.get("/ayarlar").text
+    assert "1 tahtada ajan güncellenmeli (eski ajan açılışta kilitlenmez)." in panel.get("/ayarlar/kilit").text
 
 
 def test_acil_yayin_ve_sinav_penceresinde_uygulanmaz(panel, tahta, okul, monkeypatch):

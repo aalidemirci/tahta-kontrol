@@ -58,7 +58,7 @@ def temizlikler():
 def test_temizlik_varsayilan_kapali(uygulama, panel, okul, saat):
     kapatma(panel)
     assert calistir(uygulama, saat, an(16, 16, 55, 10)) == [] and temizlikler() == []
-    sayfa = panel.get("/ayarlar").text
+    sayfa = panel.get("/ayarlar/gunsonu").text
     assert "checked" not in sayfa.split('name="tm_etkin"')[1].split(">")[0]
     assert "Gün sonunda ortak hesapta oturum temizliği yap" in sayfa
 
@@ -94,7 +94,7 @@ def test_temizlik_kacan_is_sonradan_calismaz(uygulama, panel, tahta, okul, saat)
 def test_temizlik_otomatik_kapatma_yoksa_yapilmaz_ve_ayarlarda_uyarir(uygulama, panel, okul, saat):
     assert "Uyarı: Otomatik kapatma kapalı" in ayarla(panel)
     assert calistir(uygulama, saat, an(16, 16, 55, 10)) == []
-    assert "Otomatik kapatma kapalı ya da saati yok" in panel.get("/ayarlar").text
+    assert "Otomatik kapatma kapalı ya da saati yok" in panel.get("/ayarlar/gunsonu").text
 
 
 def test_temizlik_belirli_saatte_ve_hafta_sonu_yok(uygulama, panel, okul, saat):
@@ -116,7 +116,7 @@ def test_temizlik_ikili_egitimde_gun_sonu_son_devrenin_sonu(uygulama, panel, oku
     ayarla(panel, tm_zaman="gun_sonu")
     assert calistir(uygulama, saat, an(16, 12, 30, 10)) == []  # sabah devresinin sonu (12:20 + 10) gün sonu değildir
     assert calistir(uygulama, saat, an(16, 18, 0, 10)) == [kimlik(okul["yeni"])]  # öğlenin son dersi 17:50 + 10 dk
-    assert "Bugün: 18:00." in panel.get("/ayarlar").text
+    assert "Bugün: 18:00." in panel.get("/ayarlar/gunsonu").text
 
 
 def test_temizlik_acil_surerken_ve_sinavdaki_tahtada_verilmez(uygulama, panel, okul, saat, monkeypatch):

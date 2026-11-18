@@ -1,0 +1,37 @@
+{% extends "taban.html" %}
+{% from "_ayar.html" import arama, bolum_listesi with context %}
+{% block baslik %}{{ bolum.baslik }} · Ayarlar · Tahta Kontrol{% endblock %}
+{# Ayarlar'ın bir bölüm sayfası (0.16.0). Bağlam: bolum (ayar_bolumleri.BOLUMLER öğesi), ayar_kumeleri (yan menü +
+   özetler) ve web.bolum_baglami'nın o bölüme özgü değişkenleri. İleti, `yer` değeri bu sayfadaki bir kartınsa o
+   kartın başında (id="ileti", odaklanır), değilse sayfa başında çizilir. İçerik parçası _ayar_<anahtar>.html'dir;
+   anahtar sunucuda listeye karşı doğrulanmıştır. #}
+{% block mesaj_yeri %}{% if mesaj and ileti_yeri not in bolum.yerler %}{% include "_ileti.html" %}{% endif %}{% endblock %}
+{% block icerik %}
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <nav class="kirinti" aria-label="Konum"><a href="/ayarlar">Ayarlar</a><svg class="simge" aria-hidden="true"><use href="#s-ok"/></svg><span>{{ bolum.kume }}</span><svg class="simge" aria-hidden="true"><use href="#s-ok"/></svg><span aria-current="page">{{ bolum.baslik }}</span></nav>
+    <h1>{{ bolum.baslik }}</h1>
+  </div>
+  {% if bolum.anahtar == 'veri' %}<a class="dugme sayfa-eylem" href="/yedekler">Yedekleri gör</a>{% endif %}
+</div>
+
+<div class="ayar-duzen">
+  <nav class="ayar-menu" aria-label="Ayar bölümleri">
+    {# Dar ekranda (ve JS'siz) bölüm listesi <details> ile açılır; geniş ekranda aynı liste açık durur. İkisinden
+       yalnız biri görünür (öbürü display:none; erişilebilirlik ağacında da yoktur). #}
+    <details class="dar-secim">
+      <summary><svg class="simge" aria-hidden="true"><use href="#{{ bolum.simge }}"/></svg><span>Bölüm: <b>{{ bolum.baslik }}</b></span><span class="degistir">Değiştir</span></summary>
+      {{ bolum_listesi(bolum.anahtar) }}
+      <p class="ayar-menu-tum"><a href="/ayarlar">Bütün ayarlar</a></p>
+    </details>
+    <div class="genis-secim">
+      {{ arama('ayar-ara-yan') }}
+      {{ bolum_listesi(bolum.anahtar) }}
+      <p class="ayar-menu-tum"><a href="/ayarlar">Bütün ayarlar</a></p>
+    </div>
+  </nav>
+  <div class="ayar-icerik">
+    {% include "_ayar_" ~ bolum.anahtar ~ ".html" %}
+  </div>
+</div>
+{% endblock %}

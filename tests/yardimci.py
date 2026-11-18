@@ -48,6 +48,13 @@ def ileti(yanit) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", bant.group(1)).replace("Hata: ", "", 1)).strip()
 
 
+def ayar_sayfasi(panel, bolum: str) -> str:
+    """Ayarlar'ın bir bölüm sayfasının HTML'i (0.16.0: /ayarlar/<bölüm>; `panel` yönlendirme izlemez)."""
+    yanit = panel.get(f"/ayarlar/{bolum}")
+    assert yanit.status_code == 200, (bolum, yanit.status_code, yanit.headers.get("location"))
+    return yanit.text
+
+
 def tahta_ekle(panel, tahta, ad: str = "Tahta", durum: dict | None = None, surum: str = "0.3.0", **alanlar) -> dict:
     """Kaydolur, onaylar, bir kez bekle çağırır; ajan başlıklarını döndürür. alanlar: bina, kat, duzey, devre…"""
     panel.post("/ekle", data={"eylem": "ac"})

@@ -393,16 +393,17 @@ seçimde korunur.
 - **GTK'da iki stil sağlayıcısı:** ölçüler bir kez yüklenir, renkler tema
   değişince aynı sağlayıcıya yeniden yüklenir (pencere yeniden açılmaz).
 
-### 11.1 Panel kabuğu ve arayüzün yeniden düzeni (0.15.0)
+### 11.1 Panel kabuğu ve arayüzün yeniden düzeni (0.15.0, 0.16.0)
 
 Kullanıcı (18.11.2026) paneli "ilkel ve karışık" buldu. Bütün panel için bir arayüz taslağı hazırlandı
 (tıklanabilir prototip ve ölçümler; **taslak depo dışında tutulur**), kullanıcı taslağı gördü ve aynı gün
-"Evet, başla" diyerek 1. aşamaya onay verdi. Sonraki aşamalar ayrı sürüm ve ayrı onaydır.
+"Evet, başla" diyerek 1. aşamaya, 0.15.0'ı gördükten sonra 19.11.2026'da "Ayarlar'a geç" diyerek 2. aşamaya
+onay verdi. Sonraki aşamalar ayrı sürüm ve ayrı onaydır.
 
 | Aşama | Sürüm | İçerik | Durum |
 |---|---|---|---|
 | 1. Kabuk | 0.15.0 | Sol menü, çekmece, telefon alt çubuğu, Acil en üstte, ölçek belirteçleri, şekilli rozet, 44 px dokunma hedefi, görünür odak, menüde rol | Uygulandı (yerel) |
-| 2. Ayarlar | — | Ayarlar'ın bölüm sayfalarına ayrılması, değer özetleri, Ayarlar içi arama | Onay bekliyor |
+| 2. Ayarlar | 0.16.0 | Ayarlar giriş sayfası (bölüm kartları, değer özetleri, kurulum listesi, Ayarlar içi arama), 11 bölüm sayfası, her kartın kendi Kaydet'i, Kullanıcılar bir bölüm, acil şablonları Acil'de | Uygulandı (yerel) |
 | 3. Tahtalar | — | Ayrı `/tahtalar` listesi, satır düğmeleri, tahta sayfası sekmeleri | Onay bekliyor |
 | 4. Bugün | — | "Bugün" masası: şu an, bekleyen işler, yoklama ve duyuru kutuları | Onay bekliyor |
 | 5. Sekmeler | — | Yoklama / Program / Kişiler sekmelerinin ayrışması, tek sayfalık duyuru formu | Onay bekliyor |
@@ -427,6 +428,37 @@ Birinci aşamanın kuralları:
 - Taslağın sorularına ayrıca cevap verilmedi; önerilen seçenekler varsayıldı (§17, soru 69–79).
 - Ölçüm: `scripts/panel_olcum.mjs` (uydurma veriyle deneme sunucusu; çıktı depo dışına). Sonuçlar ve
   denenmeyenler `docs/surum-0.15.0.md`'dedir.
+
+İkinci aşamanın kuralları (0.16.0; sonuçlar ve denenmeyenler `docs/surum-0.16.0.md`'dedir):
+
+- **Tek liste:** bölümler, giriş kartları, değer özetleri, kurulum listesi, arama dizini ve eski adres
+  eşlemeleri yalnız `ayar_bolumleri.py`'den (FastAPI'siz) üretilir; şablon ya da `web.py` kopyasını tutmaz.
+  Adresler: `GET /ayarlar` (giriş; `?ara=` JS'siz arama) ve `GET /ayarlar/{bölüm}` — `okul`, `kilit`,
+  `gunsonu`, `yuzer`, `yoklama`, `usb`, `sinav`, `veri`, `sunucu`, `guncelleme`, `kullanicilar`. Yalnız yönetici;
+  bilinmeyen bölüm giriş sayfasına döner.
+- **Bir form bir uca gider ve yalnız kendi anahtarını yazar.** Eski birleşik formun yerine üç yeni gönderim
+  bölümü: `bolum=okul` (yalnız `okul_adi`), `bolum=kapatma` (yalnız `ok_*`), `bolum=kilit_kodu`. Üçü de önce
+  doğrular, formun o form olduğunu gösteren alanı ister (işaretsiz onay kutusu gönderilmediği için eksik gövde
+  "kapalı" sayılıp ayarı ezmesin) ve boş kilit kodu kodu silmez. `bolum=genel` uyumluluk için eski
+  davranışıyla durur, hiçbir şablonda kullanılmaz. Öbür uçlar, alan adları, ayar anahtarları, şema ve ajan
+  değişmedi.
+- **Kayıttan sonra aynı bölüme dönülür** (`/ayarlar/<bölüm>?yer=<kart>#ileti`; ileti o kartın başında çizilir
+  ve odaklanır). Doğrulama hatasında bölüm 400 ile, gönderilen değerlerle yeniden çizilir (parola ve kilit
+  kodu geri yazılmaz). Eski `/ayarlar?yer=…` adresi bölüme yönlenir; eski `#parça` bağlantısını giriş
+  sayfasındaki veri bloğundan `panel.js` taşır.
+- **Özet ve arama dizini sır taşımaz:** kilit kodu (kendisi, özeti, uzunluğu), parola, PIN, kişi adı, ağ
+  adresi, klasör yolu, tahta ve şube adı girmez. Giriş sayfası ağ çağrısı yapmaz (güncelleme özeti saklanan
+  durumdan; kural 32).
+- **Kaydet çubuğu ilerlemeli iyileştirmedir:** formlar JS'siz kaydedilir; JS varken değişiklik izlenir, çubuk
+  alta yapışır, çıkışta uyarılır. Parola formları izlenmez. Onay isteyen iki iş ("Kodu kaldır…", "Logoyu
+  kaldır…") `type="button"` + `data-onay`'dır ve JS'siz **gönderilmez** (bilerek); sayfa `<noscript>` notuyla
+  söyler.
+- **Yedek formları iki yerde:** Ayarlar › Veri saklama ve yedek ve Yedekler sayfası aynı uçlara
+  (`/yedekler/parola`, `/yedekler/ayar`) gönderir; isteğe bağlı, beyaz listeli `donus=ayarlar` yalnız dönüş
+  adresini seçer.
+- **Kullanıcılar** Ayarlar'ın bölümüdür (soru 69, öneri); menü dokuz öğedir, `GET /kullanicilar` bölüme
+  yönlenir, `POST /kullanicilar` aynı uçtur. **Acil şablonları** `/acil?sekme=sablonlar` görünümündedir (yalnız
+  yöneticiye çizilir; uç ve alanlar aynı).
 
 ## 12. Ders programı ve program kilidi
 
@@ -1487,7 +1519,8 @@ izlenir. Kurulu (PyInstaller) programda sistem sertifika deposunun bulunduğu he
 | 5B | USB anahtar: bellekteki anahtar dosyasıyla idare ve isteyen öğretmen için yoklama, ayarla kilit açma; tek seferlik indirme, iptal, kopya uyarısı (§14.1) | 0.11.0 — testlerle, tarayıcıda ve Debian 12 kabında loop bellekle (USB benzetimi) denendi; gerçek USB bellek, udisks ve ETAP'ta denenecek |
 | 3B | Zil düzenleyici (çizelgeler, haftalık düzen, tarihe özel çizelge, günü önizle, CSV; Okul Zili'nden alma aynı yapıya yazar) ve ders programını içe aktarma sihirbazı (aSc XML deneme, şablon CSV/XLSX, yapay zekâ istemi, önceki programlar) | 0.10.0 (§12.2–12.3) — testlerle ve tarayıcıda uydurma veriyle denendi; gerçek aSc dosyası ve okulun gerçek zil saatleriyle denenecek |
 | 5C | Yoklama yeniden tasarımı: tahtada kaydırmasız şube/ders seçimi, okul no sıralı liste, devrenin ilk dersinde geç, saate göre ders ön seçimi; panelde şube defteri (son beş öğretim günü, düzeltme katmanı), mazeret/izin, son günler listesi (§14.2) | 0.14.0 — testlerle, Debian 12 kabında (Xvfb) ekran ölçümüyle ve tarayıcıda uydurma veriyle denendi; ETAP'ta ve gerçek sınıfta denenecek |
-| P1 | Panel arayüzü 1. aşama (kabuk): sol menü (üç küme, role göre), dar ekranda çekmece ve telefon alt çubuğu, Acil en üstte, ölçek belirteçleri, şekilli rozet, dokunma hedefi (§11.1) | 0.15.0 — testlerle ve deneme sunucusunda başsız tarayıcı ölçümüyle (uydurma veri; 1366 ve 390 px, açık/koyu) denendi; okulun bilgisayarlarında, gerçek telefonda ve ekran okuyucuyla denenecek. 2–6. aşamalar onay bekliyor |
+| P1 | Panel arayüzü 1. aşama (kabuk): sol menü (üç küme, role göre), dar ekranda çekmece ve telefon alt çubuğu, Acil en üstte, ölçek belirteçleri, şekilli rozet, dokunma hedefi (§11.1) | 0.15.0 — testlerle ve deneme sunucusunda başsız tarayıcı ölçümüyle (uydurma veri; 1366 ve 390 px, açık/koyu) denendi; okulun bilgisayarlarında, gerçek telefonda ve ekran okuyucuyla denenecek |
+| P2 | Panel arayüzü 2. aşama (Ayarlar): giriş sayfası (bölüm kartları, değer özetleri, kurulum listesi, arama), 11 bölüm sayfası, yeni `bolum=okul`/`kapatma`/`kilit_kodu` (her biri yalnız kendi anahtarını yazar), Kullanıcılar Ayarlar'da, acil şablonları Acil'de (§11.1) | 0.16.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri; JS açık ve kapalı kayıt denemesi, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek ayarlarla ve kurulu hizmette denenecek. 3–6. aşamalar onay bekliyor |
 | 3C | Sihirbaza e-Okul "Haftalık Ders Programları" raporu (OOK11002_R01, .XLS): blok ayrıştırma, rapordan zil çizelgesi, zorunlu şube eşlemesi, şubenin tahtasına yazma (§12.4) | 0.12.0 — testlerle (uydurma matris) ve geliştirme bilgisayarında gerçek bir raporla (ayrı veri dizini, uydurma tahtalar) uçtan uca denendi; okulda denenecek |
 
 Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" ve "Seçili
@@ -1643,13 +1676,14 @@ Ders yoklaması (0.6.0):
 68. **Aydınlatma:** okulun aydınlatma metni tahtada okul numarası ile adın birlikte görünmesini ve mazeret
     türünün (raporlu dahil) okul sunucusunda tutulmasını kapsıyor mu? (Soru 33'ün devamı.)
 
-Panel arayüzü (0.15.0; taslağın soruları — yanıt gelene kadar **önerilen** seçenek geçerlidir, §11.1):
+Panel arayüzü (0.15.0, 0.16.0; taslağın soruları — yanıt gelene kadar **önerilen** seçenek geçerlidir, §11.1):
 
-69. **Panel kullanıcıları nerede dursun?** Öneri: Ayarlar içinde bir bölüm (2. aşama). Şimdi menüde ayrı öğe.
+69. **Panel kullanıcıları nerede dursun?** Öneri: Ayarlar içinde bir bölüm. (0.16.0'da öneri uygulandı:
+    `/ayarlar/kullanicilar`; menüde ayrı öğe kalktı. Geri istenirse menü öğesi tek satırdır.)
 70. **Ana sayfanın adı:** öneri "Bugün" (4. aşama). Şimdi menüde "Tahtalar", adres `/`.
 71. **Bugün ekranında tahtalar:** öneri kat/blok çipleri ve durum sayıları, tam liste Tahtalar'da; öbür
     seçenek bugünkü kart ızgarası.
-72. **Genel arama ne zaman?** Öneri: son aşamada; önce yalnız Ayarlar içinde.
+72. **Genel arama ne zaman?** Öneri: son aşamada; önce yalnız Ayarlar içinde (0.16.0'da Ayarlar araması var).
 73. **Sol menünün rengi:** öneri okulun şerit rengi (0.15.0'da böyle); öbür seçenek nötr koyu gri.
 74. **Yoklama'ya tıklayınca ilk sayfa:** öneri Günlük (bugünkü gibi); öbür seçenek şube defteri.
 75. **Tahta ayrıntısında bugünün ders başlıkları gösterilsin mi?** Öneri: gösterilsin, öğretmen adı olmadan.

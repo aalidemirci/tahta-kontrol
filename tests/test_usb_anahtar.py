@@ -106,7 +106,7 @@ def test_usb_ayar_varsayilan_kapali_ve_ajana_yalniz_etkin_iner(panel, tahta, haz
     assert sorgu("SELECT ayrinti FROM kayit WHERE islem = 'USB anahtar ayarı kaydedildi'")[0]["ayrinti"] == (
         "açık · kilit açar · PIN: idare, öğretmen"
     )
-    assert panel.get("/ayarlar").status_code == 200
+    assert panel.get("/ayarlar/usb").status_code == 200
 
 
 def test_usb_ayar_yalniz_yonetici(panel, tahta, hazir):  # noqa: F811
@@ -683,24 +683,24 @@ def test_usb_ogretmenler_sayfasi_ve_menu(panel, tahta, usb_hazir):
 
 # ---- panel arayüzü (0.11.0 arayüz uygulayıcısı) ------------------------------------------------------------------
 def test_usb_ayarlar_bolumu_cizilir_ve_ileti_bolumde(panel, tahta, hazir):  # noqa: F811
-    sayfa = panel.get("/ayarlar").text
-    assert 'id="usb-anahtar"' in sayfa and 'name="bolum" value="usb_anahtar"' in sayfa
+    sayfa = panel.get("/ayarlar/usb").text
+    assert 'id="usb_anahtar"' in sayfa and 'name="bolum" value="usb_anahtar"' in sayfa
     for alan in ("ua_etkin", "ua_kilit_acar", "ua_pin_idare", "ua_pin_ogretmen"):
         assert f'name="{alan}"' in sayfa
     assert "Kapalıyken tahtalar takılan belleklere hiç bakmaz." in sayfa
     assert "PIN, kopyalanan dosyayı tek başına işe yaramaz kılar." in sayfa
     konum = usb_ayar(panel).headers["location"]
-    assert konum.startswith("/ayarlar?yer=usb_anahtar")
+    assert konum.startswith("/ayarlar/usb?yer=usb_anahtar")
     sayfa = panel.get(konum.split("#")[0]).text
     # İleti bölümün içinde bir kez, odaklanabilir bant olarak çizilir.
     assert sayfa.count("USB anahtar ayarı kaydedildi.") == 1
-    assert sayfa.index('id="ileti"') > sayfa.index('id="usb-anahtar"')
+    assert sayfa.index('id="ileti"') > sayfa.index('id="usb_anahtar"')
 
 
 def test_usb_ayarlar_yoklama_kapaliyken_uyari(panel, tahta, hazir):  # noqa: F811
     usb_ayar(panel)
     ayar_kaydet(panel, yk_etkin=None)
-    assert "USB anahtar yalnız kilit açmada işe yarar" in panel.get("/ayarlar").text
+    assert "USB anahtar yalnız kilit açmada işe yarar" in panel.get("/ayarlar/usb").text
 
 
 def test_usb_sayfasi_iptal_dialog_tetigi_ve_kopya_rozeti(panel, tahta, usb_hazir):
@@ -722,7 +722,7 @@ def test_usb_sayfasi_iptal_dialog_tetigi_ve_kopya_rozeti(panel, tahta, usb_hazir
 
 def test_usb_sayfasi_ozellik_kapaliyken_uyari_bandi(panel, tahta, hazir):  # noqa: F811
     sayfa = panel.get("/usb-anahtarlar").text
-    assert ua.ILETI_KAPALI_PANEL.replace("'", "&#39;") in sayfa and 'href="/ayarlar#usb-anahtar"' in sayfa
+    assert ua.ILETI_KAPALI_PANEL.replace("'", "&#39;") in sayfa and 'href="/ayarlar/usb"' in sayfa
 
 
 def test_usb_uretildi_sayfasi_gizli_icermez(panel, tahta, usb_hazir):

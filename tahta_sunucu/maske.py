@@ -34,6 +34,13 @@ SINIF_BICIMLERI = {
     "no_basharf": "Okul no ve baş harfler (1047 A. Y.)",
 }
 VARSAYILAN_SINIF_BICIMI = "no_ad_soyadbas"
+
+
+def bicim_parcalari(kod: str) -> tuple[str, str]:
+    """Biçim etiketini ada ve örneğe ayırır: "Ad ve soyadın baş harfi (Ayşe Y.)" → ("Ad ve soyadın baş harfi", "Ayşe Y.").
+    Ayarlar'daki seçenek kartları ve değer özeti aynı kaynaktan (SINIF_BICIMLERI) beslenir; bilinmeyen kod ("", "")."""
+    ad, ayrac, ornek = SINIF_BICIMLERI.get(kod, "").rpartition(" (")
+    return (ad, ornek.rstrip(")")) if ayrac else (ornek, "")
 ETIKET_EN_UZUN = 40  # ajan etiketi 40 karakterde keser (servis._yoklama_listesi_coz)
 OKUL_NO_EN_UZUN = 12  # etiketteki numara; boşluksuz tek belirteçtir
 GEC_EKI = " (geç)"  # `yoklama_gec` yeteneği olmayan ajana geç öğrencinin etiketi bu ekle gider

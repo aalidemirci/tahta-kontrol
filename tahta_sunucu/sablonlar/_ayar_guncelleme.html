@@ -1,0 +1,38 @@
+{% from "_ayar.html" import ileti, nedir, kaydet_cubugu with context %}
+{# Güncelleme denetimi (kural 32): form (bolum=guncelleme) yalnız `guncelleme_denetimi` anahtarını yazar. Varsayılan açık.
+   Tarayıcı dış kaynağa istek atmaz; denetimi sunucu yapar. Sayfa yalnız SAKLANAN durumu gösterir (çizim ağ çağrısı
+   yapmaz). Kapalıyken "Şimdi denetle" düğmesi çizilmez. #}
+<section class="kutu ayar-kart" id="guncelleme" aria-labelledby="guncelleme-baslik">
+  <div class="kutu-bas">
+    <h2 id="guncelleme-baslik">Güncelleme denetimi</h2>
+    <span class="rozet" data-durum="{{ 'tamam' if guncelleme.acik else 'cevrimdisi' }}">{{ 'Açık' if guncelleme.acik else 'Kapalı' }}</span>
+  </div>
+  {{ ileti('guncelleme') }}
+  <p class="not" id="guncelleme-ipucu">Sunucu günde en çok bir kez GitHub'daki sürüm sayfasına bakar; yeni sürüm yayımlanmışsa
+    panoda yalnız yöneticiye haber verir. Kendiliğinden indirme ya da kurma yapılmaz.</p>
+  {# "Şimdi denetle" ayrı formdur (ayar yazmaz) ve sonucunu gösteren satırın yanında durur; kapalıyken çizilmez. #}
+  <div class="oneri-satir denetim-satiri">
+  <p>Kurulu sürüm: <strong>{{ guncelleme.kurulu }}</strong>.
+    {% if not guncelleme.acik %}Denetim kapalı; GitHub'a istek gönderilmez.
+    {% elif guncelleme.denetlendi %}Son denetim: {{ guncelleme.zaman }} — {{ guncelleme.sonuc }}
+      {% if guncelleme.yeni %}<a href="{{ guncelleme.yeni.adres }}" rel="noopener noreferrer">Sürüm sayfası</a>{% endif %}
+    {% else %}{{ guncelleme.sonuc }}{% endif %}</p>
+  {% if guncelleme.acik %}
+  <form method="post" action="/ayarlar/guncelleme/denetle"><button>Şimdi denetle</button></form>
+  {% endif %}
+  </div>
+  <form method="post" action="/ayarlar" data-kirli-izle>
+    <input type="hidden" name="bolum" value="guncelleme">
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="gd_acik">Yeni sürümü GitHub'dan denetle</label></div>
+      <div class="ayar-denetim"><input type="checkbox" name="gd_acik" value="1" {% if guncelleme.acik %}checked{% endif %} id="gd_acik" class="anahtar" aria-describedby="guncelleme-ipucu"></div>
+    </div>
+    {% call nedir("GitHub'a ne gönderilir?") %}
+    <p>İstekle birlikte okul adı, tahta sayısı, kurulu sürüm ya da başka bir bilgi gönderilmez; GitHub yalnız isteğin
+      geldiği internet adresini görür. Tahtalar internete çıkmaz. İnternet yoksa program etkilenmez.</p>
+    {% endcall %}
+    {{ kaydet_cubugu('Güncelleme ayarını kaydet') }}
+  </form>
+</section>
+
+<p class="ilgili">İlgili: <a href="/ayarlar/sunucu">Sunucu ve ağ</a></p>

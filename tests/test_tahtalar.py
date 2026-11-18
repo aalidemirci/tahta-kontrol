@@ -166,7 +166,7 @@ def test_csv_formul_kacisi_ve_ice_aktarma_yetkisi(iki_tahta, panel):
 
 def test_menu_ve_rol_gorunurlugu(iki_tahta, panel):
     sayfa = panel.get("/gruplar").text
-    for parca in ('href="/gruplar" aria-current="page"', 'href="/acil"', 'href="/kullanicilar"', 'href="/ayarlar"'):
+    for parca in ('href="/gruplar" aria-current="page"', 'href="/acil"', 'href="/ayarlar"'):
         assert parca in sayfa, parca
     kullanici_ekle(panel, "idareci1")
     gir(panel, "idareci1")

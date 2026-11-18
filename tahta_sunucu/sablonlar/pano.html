@@ -5,7 +5,7 @@
   <div class="bas-yazi">
     <h1>Tahtalar</h1>
     <p>Otomatik kapatma: {{ kapatma or 'kapalı' }}.
-      {% if kullanici.rol == 'yonetici' %}<a href="/ayarlar">Ayarla</a>{% endif %}</p>
+      {% if kullanici.rol == 'yonetici' %}<a href="/ayarlar/gunsonu">Ayarla</a>{% endif %}</p>
     {% if onayli %}<span class="canli" id="canli" data-durum="cevrimici"><svg class="simge" aria-hidden="true"><use href="#s-acik"/></svg><span>Canlı</span></span>{% endif %}
   </div>
   {% if onayli %}
@@ -52,7 +52,7 @@
 
 {# Yeni sürüm notu: yalnız yöneticiye (web.py). Bağlantı sunucuda sabit kalıptan kurulur; sürüm notu metni basılmaz. #}
 {% if yeni_surum %}
-<div class="bant" role="status" data-yeni-surum="{{ yeni_surum.surum }}">Tahta Kontrol {{ yeni_surum.surum }} yayımlandı (kurulu sürüm {{ surum }}). <a href="{{ yeni_surum.adres }}" rel="noopener noreferrer">Sürüm sayfası</a> · <a href="/ayarlar#guncelleme">Ayarlar</a></div>
+<div class="bant" role="status" data-yeni-surum="{{ yeni_surum.surum }}">Tahta Kontrol {{ yeni_surum.surum }} yayımlandı (kurulu sürüm {{ surum }}). <a href="{{ yeni_surum.adres }}" rel="noopener noreferrer">Sürüm sayfası</a> · <a href="/ayarlar/guncelleme">Ayarlar</a></div>
 {% endif %}
 
 <div class="bant uyari" id="yenile-bandi" hidden>Yeni tahta onaylandı ya da onay bekleyen sayısı değişti. <a href="/">Sayfayı yenile</a></div>
@@ -75,7 +75,7 @@
 
 {% if not kilit_kodu_var %}
 <div class="bant" role="status">Kilit kodu tanımlı değil: kilitlenen tahta yalnız panelden açılır.
-  {% if kullanici.rol == 'yonetici' %}<a href="/ayarlar">Ayarlar</a> sayfasından kod belirleyebilirsiniz.{% endif %}</div>
+  {% if kullanici.rol == 'yonetici' %}<a href="/ayarlar/kilit">Ayarlar › Kilit ve güvenlik</a> bölümünden kod belirleyebilirsiniz.{% endif %}</div>
 {% endif %}
 
 {% if not onayli %}

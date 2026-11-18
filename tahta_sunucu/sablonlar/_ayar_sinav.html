@@ -1,0 +1,30 @@
+{% from "_ayar.html" import ileti, nedir, kaydet_cubugu with context %}
+{# Sınav ekranı (A4): tek form (bolum=sinav). Boş bırakılırsa ya da eylem=varsayilan ise varsayılan metin. Doğrulama
+   hatasında sayfa gönderilen metinle (400) yeniden çizilir. #}
+<section class="kutu ayar-kart" id="sinav" aria-labelledby="sinav-baslik">
+  <div class="kutu-bas">
+    <h2 id="sinav-baslik">Sınav kuralları</h2>
+    <span class="rozet" data-durum="bilgi">{{ 'Özel metin' if sinav_kurallari_ozel else 'Varsayılan metin' }}</span>
+  </div>
+  {{ ileti('sinav') }}
+  <form method="post" action="/ayarlar" data-kirli-izle>
+    <input type="hidden" name="bolum" value="sinav">
+    <label for="sinav_kurallari">Sınav kuralları (tahtadaki sınav ekranında görünür)</label>
+    <p class="ipucu" id="sinav-kurallari-ipucu">Sınav süresince salon tahtasında sayacın altında görünür; her satır ayrı satırdır.</p>
+    <textarea id="sinav_kurallari" name="sinav_kurallari" rows="5" maxlength="{{ sinav_kurallari_en_uzun }}" aria-describedby="sinav-kurallari-ipucu sinav-kurallari-not">{{ sinav_kurallari }}</textarea>
+    <p class="not sayac" data-sayac="sinav_kurallari">En çok {{ sinav_kurallari_en_uzun }} karakter</p>
+    <p class="not" id="sinav-kurallari-not">Boş bırakılırsa varsayılan metin kullanılır. <strong>Öğrenci adı ya da kişisel bilgi yazmayın.</strong></p>
+    {% call nedir('Tahtada nasıl görünür?') %}
+    <p>En çok 8 satır; tahtada sığmayan kısım kesilir, kısa tutun. Metin okulun tercihidir; tahtada mevzuat dayanağı gösterilmez.</p>
+    {% endcall %}
+    {% if sinav_kurallari_ozel %}
+    {% call kaydet_cubugu('Sınav kurallarını kaydet') %}
+    <button name="eylem" value="varsayilan">Varsayılan metne dön</button>
+    {% endcall %}
+    {% else %}
+    {{ kaydet_cubugu('Sınav kurallarını kaydet') }}
+    {% endif %}
+  </form>
+</section>
+
+<p class="ilgili">İlgili: <a href="/sinavlar">Sınavlar</a></p>

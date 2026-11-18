@@ -32,6 +32,30 @@ KVKK_YEDEK_NOTU = (
 )
 
 
+def yedek_ayar_baglami(b) -> dict:
+    """Yedek parolası ve saklama formlarının bağlamı: Yedekler sayfası ve Ayarlar › Veri saklama ve yedek (0.16.0)
+    aynı işlevi kullanır. Parola hiçbir alana geri yazılmaz; yalnız "var mı" ve belirlenme zamanı."""
+    ayar_ = yedek.ayarlar(b)
+    return {
+        "yedek_ayari": {
+            "parola_var": ayar_["parola_var"],
+            "parola_zamani": ayar_.get("parola_zamani"),
+            "saklama": int(ayar_.get("saklama") or yedek.SAKLAMA_VARSAYILAN),
+            "kopya_dizini": ayar_.get("kopya_dizini") or "",
+        },
+        "saklama_aralik": yedek.SAKLAMA_ARALIK,
+        "parola_en_kisa": yedek.PAROLA_EN_KISA,
+    }
+
+
+def donus_adresi(form, yer: str) -> str:
+    """Yedek formlarının dönüş adresi. Ayarlar'daki form gizli `donus=ayarlar` yollar; başka her değer yok
+    sayılır (beyaz liste: açık yönlendirme yok)."""
+    if form.get("donus") == "ayarlar":
+        return f"/ayarlar/veri?yer={yer}#ileti"
+    return f"/yedekler?yer={yer}#ileti"
+
+
 def kaydet(uygulama, y) -> None:
     geri_yukleme_hatalari: dict[str, list[float]] = defaultdict(list)
     parola_denemeleri: dict[str, list[float]] = defaultdict(list)
@@ -73,19 +97,12 @@ def kaydet(uygulama, y) -> None:
         else:
             sonraki = "Program açıldıktan 5 dakika sonra (bugün)."
         return {
-            "yedek_ayari": {
-                "parola_var": ayar_["parola_var"],
-                "parola_zamani": ayar_.get("parola_zamani"),
-                "saklama": int(ayar_.get("saklama") or yedek.SAKLAMA_VARSAYILAN),
-                "kopya_dizini": ayar_.get("kopya_dizini") or "",
-            },
+            **yedek_ayar_baglami(b),
             "son_yedek": son,
             "bugun_alindi": bugun,
             "sonraki_otomatik": sonraki,
             "klasor": str(yedek.dizin()),
             "yedekler": yedek.listele(),
-            "saklama_aralik": yedek.SAKLAMA_ARALIK,
-            "parola_en_kisa": yedek.PAROLA_EN_KISA,
             "izin_komutu": yedek.izin_komutu(ayar_.get("kopya_dizini") or "D:\\TahtaYedek"),
             "kvkk_notu": KVKK_YEDEK_NOTU,
             "bekleyen": yedek.bekleyen_oku(),
@@ -107,8 +124,8 @@ def kaydet(uygulama, y) -> None:
         k = y.kullanici(istek)
         if not yonetici_mi(k):
             return y.yetkisiz_reddet(istek, k, "Yedek parolası")
-        adres = "/yedekler?yer=parola#ileti"
         form = await istek.form()
+        adres = donus_adresi(form, "parola")
         hesap = str(form.get("hesap_parolasi", ""))
         parola, parola2 = str(form.get("parola", "")), str(form.get("parola2", ""))
         if not y.hiz_siniri(parola_denemeleri, ip(istek), *YEDEK_PAROLA_SINIRI):
@@ -144,8 +161,8 @@ def kaydet(uygulama, y) -> None:
         k = y.kullanici(istek)
         if not yonetici_mi(k):
             return y.yetkisiz_reddet(istek, k, "Yedek ayarları")
-        adres = "/yedekler?yer=ayar#ileti"
         form = await istek.form()
+        adres = donus_adresi(form, "ayar")
         try:
             saklama = int(str(form.get("saklama", "")).strip())
         except ValueError:

@@ -76,9 +76,9 @@ def test_acil_sablonu_hatasinda_duzenlemeler_korunur(okul, panel):
     assert 'value="Gaz kaçağı"' in yanit.text and "Okulun yeni metni." in yanit.text
     assert sorgu("SELECT deger FROM ayar WHERE anahtar = 'acil_sablonlar'") == []  # hiçbir şey yazılmadı
     # "Örnek şablonlara dön" yalnız onaylı tetikle gelir (örnek metinler kullanılırken hiç görünmez).
-    assert 'data-onay="sablon_varsayilan"' not in panel.get("/ayarlar").text
+    assert 'data-onay="sablon_varsayilan"' not in panel.get("/acil?sekme=sablonlar").text
     panel.post("/ayarlar", data={"bolum": "acil_sablonlari", "s_ad": "Deprem", "s_baslik": "D", "s_metin": "m"})
-    assert 'data-onay="sablon_varsayilan"' in panel.get("/ayarlar").text
+    assert 'data-onay="sablon_varsayilan"' in panel.get("/acil?sekme=sablonlar").text
 
 
 @pytest.mark.parametrize("deger", ["100000000000000000000", "2147483648"])

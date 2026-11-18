@@ -12,6 +12,7 @@
 //           [--zorlanmis] [--ek=-ad] [--yol=/adres] [--oturumsuz]
 //   --ilk       yalnız ilk ekranın görüntüsü          --gorsuz   görüntü alma, yalnız ölç
 //   --zorlanmis forced-colors: active öykünmesi       --yol=     listedeki sayfalar yerine tek adres ("ozel" adıyla)
+//   --acik      <details> öğelerini açıp öyle ölç
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -49,7 +50,14 @@ export const SAYFALAR = [
   ["yoklama-icmal", "/yoklama/icmal"], ["ogretmenler", "/ogretmenler"], ["ogrenciler", "/ogrenciler"],
   ["usb-anahtarlar", "/usb-anahtarlar"], ["ogretmen-programi", "/ogretmen-programi"], ["arizalar", "/arizalar"],
   ["ariza-ayrinti", "/ariza/1"], ["envanter", "/envanter"], ["yedekler", "/yedekler"], ["islem-kaydi", "/kayit"],
-  ["kullanicilar", "/kullanicilar"], ["ayarlar", "/ayarlar"], ["acil", "/acil"], ["giris", "/giris"],
+  ["ayarlar", "/ayarlar"], ["acil", "/acil"],
+  // 0.16.0: Ayarlar'ın 11 bölüm sayfası ("ayar-" önekiyle süzülür) ve Acil › Şablonlar. /kullanicilar artık bir bölümdür.
+  ["ayar-okul", "/ayarlar/okul"], ["ayar-kilit", "/ayarlar/kilit"], ["ayar-gunsonu", "/ayarlar/gunsonu"],
+  ["ayar-yuzer", "/ayarlar/yuzer"], ["ayar-yoklama", "/ayarlar/yoklama"], ["ayar-usb", "/ayarlar/usb"],
+  ["ayar-sinav", "/ayarlar/sinav"], ["ayar-veri", "/ayarlar/veri"], ["ayar-sunucu", "/ayarlar/sunucu"],
+  ["ayar-guncelleme", "/ayarlar/guncelleme"], ["ayar-kullanicilar", "/ayarlar/kullanicilar"],
+  ["acil-sablonlar", "/acil?sekme=sablonlar"],
+  ["giris", "/giris"], // EN SONDA: oturum çerezi burada silinir
 ];
 
 // Sayfanın içinde çalışan ölçüm (yalnız okur).
@@ -89,7 +97,8 @@ const OLCUM = `(() => {
   const yaz = (x) => ad(x.e) + " '" + x.e.textContent.trim().slice(0, 20) + "' " + x.o.toFixed(2);
   const kucuk = metinli.filter((e) => parseFloat(getComputedStyle(e).fontSize) < 12);
   const esik = innerWidth < 1024 ? 44 : 36;
-  const hedefler = g("button, a.dugme, summary.dugme, .sekmeler a, .yan-menu a, .ust-cubuk a, .alt-cubuk a").filter(gorunur)
+  const hedefler = g("button, a.dugme, summary.dugme, .sekmeler a, .yan-menu a, .ust-cubuk a, .alt-cubuk a, "
+    + ".ayar-liste a, .ayar-menu li a, .ayar-menu summary, details.nedir > summary, details.ozet-satir > summary").filter(gorunur)
     .filter((e) => !e.closest(".firca-sec, .defter, dialog:not([open])"));
   const kucukHedef = hedefler.filter((e) => kutu(e).height < esik - .5);
   const ilk = [...(document.querySelector("main") || document.body).children].find(gorunur);
@@ -185,6 +194,11 @@ async function main() {
     await cdp("Page.navigate", { url: KOK + yol });
     for (let i = 0; i < 80 && !olaylar.some((o) => o.method === "Page.loadEventFired"); i++) await bekle(100);
     await bekle(1200); // panel.js'in ilk durum turu
+    // --acik: katlı açıklamalar (<details>) açılıp öyle ölçülür (0.16.0 Ayarlar: açıkken de taşma olmamalı).
+    if (bayrak("acik")) {
+      await cdp("Runtime.evaluate", { expression: 'document.querySelectorAll("main details").forEach((d) => { d.open = true; })' });
+      await bekle(200);
+    }
     const o = (await cdp("Runtime.evaluate", { expression: OLCUM, returnByValue: true })).result?.result?.value || {};
     o.yol = yol;
     o.hatalar = olaylar.filter((x) => x.method === "Runtime.exceptionThrown")

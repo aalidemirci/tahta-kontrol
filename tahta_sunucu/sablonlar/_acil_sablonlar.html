@@ -1,0 +1,34 @@
+{# Acil › Şablonlar (0.16.0; Ayarlar'dan taşındı, yalnız yönetici). Ayrı formdur (POST /ayarlar, bolum=acil_sablonlari):
+   başka hiçbir ayarı ezmez. Alanlar paralel listedir: s_ad, s_baslik, s_metin; adı boş satır silinmiş sayılır.
+   Doğrulama hatasında görünüm gönderilen değerlerle (400) yeniden çizilir. #}
+<section class="kutu" id="acil-sablonlari" aria-labelledby="acil-sablon-baslik">
+  <h2 id="acil-sablon-baslik">Acil yayın şablonları</h2>
+  <p class="bant uyari"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{% if acil_sablon_ornek %}Aşağıdakiler örnek metinlerdir; mevzuat metni değildir. {% endif %}Şablonları okulunuzun acil durum planındaki ifadelere göre düzenleyin; iş güvenliği sorumlunuzun görüşünü alın. Öğrenci ya da kişi adı yazmayın.</p>
+  {% if mesaj %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  <p class="ipucu">En çok {{ acil_sablon_en_cok }} şablon. Bir şablonu silmek için adını boşaltıp kaydedin.</p>
+  <p class="bant uyari" id="acil-sablon-bilgi" role="status" hidden>Silinen şablon "Şablonları kaydet" deyince kalkar.</p>
+  <form method="post" action="/ayarlar" id="acil-sablon-formu">
+    <input type="hidden" name="bolum" value="acil_sablonlari">
+    <div class="sablon-listesi">
+    {% for s in acil_sablonlar %}
+    <fieldset class="sablon-satiri">
+      <legend class="gizli">Şablon {{ loop.index }}: {{ s.ad }}</legend>
+      <div><label for="s-ad-{{ loop.index }}">Ad</label><input type="text" id="s-ad-{{ loop.index }}" name="s_ad" value="{{ s.ad }}" maxlength="40"></div>
+      <div><label for="s-baslik-{{ loop.index }}">Tahtadaki başlık</label><input type="text" id="s-baslik-{{ loop.index }}" name="s_baslik" value="{{ s.baslik }}" maxlength="120"></div>
+      <div class="sablon-metin"><label for="s-metin-{{ loop.index }}">Metin</label><textarea id="s-metin-{{ loop.index }}" name="s_metin" rows="2" maxlength="1000">{{ s.metin }}</textarea></div>
+      <div class="sablon-sil"><button type="button" class="tehlike" data-sablon-sil hidden>Sil</button></div>
+    </fieldset>
+    {% endfor %}
+    {% if acil_sablonlar | length < acil_sablon_en_cok %}
+    <fieldset class="sablon-satiri yeni">
+      <legend class="gizli">Yeni şablon</legend>
+      <div><label for="s-ad-yeni">Yeni şablon adı</label><input type="text" id="s-ad-yeni" name="s_ad" maxlength="40" placeholder="ör. Gaz kaçağı"></div>
+      <div><label for="s-baslik-yeni">Tahtadaki başlık</label><input type="text" id="s-baslik-yeni" name="s_baslik" maxlength="120"></div>
+      <div class="sablon-metin"><label for="s-metin-yeni">Metin</label><textarea id="s-metin-yeni" name="s_metin" rows="2" maxlength="1000"></textarea></div>
+    </fieldset>
+    {% endif %}
+    </div>
+    <div class="dugme-satiri"><button name="eylem" value="kaydet" class="ana">Şablonları kaydet</button>
+      {% if not acil_sablon_ornek %}<button type="button" class="tehlike" data-onay="sablon_varsayilan" aria-haspopup="dialog">Örnek şablonlara dön…</button>{% endif %}</div>
+  </form>
+</section>

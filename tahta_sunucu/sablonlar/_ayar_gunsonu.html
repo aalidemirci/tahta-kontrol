@@ -1,0 +1,89 @@
+{% from "_ayar.html" import ileti, nedir, kaydet_cubugu with context %}
+{# Kapatma ve gün sonu: otomatik kapatma (bolum=kapatma; yalnız otomatik_kapatma) ve oturum temizliği
+   (bolum=temizlik, K7; yalnız oturum_temizligi). Her ayarın bütün alanları kendi tek formundadır. #}
+<section class="kutu ayar-kart" id="kapatma" aria-labelledby="kapatma-baslik">
+  <div class="kutu-bas">
+    <h2 id="kapatma-baslik">Otomatik kapatma</h2>
+    <span class="rozet" data-durum="{{ 'tamam' if kapatma.etkin or kapatma.hafta_sonu else 'cevrimdisi' }}">{{ 'Açık' if kapatma.etkin or kapatma.hafta_sonu else 'Kapalı' }}</span>
+  </div>
+  {{ ileti('kapatma') }}
+  <p class="not">Enerji tasarrufu için açık kalan tahtalar kapatılır. Kullanılan tahtada kapanmadan önce 60 saniyelik geri sayım çıkar
+    ve tahtadaki kişi “Vazgeç” diyebilir; vazgeçilen tahta o saat için yeniden kapatılmaz.
+    Kilitli ya da oturum açılmamış tahta uyarısız kapanır.</p>
+  <form method="post" action="/ayarlar" data-kirli-izle>
+    <input type="hidden" name="bolum" value="kapatma">
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="ok_etkin">Hafta içi belirlenen saatlerde açık tahtaları kapat</label></div>
+      <div class="ayar-denetim"><input type="checkbox" name="ok_etkin" value="1" {% if kapatma.etkin %}checked{% endif %} id="ok_etkin" class="anahtar"></div>
+    </div>
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="ok_saatler">Kapatma saatleri</label><p class="not" id="ok-saatler-ipucu">SS:DD biçiminde, virgülle ayırın (ör. 12:40, 19:15).</p></div>
+      <div class="ayar-denetim"><input type="text" id="ok_saatler" name="ok_saatler" value="{{ (kapatma.saatler or []) | join(', ') }}" placeholder="ör. 19:15" aria-describedby="ok-saatler-ipucu"></div>
+    </div>
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="ok_hafta_sonu">Cumartesi ve pazar günü uzun süre açık kalan tahtayı kapat</label>
+        <p class="not">Vazgeçilirse aynı süre sonra yeniden sorulur.</p></div>
+      <div class="ayar-denetim"><input type="checkbox" name="ok_hafta_sonu" value="1" {% if kapatma.hafta_sonu %}checked{% endif %} id="ok_hafta_sonu" class="anahtar"></div>
+    </div>
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="ok_hafta_sonu_dk">Kaç dakika açık kalınca</label><p class="not" id="ok-dk-ipucu">10–600 dakika.</p></div>
+      <div class="ayar-denetim"><input type="number" id="ok_hafta_sonu_dk" name="ok_hafta_sonu_dk" min="10" max="600" value="{{ kapatma.hafta_sonu_dk or 60 }}" class="alan-sayi" aria-describedby="ok-dk-ipucu"></div>
+    </div>
+    {% call nedir('Neye dikkat edilmeli?') %}
+    <ul>
+      <li>Yalnız o anda açık olan tahtalar kapatılır; saatinden sonra açılan tahtaya dokunulmaz.</li>
+      <li>Resmî tatiller ayrıca tanınmaz; hafta içine denk gelen tatilde hafta içi kuralı geçerlidir.</li>
+      <li>Sunucu programı o saatte çalışıyor olmalıdır.</li>
+      <li>Acil yayın sürerken ve sınavdaki tahtada kapatma yapılmaz.</li>
+      <li>Ders saatleri <a href="/program">Program</a> sayfasında tanımlanır.</li>
+    </ul>
+    {% endcall %}
+    {{ kaydet_cubugu('Kapatma ayarını kaydet') }}
+  </form>
+</section>
+
+<section class="kutu ayar-kart" id="temizlik" aria-labelledby="temizlik-baslik">
+  <div class="kutu-bas">
+    <h2 id="temizlik-baslik">Oturum temizliği</h2>
+    <span class="rozet" data-durum="{{ 'tamam' if temizlik_ayari.etkin else 'cevrimdisi' }}">{{ 'Açık' if temizlik_ayari.etkin else 'Kapalı' }}</span>
+  </div>
+  {{ ileti('temizlik') }}
+  <p class="not" id="temizlik-ipucu">Gün sonunda öğretmen ve öğrenci ortak hesabının oturumu hafifçe temizlenir: açık pencerelere kapatma
+    isteği gider (kaydedilmemiş belge için uygulama soru sorar, zorla kapatılmaz), tarayıcılar kapatılır ve tarayıcı profillerinde
+    yalnız çerez ve oturum dosyaları silinir. Yalnız öğretmen ve öğrenci ortak hesaplarında yapılır.</p>
+  {% if temizlik_ayari.etkin and temizlik_zamani.uyari %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ temizlik_zamani.uyari }}</p>{% endif %}
+  {% if temizlik_eski %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ temizlik_eski }} tahtada ajan güncellenmeli (eski ajan temizlik yapmaz).</p>{% endif %}
+  <form method="post" action="/ayarlar" data-kirli-izle>
+    <input type="hidden" name="bolum" value="temizlik">
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="tm_etkin">Gün sonunda ortak hesapta oturum temizliği yap</label>
+        {% if temizlik_ayari.etkin and temizlik_zamani.bugun %}<p class="not">Bugün: {{ temizlik_zamani.bugun }}.</p>{% endif %}</div>
+      <div class="ayar-denetim"><input type="checkbox" name="tm_etkin" value="1" {% if temizlik_ayari.etkin %}checked{% endif %} id="tm_etkin" class="anahtar" aria-describedby="temizlik-ipucu"></div>
+    </div>
+    <fieldset class="olcut">
+      <legend>Ne zaman (yalnız hafta içi)</legend>
+      {# fieldset.olcut iki sütunlu ızgaradır (başlık + içerik): seçenekler tek kapsayıcıda durur. #}
+      <div>
+        {% for kod, ad in temizlik_zamanlari.items() %}
+        <label class="satir"><input type="radio" name="tm_zaman" value="{{ kod }}" {% if temizlik_ayari.zaman == kod %}checked{% endif %}> {{ ad }}</label>
+        {% endfor %}
+        <label for="tm_saat">Belirli saat (SS:DD)</label>
+        <input type="text" id="tm_saat" name="tm_saat" value="{{ temizlik_ayari.saat }}" maxlength="5" inputmode="numeric" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" class="alan-sayi" placeholder="17:30">
+      </div>
+    </fieldset>
+    {% call nedir('Neler silinmez, ne zaman yapılmaz?') %}
+    <ul>
+      <li>Çerez ve oturum dosyaları silinince tahtada açık kalmış e-posta ya da okul sistemi oturumları kapanır.</li>
+      <li>Dosyalara (İndirilenler, Masaüstü, Belgeler), tarayıcı geçmişine, yer imlerine ve kayıtlı parolalara dokunulmaz.</li>
+      <li>Yönetici (etapadmin) ve kişisel hesaplarda hiçbir zaman yapılmaz.</li>
+      <li>Kullanılan tahtada önce 60 saniyelik uyarı çıkar ve tahtadaki kişi “Vazgeç” diyebilir; kilitli ya da oturumsuz tahtada uyarısız yapılır.</li>
+      <li>Yalnız o anda açık olan tahtalara verilir; sunucu o saatte çalışmıyorsa ya da tahta kapalıysa o günün temizliği sonradan yapılmaz.</li>
+      <li>Acil yayın sürerken ve sınavdaki tahtada yapılmaz.</li>
+      <li>Tek bir tahtada denemek için tahta sayfasındaki “Şimdi temizle” düğmesini kullanın.</li>
+    </ul>
+    {% endcall %}
+    {{ kaydet_cubugu('Temizlik ayarını kaydet') }}
+  </form>
+</section>
+
+<p class="ilgili">İlgili: <a href="/ayarlar/kilit">Kilit ve güvenlik</a> · <a href="/program">Program (ders saatleri)</a></p>
