@@ -1,5 +1,12 @@
 # CLAUDE.md — Tahta Kontrol
 
+Yerel geliştirme 0.14.0 (kullanıcı isteği 18.11.2026): ders yoklaması yeniden tasarlandı. Tahtada
+kaydırmasız şube/ders saati seçimi, okul no sırasıyla "123 Ayşe Y." listesi, devrenin ilk dersinde "geç",
+saate göre ders ön seçimi; panelde şube defteri (son beş öğretim günü + gün kipinde düzeltme), mazeret/izin
+girişi ve son günler listesi. `docs/surum-0.14.0.md`, tasarım §14.2; kural 18, 19, 24 güncellendi, 33–35
+eklendi. Ajan değişti (yetenek `yoklama_gec`). Testlerle, Debian 12 kabında (Xvfb) ekran ölçümüyle ve
+tarayıcıda uydurma veriyle denendi; dağıtılmadı, gerçek ETAP'ta ve gerçek sınıfta denenmedi.
+
 Yerel geliştirme 0.13.1: 0.13.0'ın bağımsız incelemesinde doğrulanan bulguların düzeltmesi
 (seçmeli hücrede öğretmen adının ders başlığına karışması, kilit ekranı gün programı, önizleme
 belleği, yüzer düğme). `docs/surum-0.13.1.md`. Dağıtılmadı; gerçek ETAP'ta denenmedi; 0.13.0 ile
@@ -30,7 +37,10 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.13.1, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.13.1: 0.13.0
+- Durum: **0.14.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.14.0: ders yoklaması
+  yeniden tasarımı — tahtada kaydırmasız seçim ekranı, okul no sıralı liste, geç, panelde şube defteri, mazeret
+  ve son beş gün; testlerle, Debian 12 kabında (Xvfb) ekran ölçümüyle ve tarayıcıda uydurma veriyle denendi,
+  gerçek ETAP'ta ve gerçek sınıfta denenmedi; tasarım §14.2; 0.13.1: 0.13.0
   inceleme bulguları, yukarıda, ve GitHub'dan yeni sürüm denetimi — gerçek ağla yalnız geliştirme ortamında
   denendi, kurulu hizmette ve okul ağında denenmedi; 0.13.0: öğretmen programı aktarımı (`/ogretmen-programi`, XLS + PDF ya da
   şube listesi) ve kilit ekranında bugünün şube/ders/saat programı, tasarım §12.5; yüzer düğme ve kilit
@@ -61,7 +71,7 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
   0.7.0'ın altyapı çekirdeği (şifreli yedek, sunucu adres listesi, envanter, arıza bildirimi)
   yalnız Debian 12 kabında ve tarayıcıda denendi; gerçek bir ETAP tahtasında, gerçek Kelebek
   çizelgesiyle ve gerçek e-Okul sınıf listesiyle henüz denenmedi. Ajan paketi imzası yapılmadı.
-- Ders programı ve program kilidi `docs/tasarim.md` §12 (öğretmen programı ve kilit ekranı gün programı §12.5); sınav kipi §13; ders yoklaması §14;
+- Ders programı ve program kilidi `docs/tasarim.md` §12 (öğretmen programı ve kilit ekranı gün programı §12.5); sınav kipi §13; ders yoklaması §14 (0.14.0 yeniden tasarımı §14.2);
   altyapı (yedek, adres listesi, envanter, arıza) §15, Windows hizmeti §15.6; yol haritası §16; okul idaresinin kesin
   kararları (K1–K8, 16.11.2026) ve kullanıcıya sorulacaklar §17; doğrulanacak dayanaklar §18.
   Kararlar yeniden tartışılmaz; bir kararla çelişen öneri yapılmaz.
@@ -106,6 +116,10 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   panel_yoklama.py  /yoklama (günlük ızgara, kayıt/düzeltme, panelden gir, icmal + .csv, e-Okul işareti),
                     /ogretmenler (PIN pusulası), /ogrenciler (önizle/aktar/temizle), /ajan/yoklama/*;
                     sonunda şablon bağlamlarının SÖZLEŞME bloğu
+  panel_defter.py   şube defteri ve mazeret uçları (0.14.0; `kaydet` panel_yoklama.kaydet içinden çağrılır):
+                    /yoklama/sube (beş gün / gün kipi), /yoklama/sube/hucre (fırça; JSON ya da 303),
+                    /yoklama/sube/toplu (Alındı iki adım, Bütün gün yok, Temizle), /yoklama/son-gunler,
+                    /yoklama/ogrenci/{id}, /yoklama/mazeret[/onizle|onayla|{id}/iptal]; hepsi no-store
   panel_usb.py      USB anahtar (0.11.0): /usb-anahtarlar (üret, iptal), /usb-anahtarlar/indir/{belirtec} (tek
                     seferlik, 5 dk), /ajan/usb/{tani,yoklama,kilit_ac}; sonunda SÖZLEŞME bloğu
   panel_ogretmen_program.py  öğretmen programı (0.13.0): /ogretmen-programi[/onizle|vazgec|uygula]; yalnız yönetici;
@@ -130,10 +144,18 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 sinavlar.html, sinav.html, sinav_yoklama.html, sinav_kodlar.html, sinav_icmal.html, _sinav.html;
                 yoklama*.html, ogretmenler.html, ogretmen_program.html (0.13.0), ogretmen_pusula.html, ogrenciler.html, ogrenci_onizleme.html
                 ve ortak başları _yoklama_bas.html (sekmeler + KVKK notu); usb_anahtarlar.html, usb_anahtar_uretildi.html;
+                0.14.0: yoklama_sube.html (şube defteri), yoklama_son_gunler.html, yoklama_mazeret.html,
+                yoklama_mazeret_onizleme.html, yoklama_ogrenci.html, _yoklama_hucre.html (hücre makrosu + lejant);
                 yedekler.html, yedek_onay.html, yedek_geri_yukle.html, envanter.html, arizalar.html,
                 ariza.html, _ariza.html (durum rozeti + açma formu makroları), _tahta_altyapi.html
-  yoklama.py    ders yoklaması iş mantığı (FastAPI'siz): ayar, A3 uyarlama işlevleri, öneri, PIN kapısı
-                (3 katman), belirteç, yoklama_yaz (upsert + iz), günlük görünüm, icmal/metin/CSV, aktarım, imha
+  yoklama.py    ders yoklaması iş mantığı (FastAPI'siz): ayar, A3 uyarlama işlevleri, öneri (0.14.0: ders_kurali —
+                süren → 5 dk içinde başlayacak → son 15 dk'da biten; teneffüste ders_adaylari; pencere_devresi;
+                ogretmen_onerisi dar SELECT), gec_secilebilir, PIN kapısı (3 katman), belirteç, yoklama_yaz (upsert +
+                iz; yok + geç + devre), gecerli_durum, günlük görünüm, icmal/metin/CSV, aktarım, imha
+  yoklama_defter.py  şube defteri, son günler, mazeret (0.14.0, FastAPI'siz): Veri (aralığı toplu yükler; sorgu
+                sayısı öğrenci/şube sayısından bağımsız), TEK birleşim kuralı (gecerli_duzeltmeler, kumeler,
+                hucre_durumu; kural 34), hucre_yaz (düzeltme katmanı), sutun_alindi, ogretim_gunleri, ardisik_yok,
+                sube_defteri, sube_gunu, son_gunler, ogrenci_gorunumu, mazeret_coz/onizle/yaz/iptal, eokul_bayat
   eokul.py      öğrenci listesi ayrıştırıcı: e-Okul OOG01001R020 .xls (xlrd), düz .xlsx/.csv
   sinav.py      sınav iş mantığı: R5 ayrıştırma, içe aktarma, eşleşme önerisi, süreler/evreler, ayar.sinav,
                 gözetmen kapısı (bellekte), yoklama, şube duyurusu, icmal, saklama temizliği
@@ -152,8 +174,9 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 sayı), uygula (sürüm sayacı; kalıcı tabloda öğretmen KİMLİĞİ, ham ad yok)
   kilit_program.py  kilit ekranı gün programı (0.13.0): ajan_gorunumu → ayar.gun_programi {tarih, dersler, ileti,
                 gecerli_sn}; yalnız şube/ders/saat; tablo boşsa ya da tahtanın şubesi yoksa None (kutu çıkmaz)
-  maske.py      tek maskeleme tanımı: kalabalik("Ah*** Yı****"), no_son("47"), sinif_etiketi("Ayşe Y.")
-  program.py    zil saatleri, Okul Zili okuma, takvim (plan_hesapla yalnız burada; dışarıdan gun_plani(b, tarih)),
+  maske.py      tek maskeleme tanımı: kalabalik("Ah*** Yı****"), no_son("47"), sinif_etiketi (0.14.0 varsayılanı
+                no_ad_soyadbas "123 Ayşe Y."; ad_kisalt sunucuda, eşik sütuna bağlı; yoklama_yerlesim ajanla aynı)
+  program.py    zil saatleri, Okul Zili okuma, takvim (plan_hesapla yalnız burada; dışarıdan gun_plani(b, tarih), aralık için gun_planlari),
                 kilit aralıkları (saf); derslik CSV okuması program_aktar.tablo_oku'ya devredilir;
                 ikili eğitim: devre_turleri (sabah/öğle eşlemesi), tahta_devreleri (programdan devre)
   dugme.py      tahtadaki yüzer düğme (0.9.0): ayar.tahta_dugmesi → ajana ayar.dugme {acik, islemler}
@@ -192,10 +215,15 @@ tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
                 sınav durumu (ayar.sinav, monotonik sayaç) ve gözetmen oturumu (belirteç yalnız burada),
                 ders yoklaması (ayar.yoklama_etkin, self.yoklama; belirteç yalnız _yoklama_belirtec'te), yerel soket
                 (ilk satır `arayuz: komut` ise kısa ömürlü istemci: ona yayın yok, ekran sayılmaz);
+                0.14.0 yoklama: yetenek yoklama_gec; şube seçiminde sunucunun ders önerisi uygulanır
+                (_yoklama_ders_uygula); tahta/öğretmen önerisi çatışması _yoklama_oturum_acildi'de liste isteğinden
+                ÖNCE çözülür; geç, sayfalama (yoklama_sayfa), yoklama_temizle; yeni alanlar diske yazılmaz;
                 A6: adres listesi (_istemci_kur/_adres_hatasi/_adres_basarili), envanter (donanim_tazele,
                 envanter_iste), arıza kuyruğu (ariza_bildir, durum.json `ariza_kuyrugu`); döngünün bir turu _tur();
                 USB anahtar (0.11.0): izleme iş parçacığı (yalnız ayar açıkken), self.usb durum makinesi, gizli
                 yalnız _usb_gizli'de; _usb_tara, _usb_tani_iste, _usb_kilit_*, _usb_yoklama_baslat
+  yoklama.py    yoklamanın ortak saf kuralları (0.14.0; servis ve ekran aynı işlevi kullanır): sonraki_durum
+                (var → yok → geç), yerlesim (≤ 42: 6×7, ≤ 48: 6×8, sonrası 7×8), sayfa_sayisi, sayfa_dilimi (56'lık)
   usb_anahtar.py  USB anahtar (0.11.0, saf): dosya_coz (sunucuyla aynı), mountinfo_coz, aday_nedeni, ekran metinleri
   envanter.py   envanteri §5.4 biçiminde kurar (seri yer tutucuları boşaltılır), özet
   ariza_penceresi.py  "Arıza bildir" penceresi (GTK3, ayrı süreç; kullanıcı yetkisiyle); gonder() servise
@@ -204,13 +232,17 @@ tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
                 program kilidinde "Teneffüs · Tahta 10:40'ta açılır." satırı (saat_eki sunucudakiyle aynı);
                 sınav sayfaları: sinav-giris, sinav, gozetmen-kod, gozetmen-menu, gozetmen-yoklama;
                 yoklama sayfaları: yoklama-pin (USB kipi: yalnız PIN), yoklama-liste, yoklama-onay, yoklama-ileti;
+                0.14.0: yoklama-liste içinde kaydırmasız seçim görünümü (öneri + ★ satırı, düzey, şube ızgarası,
+                ders saatleri) ve homojen Gtk.Grid öğrenci listesi (iki satırlı Gtk.Button: no + YOK/GEÇ, ad;
+                56'dan çok öğrencide sayfalı; ScrolledWindow/FlowBox yok);
                 kilitte "Yoklama al" ve "USB anahtarla aç"; usb-pin sayfası; UsbBildirimi (köşe, odak çalmaz);
                 ölçüler 1920x1080 için yazılır, ekran_olcegi() ile pencerenin monitörüne orantılanır (0.7.1)
   yuzer.py      yüzer düğme ve menüsü (0.9.0; 0.12.2'den beri yönetilen UTILITY pencere, grab yok; 0.13.1: stick,
                 dokunma gölgesi 0,7 sn, dokunmada sürükleme eşiği 28 px); üstteki işlevler saf, GTK sınıfı kur() içinde
   gun_programi.py  sunucudan gelen gün programının izinli alanları (0.13.0, saf): coz — en çok 24 ders, şube/ders
                 adı/saat/ileti; başka alan ekrana geçmez; yalnız servis belleğinde, gecerli_sn dolunca kalkar
-scripts/ekran_olcum.py  Docker/Xvfb'de her tahta sayfasının ekrana sığıp sığmadığını ölçer (uydurma veri)
+scripts/ekran_olcum.py  Docker/Xvfb'de her tahta sayfasının ekrana sığıp sığmadığını ölçer (uydurma veri); 0.14.0:
+                yoklama senaryoları (yk-secim-*, yk-liste-*), kaydırmasızlık ve dokunma ölçüsü denetimi, `--yalniz`
   __main__.py   komut satırı; `tahta-ajan yoklama` ("Yoklama Al" kısayolu) servise yoklama_ac yollar;
                 `tahta-ajan ariza` (pencere), `tahta-ajan sunucu ADRES` (parmak izi tutarsa yazar)
   ayar.py       yapılandırma, varsayılan tahta paleti, logonun servis tarafında saklanması, adres doğrulama/sırası
@@ -288,13 +320,19 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    işlem kaydına ad, maske, okul no yazılmaz. Kişisel veri öğretim yılı sonunda (kural 24)
    `secure_delete` + WAL budamayla silinir. Okul no yalnız panelde salon yoklaması ve icmal sayfalarındadır.
 18. **Öğrenci listesi tahtada diske yazılmaz; yoklama belirteci ekran yardımcısına gitmez.**
-   Liste, işaretler ve belirteç yalnız servisin belleğindedir (`durum.json`, günlük, tanılama
+   Liste, işaretler (yok, geç) ve belirteç yalnız servisin belleğindedir (`durum.json`, günlük, tanılama
    raporu yok); kaydedilince ya da süre dolunca bellekten de atılır. Sunucuya giden durumda yalnız
-   `yoklama_acik` bayrağı olur. Tahtada öğrenci ancak maskeli etiketle (`maske.sinif_etiketi`)
-   görünür; ad ve okul no hiçbir zaman ikisi birden açık değildir (`tam` maskesi yoktur).
+   `yoklama_acik` bayrağı olur. Tahtada öğrenci maskeli etiketle (`maske.sinif_etiketi`) görünür; ders
+   yoklaması listesinin varsayılan biçimi okul numarası + ad + soyadın baş harfidir ("123 Ayşe Y.";
+   kullanıcı kararı 18.11.2026). Bu istisna yalnız PIN ya da USB anahtarla açılan ders yoklaması listesi
+   içindir; sınav ekranları ve kalabalık listeleri (kural 17, `maske.kalabalik` + `no_son`) için "ad ve
+   numara birlikte açık olmaz" hükmü sürer. **Tam soyad ve T.C. kimlik numarası tahtaya hiçbir biçimde
+   gitmez** (`tam` maskesi yoktur). Mazeret/izin bilgisi, geçmiş günlerin yoklaması ve öğretmenin programı
+   (PIN/USB doğrulanmadan) ajan yanıtına girmez.
 19. **PIN düz metni yalnız pusula yanıtında görünür** (POST, `no-store`, yönlendirme yok); sunucuda
    scrypt özeti, tahtaya ne PIN ne özeti gider. İşlem kaydına öğretmen için yalnız kod, öğrenci için
-   yalnız sayı yazılır; düzeltme gerekçesi ve öğrenci kimlikli iz `yoklama_iz`'dedir ve imhayla gider.
+   yalnız sayı yazılır; düzeltme gerekçesi ve öğrenci kimlikli iz yalnız `yoklama_iz`, `yoklama_duzeltme` ve
+   `yoklama_mazeret`'tedir (0.14.0) ve üçü de imhayla gider; mazeret türü ve tarih aralığı da işlem kaydına yazılmaz.
 20. **Kısa ömürlü yerel istemci kendini tanıtır:** yerel sokete bağlanan komut istemcisi ilk satırda
    `{"tur":"merhaba","arayuz":"komut"}` yollar; servis ona durum yayını göndermez, `durum_ozeti`
    ekranlarına ve "ekran bağlı" sayımına katmaz. Ekran yardımcısı da bağlanır bağlanmaz `merhaba` yollar
@@ -317,11 +355,14 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    Tahtadan arıza yalnız hesap SINIFIYLA gelir; açıklama 300 karakter, T.C. no içeriyorsa sunucu metni
    kaydetmez. Arıza kuyruğu tahtada en çok 10 öğe / 7 gün, saatte 3 bildirim. Arıza kaydı silinmez.
 24. **Öğrenci verisi içeren kayıtlar öğretim yılı sonuna kadar saklanır** (K3; `saklama.py`). Ders
-   yoklaması, sınav listesi/yoklaması ve boş ders uyarısı, yöneticinin Ayarlar'da girdiği
+   yoklaması (0.14.0: geç işaretleri `yoklama_gec`, panel düzeltmeleri `yoklama_duzeltme` ve mazeret kayıtları
+   `yoklama_mazeret` dahil; aralığı sınırı aşan mazeret de bütünüyle silinir), sınav listesi/yoklaması ve boş ders uyarısı, yöneticinin Ayarlar'da girdiği
    `ogretim_yili_bitis` geçince (ertesi gün) o tarihe kadar oluşanlarıyla kalıcı silinir; tarih boşsa
    hiçbir şey silinmez ve Ayarlar uyarır. Gün sayılı saklama sabiti ya da ayarı geri getirilmez; tarih
    kendiliğinden (Okul Zili'nden ya da göçle) yazılmaz, yalnız önerilir. Tahtadan alınan ders ve sınav
-   yoklaması kâğıdın yanında yardımcı kayıttır (K5); arayüz resmî kayıt iddiasında bulunmaz.
+   yoklaması kâğıdın yanında yardımcı kayıttır (K5); arayüz resmî kayıt iddiasında bulunmaz. Yalnız geç,
+   düzeltme ya da mazeret kaydı olan pasif öğrenci de imhaya kadar silinmez; `hepsini_sil` yeni tabloları
+   açık DELETE ile boşaltır (CASCADE'e güvenilmez).
 25. **İkili eğitim (K1):** ders saati, derslik programı, boş ders uyarısı ve yoklama önerisi devreyle
    (`ders_saati.devre`) anahtarlanır; ders numarası devre başınadır (sabahın 3. dersi ≠ öğlenin 3.
    dersi). Tek devreli okulda devre adı hiçbir yerde gösterilmez ve davranış değişmez.
@@ -389,7 +430,54 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    altında ya da veritabanı bağlantısı açıkken yapılmaz; kapanış onu beklemez. İşlem kaydına yalnız elle
    denetim ve ayar değişikliği yazılır. Yeni bağımlılık (requests, certifi…) eklenmez.
 
+33. **"Geç" yalnız devrenin ilk dersinde işaretlenir** (0.14.0, kullanıcı kararı 18.11.2026; `docs/tasarim.md`
+   §14.2). `yoklama.gec_secilebilir` = seçilen ders, şubenin devresinin o günkü planındaki en küçük ders
+   numarasıdır (sabah ve öğle devresinin ilk dersi ayrı ayrı; devre bulunamazsa 1. ders). Sunucu tahtadan da
+   panelden de ilk ders dışındaki geçi reddeder; bir öğrenci aynı kayıtta hem yok hem geç olamaz. Geç ayrı
+   tablodadır (`yoklama_gec`), "yok" sayımına girmez, ayrı sayılır; yarım/tam güne çevrilmez (K2). Yetenek
+   `yoklama_gec`: bildiren ajan `/ajan/yoklama/kaydet` gövdesinde `gec`'i her zaman yollar (boş liste dahil;
+   yoksa 400), bildirmeyen eski ajanın kaydı var olan geçi silmez ve ona geç öğrenci " (geç)" ekli etiketle
+   gider. Sunucu–ajan yoklama sözleşmesinin örnekleri `tests/yoklama_sozlesme.json`'dadır; iki tarafın testi
+   bu dosyadan beslenir, alan eklenirse dosya, sunucu ve ajan çözücüsü birlikte değişir. Öğretmen programı
+   ve saat yalnız ÖN SEÇİMDİR: hiçbir şube ya da ders düğmesi programa göre kapatılmaz.
+34. **İdare düzeltmesi ayrı katmandır; ders saatinin geçerli durumu tek koddan çıkar** (0.14.0;
+   `yoklama_defter.Veri.gecerli_duzeltmeler`/`kumeler`, `hucre_durumu`, `yoklama.gecerli_durum`). Şube
+   defterindeki düzeltme öğretmenin/tahtanın kaydına DOKUNMAZ, `yoklama_duzeltme`'ye satır yazar (aynı
+   kullanıcı aynı hücrede 60 sn içinde tek satır). Geçerli durum: o ders saatinin EN SON KAYDEDİLEN yoklama
+   kaydı (kayıtlar birleştirilmez); üstüne, o kayıttan ESKİ OLMAYAN en yeni düzeltme. Yani "en son işlem
+   geçerlidir": düzeltmeden sonra tahtadan yeniden kaydedilen yoklama düzeltmenin üstüne geçer (liste
+   düzeltilmiş durumu gösterdiği ve kaydet tam durumu yazdığı için veri kaybolmaz). Günlük görünüm, icmal,
+   metin, CSV, `/yoklama/gir` ön doldurması ve tahtanın `/liste` yanıtı bu koddan geçer; ikinci bir toplama
+   yolu yazılmaz. Yoklaması alınmamış saatte hücre yazılmaz (409; yalnız yok/geç satırı tutulduğu için kayıt
+   açmak sınıfın kalanını "var" saymaktır); kayıt panelden yalnız iki adımlı "Alındı" onayıyla açılır.
+   Yok/geç → var düzeltmesinde not zorunludur. Düzenleme bugün ve son 7 gün içindir; eskisi salt okunur.
+35. **Mazerette serbest metin yoktur; mazeret ve geçmiş tahtaya gitmez** (0.14.0; `docs/tasarim.md` §14.2).
+   Mazeret sabit tür (izinli, raporlu, mazeretli, görevli) ve isteğe bağlı sabit dayanak seçimiyle girilir;
+   açıklama alanı EKLENMEZ (sağlık verisi ve gerekçe metni birikmesin). Tür yalnız mazeret sayfasında ve
+   öğrenci görünümünün mazeret bölümünde görünür; şube defterinde, icmalde, metinde, CSV'de, yazdırmada,
+   erişilebilirlik metninde ve işlem kaydında tek "Ö" (özürlü) vardır. İşlem kaydına tür ve tarih aralığı da
+   yazılmaz (yalnız öğrenci ve gün sayısı). Mazeret ayrı katmandır: öğretmen kaydını ve düzeltmeyi
+   değiştirmez; kaldırılınca tür `iptal` yapılır, dayanak boşaltılır. Önizleme yalnız bellekte 10 dk durur.
+   "N gündür derste görülmedi" türetilir; saklanmaz, dışa aktarılmaz, arayüz "devamsızlık günü" demez (K2,
+   K5). Şube defteri, son günler, öğrenci görünümü ve mazeret listesi `no-store` döner, yönetici ve idareciye
+   açıktır, dışa aktarılmaz (yalnız yazdırılır). Ajan yanıtlarına mazeret ve geçmiş gün girmez.
+
 ## Bilinen tuzaklar
+
+- **Panonun genel `.ozet { display: flex }` kuralı tablo hücresini bozar (0.14.0):** şube defterinin özet
+  hücreleri bu yüzden alt alta diziliyordu; `.defter .ozet { display: table-cell }` ayrıca verilir. Dar ekranda
+  görünmez (ekran okuyucu) metinler de sayfayı yatay taşırıyordu; yeni tablo sayfasında 800 px'te taşmaya bak.
+- **Şube defterinde iki dikey kaydırma olmasın (0.14.0):** sığan tabloda kap kaydırma kabı değildir
+  (`.defter-kap.sigar`); sütun sınırı (beş gün ≤ 40, gün ≤ 12 ders sütunu) aşılınca ya da dar ekranda kendi
+  kabında kayar. 8 ders × 5 gün 1366 px'e ancak 22 px hücre ve 10rem ad sütunuyla sığar; sütun genişletme.
+- **Pango kısaltması soyad baş harfini yutar (0.14.0):** öğrenci adı tahtada kısaltılmaz; ad kısmını sunucu
+  kısaltır (`maske.ad_kisalt`, eşik sütun sayısına bağlı). Sütun × satır tablosu iki yerdedir
+  (`maske.yoklama_yerlesim` ve `tahta_ajan/yoklama.yerlesim`) ve testle eşlenir; biri değişirse öbürü de.
+- **Düzeltme ile kayıt aynı saniyedeyse düzeltme kazanır** (`zaman >= guncelleme`, kural 34). `/yoklama/kayit/{id}`
+  "Düzelt" ile eski bir kaydı düzeltmek o kaydı en yeni yapar: o ders saatindeki öbür kaydı ve panel
+  düzeltmelerini örter (sayfada şube defterine yönlendiren not vardır).
+- **Tahtanın `/liste` yanıtında `gec_secilebilir` false ise `gec` hep `[]` döner (0.14.0):** plan sonradan
+  değişmiş günde ilk ders dışı geç tahtaya inerse ajan onu geri yollar ve 400 alırdı.
 
 - **Testler gerçek ağa çıkmaz (0.13.1):** `tests/conftest.py::ag_kapali` (autouse) her testte
   `guncelleme.github_getir` ve `guncelleme._ac` adlarını sahtesiyle değiştirir. Denetimi sınayan test
@@ -426,6 +514,8 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
 
 - **GtkButton.set_label etiketi yeniden kurar:** ortalama (`set_justify`) ve kısaltma kaybolur;
   yoklama düğmesinin metni değişince `ekran._ogrenci_etiketi` ile yeniden verilir (16.11.2026, Docker).
+  0.14.0'dan beri öğrenci düğmesi iki ayrı etiket taşır ve `set_label` çağrılmaz; `_ogrenci_etiketi` yalnız
+  durum yazısını (YOK/GEÇ) ve stil sınıfını günceller. Başka düğmede `set_label` kullanılırsa tuzak sürer.
 - **Zombi süreç /proc'ta yaşar görünür:** `/proc/<pid>/status` hâlâ Name ve Uid verir; tarayıcı
   süreci sayılırken `State: Z` atlanmazsa kapanmış tarayıcı "kapanmadı" sayılır ve verisi temizlenmez
   (16.11.2026, Docker oturum temizliği denemesi).
