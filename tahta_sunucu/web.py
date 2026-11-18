@@ -2067,6 +2067,8 @@ def uygulama_olustur(parmak_izi: str = "") -> FastAPI:
         ("yedek", yedek_zamanlayici),
         # 0.11.0: indirilmeden süresi dolan USB anahtarlar düşer (işlem kaydına "indirilmedi").
         ("usb_bekleyen", uygulama.state.usb_bekleyen_temizle),
+        # 0.13.1: süresi dolan öğretmen programı önizlemesi (ham adlar) bellekte beklemez.
+        ("ogretmen_program_onizleme", uygulama.state.ogretmen_program_onizleme.suresi_dolanlari_sil),
     ]
     # Otomatik yedeğin "program ≥ 5 dk açık" ölçüsü (testler ilerletebilir).
     uygulama.state.acilis = acilis

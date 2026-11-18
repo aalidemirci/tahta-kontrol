@@ -579,7 +579,9 @@ gibi Ş'siz yazım olabilir; Türkçe katlamayla eşlenir); sonra şube bloklar�
 sütunlarında hücre ("DERS ADI\nÖĞRETMEN", seçmelide "SEÇMELİ DERS\nÖĞRETMEN - DERS"; boş = ders yok).
 Ders no 1'e (ya da öncekine eşit/küçüğe) dönünce yeni blok; ders no'suz satırlar (altbilgi) atlanır.
 Derslik yoktur. Şube adı ve sırası yalnız raporun PDF'indedir ("9. Sınıf / A Şubesi"; düzey artan, harf
-Türk abecesiyle … H, I, İ, J …); PDF ayrıştırılmaz (yeni bağımlılık yok), kullanıcı gözle doğrular.
+Türk abecesiyle … H, I, İ, J …); bu derslik aktarımında PDF ayrıştırılmaz, kullanıcı gözle doğrular.
+(0.13.0'dan beri ayrı öğretmen programı yolunda PDF `pypdf` ile okunur; yalnız şube başlığı ve sıra
+doğrulaması için, §12.5. Derslik aktarımı PDF'i yine reddeder.)
 
 - **Okuma** (`eokul_program.py`, saf): ilk baytlardan OLE2 → `eokul.xls_oku` (xlrd; her hata Türkçe
   iletiye döner), ZIP → `xlsx.oku`, PDF ve diğerleri Türkçe ret. 2 MB, 5000 satır, 300 blok sınırı; T.C.
@@ -623,9 +625,7 @@ Türk abecesiyle … H, I, İ, J …); PDF ayrıştırılmaz (yeni bağımlılı
   sayısı), onay, önceki sürümün saklanması, işlem kaydı (yalnız biçim ve sayılar). Yalnız yönetici.
   Tahta Kontrol e-Okul'a bağlanmaz.
 
-## 13. Sınav kipi ve sınav yoklaması
-
-### 0.13.0 ek kararı: öğretmen programı ve kilit görünümü
+### 12.5 Öğretmen programı ve kilit ekranında gün programı (0.13.0, 0.13.1)
 
 Kullanıcının 17.11.2026 talimatıyla, öğretmen programı ayrı bir içe aktarma
 yolunda (`ogretmen_program.py`, `/ogretmen-programi`) mevcut öğretmen kimliklerine
@@ -645,6 +645,49 @@ Kilit ekranına yalnız ilgili şubelerin bugünkü şube/ders/saat listesi gön
 gece yarısı süresiyle sona erer, disk/tanılamaya yazılmaz. Bu görünüm eski
 program kilidi gerekçesi satırından ayrıdır. Dört satırlık sayfalama tuş
 takımının altında kalır; gerçek ETAP ekran ölçümü saha aşamasıdır.
+
+**0.13.1 düzeltmeleri** (0.13.0'ın bağımsız incelemesi; `docs/surum-0.13.1.md`):
+
+- **Hücre çözümü kapalı hata** (`ogretmen_program.hucre_coz`). Seçmeli hücrede birden çok grup tek satırda
+  "KİŞİ - DERS" parçaları olarak gelir ve parçalar `,` `;` sekme ya da iki ve daha çok boşlukla ayrılır.
+  0.13.0 boşlukları bölmeden önce sadeleştirdiği için ikinci kişinin adı ders başlığına karışıyordu; ders
+  başlığı kilit ekranına gittiğinden bu bir ad sızıntısıydı. Artık önce bölünür; bölündükten sonra hâlâ
+  birden çok " - " taşıyan parça belirsiz sayılır: ders başlığı hücrenin ilk satırındaki genel başlığa
+  iner, kişi eşlemeye alınmaz, önizleme yalnız sayıyla uyarır. İlk satırın kendisi "kişi - ders"
+  kalıbındaysa başlık "Ders" olur. PDF'ten ders adı hiç çıkarılmaz.
+- **Göç:** `ders_adi` içinde " - " geçen eski satırlar "Seçmeli ders" yapılır (metnin neresinin ad olduğu
+  bilinemediği için kırpılmaz), çakışan bozuk satır silinir. 0.13.0'da kaybolan ikinci grubun satırı geri
+  gelmez; 0.13.0 ile aktarım yapılmışsa program yeniden aktarılır. Göç öncesi kopya (`goc-oncesi`) eski
+  değeri saklama düzeni içinde taşımaya devam eder.
+- **Aynı adlı iki kaynak öğretmen:** rapor iki kişiyi ayırt etmez. Aynı ad aynı gün ve saatte farklı
+  derslerde görünüyorsa önizleme sayıyla uyarır ve satırı işaretler (şubeleri birleştirilen aynı ders
+  sayılmaz). Hiç çakışmayan iki adaş yine tek kişide birleşir; bu bilinen sınırdır.
+- **Önizleme belleği:** 15 dk (`yoklama.ONIZLEME_OMRU_SN`); süresi dolan kayıt zamanlayıcıda (20 sn) silinir,
+  "Vazgeç" (`POST /ogretmen-programi/vazgec`, JS'siz `formaction`) hemen siler, onay tek kullanımlıktır.
+  Dosya ayrıştırma iş parçacığı havuzunda çalışır (olay döngüsü beklemez).
+- **Kilit ekranı kutusu:** öğretmen programı hiç aktarılmamışsa ya da tahtanın şubesi yoksa
+  `ajan_gorunumu` `None` döner; anahtar yetenekli ajana yine gider (değeri null), ajan elindeki programı
+  kaldırır ve kutu çıkmaz. Tahtanın tarihi sunucununkinden farklıysa program gizlenmez; başlık
+  "Bugünün ders programı" yerine sunucunun tarihini taşır ve ilk sayfadan açılır (tahtanın saatine
+  güvenilmez). Tarih tutuyorsa program şimdiki ya da sıradaki dersin sayfasından açılır; elle seçilen
+  sayfa 60 sn kalır. Sunucunun iletisi dersler varken de gösterilir (160 karakter, ekranda en çok iki
+  satır). Sayfa değişince tuş takımı ve düğmeler yer değiştirmez (`scripts/ekran_olcum.py` "OYNADI").
+- **Yüzer düğme** (§5.1): pencere yapışkandır (`stick`), ipucu UTILITY kalır; grab ve POPUP yoktur.
+  Dokunuşun ardından gelen öykünülmüş fare basışı 0,7 sn yok sayılır; dokunmada sürükleme eşiği 28 px.
+
+Yalnız Debian 12 kabında (Xvfb) ölçülen pencere davranışı (18.11.2026); ETAP'ın pencere yöneticisi
+bilinmediği için saha denemesinin yerini tutmaz:
+
+| Pencere yöneticisi | Odaklı tam ekranın üstünde tıklanır | 2. çalışma alanında | "Masaüstünü göster" kipinde |
+|---|---|---|---|
+| xfwm4 | evet | evet | evet |
+| Mutter | evet | evet | hayır (gizlenir) |
+| Muffin | evet | evet | hayır (gizlenir) |
+| Openbox | hayır | evet | hayır (gizlenir) |
+
+Gerçek dokunma olayı kapta üretilemedi; dokunma yolu yalnız taklit testlerle sınandı.
+
+## 13. Sınav kipi ve sınav yoklaması
 
 Kaynak, Kelebek Sınav'ın **Toplu Dağıtım Çizelgesi** (R5, `.xlsx`) dosyasıdır; bir dosya bir
 sınav oturumudur. Sunucu dosyayı standart kitaplıkla okur (`xlsx.py`: zip üye sayısı ve açılmış

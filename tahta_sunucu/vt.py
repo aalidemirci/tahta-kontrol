@@ -440,6 +440,13 @@ GOCLER = [
         UNIQUE (sube, gun, ders_no, baslangic, ders_adi, ogretmen_id));
     CREATE INDEX ogretmen_program_gun ON ogretmen_program(gun, sube, ders_no);
     """,
+    # 0.13.1 — 0.13.0 çok gruplu seçmeli hücrede ikinci öğretmenin adını ders adına karıştırıyordu
+    # ("DERS1 KİŞİ2 - DERS2"). Bozuk değer her zaman " - " taşır; metnin neresinin ad olduğu bilinemediği
+    # için kırpılmaz, tümü genel başlığa iner (aynı satır zaten varsa bozuk olan silinir).
+    """
+    UPDATE OR IGNORE ogretmen_program SET ders_adi = 'Seçmeli ders' WHERE ders_adi LIKE '% - %';
+    DELETE FROM ogretmen_program WHERE ders_adi LIKE '% - %';
+    """,
 ]
 GOC_ONCESI_KALAN = 3
 # Göç (ve göç öncesi kopya), yedek alma ve geri yükleme aynı anda çalışmaz (A6 K-B2).

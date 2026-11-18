@@ -7,8 +7,17 @@ Yoklama al. Hangi işlemlerin görüneceğini sunucu belirler (`ayar.dugme`, ser
 servis doğrular ve uygular (yerel_kilitle / yerel_kapat / yerel_yeniden_baslat). Bu modül sır taşımaz.
 
 - Odak çalmaz: iki pencere de çerçevesiz yardımcı penceredir; masaüstünün
-  klavye, dokunma veya fare girişini ele geçirmez. Menü düğmeyle, Kapat ile
-  veya zaman aşımıyla kapanır; görev çubuğu menü açıkken de kullanılabilir.
+  klavye, dokunma veya fare girişini ele geçirmez (girdi tutma — seat grab — GERİ GETİRİLMEZ).
+  Menü düğmeyle, Kapat ile veya zaman aşımıyla kapanır; görev çubuğu menü açıkken de kullanılabilir.
+- Pencere yönetilen (TOPLEVEL/UTILITY, keep_above) ve yapışkandır (stick: bütün çalışma alanlarında
+  görünür). 18.11.2026 kap denemesi (Xvfb): xfwm4, Mutter ve Muffin'de odaklı tam ekran uygulamanın
+  üstünde kalır ve tıklanır; DOCK ipucu Mutter/Muffin'de tam ekranın ALTINDA kalır, NOTIFICATION
+  bir şey kazandırmaz — ipucu bu yüzden UTILITY kalır. Openbox'ta odaklı tam ekranın üstüne hiçbir
+  yönetilen pencere çıkamaz; "masaüstünü göster" xfwm4'te düğmeyi gizlemez, Mutter/Muffin/Openbox'ta
+  o kip sürdükçe gizler (pencere yöneticisi sınırı).
+- Dokunma: aynı dokunuş hem touch-event hem (GTK'nın fare öykünmesiyle) button-press olarak
+  gelebilir; dokunuştan hemen sonraki fare basışı yok sayılır (menü açılıp hemen kapanmasın).
+  Dokunmada sürükleme eşiği farenin iki katıdır (parmak titrer).
 - Ölçüler 1920x1080 için yazılır ve ekran_olcegi() ile ölçeklenir; sabit piksel yoktur.
 - Konum oturum boyunca bellekte tutulur (kenar + dikey oran): çözünürlük değişse de aynı yere gelir.
 
@@ -29,7 +38,9 @@ from .ekran import ekran_olcegi, olcekle, olcekli_stil
 DUGME_CAP = 60  # düğmenin eni ve boyu
 KENAR_BOSLUGU = 18  # ekran kenarına yapışınca kalan boşluk
 MENU_ARALIGI = 12  # düğme ile menü arasındaki boşluk
-SURUKLEME_ESIGI = 14  # bundan az kayan dokunuş "dokunma" sayılır, sürükleme değil
+SURUKLEME_ESIGI = 14  # fare: bundan az kayan basış "tıklama" sayılır, sürükleme değil
+DOKUNMA_ESIGI = 28  # dokunma: parmak ve kızılötesi çerçeve titrer; eşik farenin iki katıdır
+DOKUNMA_GOLGESI_SN = 0.7  # dokunuştan sonra bu süre içinde gelen fare basışı aynı dokunuşun öykünmesidir
 SOLUK_SAYDAMLIK = 0.55  # bileşikli (compositor) masaüstünde boştayken
 BELIRGIN_SN = 4  # dokunuştan sonra bu kadar saniye belirgin kalır
 MENU_KAPANMA_SN = 12  # dokunulmayan menü kendiliğinden kapanır
@@ -162,6 +173,16 @@ def menu_konumu(dx: int, dy: int, cap: int, menu_en: int, menu_boy: int, alan: t
     return int(x), int(y)
 
 
+def surukleme_mi(dx: float, dy: float, esik: float) -> bool:
+    """Basılan noktadan uzaklık (düz çizgi) eşiğe ulaştıysa sürüklemedir."""
+    return math.hypot(dx, dy) >= esik
+
+
+def fare_oykunmesi_mi(simdi: float, dokunma_suruyor: bool, son_dokunma: float) -> bool:
+    """Fare basışı az önce işlenen (ya da süren) dokunuşun öykünmesi mi? Öyleyse yok sayılır."""
+    return dokunma_suruyor or (simdi - son_dokunma) < DOKUNMA_GOLGESI_SN
+
+
 def geri_sayim_metni(islem: str, kalan: int) -> tuple[str, str]:
     """Onay sayfası: başlık ve sayaç ("Tahta kapatılacak", "10")."""
     return GERI_SAYIM_BASLIK.get(islem, "Onaylayın"), str(max(0, int(kalan)))
@@ -197,6 +218,8 @@ def kur(ekran):
             self.menu_acik = False
             self.menu_dokunma = 0.0
             self.dokunma_dizisi = None
+            self.dokunma_son = -DOKUNMA_GOLGESI_SN  # son dokunuşun bittiği an (monotonik)
+            self.esik = SURUKLEME_ESIGI  # süren basışın sürükleme eşiği (fare ya da dokunma)
             self.geri_sayim = None  # (islem, bitis zamanı)
             self.ileti_bitis = 0.0
             self.olcek = None
@@ -253,6 +276,8 @@ def kur(ekran):
             pencere.set_skip_taskbar_hint(True)
             pencere.set_skip_pager_hint(True)
             pencere.set_type_hint(Gdk.WindowTypeHint.UTILITY)
+            # Yönetilen pencere yalnız açıldığı çalışma alanında görünürdü: bütün alanlarda dursun.
+            pencere.stick()
             gorsel = pencere.get_screen().get_rgba_visual()
             if self.bilesik and gorsel is not None:
                 pencere.set_visual(gorsel)  # köşeler saydam (yuvarlak düğme)
@@ -335,17 +360,18 @@ def kur(ekran):
 
         # ---- dokunma ve sürükleme --------------------------------------------------------
         def _basildi(self, _w, olay):
-            if self.dokunma_dizisi is not None:
-                return True
+            if fare_oykunmesi_mi(time.monotonic(), self.dokunma_dizisi is not None, self.dokunma_son):
+                return True  # aynı dokunuş touch-event ile işlendi/işleniyor: ikinci kez sayılmaz
             if olay.type != Gdk.EventType.BUTTON_PRESS:
                 return True  # çift tıklama olayları yok sayılır
             if olay.button != 1:
                 return False
             return self._baslat(olay.x_root, olay.y_root)
 
-        def _baslat(self, kok_x, kok_y):
+        def _baslat(self, kok_x, kok_y, dokunma=False):
             x, y = self._konum()
             self.basili = (kok_x, kok_y, x, y)
+            self.esik = DOKUNMA_ESIGI if dokunma else SURUKLEME_ESIGI
             self.suruklendi = False
             self.belirgin_bitis = time.time() + BELIRGIN_SN
             self._soluk(False)
@@ -356,7 +382,7 @@ def kur(ekran):
                 return False
             kx, ky, px, py = self.basili
             dx, dy = olay.x_root - kx, olay.y_root - ky
-            if not self.suruklendi and abs(dx) + abs(dy) < self._o(SURUKLEME_ESIGI):
+            if not self.suruklendi and not surukleme_mi(dx, dy, self._o(self.esik)):
                 return True
             if not self.suruklendi:
                 self.suruklendi = True
@@ -378,27 +404,33 @@ def kur(ekran):
             if olay.type == Gdk.EventType.TOUCH_BEGIN:
                 if self.dokunma_dizisi is None:
                     self.dokunma_dizisi = dizi
-                    self._baslat(olay.x_root, olay.y_root)
+                    # Öykünülmüş fare basışı dokunmadan önce geldiyse basış dokunma olarak yeniden başlar.
+                    self._baslat(olay.x_root, olay.y_root, dokunma=True)
             elif dizi == self.dokunma_dizisi:
                 if olay.type == Gdk.EventType.TOUCH_UPDATE:
                     self._kaydi(_w, olay)
                 elif olay.type == Gdk.EventType.TOUCH_END:
                     self.dokunma_dizisi = None
+                    self.dokunma_son = time.monotonic()
                     self._bitir()
                 elif olay.type == Gdk.EventType.TOUCH_CANCEL:
                     self.dokunma_dizisi = None
-                    self.basili = None
+                    self.dokunma_son = time.monotonic()
+                    self._bitir(iptal=True)
             return True
 
-        def _bitir(self):
+        def _bitir(self, iptal=False):
             if not self.basili:
                 return True
             self.basili = None
             self.belirgin_bitis = time.time() + BELIRGIN_SN
             if self.suruklendi:
+                # İptal edilen sürüklemede de düğme ekranın ortasında kalmaz, kenara yapışır.
                 x, y = self._konum()
                 self.kenar, self.oran = yapis(x, y, self.cap, self.alan, self._o(KENAR_BOSLUGU))
                 self._yerlestir()
+                return True
+            if iptal:
                 return True
             if self.menu_acik:
                 self.menu_kapat()

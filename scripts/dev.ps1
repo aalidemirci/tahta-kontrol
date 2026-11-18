@@ -12,13 +12,9 @@ try {
     $Python = Join-Path $Kok '.venv\Scripts\python.exe'
     if ($Islem -eq 'kur') {
         $Uv = Get-Command uv -ErrorAction SilentlyContinue
-        if ($Uv) { $UvYolu = $Uv.Source }
-        else {
-            # Bu bilgisayardaki ilk hazırlıkta indirilen taşınabilir araç.
-            $UvYolu = Join-Path $Kok '..\..\work\tools\uv\uv.exe'
-            if (-not (Test-Path -LiteralPath $UvYolu)) { throw 'uv bulunamadı. uv kurup kur komutunu yeniden çalıştırın.' }
-        }
-        & $UvYolu sync --locked
+        # uv'nin PATH'te olduğu varsayılır; bilgisayara özgü yola bakılmaz.
+        if (-not $Uv) { throw 'uv bulunamadı. uv kurup kur komutunu yeniden çalıştırın.' }
+        & $Uv.Source sync --locked
         if ($LASTEXITCODE -ne 0) { throw 'Bağımlılık kurulumu başarısız.' }
     } else {
         if (-not (Test-Path -LiteralPath $Python)) { throw 'Önce scripts\dev.ps1 kur komutunu çalıştırın.' }

@@ -1,12 +1,18 @@
 # CLAUDE.md — Tahta Kontrol
 
+Yerel geliştirme 0.13.1: 0.13.0'ın bağımsız incelemesinde doğrulanan bulguların düzeltmesi
+(seçmeli hücrede öğretmen adının ders başlığına karışması, kilit ekranı gün programı, önizleme
+belleği, yüzer düğme). `docs/surum-0.13.1.md`. Dağıtılmadı; gerçek ETAP'ta denenmedi; 0.13.0 ile
+öğretmen programı aktarılmışsa yeniden aktarılır.
+
 0.13.0 kullanıcı kararı (17.11.2026): öğretmen programı bilgilendirme için
 ayrı `/ogretmen-programi` yolunda PDF/XLS'den eşlenir; eski dolu/boş okuyucu
 değişmez. Ham adlar yalnız önizleme belleğinde, kalıcı bağlantı mevcut öğretmen
 kimliğidir. **Program hiçbir öğretmenin başka sınıf/ders yoklamasını engellemez.**
 Kilit ekranında bugünün şube/ders/saat bilgisi gösterilir; öğretmen ve öğrenci
 adları bu yola girmez. Bu talimat eski "programda öğretmen ve ders adı yok"
-kuralına yalnız yeni öğretmen programı tablosu ve ders başlıkları için istisnadır.
+kuralına yalnız yeni öğretmen programı tablosu ve ders başlıkları için istisnadır;
+istisna kural 12 ve 30'un içinde yazılıdır, ayrıştırıcı ve önizleme kural 31'dedir.
 Program ajan diskine yazılmaz, gece yarısında bellek görünümü kalkar.
 
 Yerel geliştirme 0.12.2: ETAP yüzer düğme için yönetilen yardımcı pencereler,
@@ -23,7 +29,10 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.12.0, saha denemesi sürümü** (0.12.0: ders programı sihirbazına beşinci kaynak — e-Okul
+- Durum: **0.13.1, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.13.1: 0.13.0
+  inceleme bulguları, yukarıda; 0.13.0: öğretmen programı aktarımı (`/ogretmen-programi`, XLS + PDF ya da
+  şube listesi) ve kilit ekranında bugünün şube/ders/saat programı, tasarım §12.5; yüzer düğme ve kilit
+  programı yalnız Debian 12 kabında (Xvfb) ölçüldü; 0.12.0: ders programı sihirbazına beşinci kaynak — e-Okul
   "Haftalık Ders Programları" raporu (OOK11002_R01, .XLS): şube blokları ayrıştırılır, zil çizelgesi yoksa ya
   da uymuyorsa rapordaki saatlerden oluşturulur, şube eşlemesi zorunlu adımdır (raporda şube adı yok), her
   şubenin dersi şubenin tahtasına yazılır; yalnız sunucu, ajan değişmedi; bir okulun gerçek raporuyla yerel
@@ -50,7 +59,7 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
   0.7.0'ın altyapı çekirdeği (şifreli yedek, sunucu adres listesi, envanter, arıza bildirimi)
   yalnız Debian 12 kabında ve tarayıcıda denendi; gerçek bir ETAP tahtasında, gerçek Kelebek
   çizelgesiyle ve gerçek e-Okul sınıf listesiyle henüz denenmedi. Ajan paketi imzası yapılmadı.
-- Ders programı ve program kilidi `docs/tasarim.md` §12; sınav kipi §13; ders yoklaması §14;
+- Ders programı ve program kilidi `docs/tasarim.md` §12 (öğretmen programı ve kilit ekranı gün programı §12.5); sınav kipi §13; ders yoklaması §14;
   altyapı (yedek, adres listesi, envanter, arıza) §15, Windows hizmeti §15.6; yol haritası §16; okul idaresinin kesin
   kararları (K1–K8, 16.11.2026) ve kullanıcıya sorulacaklar §17; doğrulanacak dayanaklar §18.
   Kararlar yeniden tartışılmaz; bir kararla çelişen öneri yapılmaz.
@@ -97,10 +106,13 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                     sonunda şablon bağlamlarının SÖZLEŞME bloğu
   panel_usb.py      USB anahtar (0.11.0): /usb-anahtarlar (üret, iptal), /usb-anahtarlar/indir/{belirtec} (tek
                     seferlik, 5 dk), /ajan/usb/{tani,yoklama,kilit_ac}; sonunda SÖZLEŞME bloğu
+  panel_ogretmen_program.py  öğretmen programı (0.13.0): /ogretmen-programi[/onizle|vazgec|uygula]; yalnız yönetici;
+                    dosya ayrıştırma iş parçacığı havuzunda; önizleme OnizlemeDeposu'nda (15 dk, Vazgeç'te silinir)
   usb_anahtar.py    USB anahtar iş mantığı (FastAPI'siz): ayar, dosya biçimi/ayrıştırıcı (ajandakiyle aynı),
                     bekleyen indirmeler, tanıma, PIN (öğretmen PIN'i ya da anahtar PIN'i), kopya uyarısı, iptal, yıl sonu
   panel_altyapi.py  /yedekler (parola, ayar, al, indir, geri-yukle + onay/uygula), /envanter (+ .csv),
                     /tahta/{id}/envanter, /tahta/{id}/donanim-goruldu, /arizalar, /ariza/{id}, /yerel/durum
+  yedek_is.py   otomatik yedeği ana zamanlayıcıyı bekletmeden ayrı tek işte yürütür (0.12.1; YedekIsleyici)
   yedek.py      şifreli yedek .tkyedek (scrypt → X25519 → HKDF → AES-GCM), saklama, ikinci kopya, geri yükleme
                 (denetle → onay → açılışta bekleyeni_uygula); yedek.KILIT = vt.KILIT (göç ve yedek aynı kilitte)
   adresler.py   sunucu adres listesi (en çok 5): doğrulama, özet (ajanla aynı), eski sunucu_adresi geçişi
@@ -110,7 +122,7 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 cizelge.html, program_gun.html, _zaman_cizgisi.html (SVG + liste makrosu), program_aktar.html,
                 program_gecmis.html (0.10.0);
                 sinavlar.html, sinav.html, sinav_yoklama.html, sinav_kodlar.html, sinav_icmal.html, _sinav.html;
-                yoklama*.html, ogretmenler.html, ogretmen_pusula.html, ogrenciler.html, ogrenci_onizleme.html
+                yoklama*.html, ogretmenler.html, ogretmen_program.html (0.13.0), ogretmen_pusula.html, ogrenciler.html, ogrenci_onizleme.html
                 ve ortak başları _yoklama_bas.html (sekmeler + KVKK notu); usb_anahtarlar.html, usb_anahtar_uretildi.html;
                 yedekler.html, yedek_onay.html, yedek_geri_yukle.html, envanter.html, arizalar.html,
                 ariza.html, _ariza.html (durum rozeti + açma formu makroları), _tahta_altyapi.html
@@ -129,6 +141,11 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   eokul_program.py  e-Okul "Haftalık Ders Programları" (0.12.0, saf): matris_oku, rapor_oku (bloklar; yalnız dolu/boş
                 + blok başına ≤3 ders adı ipucu), devre_gruplari/devre_esle (±5 dk), zil_onerisi/zil_yaz,
                 sube_listesi_coz, blok_subeleri (öneri sırası), hazirla (→ program_aktar.esle girdisi)
+  ogretmen_program.py  öğretmen programı (0.13.0, FastAPI'siz): hucre_coz (kapalı hata, kural 31), pdf_oku (pypdf;
+                yalnız şube başlığı ve sıra doğrulaması), matris_oku, onizle (ad eşleme önerisi, uyarılar yalnız
+                sayı), uygula (sürüm sayacı; kalıcı tabloda öğretmen KİMLİĞİ, ham ad yok)
+  kilit_program.py  kilit ekranı gün programı (0.13.0): ajan_gorunumu → ayar.gun_programi {tarih, dersler, ileti,
+                gecerli_sn}; yalnız şube/ders/saat; tablo boşsa ya da tahtanın şubesi yoksa None (kutu çıkmaz)
   maske.py      tek maskeleme tanımı: kalabalik("Ah*** Yı****"), no_son("47"), sinif_etiketi("Ayşe Y.")
   program.py    zil saatleri, Okul Zili okuma, takvim (plan_hesapla yalnız burada; dışarıdan gun_plani(b, tarih)),
                 kilit aralıkları (saf); derslik CSV okuması program_aktar.tablo_oku'ya devredilir;
@@ -183,6 +200,10 @@ tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
                 yoklama sayfaları: yoklama-pin (USB kipi: yalnız PIN), yoklama-liste, yoklama-onay, yoklama-ileti;
                 kilitte "Yoklama al" ve "USB anahtarla aç"; usb-pin sayfası; UsbBildirimi (köşe, odak çalmaz);
                 ölçüler 1920x1080 için yazılır, ekran_olcegi() ile pencerenin monitörüne orantılanır (0.7.1)
+  yuzer.py      yüzer düğme ve menüsü (0.9.0; 0.12.2'den beri yönetilen UTILITY pencere, grab yok; 0.13.1: stick,
+                dokunma gölgesi 0,7 sn, dokunmada sürükleme eşiği 28 px); üstteki işlevler saf, GTK sınıfı kur() içinde
+  gun_programi.py  sunucudan gelen gün programının izinli alanları (0.13.0, saf): coz — en çok 24 ders, şube/ders
+                adı/saat/ileti; başka alan ekrana geçmez; yalnız servis belleğinde, gecerli_sn dolunca kalkar
 scripts/ekran_olcum.py  Docker/Xvfb'de her tahta sayfasının ekrana sığıp sığmadığını ölçer (uydurma veri)
   __main__.py   komut satırı; `tahta-ajan yoklama` ("Yoklama Al" kısayolu) servise yoklama_ac yollar;
                 `tahta-ajan ariza` (pencere), `tahta-ajan sunucu ADRES` (parmak izi tutarsa yazar)
@@ -236,8 +257,12 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    ya da `program` (süre tahtanın monotonik saatiyle sayılır, en çok 8 saat; sunucu kapalı olsa
    da süre dolunca açılır). Program kilidi idare kilidine uygulanmaz, program açması idare
    kilidini açmaz (`(True, "...; uygulanmadı.")`); idare kilidi program kilidini ezer. Program
-   kilidi yeniden başlatmada **geri yüklenmez**. Tahta ekranında yalnız neden ve açılış saati
-   yazar; şube, ders, öğretmen yazılmaz. Derslik programında öğretmen ve ders adı tutulmaz.
+   kilidi yeniden başlatmada **geri yüklenmez**. Program kilidinin gerekçe satırında yalnız neden ve
+   açılış saati yazar; şube, ders, öğretmen yazılmaz. Derslik programında öğretmen ve ders adı tutulmaz.
+   İstisna (17.11.2026 kararı, 0.13.0; `docs/tasarim.md` §12.5): ayrı `ogretmen_program` tablosu ders
+   başlığı ve öğretmen KİMLİĞİ tutar; kilit ekranındaki ayrı gün programı kutusu (`ayar.gun_programi`,
+   `kilit_program.ajan_gorunumu`) bugünün şube/ders/saat bilgisini gösterir. Öğretmen ve öğrenci adı
+   tahtaya gitmez; kutu ajanda yalnız bellektedir, gece yarısında kalkar; derslik programı değişmedi.
 13. **Boş ders uyarısı personel verisi gibi korunur:** varsayılan açıktır ve geçmişiyle raporlanır
    (K6) ama işlem kaydına içeriği yazılmaz (yalnız `#id`; rapor görüntülemesi yalnız tarih aralığı ve
    süzgecin varlığıyla), dışa aktarılmaz (yalnız yazdırılır), raporda kişi adı yoktur, tahtada görünmez,
@@ -329,8 +354,35 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    yalnız önizleme kaydında durur. Tek satırlı hücreden ipucu almayı "kolaylık" için açma. Raporda şube adı
    yoktur: şube eşlemesi zorunlu adımdır, aynı şube iki bloğa atanamaz. Gerçek rapor ve PDF'i depoya,
    teste, belgeye girmez; testler uydurma matrisle (`tests/test_eokul_program.py`) yazılır.
+   Bu kural derslik aktarımı (`eokul_program.py`, `/program/aktar/eokul`) içindir ve DEĞİŞMEDİ. İstisna
+   (17.11.2026 kararı, 0.13.0): ayrı `/ogretmen-programi` yolu aynı raporun öğretmen satırını okur; ham ad
+   yalnız önizleme belleğinde durur, kalıcı kayda mevcut öğretmen kimliği yazılır (kural 31). Ad işlem
+   kaydına, tahtaya, ajana girmez; öğretmen kaydı kendiliğinden oluşturulmaz.
+
+31. **Öğretmen programı ayrıştırıcısı kapalı hata çalışır; önizleme kısa ömürlüdür** (0.13.1;
+   `docs/tasarim.md` §12.5). Hücre `ogretmen_program.hucre_coz` ile çözülür: seçmeli gruplar `,` `;` sekme
+   ve iki ya da daha çok boşlukla ayrılır, her parça ayrı "kişi - ders" girişidir. Ders başlığına kişi adı
+   karışabilecek belirsiz parça (bölündükten sonra hâlâ birden çok " - ") genel başlığa iner, kişi
+   eşlemeye alınmaz, önizleme yalnız sayıyla uyarır; başlık satırının kendisi "kişi - ders" kalıbındaysa
+   başlık "Ders" olur. Bunu "daha çok satır okunsun" diye gevşetme: ders başlığı kilit ekranına gider.
+   PDF'ten yalnız şube başlığı ve sıra doğrulaması okunur. Önizleme (ham adlar) yalnız bellektedir:
+   15 dk sonra zamanlayıcıda, "Vazgeç"te ve onayda silinir; diske, işlem kaydına yazılmaz. Program
+   hiçbir öğretmenin başka sınıf/ders yoklamasını engellemez. Testler uydurma adla yazılır.
 
 ## Bilinen tuzaklar
+
+- **e-Okul hücresinde iki seçmeli grup çift boşlukla ayrılır (0.13.1):** "KİŞİ - DERS  KİŞİ - DERS" tek
+  satırda gelir; boşluklar bölmeden ÖNCE sadeleştirilirse ikinci kişinin adı ders başlığına karışır
+  (0.13.0 kusuru; kilit ekranına ad sızdırabilirdi). Önce böl, sonra sadeleştir (`hucre_coz`). Göç,
+  " - " taşıyan eski ders başlığını "Seçmeli ders" yapar; kaybolan satırı getirmez, program yeniden aktarılır.
+- **Yüzer düğmede girdi tutma (grab) ve POPUP kullanılmaz:** `Gdk.Seat.grab` ETAP'ta görev çubuğunu
+  kilitledi, düğme tıklanamadı (0.12.0 saha bulgusu). Pencere yönetilen UTILITY + keep_above + stick'tir.
+  Kap ölçümü (18.11.2026, Xvfb): xfwm4/Mutter/Muffin'de odaklı tam ekranın üstünde tıklanır, Openbox'ta
+  çıkamaz; "masaüstünü göster" Mutter/Muffin/Openbox'ta düğmeyi gizler. ETAP'ın pencere yöneticisi bilinmiyor.
+- **Dokunuş iki kez gelir:** aynı dokunuş touch olayı ve ardından öykünülmüş fare basışı olarak gelebilir;
+  dokunuştan sonraki 0,7 sn içindeki fare basışı yok sayılır (`yuzer.fare_oykunmesi_mi`), yoksa menü açılıp kapanır.
+- **Kilit ekranı gün programında tahtanın tarihine güvenilmez:** tarih sunucununkinden farklıysa program
+  gizlenmez, başlık sunucunun tarihini taşır ve ilk sayfadan açılır; eskimiş programı servis `gecerli_sn` ile kaldırır.
 
 - **JS'de `form.id` kullanma (0.11.0):** formda `name="id"` alanı varsa `form.id` o alanı döndürür; onay
   düğmesi forma bağlanmaz, iptal/silme hiç gitmez (0.3.0'dan beri grup silme de böyle bozuktu).

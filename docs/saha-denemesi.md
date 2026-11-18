@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.12.0)
+# Saha denemesi kılavuzu (0.13.1)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -48,6 +48,10 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Ders programı içe aktarma (0.10.0): yapay zekâ çıktısı yapıştırma (açıklama ve kod bloğu atıldı), şube → tahta eşlemesi, önizleme (tahta başına +/−/~), onay, "Önceki programlar"; aSc XML ve geri yükleme yalnız testlerde (uydurma XML) | Deneme sunucusu (8797), Chromium; birim testleri | Çalıştı |
 | **Gerçek aSc Timetables XML dosyası**, okulun gerçek zil saatleriyle taşıma | — | **Denenmedi** (§3.9) |
 | e-Okul "Haftalık Ders Programları" raporu (0.12.0): kullanıcının verdiği gerçek .XLS (ikili eğitim) boş sistemde yüklendi; rapordan zil çizelgesi (Sabah 8 + Öğleden sonra 8 ders) onayla kuruldu; PDF başlık biçiminde yapıştırılan şube listesi blok sırasına oturdu; tahta yokken onay kapalı kaldı; uydurma tahtalar (bir kısmı sabahçı + öğlenci şube taşır) eklenince önizleme, onay, "Önceki programlar", ikinci yüklemede hatırlanan eşleme; sayfalarda, işlem kaydında ve veritabanında öğretmen adı yok | Geliştirme bilgisayarı, ayrı veri dizini, deneme sunucusu (8797), betikle (tarayıcı değil) | Çalıştı (deneme verisi silindi) |
+| Öğretmen programı ve kilit ekranı gün programı (0.13.0–0.13.1): hücre çözümü, göç, önizleme belleği, `gun_programi` anahtarı | Birim testleri (uydurma veri); kullanıcının gerçek XLS + PDF'i yalnız yerel ayrıştırmayla (yalnız sayılar: 59 blok, ders başlıklarında ad ve " - " yok) | Geçti; deneme sunucusu ve tarayıcıyla denenmedi |
+| Yüzer düğme (0.13.1): tıklama, menü, sürükleme, odaklı tam ekran üstünde görünme, ikinci çalışma alanı | Debian 12 kabı + Xvfb, `xdotool`; xfwm4, Mutter, Muffin, Openbox | xfwm4'te tamamı çalıştı; Mutter/Muffin'de "masaüstünü göster" düğmeyi gizledi; Openbox'ta odaklı tam ekranın üstüne çıkamadı. Gerçek dokunma olayı üretilemedi |
+| Kilit ekranı gün programı (0.13.1): `scripts/ekran_olcum.py` üç yeni senaryo, 1024×768, 1366×768, 1920×1080, 3840×2160 | Debian 12 kabı + Xvfb (Openbox) | "TAŞTI" ve "OYNADI" yok (en dar pay 1366×768'de 767/768 px) |
+| **Yüzer düğme, gün programı ve öğretmen programı gerçek ETAP tahtasında** | — | **Denenmedi** (§3.12) |
 | **Gerçek ETAP tahtası** | — | İlk deneme 16.11.2026 (0.8.0): bulgular G1–G3, `docs/tasarim.md` §5.1 |
 | Kurulum dosyasının başka bir bilgisayara kurulması | — | Denenmedi |
 | Gerçek kapatma / yeniden başlatma / uzaktan açma | — | Denenmedi (kapta benzetim) |
@@ -432,6 +436,35 @@ görüntüsü depoya girmez (`saha/`); buraya yalnız sayılar yazılır.
 | E9 | Aynı raporu yeniden yükleyin | Şubeler "Hatırlanan" rozetiyle gelir | |
 | E10 | Hiç dersi olmayan bloklar (e-Okul'da programı girilmemiş şubeler) | "N blokta hiç ders yok" uyarısı; o şubelerin tahtasına bir şey yazılmaz | |
 
+### 3.12 Yüzer düğme, gün programı ve öğretmen programı (0.13.x)
+
+Hazırlık: sunucuyu yükseltmeden önce şifreli yedek alın. 0.13.0 ile öğretmen programı aktarıldıysa
+0.13.1'de yeniden aktarın. Ajan değişti: tek tahtayı güncelleyin, yeni ekran yardımcısı için oturumu
+yeniden açın. Rapor dosyası, PDF'i ve ekran görüntüsü depoya girmez (`saha/`); buraya yalnız sayılar ve
+evet/hayır yazılır. Tahtanın pencere yöneticisinin adını not edin (`wmctrl -m`; kurulu değilse
+`xprop -root _NET_SUPPORTING_WM_CHECK`).
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| Y1 | Kilitli olmayan tahtada yüzer düğmeye parmakla bir kez dokunun | Menü açılır ve AÇIK KALIR (açılıp hemen kapanmaz); ikinci dokunuş kapatır | |
+| Y2 | Menü açıkken görev çubuğuna, başlat menüsüne ve bir pencereye dokunun | Hepsi tıklanır; görev çubuğu kilitlenmez (0.12.0 bulgusu yinelenmez) | |
+| Y3 | Düğmeyi parmakla sürükleyip bırakın; sonra parmağı titreterek kısa dokunun | Sürükleyince en yakın kenara yapışır; titrek kısa dokunuş sürükleme sayılmaz, menü açılır | |
+| Y4 | Tam ekran bir uygulama açın (tarayıcıda F11, sunum, video) | Düğme üstte görünür ve tıklanır; odak uygulamada kalır | |
+| Y5 | "Masaüstünü göster" kısayolunu kullanın; varsa ikinci çalışma alanına geçin | Düğme görünür kalır (kapta xfwm4 dışında gizlendi; ETAP'taki sonucu yazın) | |
+| Y6 | Menüden Kilitle, Yoklama al, Arıza bildir | Her biri bir kez çalışır (çift tetikleme yok) | |
+| Y7 | Fareyle aynı adımlar (Y1–Y3) | Fare tıklaması ve sürüklemesi de çalışır | |
+| P1 | Öğretmen programı aktarılmış, tahtaya şube atanmış; tahtayı kilitleyin | Tuş takımının altında bugünün şube/ders/saat listesi; şimdiki ya da sıradaki dersin sayfası açık | |
+| P2 | Önceki/Sonraki ile sayfa değiştirin; 1024×768 ve 1366×768'de de bakın | Tuş takımı ve düğmeler yer değiştirmez; hiçbir şey taşmaz; 60 sn sonra şimdiki derse döner | |
+| P3 | **Gözle denetim:** bütün sayfalarda ders başlıklarını okuyun (özellikle seçmeli dersler) | Hiçbir satırda öğretmen ya da öğrenci adı YOK; yalnız şube, ders, saat | |
+| P4 | Şubesi atanmamış bir tahtayı ve öğretmen programı hiç aktarılmamış sunucuyu deneyin | Program kutusu hiç çıkmaz (ileti de yok) | |
+| P5 | Tatil günü | Kutuda ders yerine sunucunun iletisi ("Bugün tatil; ders programı yok.") | |
+| P6 | Sunucuyu durdurun, 90 sn bekleyin | "Kilidi aç" düğmesi yine çıkar (kural 3); program kutusu kilit açmayı engellemez | |
+| P7 | Tahtanın tarihi yanlışsa (saat pili) | Program gizlenmez; başlıkta sunucunun tarihi yazar | |
+| O1 | Yönetici: Program › Öğretmen programı; aynı raporun XLS + PDF'ini yükleyin | Blok sayısı PDF sayfa sayısına eşit; belirsiz hücre ve aynı ad çakışması uyarıları (varsa) yalnız sayı verir | |
+| O2 | Önizlemede seçmeli derslerin ders başlıkları | Hiçbir ders başlığında kişi adı ya da " - " yok | |
+| O3 | "Vazgeç"; sonra yeniden yükleyip 15 dk bekleyin | Vazgeç'te önizleme hemen silinir; 15 dk sonra onay kabul edilmez, dosya yeniden yüklenir | |
+| O4 | Onaydan sonra işlem kaydı ve bir öğretmenin başka sınıfta yoklama alması | İşlem kaydında ad yok, yalnız sayılar; başka sınıf/ders yoklaması engellenmez | |
+
 ### 3.7 Windows hizmeti (K8, 0.8.0)
 
 Hazırlık: bu denemeler yönetici yetkisi ister ve **önce deneme bilgisayarında** yapılmalıdır.
@@ -626,6 +659,15 @@ ve güncellemeden sonra duruyor mu.
     - İki satırlı hücrenin ilk satırı ders adıdır (örnekte bütün iki satırlı hücrelerde öyleydi); tek
       satırlı hücrelerin ne taşıdığı kesin olmadığından ipucu alınmaz.
     - Raporun "Excel olarak kaydet" çıktısı her sürümde eski ikili biçimdedir (.XLS, OLE2); .xlsx gelirse de okunur.
+  - Yüzer düğme ve öğretmen programı (0.13.x; §3.12):
+    - ETAP'ın pencere yöneticisi yönetilen, keep_above + stick UTILITY pencereyi tam ekran uygulamanın
+      üstünde tutar (kapta xfwm4/Mutter/Muffin tuttu, Openbox tutmadı; ETAP'ınki bilinmiyor).
+    - Dokunmatik panel, dokunuşun ardından öykünülmüş fare basışını 0,7 sn içinde üretir; parmak titremesi
+      28 px'in (1920×1080) altında kalır.
+    - Başka okulların raporunda da seçmeli gruplar aynı hücrede çift boşluk, virgül, noktalı virgül ya da
+      sekmeyle ayrılır (tek örnekte çift boşluktu); tek boşlukla ayrılırsa hücre belirsiz sayılır ve
+      ders genel başlıkla yazılır.
+    - Rapordaki aynı ad tek kişidir (adaş iki öğretmen yalnız aynı saatte farklı derste görünürse uyarılır).
   - Dayanaklar: KVKK md. 12 ve "yeterli önlemler" kararı doğrulanacaklar listesindedir
     (`docs/tasarim.md` §18); arayüzde atıf yoktur.
 

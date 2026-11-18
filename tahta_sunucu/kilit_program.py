@@ -11,7 +11,14 @@ ISTANBUL = ZoneInfo("Europe/Istanbul")
 EN_COK_SATIR = 24
 
 
-def ajan_gorunumu(b, tahta, an: int) -> dict:
+def ajan_gorunumu(b, tahta, an: int) -> dict | None:
+    """Öğretmen programı hiç aktarılmamışsa ya da tahtanın şubesi yoksa None: kilit ekranında kutu çıkmaz.
+
+    Anahtar yine gönderilir (değeri null); ajan None görünce elindeki programı da kaldırır.
+    """
+    subeler = {s for ham in str(tahta["subeler"] or "").split(",") if (s := metin.sube_duzelt(ham))}
+    if not subeler or not b.execute("SELECT 1 FROM ogretmen_program LIMIT 1").fetchone():
+        return None
     simdi = datetime.fromtimestamp(an, ISTANBUL)
     gun = simdi.date()
     bitis = datetime.combine(gun + timedelta(days=1), time.min, ISTANBUL)
@@ -22,10 +29,6 @@ def ajan_gorunumu(b, tahta, an: int) -> dict:
         return sonuc
     if not plan.get("dersler") and program.ders_saatleri_oku(b):
         sonuc["ileti"] = "Bugün için ders saati tanımlı değil."
-        return sonuc
-    subeler = {s for ham in str(tahta["subeler"] or "").split(",") if (s := metin.sube_duzelt(ham))}
-    if not subeler:
-        sonuc["ileti"] = "Bu tahtaya şube atanmamış."
         return sonuc
     satirlar = [dict(s) for s in b.execute(
         "SELECT sube, ders_no, baslangic, bitis, ders_adi FROM ogretmen_program WHERE gun = ?",

@@ -36,6 +36,14 @@ def test_yalniz_tahtanin_subeleri_ve_ders_alanlari(veri):
     assert g["tarih"] == "2026-11-17" and 0 < g["gecerli_sn"] <= 86400
 
 
+def test_program_aktarilmamissa_ya_da_sube_yoksa_kutu_gonderilmez(veri):
+    assert kilit_program.ajan_gorunumu(veri, {"subeler": "9/A"}, AN) is None
+    ekle(veri)
+    assert kilit_program.ajan_gorunumu(veri, {"subeler": ""}, AN) is None
+    assert kilit_program.ajan_gorunumu(veri, {"subeler": None}, AN) is None
+    assert kilit_program.ajan_gorunumu(veri, {"subeler": "9/A"}, AN)["dersler"]
+
+
 def test_ayni_saat_secmeli_dersler_birlesir(veri):
     ekle(veri, adi="Ders A")
     ekle(veri, adi="Ders B")

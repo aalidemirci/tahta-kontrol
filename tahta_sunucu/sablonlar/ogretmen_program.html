@@ -6,13 +6,15 @@
 {% include "_yoklama_bas.html" %}
 {% endwith %}
 <p class="geri"><a href="/ogretmenler">← Öğretmenler ve PIN</a></p>
-<p class="bant uyari" role="note">Bu sayfa öğretmen adları içerir. Dosyalar diske yazılmaz; önizleme yalnız bellekte 15 dakika tutulur. Kaynak öğretmen adları kalıcı saklanmaz, onaylanan eşleme sistemdeki öğretmen kimliğine bağlanır. Öğrenci listesi yüklemeniz gerekmez.</p>
+<p class="bant uyari" role="note">Bu sayfa öğretmen adları içerir. Dosyalar diske yazılmaz; önizleme yalnız bellekte en çok 15 dakika tutulur, “Vazgeç” hemen siler. Kaynak öğretmen adları kalıcı saklanmaz, onaylanan eşleme sistemdeki öğretmen kimliğine bağlanır. Öğrenci listesi yüklemeniz gerekmez.</p>
 {% if aktarim_hatasi %}<p class="bant uyari" role="alert">{{ aktarim_hatasi }}</p>{% endif %}
 {% if onizleme %}
 <section class="kutu">
   <h2>Aktarım önizlemesi</h2>
   <p>{{ onizleme.sube_sayisi }} dolu şube · {{ onizleme.ders_sayisi }} ders satırı · {{ onizleme.bos_blok }} boş program bloğu. Mevcut {{ mevcut_sayi }} ders satırı bu aktarımın tamamıyla değiştirilecek.</p>
   {% if onizleme.ogretmensiz %}<p class="bant uyari">{{ onizleme.ogretmensiz }} ders hücresinde öğretmen adı okunamadı. Ders bilgisi öğretmen eşlemesi olmadan aktarılabilir; bunun için ayrıca onay gerekir.</p>{% endif %}
+  {% if onizleme.belirsiz %}<p class="bant uyari">{{ onizleme.belirsiz }} ders hücresinde kişi ile ders adı ayrılamadı. Bu hücrelerde ders yalnız genel başlığıyla ve öğretmen eşlemesi olmadan aktarılır; raporu kontrol edin.</p>{% endif %}
+  {% if onizleme.cakisan_sayisi %}<p class="bant uyari">{{ onizleme.cakisan_sayisi }} rapor adı aynı gün ve saatte farklı derslerde görünüyor. Raporda aynı adı taşıyan iki öğretmen olabilir; rapor ikisini ayırt etmediği için dersleri tek kişiye bağlanır. Aşağıda işaretli satırları kontrol edin, gerekiyorsa “Öğretmen eşlemeden aktar” seçin.</p>{% endif %}
   <h3>Şube ve blok sırası</h3>
   <div class="tablo-kap"><table><thead><tr><th>Blok</th><th>Şube</th><th>Saat aralığı</th><th>Dolu ders</th></tr></thead><tbody>
     {% for b in onizleme.bloklar %}<tr><td>{{ b.no }}</td><td>{{ b.sube }}</td><td>{{ b.bas }}–{{ b.bit }}</td><td>{{ b.dolu }}{% if not b.dolu %} · boş program{% endif %}</td></tr>{% endfor %}
@@ -27,13 +29,16 @@
             <option value="">Seçin</option>
             {% for o in onizleme.secenekler %}<option value="{{ o.id }}"{% if e.secilen == o.id | string %} selected{% endif %}>{{ o.ad }}</option>{% endfor %}
             <option value="yok"{% if e.secilen == 'yok' %} selected{% endif %}>Öğretmen eşlemeden aktar</option>
-          </select></td><td>{% if e.belirsiz %}Aynı isimde birden çok öğretmen var; elle seçin.{% elif e.otomatik %}Tam ad eşleşmesi önerildi; doğrulayın.{% else %}Elle eşleme gerekli.{% endif %}</td></tr>
+          </select></td><td>{% if e.cakisan %}<strong>Aynı saatte farklı derslerde görünüyor; aynı adlı iki öğretmen olabilir.</strong> {% endif %}{% if e.belirsiz %}Aynı isimde birden çok öğretmen var; elle seçin.{% elif e.otomatik %}Tam ad eşleşmesi önerildi; doğrulayın.{% else %}Elle eşleme gerekli.{% endif %}</td></tr>
       {% endfor %}</tbody>
     </table></div>
+    <h3>Aktarılacak ders adları ({{ onizleme.ders_adlari | length }})</h3>
+    <p class="not">Bu adlar tahtanın kilit ekranında görünür. Aralarında kişi adı görürseniz aktarmayın; raporu kontrol edin.</p>
+    <ul>{% for ad in onizleme.ders_adlari %}<li>{{ ad }}</li>{% endfor %}</ul>
     <p class="not">USB anahtarları öğretmen kimliğine bağlıdır; doğru öğretmeni seçmeniz program ile USB kimliğini ilişkilendirir. Yeni öğretmen oluşturulmaz veya anahtar üretilmez.</p>
     <label class="satir"><input type="checkbox" name="ogretmensiz_onay" value="1"> Öğretmeni okunamayan veya açıkça eşlemeden aktar seçtiğim derslerin öğretmensiz saklanmasını kabul ediyorum.</label>
     <label class="satir"><input type="checkbox" name="onay" value="1" required> Şube sırasını, dersleri ve öğretmen eşlemelerini kontrol ettim; mevcut öğretmen programının değişmesini onaylıyorum.</label>
-    <div class="dugme-satiri"><button class="ana">Programı aktar</button><a class="dugme" href="{{ kaynak_yolu }}">Vazgeç</a></div>
+    <div class="dugme-satiri"><button class="ana">Programı aktar</button><button formaction="{{ kaynak_yolu }}/vazgec" formnovalidate>Vazgeç</button></div>
   </form>
   <details><summary>İlk {{ onizleme.ornek_dersler | length }} ders satırı</summary>
     <div class="tablo-kap"><table><thead><tr><th>Şube</th><th>Gün</th><th>Ders</th><th>Saat</th><th>Ders adı</th></tr></thead><tbody>

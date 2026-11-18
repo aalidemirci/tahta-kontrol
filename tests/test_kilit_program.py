@@ -22,8 +22,54 @@ def test_eski_sunucu_ve_bozuk_program_paneli_gizler():
         assert not ekran.gunluk_program_gorunumu(veri, bugun=BUGUN)["gorunur"]
 
 
-def test_baska_gunun_programi_gece_yarisinda_kalkar():
-    assert not ekran.gunluk_program_gorunumu(durum([ders()]), bugun="2026-11-18")["gorunur"]
+def test_sunucu_null_gonderirse_ya_da_anahtar_yoksa_kutu_hic_gosterilmez():
+    """Program/şube yokken sunucu `null` gönderir; eski sunucuda anahtar hiç yoktur: ikisinde de kutu yok."""
+    for veri in ({"gun_programi": None}, {"kilitli": True}):
+        g = ekran.gunluk_program_gorunumu(veri, sayfa=None, bugun=BUGUN, simdi="09:00")
+        assert not g["gorunur"] and not g["satirlar"] and not g["ileti"]
+
+
+def test_tahtanin_tarihi_farkliysa_program_kaybolmaz_baslik_sunucunun_tarihini_tasir():
+    """Tahtanın saati yanlış olabilir: esas sunucunun tarihidir (eskiyeni servis `gecerli_sn` ile kaldırır)."""
+    ayni = ekran.gunluk_program_gorunumu(durum([ders()]), bugun=BUGUN)
+    assert ayni["gorunur"] and ayni["baslik"] == "Bugünün ders programı"
+    farkli = ekran.gunluk_program_gorunumu(durum([ders()]), bugun="2026-11-18")
+    assert farkli["gorunur"] and len(farkli["satirlar"]) == 1
+    assert farkli["baslik"] == "17 Kasım Salı ders programı" and "Bugün" not in farkli["baslik"]
+
+
+def test_dersler_varken_de_sunucunun_iletisi_gosterilir():
+    g = ekran.gunluk_program_gorunumu(durum([ders()], ileti="Bugün program değişti."), bugun=BUGUN)
+    assert len(g["satirlar"]) == 1 and g["ileti"] == "Bugün program değişti."
+    assert ekran.gunluk_program_gorunumu(durum([ders()]), bugun=BUGUN)["ileti"] == ""
+    # Servisin kabul ettiği en uzun ileti (160) ekranda da atılmaz.
+    uzun = "a" * ekran.KILIT_PROGRAM_ILETI_SINIRI
+    assert ekran.gunluk_program_gorunumu(durum([ders()], ileti=uzun), bugun=BUGUN)["ileti"] == uzun
+
+
+def _on_ders():
+    # 08:00–08:40, 08:50–09:30, … on ders: üç sayfa (4 + 4 + 2).
+    return [ders(no=i + 1, bas=f"{8 + (i * 50) // 60:02d}:{(i * 50) % 60:02d}",
+                 bit=f"{8 + (i * 50 + 40) // 60:02d}:{(i * 50 + 40) % 60:02d}") for i in range(10)]
+
+
+@pytest.mark.parametrize(("simdi", "sayfa"), [
+    ("07:30", 0),  # gün başlamadı: ilk ders
+    ("08:10", 0),  # 1. ders sürüyor
+    ("11:15", 1),  # 4. ders bitti (11:10), teneffüs: sıradaki 5. ders ikinci sayfada
+    ("11:30", 1),  # 5. ders sürüyor
+    ("15:00", 2),  # 9. ders (14:40–15:20) üçüncü sayfada
+    ("18:00", 2),  # bütün dersler bitti: son sayfa
+])
+def test_program_simdiki_ya_da_siradaki_dersin_sayfasindan_acilir(simdi, sayfa):
+    g = ekran.gunluk_program_gorunumu(durum(_on_ders()), sayfa=None, bugun=BUGUN, simdi=simdi)
+    assert g["sayfa"] == sayfa and g["sayfa_sayisi"] == 3
+
+
+def test_otomatik_sayfa_tarih_farkliysa_ilk_sayfadir_elle_secim_korunur():
+    assert ekran.gunluk_program_gorunumu(durum(_on_ders()), sayfa=None, bugun="2026-11-18", simdi="15:00")["sayfa"] == 0
+    assert ekran.gunluk_program_gorunumu(durum(_on_ders()), sayfa=0, bugun=BUGUN, simdi="15:00")["sayfa"] == 0
+    assert ekran.gunluk_program_gorunumu(durum([]), sayfa=None, bugun=BUGUN, simdi="15:00")["sayfa"] == 0
 
 
 def test_ogretmen_ve_ogrenci_alanlari_kopyalanmaz():
@@ -93,3 +139,21 @@ def test_program_saat_sutununa_degil_tus_takiminin_altina_eklenir():
     # program kaybolunca yalnız boş panel sütunu açık tutmaz.
     assert 'or self.kilit_program_kutu.get_visible())' in kaynak
     assert 'or gorunum["gorunur"])' in kaynak
+
+
+def test_sayfa_degisince_yerlesim_sabit_kalir_ve_elle_secim_gecicidir():
+    """GTK olmayan ortamda yerleşim sözleşmesi (gerçek ölçüm: scripts/ekran_olcum.py, kilit-program-*)."""
+    from pathlib import Path
+
+    kaynak = Path(ekran.__file__).read_text(encoding="utf-8")
+    sayfa = kaynak.split("        def _kilit_sayfasi(self):", 1)[1].split("        def _kilit_program_gec", 1)[0]
+    # Satırların doğal eni sabit: sayfadan sayfaya metin uzunluğu sütunu (ve tuş takımını) kaydırmaz.
+    assert "etiket.set_width_chars(44)" in sayfa and "etiket.set_max_width_chars(44)" in sayfa
+    ciz = kaynak.split("        def _kilit_program_ciz(self):", 1)[1].split("        def _duyuru_sayfasi", 1)[0]
+    # Çok sayfalı programda son sayfanın boş satırları da yer tutar: düğmeler ve tuş takımı oynamaz.
+    assert "etiket.set_visible(bool(satir) or cok_sayfa)" in ciz
+    # Elle seçim yokken şimdiki/sıradaki dersin sayfası; Önceki/Sonraki seçimi süreyle korunur.
+    assert "self.kilit_program_sayfa if elle else None" in ciz
+    assert "self.kilit_program_baslik.set_text(gorunum[\"baslik\"])" in ciz
+    gec = kaynak.split("        def _kilit_program_gec(self, fark):", 1)[1].split("        def _kilit_program_ciz", 1)[0]
+    assert "KILIT_PROGRAM_ELLE_SN" in gec

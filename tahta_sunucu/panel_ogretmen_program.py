@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from . import eokul_program, vt, yoklama
@@ -54,7 +55,9 @@ def kaydet(uygulama, y) -> None:
                     raise ValueError("Program Excel dosyasını seçin.")
                 xls_veri = await dosya.read(eokul_program.EN_COK_BAYT + 1)
                 pdf_veri = await pdf.read(op.PDF_EN_COK_BAYT + 1) if isinstance(pdf, UploadFile) and pdf.filename else None
-                veri = op.dosya_oku(xls_veri, pdf=pdf_veri, sube_metni=str(form.get("subeler") or ""))
+                # PDF/XLS ayrıştırması saniyeler sürebilir; olay döngüsünü (ajan beklemelerini) tutmasın.
+                veri = await run_in_threadpool(op.dosya_oku, xls_veri, pdf=pdf_veri,
+                                               sube_metni=str(form.get("subeler") or ""))
             finally:
                 await form.close()
             with vt.islem() as b:
@@ -63,6 +66,17 @@ def kaydet(uygulama, y) -> None:
             return sayfa(istek, k, veri=veri, belirtec=belirtec)
         except ValueError as hata:
             return y.yonlendir(YOL, str(hata), hata=True)
+
+    @uygulama.post(YOL + "/vazgec")
+    async def vazgec(istek: Request):
+        """Önizlemeyi (ham öğretmen adlarını) 15 dakikayı beklemeden bellekten siler."""
+        k = y.kullanici(istek)
+        engel = yetki_reddi(y, istek, k, "Öğretmen programı önizleme", "/yoklama")
+        if engel:
+            return engel
+        form = await istek.form()
+        depo.al(str(form.get("belirtec") or ""), k["id"])
+        return y.yonlendir(YOL, "Aktarımdan vazgeçildi; önizleme silindi.")
 
     @uygulama.post(YOL + "/uygula", response_class=HTMLResponse)
     async def uygula(istek: Request):

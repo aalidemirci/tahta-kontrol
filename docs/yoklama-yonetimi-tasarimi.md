@@ -1,10 +1,13 @@
-# Yoklama yönetimi — tasarım kararı
+# Yoklama yönetimi — taslak (uygulanmadı)
 
-17 Kasım 2026. Bu belge ve etkileşimli taslak tasarımdır; canlı uygulamanın
-veritabanı, ajanı ve icmal hesaplaması bu özellikler için henüz değiştirilmedi.
-Taslak yalnız uydurma öğrenci numaraları ve örnek etiketler kullanır.
+> **Taslak, uygulanmadı.** Bağlayıcı kararlar `docs/tasarim.md` §17'dedir; ders yoklamasının
+> yürürlükteki tasarımı §14'tür ("yalnız yok" işareti, kategori tutulmaz). Bu belge onları
+> değiştirmez; aşağıdakiler ancak §14 ve §17 açıkça güncellenirse uygulanır.
 
-## Kullanıcının kesinleştirdiği kurallar
+17 Kasım 2026. Canlı uygulamanın veritabanı, ajanı ve icmal hesaplaması bu özellikler için
+değiştirilmedi.
+
+## Taslaktaki kurallar
 
 | Bilgi | İdare paneli | Tahtadaki yoklama ekranı | Devamsızlık toplamı |
 |---|---|---|---|
@@ -75,13 +78,13 @@ Uyarı okuldan izinsiz ayrılma veya disiplin ihlali kanıtı olarak sunulmaz;
 yoklama hatası ve gecikmiş izin olasılığı için yalnız inceleme çağrısıdır.
 Tahtaya, öğretmen ekranına veya genel olay günlüğüne öğrenci kimliğiyle
 gönderilmez. Yıl sonu/tüm veri imhası uyarı ve inceleme kayıtlarını da kapsar.
-Taslak etkin uyarıları yerel veriden hesaplar; kalıcı inceleme geçmişi gerçek
-uygulama aşamasında eklenecektir.
+Kalıcı inceleme geçmişi uygulama aşamasının işidir.
 
 ## Uygulama sırası
 
-1. Mevcut tasarım §14'te "yalnız yok" ve kategori tutmama kararları bu yeni
-   kullanıcı talimatıyla güncellenecek; eski veri dönüştürülmeden korunacak.
+1. Ön koşul: `docs/tasarim.md` §14'teki "yalnız yok" ve kategori tutmama kararları yürürlüktedir.
+   Bu taslak ancak o kararlar açıkça değiştirilip §14 ve §17'ye işlendikten sonra uygulanır;
+   eski veri dönüştürülmeden korunur.
 2. Yeni göç: orijinal kayda bağlı geç işaretleri ve ayrı idari durum/iz tabloları.
    Tarih, öğrenci, ders, şube/devre geçmişi ve değişiklik sürümü saklanacak.
    Aynı öğrencinin sabah/öğle dersleri karışmayacak.
@@ -109,5 +112,4 @@ uygulama aşamasında eklenecektir.
 - İşlendi işareti değişen icmalden sonra yeniden onay gerektirir.
 - Yıl sonu ve elle silme, idari durum/iz/Geç verisini de kaldırır.
 
-Etkileşimli taslak, seçim ve yapıştırma akışını gösterir; çakışma yönetimi,
-yetkilendirme ve kalıcı kayıt gerçek uygulama aşamasında eklenecektir.
+Çakışma yönetimi, yetkilendirme ve kalıcı kayıt uygulama aşamasının işidir.

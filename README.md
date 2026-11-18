@@ -1,5 +1,9 @@
 # Tahta Kontrol
 
+Yerel geliştirme **0.13.1**: 0.13.0 inceleme bulgularının düzeltmesi — seçmeli derslerde
+öğretmen adının ders başlığına karışması, kilit ekranındaki gün programı, önizleme belleği ve
+yüzer düğme. [Sürüm notları](docs/surum-0.13.1.md). Dağıtılmadı; gerçek tahtada denenmedi.
+
 Yerel geliştirme **0.13.0**: PDF/Excel'den öğretmen programı eşlemesi ve
 kilit ekranında bugünün ders programı. Öğretmenlerin başka sınıfta yoklama alma
 yolu açıktır. [Sürüm notları](docs/surum-0.13.0.md). Henüz kurulu sisteme dağıtılmadı.
@@ -15,9 +19,9 @@ Bu değişiklikler henüz kurulu sunucuya/istemciye dağıtılmadı.
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.12.0, saha denemesi sürümü.** Debian 12 ve Pardus 25 masaüstünde denendi;
-> gerçek bir Pardus ETAP tahtasında ilk deneme yapıldı (0.8.0; bulgular 0.9.0'da
-> giderildi), sonraki sürümler gerçek tahtada henüz denenmedi. Okul genelinde
+> **Durum: 0.13.1 yerel geliştirme; saha denemesindeki sürüm 0.12.0.** Debian 12 ve Pardus 25
+> masaüstünde denendi; gerçek bir Pardus ETAP tahtasında ilk deneme yapıldı (0.8.0; bulgular 0.9.0'da
+> giderildi), sonraki sürümler (0.13.x dahil) gerçek tahtada henüz denenmedi. Okul genelinde
 > kullanmadan önce tek tahtada deneyin (`docs/saha-denemesi.md`).
 
 ## Ne yapar

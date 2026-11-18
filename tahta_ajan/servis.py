@@ -1470,6 +1470,18 @@ class Servis:
             return self.gun_programi
         return None
 
+    def _gun_programi_suresi_denetle(self) -> bool:
+        """Günün programının ömrü (gecerli_sn; gece yarısı) dolduysa bellekten atar; True ise yayınlanmalı.
+
+        Sunucuya ulaşılamazken yeni yanıt gelmez; ekran yardımcısı elindeki son durumu çizmeyi sürdürür.
+        Bu yüzden süre dolduğunda bekçi bir kez yayın yapar (dünün programı kilit ekranında kalmasın).
+        """
+        with self.kilit:
+            if self.gun_programi is None or time.monotonic() < self.gun_programi_bitis:
+                return False
+            self.gun_programi, self.gun_programi_bitis = None, 0.0
+            return True
+
     def _oturum_gor(self, baslangic):
         """Ekran yardımcısı bağlandı: başlangıcı bilinen oturumdan yeniyse yeni oturum kimliği üretilir.
 
@@ -2514,8 +2526,9 @@ class Servis:
             self._sinav_denetle()
             self._yoklama_denetle()
             self._usb_denetle()
+            program_bitti = self._gun_programi_suresi_denetle()
             durum =(self.cevrimdisi(), self.duyuru is not None and self.duyuru["bitis"] <= time.time())
-            if durum != self._son_cevrimdisi or durum[1] or acil_bitti:
+            if durum != self._son_cevrimdisi or durum[1] or acil_bitti or program_bitti:
                 self._son_cevrimdisi = durum
                 self.yayinla()
 

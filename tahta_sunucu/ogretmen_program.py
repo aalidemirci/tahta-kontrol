@@ -30,6 +30,75 @@ def _metin(deger: str) -> str:
     return sonuc
 
 
+_PARCA = re.compile(r"[,;\t]|\s{2,}")
+_AYIRAC = re.compile(r"\s-\s")
+GENEL_BASLIK = "Ders"
+
+
+def hucre_coz(hucre: str) -> tuple[str, list[tuple[str, str]], int]:
+    """Hücre → (genel başlık, [(kaynak kişi, ders adı)], belirsiz giriş sayısı).
+
+    İlk satır dersin (ya da "SEÇMELİ DERS" gibi grubun) başlığıdır; sonraki satırlar kişilerdir.
+    e-Okul aynı saatteki seçmeli grupları TEK satırda en az iki boşlukla ayırır
+    ("KİŞİ - DERS  KİŞİ - DERS"); bu yüzden satır, boşluklar sadeleştirilmeden ÖNCE bölünür.
+    Kapalı hata: bölündükten sonra bir parçada hâlâ birden çok " - " varsa kişi ile dersin sınırı
+    bilinemez; ders adı genel başlığa iner ve kişi eşlemeye alınmaz (ders adı tahtanın kilit
+    ekranında görünür). Hücre tek başına her sapmayı yakalayamaz (tek " - " sonrasına eklenmiş ikinci
+    kişi, ilk satırı ad olan hücre); bunlar için `matris_oku` bütün rapor okunduktan sonra ders
+    adlarını rapordaki kişi adlarıyla karşılaştırır (`_adli_dersleri_indir`) ve önizleme aktarılacak
+    FARKLI ders adlarının tamamını gösterir.
+    """
+    satirlar = [s for s in str(hucre or "").splitlines() if s.strip()]
+    if not satirlar:
+        return "", [], 0
+    belirsiz = 0
+    baslik = satirlar[0].strip()
+    # Başlık satırı da "kişi - ders" kalıbındaysa başlık sayılmaz.
+    if _AYIRAC.search(baslik):
+        baslik, belirsiz = GENEL_BASLIK, 1
+    baslik = _metin(baslik)
+    girisler = []
+    for satir in satirlar[1:]:
+        for parca in (p.strip() for p in _PARCA.split(satir)):
+            if not parca:
+                continue
+            bolumler = _AYIRAC.split(parca)
+            if len(bolumler) > 2:
+                belirsiz += 1
+                girisler.append(("", baslik))
+                continue
+            kisi = _metin(bolumler[0])
+            ders = _metin(bolumler[1]) if len(bolumler) == 2 else ""
+            girisler.append((kisi, ders or baslik))
+    return baslik, girisler or [("", baslik)], belirsiz
+
+
+_SOZCUK_DISI = re.compile(r"[^0-9a-z]+")
+
+
+def _sozcukler(deger: str) -> str:
+    return " ".join(_SOZCUK_DISI.sub(" ", ad_anahtari(deger)).split())
+
+
+def _adli_dersleri_indir(dersler: list[dict], ogretmenler: dict) -> int:
+    """Ders adı, raporda kişi olarak görülen bir adı (en az iki sözcük) içeriyorsa genel başlığa iner.
+
+    Kapalı hata: o satır öğretmen eşlemesine de alınmaz. Dönen sayı etkilenen ders satırıdır.
+    """
+    adlar = {f" {a} " for a in (_sozcukler(ad) for ad in ogretmenler.values()) if " " in a}
+    supheli = {}
+    sayi = 0
+    for d in dersler:
+        ad = d["ders_adi"]
+        if ad not in supheli:
+            aranan = f" {_sozcukler(ad)} "
+            supheli[ad] = any(a in aranan for a in adlar)
+        if supheli[ad]:
+            d["ders_adi"], d["ogretmen_anahtari"] = GENEL_BASLIK, ""
+            sayi += 1
+    return sayi
+
+
 def pdf_oku(bayt: bytes) -> tuple[list[str], list[str]]:
     """Her PDF sayfasından tek şube ve doğrulama metni; ikisi de yalnız bellekte."""
     if not bayt or len(bayt) > PDF_EN_COK_BAYT or not bayt.startswith(b"%PDF-"):
@@ -76,7 +145,8 @@ def matris_oku(matris: list[list[str]], subeler: list[str], pdf_metinleri: list[
           if metin.katla(h).strip(' .:') in GUNLER} for satir in matris[:eokul_program.BASLIK_TARAMA]
          if sum(metin.katla(h).strip(' .:') in GUNLER for h in satir) >= 2), {})
     dersler, ogretmenler, gorulen = [], {}, set()
-    ogretmensiz = bos_blok = 0
+    yerler: dict[str, dict[tuple, set[str]]] = defaultdict(dict)
+    ogretmensiz = bos_blok = belirsiz = 0
     for i, blok in enumerate(rapor["bloklar"]):
         son = rapor["bloklar"][i + 1]["satir"] - 1 if i + 1 < len(rapor["bloklar"]) else len(matris)
         saatler = {no: (bas, bit) for no, bas, bit in blok["dersler"]}
@@ -90,21 +160,16 @@ def matris_oku(matris: list[list[str]], subeler: list[str], pdf_metinleri: list[
             no = int(no_m.group(1))
             bas, bit = saatler[no]
             for c, gun in sutunlar.items():
-                hucre = str(satir[c] if c < len(satir) else "")
-                satirlar = [_metin(s) for s in hucre.splitlines() if s.strip()]
-                if not satirlar:
+                ders_adi, girisler, sorunlu = hucre_coz(str(satir[c] if c < len(satir) else ""))
+                if not ders_adi:
                     continue
-                ders_adi = satirlar[0]
-                kisiler = satirlar[1:] or [""]
-                for kaynak in (parca.strip() for s in kisiler for parca in re.split(r"[,;]", s)):
-                    # Seçmeli hücreler: "AD SOYAD - DERS". Tireli soyad bölünmez.
-                    kisi, ayirac, secmeli = kaynak.partition(" - ")
-                    kisi = _metin(kisi)
-                    ders = _metin(secmeli) if ayirac and secmeli.strip() else ders_adi
+                belirsiz += sorunlu
+                for kisi, ders in girisler:
                     anahtar = ad_anahtari(kisi)
                     if anahtar:
                         ogretmenler.setdefault(anahtar, kisi)
-                        parmaklar.add(ad_anahtari(kaynak))
+                        parmaklar.add(ad_anahtari(kisi if ders == ders_adi else f"{kisi} - {ders}"))
+                        yerler[anahtar].setdefault((gun, bas), set()).add(ad_anahtari(ders))
                     else:
                         ogretmensiz += 1
                     kimlik = (subeler[i], gun, no, bas, bit, ders, anahtar)
@@ -118,7 +183,12 @@ def matris_oku(matris: list[list[str]], subeler: list[str], pdf_metinleri: list[
                              "Dosyaların aynı rapordan geldiğini ve sırasını kontrol edin.")
     if not dersler:
         raise ValueError("Programda aktarılabilecek dolu ders bulunamadı.")
+    belirsiz += _adli_dersleri_indir(dersler, ogretmenler)
+    # Aynı ad aynı gün ve saatte FARKLI derslerde: aynı adı taşıyan iki kişi tek ada katlanmış olabilir
+    # (şubeleri birleştirilen seçmeli grup aynı dersi taşır; o sayılmaz).
+    cakisan = sorted(a for a, y in yerler.items() if any(len(s) > 1 for s in y.values()))
     return {"dersler": dersler, "ogretmenler": ogretmenler, "ogretmensiz": ogretmensiz,
+            "belirsiz": belirsiz, "cakisan_adlar": cakisan,
             "blok_sayisi": len(subeler), "bos_blok": bos_blok,
             "bloklar": [{"no": b["no"], "sube": subeler[i], "dolu": len(b["dolu"]),
                          "bas": b["dersler"][0][1], "bit": b["dersler"][-1][2]}
@@ -150,6 +220,7 @@ def onizle(b, veri: dict, secimler: dict | None = None) -> dict:
     for o in secenekler:
         adlar[ad_anahtari(o["ad"])].append(o["id"])
     etkin_idler = {str(o["id"]) for o in secenekler}
+    cakisan = set(veri.get("cakisan_adlar", ()))
     eslesmeler = []
     for no, (anahtar, ad) in enumerate(sorted(veri["ogretmenler"].items())):
         onerilen = str(adlar[anahtar][0]) if len(adlar[anahtar]) == 1 else ""
@@ -157,12 +228,16 @@ def onizle(b, veri: dict, secimler: dict | None = None) -> dict:
         if secilen != "yok" and secilen not in etkin_idler:
             secilen = ""
         eslesmeler.append({"no": no, "anahtar": anahtar, "ad": ad, "secilen": secilen,
-                           "otomatik": bool(onerilen), "belirsiz": len(adlar[anahtar]) > 1})
+                           "otomatik": bool(onerilen), "belirsiz": len(adlar[anahtar]) > 1,
+                           "cakisan": anahtar in cakisan})
     return {"ogretmenler": eslesmeler, "secenekler": secenekler,
             "ders_sayisi": len(veri["dersler"]), "sube_sayisi": len({d['sube'] for d in veri['dersler']}),
             "bos_blok": veri["bos_blok"], "ogretmensiz": veri["ogretmensiz"],
+            "belirsiz": veri.get("belirsiz", 0), "cakisan_sayisi": len(cakisan),
             "eslesmeyen": sum(not e["secilen"] for e in eslesmeler),
-            "bloklar": veri["bloklar"], "ornek_dersler": veri["dersler"][:80]}
+            "bloklar": veri["bloklar"], "ornek_dersler": veri["dersler"][:80],
+            # Kilit ekranına gidecek metnin TAMAMI onaydan önce insan gözünden geçsin.
+            "ders_adlari": sorted({d["ders_adi"] for d in veri["dersler"]}, key=metin.katla)}
 
 
 def surum(b) -> int:

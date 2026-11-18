@@ -7,7 +7,9 @@ göndereceği biçimde UYDURMA bir durum iletisi verir, sayfa çizilince şunlar
 - gerekli: sayfanın kaydırmasız en küçük eni x boyu (kaydırma alanlarının içeriği dahil;
   ekranın eninde boy, height-for-width ile),
 - sonuç: "sığdı" (en ve boy ekrana sığar), "kaydırma" (en sığar, uzun içerik dikey kaydırılır;
-  yalnız uzun liste/metin senaryolarında kabul), "TAŞTI" (en sığmaz ya da kısa içerik kaydırılıyor).
+  yalnız uzun liste/metin senaryolarında kabul), "TAŞTI" (en sığmaz ya da kısa içerik kaydırılıyor),
+  "OYNADI" (kilit ekranındaki gün programında sayfa değişince tuş takımı ya da Önceki/Sonraki
+  düğmeleri yer değiştirdi; kilit-program-* senaryoları bütün sayfaları gezerek ölçer).
 
 Kullanım (Docker'da: debian:12 + python3-gi gir1.2-gtk-3.0 xvfb openbox imagemagick):
     Xvfb :9 -screen 0 1366x768x24 & DISPLAY=:9 openbox &
@@ -92,6 +94,16 @@ def yoklama(asama, **ek) -> dict:
     return y
 
 
+def gun_programi(ders_sayisi=10, ileti="") -> dict:
+    """Kilit ekranındaki gün programı (0.13.0): yalnız şube/ders/saat; tarih bugündür ("Bugünün ..." başlığı)."""
+    adlar = ["Türk Dili ve Edebiyatı", "Seçmeli Peygamberimizin Hayatı / Seçmeli Temel Dini Bilgiler", "Coğrafya",
+             "Beden Eğitimi ve Spor", "Matematik"]  # fmt: skip
+    dersler = [{"ders_no": i + 1, "baslangic": f"{8 + (i * 50) // 60:02d}:{(i * 50) % 60:02d}",
+                "bitis": f"{8 + (i * 50 + 40) // 60:02d}:{(i * 50 + 40) % 60:02d}",
+                "sube": f"{9 + i % 4}/{'ABC'[i % 3]}", "ders_adi": adlar[i % len(adlar)]} for i in range(ders_sayisi)]  # fmt: skip
+    return {"tarih": time.strftime("%Y-%m-%d"), "dersler": dersler, "ileti": ileti}
+
+
 OGRENCILER = [{"id": i + 1, "etiket": ADLAR[i % len(ADLAR)]} for i in range(40)]
 GOZETMEN_LISTE = [{"k": i, "a": MASKE[i % 5], "n": f"{i:02d}", "s": "12/C"} for i in range(1, 36)]
 OTURMA = "Sınav oturma listesi · 9/A\n\n" + "\n".join(f"Ab*** Cd**** …{i:02d}  →  10/B Dersliği, koltuk {i}" for i in range(60))
@@ -101,6 +113,15 @@ SENARYOLAR = [
     ("kilit", taban(kilitli=True, kilit_kaynak="program", kilit_neden="Bu saatte bu derslikte ders yok",
                     kilit_acilis="10:40"), "kilit", False, None),  # fmt: skip
     ("kilit-cevrimdisi", taban(kilitli=True, cevrimdisi=True), "kilit", False, None),
+    ("kilit-program", taban(kilitli=True, gun_programi=gun_programi()), "kilit", False, "program_sayfalari"),
+    ("kilit-program-tam", taban(kilitli=True, kilit_kaynak="program", kilit_neden="Bu saatte bu derslikte ders yok",
+                                kilit_acilis="10:40", usb={"metin": "USB anahtar tanındı · A. Örnek (kod 112)",
+                                                           "kilit_ac": True},
+                                gun_programi=gun_programi(10, "Bugün 5. ve 6. derslerde ortak sınav vardır; sınav salonları "
+                                                              "ve oturma düzeni için koridordaki listeye bakınız.")),
+     "kilit", False, "program_sayfalari"),  # fmt: skip
+    ("kilit-program-kodsuz", taban(kilitli=True, kod_var=False, gun_programi=gun_programi(3)), "kilit", False,
+     "program_sayfalari"),
     ("duyuru", taban(duyuru={"baslik": "Zümre toplantısı", "metin": UZUN_METIN, "kalan": 600, "kapatilabilir": True}),
      "duyuru", False, None),
     ("duyuru-liste", taban(duyuru={"baslik": "Oturma listesi", "metin": OTURMA, "kalan": 600, "kapatilabilir": True}),
@@ -177,6 +198,28 @@ def olc_sayfa(sayfa) -> tuple[int, int, bool]:
     return gerekli_en, gerekli_boy, yatay_tasti
 
 
+def program_sayfalari_oynadi_mi(nesne) -> bool:
+    """Gün programının bütün sayfalarını gezer; tuş takımı, program kutusu ya da gezgin yer değiştirdiyse True."""
+
+    def yerler():
+        return [(p.get_allocation().x, p.get_allocation().y, p.get_allocation().width, p.get_allocation().height)
+                for p in (nesne.kod_kutusu, nesne.kilit_program_kutu, nesne.kilit_program_gezgin,
+                          nesne.kilit_program_onceki, nesne.kilit_program_sonraki) if p.get_mapped()]  # fmt: skip
+
+    nesne.kilit_program_sayfa = 0
+    nesne._kilit_program_gec(0)  # elle seçim: ölçüm sırasında otomatik sayfaya dönmesin
+    pompala(0.4)
+    ilk, gezilen = yerler(), 0
+    while nesne.kilit_program_sonraki.get_mapped() and nesne.kilit_program_sonraki.get_sensitive() and gezilen < 12:
+        nesne._kilit_program_gec(1)
+        gezilen += 1
+        pompala(0.4)
+        if yerler() != ilk:
+            return True
+    nesne.kilit_program_elle_bitis = 0.0
+    return False
+
+
 def ekran_goruntusu(dizin, en, boy, ad):
     if dizin:
         subprocess.run(["import", "-window", "root", os.path.join(dizin, f"{en}x{boy}-{ad}.png")], check=False)
@@ -206,8 +249,15 @@ def ekran_olc(arg) -> int:
                 sonuc = "kaydırma" if uzun else "TAŞTI"
             else:
                 sonuc = "sığdı"
-            sonuclar.append((ad, sayfa_adi, en, boy, nesne.olcek, p_en, p_boy, gerekli_en, gerekli_boy, sonuc))
             ekran_goruntusu(arg.cikti, en, boy, ad)
+            if is_ == "program_sayfalari":
+                if not nesne.kilit_program_kutu.get_mapped():
+                    sonuc = "TAŞTI"  # program kutusu görünmeliydi
+                elif program_sayfalari_oynadi_mi(nesne) and sonuc == "sığdı":
+                    sonuc = "OYNADI"
+                ad_son = ad + "-son"
+                ekran_goruntusu(arg.cikti, en, boy, ad_son)
+            sonuclar.append((ad, sayfa_adi, en, boy, nesne.olcek, p_en, p_boy, gerekli_en, gerekli_boy, sonuc))
         Gtk.main_quit()
 
     ekran.Baglanti.calis = lambda self: None  # servis yok: ileti gönderilmez, kopma bildirilmez
@@ -221,10 +271,10 @@ def ekran_olc(arg) -> int:
 
     Gtk.main = main
     ekran.calistir()
-    print(f"{'senaryo':<18} {'sayfa':<17} {'ekran':>10} {'ölçek':>6} {'pencere':>10} {'gerekli':>10}  sonuç")
+    print(f"{'senaryo':<21} {'sayfa':<17} {'ekran':>10} {'ölçek':>6} {'pencere':>10} {'gerekli':>10}  sonuç")
     for ad, sayfa_adi, en, boy, olcek, p_en, p_boy, g_en, g_boy, sonuc in sonuclar:
-        print(f"{ad:<18} {sayfa_adi:<17} {en:>4}x{boy:<5} {olcek:>6.3f} {p_en:>4}x{p_boy:<5} {g_en:>4}x{g_boy:<5}  {sonuc}")
-    return 1 if any(s[-1] == "TAŞTI" for s in sonuclar) else 0
+        print(f"{ad:<21} {sayfa_adi:<17} {en:>4}x{boy:<5} {olcek:>6.3f} {p_en:>4}x{p_boy:<5} {g_en:>4}x{g_boy:<5}  {sonuc}")
+    return 1 if any(s[-1] in ("TAŞTI", "OYNADI") for s in sonuclar) else 0
 
 
 def ariza_olc(arg) -> int:

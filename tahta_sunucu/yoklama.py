@@ -1012,8 +1012,10 @@ class OnizlemeDeposu:
         self.kayitlar: dict[str, tuple[float, int, dict]] = {}
 
     def _temizle(self) -> None:
+        # Yerinde silinir: zamanlayıcı iş parçacığı temizlerken panelin o an eklediği kayıt kaybolmasın.
         simdi = time.monotonic()
-        self.kayitlar = {k: v for k, v in self.kayitlar.items() if v[0] > simdi}
+        for anahtar in [k for k, v in list(self.kayitlar.items()) if v[0] <= simdi]:
+            self.kayitlar.pop(anahtar, None)
 
     def koy(self, kullanici_id: int, veri: dict) -> str:
         self._temizle()
@@ -1031,6 +1033,10 @@ class OnizlemeDeposu:
             return None
         del self.kayitlar[anahtar]
         return kayit[2]
+
+    def suresi_dolanlari_sil(self) -> None:
+        """Zamanlayıcıdan çağrılır: süresi dolan önizleme bir sonraki erişimi beklemeden bellekten düşer."""
+        self._temizle()
 
     def bosalt(self) -> None:
         self.kayitlar.clear()

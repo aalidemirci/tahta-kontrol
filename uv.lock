@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.12.*"
 
 [[package]]
@@ -418,7 +418,7 @@ wheels = [
 
 [[package]]
 name = "tahta-kontrol"
-version = "0.13.0"
+version = "0.13.1"
 source = { virtual = "." }
 dependencies = [
     { name = "cryptography" },

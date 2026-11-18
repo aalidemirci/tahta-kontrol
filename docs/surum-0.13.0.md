@@ -65,6 +65,9 @@ kilitlerini değiştirmez. Gerekiyorsa önce mevcut Zil/Derslik programı aktar�
 tamamlayın; şubeleri ilgili tahtalara atayın. Sonra tek tahtanın ajanını
 güncelleyin. Tahtada yeni ekran yardımcısının yüklenmesi için oturumu yeniden açın.
 
-Bu sürüm önceki yoklama yönetimi taslağındaki yeni idari durumlar, toplu faaliyet,
-Geç ve ders arası yokluk uyarılarının uygulama entegrasyonu değildir; onlar
-`yoklama-yonetimi-tasarimi.md` içinde ayrı geliştirme kapsamı olarak durur.
+Bu sürüm yoklama yönetimi taslağındaki yeni idari durumlar, toplu faaliyet,
+Geç ve ders arası yokluk uyarılarını içermez; onlar `yoklama-yonetimi-tasarimi.md`
+içinde uygulanmamış taslak olarak durur (kararlar `tasarim.md` §17'dedir).
+
+Düzeltmeler: [0.13.1](surum-0.13.1.md) — seçmeli hücrede öğretmen adının ders başlığına
+karışması dahil. 0.13.0 ile aktarım yapıldıysa 0.13.1'de program yeniden aktarılır.

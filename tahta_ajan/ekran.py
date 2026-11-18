@@ -122,7 +122,7 @@ STIL_OLCU = b"""
 #program-bilgi { font-size: 32px; font-weight: 600; }
 #gunluk-program-baslik { font-size: 26px; font-weight: 600; }
 #gunluk-program-satir, #gunluk-program-sayfa { font-size: 24px; }
-#gunluk-program-gezgin button { font-size: 22px; padding: 6px 14px; }
+#gunluk-program-gezgin button { font-size: 22px; padding: 4px 14px; }
 #usb-bilgi { font-size: 26px; font-weight: 600; }
 #bilgi { font-size: 24px; }
 #kod { font-size: 56px; letter-spacing: 12px; }
@@ -614,25 +614,37 @@ def program_bilgisi(durum: dict) -> str:
 
 KILIT_PROGRAM_SATIR_SINIRI = 24
 KILIT_PROGRAM_SAYFA_SATIRI = 4
+KILIT_PROGRAM_ILETI_SINIRI = 160  # gun_programi.coz ile aynı
+KILIT_PROGRAM_ELLE_SN = 60  # Önceki/Sonraki ile seçilen sayfa bu kadar kalır, sonra şimdiki derse döner
+KILIT_PROGRAM_BASLIK = "Bugünün ders programı"
 
 
-def gunluk_program_gorunumu(durum: dict, sayfa: int = 0, bugun: str | None = None) -> dict:
+def gunluk_program_gorunumu(durum: dict, sayfa: int | None = 0, bugun: str | None = None,
+                            simdi: str | None = None) -> dict:  # fmt: skip
     """Kilit için yalnız ders/sınıf/saat alanlarından oluşan, sınırlı ve sayfalı görünüm.
 
-    Öğretmen/öğrenci alanları kopyalanmaz. Eski sunucuda alan yoksa panel gizlenir;
-    gece yarısından sonra önceki günün bellekte kalan programı gösterilmez.
+    Öğretmen/öğrenci alanları kopyalanmaz. Sunucu programı göndermezse (anahtar yok: eski sunucu;
+    `null`: program ya da şube yok) kutu hiç gösterilmez. Esas alınan tarih SUNUCUNUN gönderdiğidir:
+    tahtanın saati yanlışsa program kaybolmaz, başlık "Bugünün" yerine o tarihi taşır. Eskimiş
+    programı servis kaldırır (`gecerli_sn`, gece yarısı); burada tahtanın saatine göre gizlenmez.
+
+    `sayfa=None`: şimdiki ya da sıradaki dersin sayfası (`simdi` "SS:DD", verilmezse tahtanın saati);
+    bütün dersler bittiyse son sayfa, tarih tahtanınkinden farklıysa ilk sayfa.
     """
-    bos = {"gorunur": False, "baslik": "Bugünün ders programı", "satirlar": [],
+    bos = {"gorunur": False, "baslik": KILIT_PROGRAM_BASLIK, "satirlar": [],
            "ileti": "", "sayfa": 0, "sayfa_sayisi": 1, "sayfa_metni": ""}
     veri = durum.get("gun_programi") if isinstance(durum, dict) else None
     if not isinstance(veri, dict):
         return bos
     tarih = veri.get("tarih")
     try:
-        if not isinstance(tarih, str) or date.fromisoformat(tarih).isoformat() != (bugun or time.strftime("%Y-%m-%d")):
+        if not isinstance(tarih, str):
             return bos
+        gun = date.fromisoformat(tarih)
     except ValueError:
         return bos
+    bugun_mu = gun.isoformat() == (bugun or time.strftime("%Y-%m-%d"))
+    baslik = KILIT_PROGRAM_BASLIK if bugun_mu else f"{gun.day} {AYLAR[gun.month - 1]} {GUNLER[gun.weekday()]} ders programı"
 
     def metin(deger, en_cok):
         if not isinstance(deger, str) or any(ord(h) < 32 or ord(h) == 127 for h in deger):
@@ -664,10 +676,17 @@ def gunluk_program_gorunumu(durum: dict, sayfa: int = 0, bugun: str | None = Non
             satirlar.append({"ders_no": no, "baslangic": bas, "bitis": bit, "sube": sube, "ders": ders})
     satirlar.sort(key=lambda s: (s["baslangic"], s["ders_no"], s["sube"], s["ders"]))
     sayfa_sayisi = max(1, math.ceil(len(satirlar) / KILIT_PROGRAM_SAYFA_SATIRI))
+    if sayfa is None:
+        sayfa = 0
+        if bugun_mu and satirlar:
+            an = simdi if isinstance(simdi, str) else time.strftime("%H:%M")
+            sira = next((i for i, s in enumerate(satirlar) if s["bitis"] > an), len(satirlar) - 1)
+            sayfa = sira // KILIT_PROGRAM_SAYFA_SATIRI
     sayfa = min(max(sayfa if isinstance(sayfa, int) and not isinstance(sayfa, bool) else 0, 0), sayfa_sayisi - 1)
     bas = sayfa * KILIT_PROGRAM_SAYFA_SATIRI
-    ileti = metin(veri.get("ileti"), 100) if not satirlar else ""
-    return {"gorunur": True, "baslik": "Bugünün ders programı", "satirlar": satirlar[bas:bas + KILIT_PROGRAM_SAYFA_SATIRI],
+    # Sunucunun iletisi dersler varken de gösterilir (ör. "Bugün program değişti").
+    ileti = metin(veri.get("ileti"), KILIT_PROGRAM_ILETI_SINIRI)
+    return {"gorunur": True, "baslik": baslik, "satirlar": satirlar[bas:bas + KILIT_PROGRAM_SAYFA_SATIRI],
             "ileti": ileti or ("" if satirlar else "Bugün için ders programı yok."), "sayfa": sayfa,
             "sayfa_sayisi": sayfa_sayisi, "sayfa_metni": f"{sayfa + 1} / {sayfa_sayisi}"}
 
@@ -848,6 +867,7 @@ def calistir() -> int:
             self.yk_guncelleniyor = False
             self.kilit_program_sayfa = 0
             self.kilit_program_tarih = None
+            self.kilit_program_elle_bitis = 0.0  # Önceki/Sonraki seçimi bu ana dek (monotonik) korunur
             # Ekran ölçeği: pencerenin bulunduğu ekranın (monitör) boyutundan. Piksel ölçüleri
             # _olcu() ile kaydedilir; ölçek değişince (başka monitör, çözünürlük değişimi) yeniden uygulanır.
             self.pencere = None
@@ -1175,7 +1195,12 @@ def calistir() -> int:
             # Dört kısa satır aynı anda görünür; uzun/ikili eğitim programı
             # sayfalanır. Aşağıda tuş takımından sonra sağ sütuna eklenir;
             # büyük saat ve kilit açıklamasının bulunduğu sol sütunu uzatmaz.
-            self.kilit_program_kutu = self._kutu(Gtk.Orientation.VERTICAL, 6)
+            # Satır etiketlerinin doğal eni sabittir (44 karakter) ve çok sayfalı programda dört satır
+            # da yer tutar: sayfa değişince kutunun eni/boyu, dolayısıyla tuş takımının ve
+            # Önceki/Sonraki düğmelerinin yeri değişmez.
+            # İleti dersler varken de göründüğü için (0.13.1) aralıklar dardır: tuş takımı + USB düğmesi +
+            # dört satır + iki satırlık ileti + gezgin 1366x768 ve 1920x1080'e kaydırmasız sığar.
+            self.kilit_program_kutu = self._kutu(Gtk.Orientation.VERTICAL, 4)
             self.kilit_program_baslik = self._etiket("gunluk-program-baslik", "Bugünün ders programı")
             self.kilit_program_kutu.pack_start(self.kilit_program_baslik, False, False, 0)
             self.kilit_program_satirlari = []
@@ -1183,17 +1208,21 @@ def calistir() -> int:
                 etiket = self._etiket("gunluk-program-satir")
                 etiket.set_line_wrap(False)
                 etiket.set_ellipsize(Pango.EllipsizeMode.END)
+                etiket.set_width_chars(44)
                 etiket.set_max_width_chars(44)
                 self.kilit_program_kutu.pack_start(etiket, False, False, 0)
                 self.kilit_program_satirlari.append(etiket)
             self.kilit_program_ileti = self._etiket("gunluk-program-satir")
-            self.kilit_program_ileti.set_max_width_chars(38)
+            self.kilit_program_ileti.set_max_width_chars(44)
+            self.kilit_program_ileti.set_lines(2)  # uzun ileti iki satırda kesilir; kutunun boyu sınırlı kalır
+            self.kilit_program_ileti.set_ellipsize(Pango.EllipsizeMode.END)
             self.kilit_program_kutu.pack_start(self.kilit_program_ileti, False, False, 0)
             self.kilit_program_gezgin = self._kutu(Gtk.Orientation.HORIZONTAL, 12)
             self.kilit_program_gezgin.set_name("gunluk-program-gezgin")
             self.kilit_program_gezgin.set_halign(Gtk.Align.CENTER)
             self.kilit_program_onceki = self._dugme("Önceki", lambda: self._kilit_program_gec(-1))
             self.kilit_program_sayfa_etiketi = self._etiket("gunluk-program-sayfa")
+            self.kilit_program_sayfa_etiketi.set_width_chars(7)  # sayfa numarası uzayınca düğmeler kaymasın
             self.kilit_program_sonraki = self._dugme("Sonraki", lambda: self._kilit_program_gec(1))
             for parca in (self.kilit_program_onceki, self.kilit_program_sayfa_etiketi, self.kilit_program_sonraki):
                 self.kilit_program_gezgin.pack_start(parca, False, False, 0)
@@ -1214,13 +1243,14 @@ def calistir() -> int:
                                                  ana=True, boy=96)  # fmt: skip
             self.kilit_usb_dugmesi.set_halign(Gtk.Align.CENTER)
             sag.pack_start(self.kilit_usb_dugmesi, False, False, 0)
-            self._ekle(sag, self.kilit_program_kutu, 12)
+            self._ekle(sag, self.kilit_program_kutu)
             govde.pack_start(sag, False, False, 0)
             self.kilit_sag = sag
             return self._sayfa(govde)
 
         def _kilit_program_gec(self, fark):
             self.kilit_program_sayfa += fark
+            self.kilit_program_elle_bitis = time.monotonic() + KILIT_PROGRAM_ELLE_SN
             self._kilit_program_ciz()
 
         def _kilit_program_ciz(self):
@@ -1228,18 +1258,23 @@ def calistir() -> int:
             tarih = veri.get("tarih") if isinstance(veri, dict) else None
             if tarih != self.kilit_program_tarih:
                 self.kilit_program_tarih = tarih
-                self.kilit_program_sayfa = 0
-            gorunum = gunluk_program_gorunumu(self.durum or {}, self.kilit_program_sayfa)
+                self.kilit_program_elle_bitis = 0.0
+            # Elle seçim yoksa (ya da süresi dolduysa) şimdiki/sıradaki dersin sayfası gösterilir.
+            elle = time.monotonic() < self.kilit_program_elle_bitis
+            gorunum = gunluk_program_gorunumu(self.durum or {}, self.kilit_program_sayfa if elle else None)
             self.kilit_program_sayfa = gorunum["sayfa"]
             self.kilit_program_kutu.set_visible(gorunum["gorunur"])
+            self.kilit_program_baslik.set_text(gorunum["baslik"])
+            cok_sayfa = gorunum["sayfa_sayisi"] > 1
             for i, etiket in enumerate(self.kilit_program_satirlari):
                 satir = gorunum["satirlar"][i] if i < len(gorunum["satirlar"]) else None
                 yazi = (f"{satir['ders_no']}. {satir['baslangic']}–{satir['bitis']} · {satir['sube']} · {satir['ders']}"
                         if satir else "")
                 etiket.set_text(yazi)
                 etiket.set_tooltip_text(yazi or None)
-                etiket.set_visible(bool(satir))
+                etiket.set_visible(bool(satir) or cok_sayfa)  # son sayfanın boş satırları da yer tutar
             self.kilit_program_ileti.set_text(gorunum["ileti"])
+            self.kilit_program_ileti.set_tooltip_text(gorunum["ileti"] or None)
             self.kilit_program_ileti.set_visible(bool(gorunum["ileti"]))
             self.kilit_program_gezgin.set_visible(gorunum["sayfa_sayisi"] > 1)
             self.kilit_program_sayfa_etiketi.set_text(gorunum["sayfa_metni"])
