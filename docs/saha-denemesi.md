@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.14.0)
+# Saha denemesi kılavuzu (0.20.0)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -51,17 +51,19 @@ Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımlar�
 | Öğretmen programı ve kilit ekranı gün programı (0.13.0–0.13.1): hücre çözümü, göç, önizleme belleği, `gun_programi` anahtarı | Birim testleri (uydurma veri); kullanıcının gerçek XLS + PDF'i yalnız yerel ayrıştırmayla (yalnız sayılar: 59 blok, ders başlıklarında ad ve " - " yok) | Geçti; deneme sunucusu ve tarayıcıyla denenmedi |
 | Yüzer düğme (0.13.1): tıklama, menü, sürükleme, odaklı tam ekran üstünde görünme, ikinci çalışma alanı | Debian 12 kabı + Xvfb, `xdotool`; xfwm4, Mutter, Muffin, Openbox | xfwm4'te tamamı çalıştı; Mutter/Muffin'de "masaüstünü göster" düğmeyi gizledi; Openbox'ta odaklı tam ekranın üstüne çıkamadı. Gerçek dokunma olayı üretilemedi |
 | Kilit ekranı gün programı (0.13.1): `scripts/ekran_olcum.py` üç yeni senaryo, 1024×768, 1366×768, 1920×1080, 3840×2160 | Debian 12 kabı + Xvfb (Openbox) | "TAŞTI" ve "OYNADI" yok (en dar pay 1366×768'de 767/768 px) |
-| **Yüzer düğme, gün programı ve öğretmen programı gerçek ETAP tahtasında** | — | **Denenmedi** (§3.12) |
+| **Kilit ekranı gün programı ve öğretmen programı gerçek ETAP tahtasında** | — | **Denenmedi** (§3.12; yüzer düğme 0.14.0 ile kısa denendi, aşağıda) |
 | Yoklama yeniden tasarımı (0.14.0), tahta: `scripts/ekran_olcum.py` 19 yoklama senaryosu (40 ve 60 şube, 12 ders, teneffüs, ikili eğitim, saatsiz, 30/42/48/56/70 öğrenci, 4 haneli no + uzun adlar, ilk ders/geç, eski sunucu biçimi), 1024×768, 1366×768, 1920×1080, 3840×2160 | Debian 12 kabı + Xvfb (Openbox), uydurma veri | Hepsi sığdı; kaydırma alanı ve kesik etiket yok. Dokunuş döngüsü ve akış yalnız testlerle ve kapta sanal dokunuşla |
 | Yoklama yeniden tasarımı (0.14.0), panel: şube defteri (beş gün ve gün kipi, fırça, Alındı, notlu/notsuz düzeltme), mazeret önizle → kaydet, son günler, öğrenci görünümü; 1366×768, 1920×1080 ve 800 px; şube defterinin A4 yatay PDF'i | Deneme sunucusu (ayrı veri klasörü, 8797), tarayıcı; uydurma 2 şube × 35 öğrenci × 6 gün | Çalıştı; 8 ders × 5 gün 1366 px'te yatay kaydırmasız |
-| **Yoklama yeniden tasarımı gerçek ETAP tahtasında ve gerçek sınıfta** (dokunma, süre ölçümü, gerçek sınıf listesi) | — | **Denenmedi** (§3.14) |
-| **Gerçek ETAP tahtası** | — | İlk deneme 16.11.2026 (0.8.0): bulgular G1–G3, `docs/tasarim.md` §5.1 |
+| Yüzer düğme, kilit ve yoklama yeniden tasarımı (0.14.0) gerçek ETAP tahtasında | Okul, gerçek ETAP tahtası, 18.11.2026 | Kısa denemede çalıştı. Derslerde günlerce kullanılmadı; §3.12 ve §3.14'teki adımlar (süre ölçümü, gerçek sınıf listesi, gün programı, öğretmen programı) tek tek işaretlenmedi |
+| Yenilenen panel (0.15.0–0.20.0): sol menü, Ayarlar bölümleri, tahta listesi, Bugün, bölüm sekmeleri ve duyuru formu, genel arama | Deneme sunucusu (ayrı veri klasörü, 8797), başsız Edge; 1366 ve 390 px, açık/koyu, JavaScript açık ve kapalı; uydurma veri ve benzetilmiş ajanlar | Çalıştı |
+| **Yenilenen panel okul bilgisayarında, gerçek telefonda, ekran okuyucuyla ve gerçek tahtalarla** | — | **Denenmedi** |
+| **Gerçek ETAP tahtası** | — | İlk deneme 16.11.2026 (0.8.0): bulgular G1–G3, `docs/tasarim.md` §5.1. İkinci kısa deneme 18.11.2026 (0.14.0), yukarıda |
 | Kurulum dosyasının başka bir bilgisayara kurulması | — | Denenmedi |
 | Gerçek kapatma / yeniden başlatma / uzaktan açma | — | Denenmedi (kapta benzetim) |
 
 ## 1. Sunucuyu kurun
 
-1. `dist\cikti\tahta-kontrol-0.8.0-windows-kurulum.exe` dosyasını sunucu olacak
+1. `tahta-kontrol-0.20.0-windows-kurulum.exe` dosyasını sunucu olacak
    idari bilgisayara kurun (yönetici izni ister). Kurucu sunucuyu **Windows hizmeti** olarak
    kaydedip başlatır (bilgisayar açılınca, oturum açılmadan çalışır), güvenlik duvarında 8788
    kapısını açar. Bitiş sayfasındaki metni okuyun (eski verinin taşınıp taşınmadığı orada yazar).

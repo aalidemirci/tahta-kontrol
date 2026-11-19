@@ -9,7 +9,7 @@ süzülür ve yalnız bir sayfayı açar (aramadan komut gitmez). Öğrenci ve �
 açıklaması, ağ adresi bilerek aranmaz; aranan sözcük hiçbir yere kaydedilmez. Var olan adresler, veritabanı
 ve tahtalar değişmedi. [Sürüm notları](docs/surum-0.20.0.md). Önceki aşama (0.19.0, bölüm sekmeleri ve tek
 sayfalık duyuru formu): [sürüm notları](docs/surum-0.19.0.md).
-Dağıtılmadı; okul bilgisayarlarında, gerçek telefonda ve gerçek tahtalarla denenmedi.
+19.11.2026'da yayımlandı (v0.20.0); okul bilgisayarlarında, gerçek telefonda ve gerçek tahtalarla denenmedi.
 
 Yerel geliştirme **0.18.0**: panel arayüzünün yeniden düzeninde 4. aşama — açılış sayfası artık "Bugün":
 şu an (ders/teneffüs, program kilidi), "Sizi bekleyenler" (eskiden tahta listesinin üstündeki bantlara
@@ -37,7 +37,8 @@ Dağıtılmadı; okul bilgisayarlarında ve gerçek telefonda denenmedi.
 Yerel geliştirme **0.14.0**: ders yoklaması yeniden tasarlandı — tahtada kaydırmasız şube ve ders
 saati seçimi, numara sırasıyla "123 Ayşe Y." listesi, ilk derste "geç", saate göre ders ön seçimi;
 panelde şube defteri (son beş öğretim günü), mazeret/izin girişi. [Sürüm notları](docs/surum-0.14.0.md).
-Dağıtılmadı; gerçek tahtada ve gerçek sınıfta denenmedi.
+18.11.2026'da yayımlandı; gerçek bir ETAP tahtasında kısa süre denendi (yüzer düğme, kilit ve yoklama çalıştı),
+derslerde günlerce kullanılmadı.
 
 Yerel geliştirme **0.13.1**: 0.13.0 inceleme bulgularının düzeltmesi — seçmeli derslerde
 öğretmen adının ders başlığına karışması, kilit ekranındaki gün programı, önizleme belleği ve
@@ -58,10 +59,13 @@ Bu değişiklikler henüz kurulu sunucuya/istemciye dağıtılmadı.
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.20.0 yerel geliştirme; saha denemesindeki sürüm 0.12.0.** Debian 12 ve Pardus 25
-> masaüstünde denendi; gerçek bir Pardus ETAP tahtasında ilk deneme yapıldı (0.8.0; bulgular 0.9.0'da
-> giderildi), sonraki sürümler (0.13.x, 0.14.0, 0.15.0, 0.16.0, 0.17.0, 0.18.0, 0.19.0 ve 0.20.0 dahil) gerçek tahtada henüz denenmedi. Okul genelinde
-> kullanmadan önce tek tahtada deneyin (`docs/saha-denemesi.md`).
+> **Durum: 0.20.0 yayımlandı; deneme aşamasında.** Debian 12 ve Pardus 25 masaüstünde denendi. Gerçek bir
+> Pardus ETAP tahtasında iki kısa deneme yapıldı: 0.8.0 (bulgular 0.9.0'da giderildi) ve 0.14.0 (yüzer düğme,
+> kilit ve ders yoklaması çalıştı). Bunlar kısa denemelerdir; derslerde günlerce kullanım değildir.
+> 0.15.0–0.20.0 yalnız yönetim panelini değiştirdi; yenilenen panel testlerle ve deneme sunucusunda uydurma
+> veriyle denendi, okul bilgisayarında, gerçek telefonda ve gerçek tahtalarla henüz denenmedi. Okul genelinde
+> kullanmadan önce tek tahtada deneyin (`docs/saha-denemesi.md`). Tanıtım ve kılavuz:
+> [okulapp.org/tahta-kontrol](https://okulapp.org/tahta-kontrol/).
 
 ## Ne yapar
 
