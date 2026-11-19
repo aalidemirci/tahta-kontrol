@@ -3,11 +3,10 @@
 {% block baslik %}{{ gun.tarih_metni }} · Program · Tahta Kontrol{% endblock %}
 {% block icerik %}
 {# "Günü önizle" (zil düzenleyici §5.5). Bağlam: gun (panel_cizelge.gun_baglami: tarih, tarih_metni, kaynak, tatil,
-   zaman_cizgisi, sinavlar, tum_gun_sinav, ders_var), serit, bolum='zil', yonetici. Kilit tahta başına olduğundan
+   zaman_cizgisi, sinavlar, tum_gun_sinav, ders_var), serit, bolum='gun' (0.19.0: kendi sekmesi), yonetici. Kilit tahta başına olduğundan
    burada "program kilidi bu gün…" cümlesi yoktur. #}
 {% include "_program_bas.html" %}
 <section class="kutu" aria-labelledby="gun-baslik">
-  <p><a class="geri" href="/program?bolum=zil">Zil saatleri</a></p>
   <h2 id="gun-baslik">{{ gun.tarih_metni }}</h2>
   <p class="kaynak-satiri"><svg class="simge" aria-hidden="true"><use href="#s-takvim"/></svg><span>{{ gun.kaynak }}</span></p>
   {% if gun.tatil %}<p class="bant" role="status"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Tatil: {{ gun.tatil }}</p>

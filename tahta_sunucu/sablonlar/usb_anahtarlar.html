@@ -9,7 +9,7 @@
    İptal tetikleri type="button" + data-onay="usb_iptal": JS yoksa hiçbir şey gönderilmez (güvenli başarısızlık). #}
 {% with bolum='usb', bas_baslik='USB anahtarlar',
         bas_aciklama='Belleğe kopyalanan küçük bir dosyayla tahtada yoklama alınır; ayar açıksa kilit de açılır. Bellek biçimlendirilmez, içindeki dosyalara dokunulmaz.' %}
-{% include "_yoklama_bas.html" %}
+{% include "_kisiler_bas.html" %}
 {% endwith %}
 
 {% if ozellik_kapali %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ kapali_iletisi }}{% if yonetici %} <a href="/ayarlar/usb">Ayarlar'da aç</a>{% endif %}</p>{% endif %}

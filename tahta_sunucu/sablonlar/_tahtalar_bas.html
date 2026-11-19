@@ -2,6 +2,7 @@
    Bağlam: istek_yolu ve ariza_sayisi (sayfa() verir), kullanici. Etkin sekme isteğin yolundan bulunur.
    Yönetici sekmeleri idareciye ÇİZİLMEZ (CSS ile gizlenmez); uçların yetki denetimi ayrıdır, şerit yalnız görünümdür.
    Şeridi çizen her sayfa web.MENU'de Tahtalar'ın `esler`'indedir. #}
+{% import "_serit.html" as serit_ %}
 {% set yol_ = istek_yolu or '' %}
 {% if yol_.startswith('/ariza') %}{% set etkin_ = 'arizalar' %}
 {% elif yol_.startswith('/envanter') %}{% set etkin_ = 'envanter' %}
@@ -11,14 +12,4 @@
 {% else %}{% set etkin_ = 'tahtalar' %}{% endif %}
 {# İdareciye yönetici sekmeleri çizilmez; o sayfalardan birini adresle açarsa şeritte "Tahtalar" etkin görünür. #}
 {% if kullanici.rol != 'yonetici' and etkin_ in ('gruplar', 'csv', 'ekle') %}{% set etkin_ = 'tahtalar' %}{% endif %}
-<nav class="sekmeler bolum-serit" aria-label="Tahtalar bölümü">
-  <a href="/tahtalar"{% if etkin_ == 'tahtalar' %} aria-current="page"{% endif %}>Tahtalar</a>
-  <a href="/arizalar"{% if etkin_ == 'arizalar' %} aria-current="page"{% endif %}>Arızalar{% if ariza_sayisi %} <span class="sayi-rozet">{{ ariza_sayisi }}</span><span class="gizli"> süren arıza</span>{% endif %}</a>
-  <a href="/envanter"{% if etkin_ == 'envanter' %} aria-current="page"{% endif %}>Envanter</a>
-  {% if kullanici.rol == 'yonetici' %}
-  <span class="sekme-ayrac" aria-hidden="true"></span>
-  <a href="/gruplar"{% if etkin_ == 'gruplar' %} aria-current="page"{% endif %}>Gruplar</a>
-  <a href="/tahtalar/ice-aktar"{% if etkin_ == 'csv' %} aria-current="page"{% endif %}>CSV ile içe/dışa aktar</a>
-  <a href="/ekle"{% if etkin_ == 'ekle' %} aria-current="page"{% endif %}>Ajan kurulum paketi</a>
-  {% endif %}
-</nav>
+{{ serit_.ciz(bolum_seridi('tahtalar', kullanici.rol, etkin_, {'ariza': ariza_sayisi})) }}

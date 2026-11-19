@@ -3,18 +3,18 @@
 {% block icerik %}
 {# Bağlam: gecmis (program_aktar.surum_listesi), onay_surumu (None ya da {..., "metin"}: geri yükleme onayı).
    Geri yükleme JS'siz iki adımdır: ilk POST onay sayfasını çizer, gizli "onay" alanı 1 olan ikinci POST uygular. #}
-<div class="sayfa-bas"><div class="bas-yazi">
-  <p><a class="geri" href="/program?bolum=derslik">Derslik programları</a></p>
-  <h1>Önceki programlar</h1>
-  <p>Her içe aktarmadan ve geri yüklemeden önce bütün derslik programı saklanır (en çok 10 sürüm).</p>
-</div></div>
+{# 0.19.0: Program şeridinin sekmesidir (yalnız yönetici; uç yetkiyi ayrıca denetler). Bağlam ayrıca: serit, bolum='gecmis'.
+   Derslik sekmesindeki eski "Önceki programlar" kutusu buraya indi (aynı tablo). #}
+{% include "_program_bas.html" %}
+<h2>Önceki programlar</h2>
+<p>Her içe aktarmadan ve geri yüklemeden önce bütün derslik programı saklanır (en çok 10 sürüm).</p>
 {% if onay_surumu %}
 <section class="kutu onizleme-kutu" aria-labelledby="geri-onay">
   <h2 id="geri-onay">Geri yüklensin mi?</h2>
   <p>{{ onay_surumu.metin }} Mevcut program önce ayrı bir sürüm olarak saklanır.</p>
   <form method="post" action="/program/gecmis/{{ onay_surumu.id }}/geri-yukle" class="dugme-satiri">
     <input type="hidden" name="onay" value="1">
-    <button class="tehlike-dolu">Geri yükle</button> <a class="dugme" href="/program?bolum=derslik">Vazgeç</a>
+    <button class="tehlike-dolu">Geri yükle</button> <a class="dugme" href="/program/gecmis">Vazgeç</a>
   </form>
 </section>
 {% endif %}
@@ -28,5 +28,5 @@
     <td data-etiket="İşlem"><form method="post" action="/program/gecmis/{{ g.id }}/geri-yukle" class="satir-ici"><button>Geri yükle</button></form></td></tr>{% endfor %}</tbody>
 </table>
 </div>
-{% else %}<p class="bos-not">Önceki program yok.</p>{% endif %}
+{% else %}<p class="bos-not">Önceki program yok; her içe aktarmadan önce mevcut program burada saklanır.</p>{% endif %}
 {% endblock %}

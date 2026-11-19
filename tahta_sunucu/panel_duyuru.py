@@ -153,8 +153,24 @@ def secenekler(b) -> dict:
     }
 
 
+# Duyuru metni/süre iletileri (zamanlama.form_coz bunları zaman alanlarından ÖNCE denetler).
+_ICERIK_HATALARI = ("Duyuru metni ", "Süre ")
+
+
+def hata_yeri(hata: Exception) -> str:
+    """Doğrulama iletisinin tek sayfalık formda çizileceği bölüm: icerik | kime | zaman (0.19.0; yalnız görünüm)."""
+    yer = getattr(hata, "yer", "")
+    if yer:
+        return yer
+    ileti = str(hata)
+    if ileti == guvenlik.TC_KIMLIK_ILETISI or ileti.startswith(_ICERIK_HATALARI):
+        return "icerik"
+    return "zaman"
+
+
 def kaydet(uygulama, y) -> None:  # noqa: C901 (uç tanımları)
-    def form_sayfasi(istek: Request, k, form: dict, *, plan=None, hata: str = "", durum_kodu: int = 200, on_secim=None):
+    def form_sayfasi(istek: Request, k, form: dict, *, plan=None, hata: str = "", durum_kodu: int = 200, on_secim=None,
+                     hata_yeri: str = ""):
         with vt.islem() as b:
             sec = secenekler(b)
             onizleme = None
@@ -173,6 +189,7 @@ def kaydet(uygulama, y) -> None:  # noqa: C901 (uç tanımları)
             plan=plan,
             duzenlenebilir=plan is None or yetkili_mi(k, plan["olusturan"]),
             hata=hata,
+            hata_yeri=hata_yeri if hata else "",
             secenekler=sec,
             onizleme=onizleme,
             on_secim=on_secim,
@@ -308,7 +325,11 @@ def kaydet(uygulama, y) -> None:  # noqa: C901 (uç tanımları)
     def formu_coz(form, simdi: int) -> tuple[dict, dict]:
         """(zamanlama sözlüğü, temiz hedef); hatada ValueError."""
         bilgi = zamanlama.form_coz(form, simdi)
-        return bilgi, hedef.dogrula(hedef.formdan(form))
+        try:
+            return bilgi, hedef.dogrula(hedef.formdan(form))
+        except ValueError as hata:
+            hata.yer = "kime"  # yalnız iletinin formda çizileceği bölüm (hata_yeri); doğrulama aynı
+            raise
 
     @uygulama.post("/duyurular")
     async def duyuru_kaydet(istek: Request):
@@ -324,7 +345,7 @@ def kaydet(uygulama, y) -> None:  # noqa: C901 (uç tanımları)
             if str(hata) == guvenlik.TC_KIMLIK_ILETISI:
                 with vt.islem() as b:
                     vt.kayit_dus(b, k["ad"], "Duyuru reddedildi", "T.C. kimlik numarasına benzeyen sayı", ip)
-            return form_sayfasi(istek, k, gonderilen_form(form), hata=str(hata), durum_kodu=400)
+            return form_sayfasi(istek, k, gonderilen_form(form), hata=str(hata), durum_kodu=400, hata_yeri=hata_yeri(hata))
         if bilgi["zaman"] == "hemen":
             with vt.islem() as b:
                 if not hedef.coz(b, temiz):
@@ -345,7 +366,7 @@ def kaydet(uygulama, y) -> None:  # noqa: C901 (uç tanımları)
                         ip=ip,
                     )
             if not sonuc:
-                return form_sayfasi(istek, k, gonderilen_form(form), hata=hata, durum_kodu=400)
+                return form_sayfasi(istek, k, gonderilen_form(form), hata=hata, durum_kodu=400, hata_yeri="kime")
             y.uyandir_hepsi(sonuc[1])
             return y.yonlendir("/duyurular", f"Duyuru {len(sonuc[1])} tahtaya gönderildi.")
         with vt.islem() as b:
@@ -436,7 +457,8 @@ def kaydet(uygulama, y) -> None:  # noqa: C901 (uç tanımları)
             if str(hata) == guvenlik.TC_KIMLIK_ILETISI:  # POST /duyurular ile aynı iz (numara yazılmaz)
                 with vt.islem() as b:
                     vt.kayit_dus(b, k["ad"], "Duyuru reddedildi", f"Plan #{plan_id}: T.C. kimlik numarasına benzeyen sayı", ip)
-            return form_sayfasi(istek, k, gonderilen_form(form), plan=plan, hata=str(hata), durum_kodu=400)
+            return form_sayfasi(istek, k, gonderilen_form(form), plan=plan, hata=str(hata), durum_kodu=400,
+                                hata_yeri=hata_yeri(hata))
         with vt.islem() as b:
             b.execute(
                 "UPDATE duyuru_plani SET baslik = ?, metin = ?, sure_sn = ?, kapatilabilir = ?, hedef_json = ?, tekrar = ?, "

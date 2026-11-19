@@ -1,0 +1,12 @@
+{# 0.19.0 — Kişiler ve anahtarlar sayfalarının ortak başı (Öğrenciler, Öğretmenler ve PIN, USB anahtarlar):
+   _yoklama_bas.html ile AYNI bağlam sözleşmesi ve sıra — başlık, bölüm sekme şeridi (bolum_serit.SERITLER["kisiler"]),
+   KVKK notu. Bağlam: bolum (ogrenciler|ogretmenler|usb), bas_baslik, bas_aciklama, adli_not (varsa). #}
+{% import "_serit.html" as serit_ %}
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>{{ bas_baslik }}</h1>
+    {% if bas_aciklama %}<p>{{ bas_aciklama }}</p>{% endif %}
+  </div>
+</div>
+{{ serit_.ciz(bolum_seridi('kisiler', kullanici.rol, bolum)) }}
+{% if adli_not %}<p class="bant uyari kvkk-bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ adli_not }}</p>{% endif %}

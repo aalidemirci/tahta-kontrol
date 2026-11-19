@@ -1606,9 +1606,13 @@
   }
 
   /* ---- duyuru formu: koşullu alanlar, gönder metni, hedef önizlemesi -------------- */
+  /* 0.19.0 ekleri (görünüm; doğrulama sunucudadır): hızlı süre ve gün düğmeleri, tahta önizlemesi, gönder çubuğu
+     özeti. "Bugün" sunucunun verdiği data-bugun'dan hesaplanır; tarayıcının saati KULLANILMAZ (yanlış saatli
+     bilgisayarda plan yanlış güne düşerdi). Önizleme yalnız textContent ile yazılır. */
   function duyuruFormuKur() {
     var form = $("duyuru-formu");
     if (!form) return;
+    form.classList.add("js-duyuru");
     var kosullular = Array.prototype.slice.call(form.querySelectorAll(".kosullu[data-kosul]"));
     var gonder = $("duyuru-gonder");
     var onizleme = $("hedef-onizleme");
@@ -1624,6 +1628,104 @@
         var hemen = secili(form, "zaman") === "hemen" && !plan;
         gonder.textContent = gonder.getAttribute(hemen ? "data-hemen" : "data-plan");
       }
+    }
+
+    // Gönder çubuğu özeti: sunucunun çizdiği metnin aynısı (hedef · zaman; süre · kapatılabilirlik).
+    var ZAMAN_ADI = { hemen: "hemen", bir_kez: "bir kez", tekrarli: "tekrarlı" };
+    function alanYaz(ad, metin) {
+      var oge = form.querySelector('[data-alan="' + ad + '"]');
+      if (oge) oge.textContent = metin;
+    }
+    function deger(ad) {
+      var a = form.querySelector('input[name="' + ad + '"]');
+      return a ? a.value : "";
+    }
+    function trTarih(iso) {
+      var p = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+      return p ? p[3] + "." + p[2] + "." + p[1] : "";
+    }
+    // Zaman özeti: plan listesindeki "Zamanlama" sütunuyla (zamanlama.ozet) aynı biçim; eksik alan AÇIKÇA yazılır.
+    // Yalnız gösterimdir: tarih/saat doğrulaması sunucudadır.
+    function zamanMetni() {
+      var z = secili(form, "zaman");
+      if (z === "bir_kez") {
+        var t = trTarih(deger("bir_tarih")), s = deger("bir_saat");
+        if (t && s) return t + " " + s;
+        return t ? t + " · saat seçilmedi" : (s ? "tarih seçilmedi · " + s : "tarih ve saat seçilmedi");
+      }
+      if (z === "tekrarli") {
+        var tur;
+        if (secili(form, "siklik") === "haftalik") {
+          var gunler = Array.prototype.map.call(form.querySelectorAll('input[name="gun"]:checked'), function (g) {
+            return (g.parentNode.textContent || "").trim();
+          });
+          tur = gunler.length ? "her hafta " + gunler.join(", ") : "her hafta · gün seçilmedi";
+        } else {
+          var sonu = form.querySelector('input[name="hafta_sonu"]');
+          tur = sonu && sonu.checked ? "her gün" : "her gün (hafta içi)";
+        }
+        var saat = deger("tekrar_saat"), bas = trTarih(deger("baslangic")), bit = trTarih(deger("bitis"));
+        return tur + " " + (saat || "· saat seçilmedi") + " · " + (bit ? (bas || "bugün") + "–" + bit : "bitiş seçilmedi");
+      }
+      return ZAMAN_ADI[z] || "zaman seçilmedi";
+    }
+    function ozetYaz() {
+      alanYaz("ozet-zaman", zamanMetni());
+      var sure = form.querySelector('input[name="sure_dk"]');
+      var kapat = form.querySelector('input[name="kapatilabilir"]');
+      if (sure) alanYaz("ozet-sure", sure.value || "—");
+      if (kapat) alanYaz("ozet-kapat", kapat.checked ? "öğretmen kapatabilir" : "öğretmen kapatamaz");
+    }
+
+    // Tahta önizlemesi: başlık boşsa tahtadaki varsayılan başlık.
+    function tahtaOnizle() {
+      var baslik = form.querySelector('input[name="baslik"]');
+      var metin = form.querySelector('textarea[name="metin"]');
+      if (baslik) alanYaz("oniz-baslik", baslik.value.trim() || "DUYURU");
+      if (metin) alanYaz("oniz-metin", metin.value);
+    }
+
+    // Hızlı süre düğmeleri (yalnız JS ile görünür).
+    var sureAlani = form.querySelector('input[name="sure_dk"]');
+    var hizliSure = form.querySelector("[data-hizli-sure]");
+    if (hizliSure && sureAlani && !sureAlani.disabled) {
+      hizliSure.hidden = false;
+      hizliSure.addEventListener("click", function (olay) {
+        var dugme = olay.target.closest ? olay.target.closest("[data-sure]") : null;
+        if (!dugme) return;
+        sureAlani.value = dugme.getAttribute("data-sure");
+        ozetYaz();
+      });
+    }
+
+    // Gün düğmeleri: sunucunun bugünü (form[data-bugun], YYYY-AA-GG) + n gün. Takvim hesabı UTC'de yapılır
+    // (yaz saati kayması günü değiştirmesin); tarayıcının "şimdi"si okunmaz.
+    var tarihAlani = form.querySelector('input[name="bir_tarih"]');
+    var hizliGun = form.querySelector("[data-hizli-gun]");
+    function gunTarihi(n) {
+      var p = /^(\d{4})-(\d{2})-(\d{2})$/.exec(form.getAttribute("data-bugun") || "");
+      if (!p) return "";
+      var t = new Date(Date.UTC(parseInt(p[1], 10), parseInt(p[2], 10) - 1, parseInt(p[3], 10) + n));
+      return t.toISOString().slice(0, 10);
+    }
+    function gunDugmeleri() {
+      if (!hizliGun || !tarihAlani) return;
+      Array.prototype.forEach.call(hizliGun.querySelectorAll("[data-gun]"), function (dugme) {
+        var tarih = gunTarihi(parseInt(dugme.getAttribute("data-gun"), 10));
+        dugme.setAttribute("aria-pressed", tarih && tarihAlani.value === tarih ? "true" : "false");
+      });
+    }
+    if (hizliGun && tarihAlani && !tarihAlani.disabled && gunTarihi(0)) {
+      hizliGun.hidden = false;
+      hizliGun.addEventListener("click", function (olay) {
+        var dugme = olay.target.closest ? olay.target.closest("[data-gun]") : null;
+        if (!dugme) return;
+        var tarih = gunTarihi(parseInt(dugme.getAttribute("data-gun"), 10));
+        if (tarih) tarihAlani.value = tarih;
+        gunDugmeleri();
+        ozetYaz();
+      });
+      gunDugmeleri();
     }
 
     // Formdan hedef sözlüğü: sunucudaki hedef.formdan ile aynı kural.
@@ -1669,6 +1771,8 @@
       if (!h.tumu && !Object.keys(h).length) {
         onizlemeYaz("s-bilgi", "uyari", ["Duyurunun hangi tahtalara gideceğini seçin."]);
         if (liste) liste.hidden = true;
+        sira++; // yoldaki eski yanıt artık yazılmaz
+        alanYaz("ozet-hedef", "Tahta seçilmedi");
         return;
       }
       var benim = ++sira;
@@ -1679,8 +1783,9 @@
         })
         .then(function (s) {
           if (!s || benim !== sira) return; // yalnız son isteğin yanıtı yazılır
-          if (!s.ok) { onizlemeYaz("s-sorun", "uyari", [s.v.hata || "Seçim okunamadı."]); return; }
+          if (!s.ok) { onizlemeYaz("s-sorun", "uyari", [s.v.hata || "Seçim okunamadı."]); alanYaz("ozet-hedef", "Seçim okunamadı"); return; }
           var v = s.v;
+          alanYaz("ozet-hedef", v.sayi ? v.sayi + " tahtaya" : "Hiçbir tahtaya ulaşmıyor");
           if (!v.sayi) onizlemeYaz("s-sorun", "uyari", ["Bu seçim şu an ", { kalin: "hiçbir tahtaya" }, " ulaşmıyor · " + v.ozet]);
           else onizlemeYaz("s-acik", "", ["Şu an ", { kalin: v.sayi + " tahtaya" }, " ulaşır · " + v.ozet]);
           if (liste) {
@@ -1695,19 +1800,40 @@
             liste.hidden = !v.sayi;
           }
         })
-        .catch(function () {});
+        .catch(function () {
+          // Ağ hatasında özet ESKİ sayıda kalmaz (yanlış hedef güveni vermesin); sunucu doğrulaması aynıdır.
+          if (benim === sira) alanYaz("ozet-hedef", "Tahta sayısı alınamadı");
+        });
     }
     function gecikmeliOnizle() {
       clearTimeout(bekleme);
+      sira++; // yoldaki eski yanıt artık yazılmaz
+      alanYaz("ozet-hedef", "Tahta sayısı hesaplanıyor…"); // gecikme + istek süresince eski sayı görünmesin
       bekleme = setTimeout(onizle, 300);
     }
 
     form.addEventListener("change", function (olay) {
       kosullariUygula();
+      ozetYaz();
+      gunDugmeleri();
       var ad = olay.target && olay.target.name;
       if (["kime", "bina", "kat", "duzey", "devre", "grup", "hedef_tahta"].indexOf(ad) >= 0) gecikmeliOnizle();
     });
+    form.addEventListener("input", function (olay) {
+      var ad = olay.target && olay.target.name;
+      if (ad === "baslik" || ad === "metin") tahtaOnizle();
+      else ozetYaz(); // süre, tarih, saat: özet her tuşta güncel
+      if (ad === "bir_tarih") gunDugmeleri();
+    });
     kosullariUygula();
+    ozetYaz();
+    tahtaOnizle();
+    // Özet yalnız JS ile görünür (JS'siz güncellenemeyeceği için sunucu `hidden` çizer).
+    var ozetKutusu = form.querySelector('[data-alan="gonder-ozet"]');
+    if (ozetKutusu) ozetKutusu.hidden = false;
+    // Hata çizimi: ileti ilgili bölümde de durur; sayfa oraya kayar (sayfa başındaki ileti role="alert" ile okunur).
+    var hataYeri = $("hata-yeri");
+    if (hataYeri && hataYeri.scrollIntoView) hataYeri.scrollIntoView({ block: "center" });
     if (onizleme && !form.querySelector("fieldset[disabled]")) onizle();
   }
 

@@ -81,7 +81,7 @@ BASKA_YERDE: list[dict] = [
      "sozcukler": "zil ders saati teneffüs çizelge okul zili ikili eğitim devre sabah öğle"},
     {"ad": "Acil durum şablonları", "yer": "Acil durum › Şablonlar", "yol": "/acil?sekme=sablonlar",
      "sozcukler": "acil şablon yangın deprem tahliye tatbikat"},
-    {"ad": "Öğrenci listesi (e-Okul)", "yer": "Kişiler ve anahtarlar › Öğrenci listesi", "yol": "/ogrenciler",
+    {"ad": "Öğrenci listesi (e-Okul)", "yer": "Kişiler ve anahtarlar › Öğrenciler", "yol": "/ogrenciler",
      "sozcukler": "öğrenci listesi eokul e-okul yükle"},
     {"ad": "Öğretmenler ve PIN", "yer": "Kişiler ve anahtarlar", "yol": "/ogretmenler",
      "sozcukler": "öğretmen pin kod pusula"},

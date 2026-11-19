@@ -1,4 +1,5 @@
 {% extends "taban.html" %}
+{% import "_serit.html" as serit_ %}
 {% block baslik %}Duyurular · Tahta Kontrol{% endblock %}
 {% block icerik %}
 {% set PLAN_RENGI = {'etkin': 'acik', 'duraklatildi': 'uyari'} %}
@@ -12,6 +13,7 @@
   </div>
   <p class="dugme-satiri sag"><a class="dugme ana" href="/duyurular/yeni"><svg class="simge" aria-hidden="true"><use href="#s-duyuru"/></svg>Yeni duyuru</a></p>
 </div>
+{{ serit_.ciz(bolum_seridi('duyurular', kullanici.rol, 'liste')) }}
 
 <h2 id="yayinda-baslik">Şu an yayında</h2>
 {% if yayinda %}

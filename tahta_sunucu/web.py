@@ -31,6 +31,7 @@ from . import (
     adresler,
     ayar,
     ayar_bolumleri,
+    bolum_serit,
     bugun,
     dugme,
     duyuru,
@@ -88,12 +89,12 @@ MENU = [
         {"ad": "Yoklama", "yol": "/yoklama", "simge": "yoklama", "esler": ["/yoklama"], "alt_cubuk": True},
     ]},
     {"kume": "Dönemlik", "ogeler": [
-        {"ad": "Program", "yol": "/program", "simge": "program", "esler": ["/program"]},
+        # 0.19.0: şeridi çizen her sayfa esler'dedir (bolum_serit.SERITLER["program"]); öğretmen programı buradadır.
+        {"ad": "Program", "yol": "/program", "simge": "program", "esler": ["/program", "/ogretmen-programi"]},
         {"ad": "Sınavlar", "yol": "/sinavlar", "simge": "sinav", "esler": ["/sinavlar", "/sinav"]},
         {"ad": "Kişiler ve anahtarlar", "yol": "/ogrenciler", "simge": "kisiler",
-         # /ogretmen-programi: sayfa Yoklama şeridini ve "← Öğretmenler ve PIN" bağlantısını çizdiği sürece buradadır
-         # (öteki kişi sayfalarıyla aynı bölüm); sekmeler ayrışınca Program'a taşınır (sonraki aşama).
-         "esler": ["/ogrenciler", "/ogretmenler", "/usb-anahtarlar", "/ogretmen-programi"]},
+         # 0.19.0: üç sayfa kendi sekme şeridini çizer (_kisiler_bas.html); /ogretmen-programi Program şeridindedir.
+         "esler": ["/ogrenciler", "/ogretmenler", "/usb-anahtarlar"]},
     ]},
     {"kume": "Yönetim", "ogeler": [
         {"ad": "Yedekler", "yol": "/yedekler", "simge": "yedek", "esler": ["/yedekler"], "rol": "yonetici",
@@ -208,6 +209,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
     sablonlar.env.filters["kat_adi"] = hedef.kat_adi
     sablonlar.env.globals.update(
         surum=__version__,
+        bolum_seridi=bolum_serit.gorunum,
         komut_adi=KOMUT_ADI,
         komut_durumu=KOMUT_DURUMU,
         roller=ROLLER,

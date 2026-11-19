@@ -1,18 +1,21 @@
 {% extends "taban.html" %}
 {% block baslik %}Devamsızlık icmali · {{ icmal.tarih_kisa }} · Tahta Kontrol{% endblock %}
 {% block govde_sinifi %}rapor-sayfasi{% endblock %}
+{% import "_serit.html" as serit_ %}
 {% block icerik %}
 {# Yazdırılabilir icmal (Aşama 5 §6.4): A4 dikey, şube başına bir sayfa; ekrandaki araç çubuğu ve metin yazdırılmaz.
    Bağlam: icmal (yoklama.icmal), metin (kopyalanacak düz metin), sube, subeler, uretim, surum (taban), adli_not.
    Okul adı yazdırılmaz (resmî evrak değildir; çalışma belgesidir). Görüntüleme işlem kaydına düşer. #}
 <div class="yazdirma">
-  <p class="geri"><a href="/yoklama?tarih={{ icmal.tarih }}">← Yoklama · {{ icmal.tarih_yazi }}</a></p>
   <div class="sayfa-bas">
     <div class="bas-yazi">
       <h1>Devamsızlık icmali · {{ icmal.tarih_yazi }}</h1>
       <p>{{ sube or 'Tüm şubeler' }} · e-Okul girişine yardımcı çalışma belgesi</p>
     </div>
   </div>
+  {# 0.19.0: Yoklama şeridi (ekranda; baskıda .bolum-serit gizlidir). Sekme bugünü açar; geri bağlantısı o güne döner. #}
+  {{ serit_.ciz(bolum_seridi('yoklama', kullanici.rol, 'icmal')) }}
+  <p class="geri"><a href="/yoklama?tarih={{ icmal.tarih }}">← Yoklama · {{ icmal.tarih_yazi }}</a></p>
   <p class="bant uyari kvkk-bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ adli_not }}</p>
   <div class="arac-cubugu" role="toolbar" aria-label="İcmal">
     <button type="button" class="ana" data-yazdir hidden>Yazdır</button>

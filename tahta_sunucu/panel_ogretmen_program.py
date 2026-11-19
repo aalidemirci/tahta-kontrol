@@ -7,9 +7,9 @@ from fastapi.responses import HTMLResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
-from . import eokul_program, vt, yoklama
+from . import eokul_program, program_is, vt, yoklama
 from . import ogretmen_program as op
-from .panel_program import bellekte_form, govde_uzunlugu, yetki_reddi
+from .panel_program import bellekte_form, govde_uzunlugu, simdi_dt, yetki_reddi
 
 YOL = "/ogretmen-programi"
 GOVDE_SINIRI = eokul_program.EN_COK_BAYT + op.PDF_EN_COK_BAYT + 256 * 1024
@@ -28,20 +28,22 @@ def kaydet(uygulama, y) -> None:
                 "GROUP_CONCAT(p.ders_no || '. ' || p.ders_adi || ' (' || p.baslangic || '-' || p.bitis || ')', ' / ') AS dersler "
                 "FROM ogretmen_program p LEFT JOIN ogretmen o ON o.id = p.ogretmen_id "
                 "GROUP BY p.ogretmen_id, p.gun, p.sube ORDER BY o.soyad, o.ad, p.gun, p.sube LIMIT 251")]
+            # 0.19.0: sayfa Program şeridini çizer; durum şeridi ve uyarı sayısı her Program sayfasında aynıdır.
+            serit = program_is.program_ozeti(b, simdi_dt())
         return y.sayfa(istek, "ogretmen_program.html", k, onizleme=onizleme, belirtec=belirtec,
                        mevcut_sayi=sayi, mevcut_gruplar=gruplar[:250], cok_grup=len(gruplar) > 250,
-                       aktarim_hatasi=hata, kaynak_yolu=YOL)
+                       aktarim_hatasi=hata, kaynak_yolu=YOL, serit=serit, bolum="ogretmen_program")
 
     @uygulama.get(YOL, response_class=HTMLResponse)
     async def program_sayfasi(istek: Request):
         k = y.kullanici(istek)
-        engel = yetki_reddi(y, istek, k, "Öğretmen programı içe aktarma", "/yoklama")
+        engel = yetki_reddi(y, istek, k, "Öğretmen programı içe aktarma", "/program")
         return engel or sayfa(istek, k)
 
     @uygulama.post(YOL + "/onizle", response_class=HTMLResponse)
     async def onizle(istek: Request):
         k = y.kullanici(istek)
-        engel = yetki_reddi(y, istek, k, "Öğretmen programı önizleme", "/yoklama")
+        engel = yetki_reddi(y, istek, k, "Öğretmen programı önizleme", "/program")
         if engel:
             return engel
         uzunluk = govde_uzunlugu(istek)
@@ -71,7 +73,7 @@ def kaydet(uygulama, y) -> None:
     async def vazgec(istek: Request):
         """Önizlemeyi (ham öğretmen adlarını) 15 dakikayı beklemeden bellekten siler."""
         k = y.kullanici(istek)
-        engel = yetki_reddi(y, istek, k, "Öğretmen programı önizleme", "/yoklama")
+        engel = yetki_reddi(y, istek, k, "Öğretmen programı önizleme", "/program")
         if engel:
             return engel
         form = await istek.form()
@@ -81,7 +83,7 @@ def kaydet(uygulama, y) -> None:
     @uygulama.post(YOL + "/uygula", response_class=HTMLResponse)
     async def uygula(istek: Request):
         k = y.kullanici(istek)
-        engel = yetki_reddi(y, istek, k, "Öğretmen programı aktarma", "/yoklama")
+        engel = yetki_reddi(y, istek, k, "Öğretmen programı aktarma", "/program")
         if engel:
             return engel
         form = await istek.form()

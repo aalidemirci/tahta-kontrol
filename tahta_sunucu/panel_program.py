@@ -360,9 +360,6 @@ def kaydet(uygulama, y) -> None:
                 b, b.execute("SELECT * FROM program_istisna ORDER BY bas DESC LIMIT 200").fetchall(), an
             )
             zil_ek = zil_baglami(b, simdi, yonetici) if bolum == "zil" else {}
-            from . import program_aktar
-
-            gecmis = program_aktar.surum_listesi(b) if bolum == "derslik" and yonetici else []
         derslik_tahtalari = [
             {"id": t["id"], "ad": t["ad"], "derslik": t["derslik"], "dersli": sayilar.get(t["id"], [0, 0])[0],
              "toplam": len(saatler), "muaf": bool(t["program_muaf"]), "programli": sayilar.get(t["id"], [0, 0])[0] > 0}  # fmt: skip
@@ -392,7 +389,6 @@ def kaydet(uygulama, y) -> None:
             derslik={
                 "tahtalar": derslik_tahtalari,
                 "yetim_sayisi": sum(1 for v in sayilar.values() if v[1]),
-                "gecmis": gecmis,
             },
             kurallar={
                 "program_kilidi": kural,

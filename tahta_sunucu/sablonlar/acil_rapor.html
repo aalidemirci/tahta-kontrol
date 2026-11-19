@@ -1,9 +1,11 @@
 {% extends "taban.html" %}
 {% block baslik %}{{ yayin.tur_adi }} raporu · Tahta Kontrol{% endblock %}
 {% block govde_sinifi %}rapor-sayfasi{% endblock %}
+{% import "_serit.html" as serit_ %}
 {% block icerik %}
 {# Yazdırılabilir: @media print menüyü, bandı ve düğmeleri gizler. Kişi adı olarak yalnız panel kullanıcı adı geçer. #}
-<p class="geri yazdirma"><a href="/acil">← Acil durum</a></p>
+{{ serit_.ciz(bolum_seridi('acil', kullanici.rol, 'gecmis')) }}
+<p class="geri yazdirma"><a href="/acil?sekme=gecmis">← Geçmiş ve raporlar</a></p>
 <div class="sayfa-bas">
   <div class="bas-yazi">
     <h1>{{ 'Tatbikat yayını raporu' if yayin.tur == 'tatbikat' else 'Acil durum yayını raporu' }}

@@ -498,7 +498,14 @@ def test_geri_yukleme_ve_geri_yuklemenin_geri_alinmasi(uygulama, panel, tahta, s
     assert son["neden"] == "geri_yukleme" and json.loads(son["veri_json"]) == [[z04, 1, "normal", 5, ""]]
     panel.post(f"/program/gecmis/{son['id']}/geri-yukle", data={"onay": "1"})  # geri almanın geri alınması
     assert [(s["gun"], s["ders_no"]) for s in sorgu("SELECT * FROM tahta_ders")] == [(1, 5)]
-    assert "Önceki programlar" in panel.get("/program?bolum=derslik").text
+    # 0.19.0: sürüm listesi ve "Geri yükle" formu "Önceki programlar" sekmesindedir (Derslik'te yalnız şerit bağlantısı).
+    derslik = panel.get("/program?bolum=derslik").text
+    assert 'href="/program/gecmis">Önceki programlar' in derslik and 'action="/program/gecmis/' not in derslik
+    gecmis = panel.get("/program/gecmis").text
+    assert '<a href="/program/gecmis" aria-current="page">Önceki programlar' in gecmis
+    kalan = [s["id"] for s in sorgu("SELECT id FROM program_surum ORDER BY id")]
+    assert kalan and all(f'action="/program/gecmis/{i}/geri-yukle"' in gecmis for i in kalan)
+    assert gecmis.count("<button>Geri yükle</button>") == len(kalan)
     assert sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Ders programı geri yüklendi'")[0]["ayrinti"].startswith("sürüm #")
 
 

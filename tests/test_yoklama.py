@@ -630,7 +630,7 @@ def test_yoklama_sayfalari_bilesen_dili_ve_kancalar(panel, tahta, hazir):
     tahtadan_yoklama(tahta, hazir, "10/A", 1, ["1047"])
     gunluk = panel.get("/yoklama").text
     # Sayfa içi sekmeler, KVKK notu, e-Okul kutusu (JS'siz yedek düğmeli) ve renk sınıfı yerine data-durum.
-    assert 'class="sekmeler"' in gunluk and 'aria-current="page">Günlük görünüm' in gunluk
+    assert 'class="sekmeler bolum-serit"' in gunluk and '<a href="/yoklama" aria-current="page">Günlük</a>' in gunluk
     assert yk.ILETI_ADLI_SAYFA in gunluk and "data-otomatik-gonder" in gunluk and "data-js-gizle" in gunluk
     assert "rozet yesil" not in gunluk and "rozet kirmizi" not in gunluk and "rozet sari" not in gunluk
     yid = sorgu("SELECT id FROM yoklama LIMIT 1")[0]["id"]
@@ -639,9 +639,10 @@ def test_yoklama_sayfalari_bilesen_dili_ve_kancalar(panel, tahta, hazir):
     icmal = panel.get("/yoklama/icmal").text
     assert 'data-kopyala="icmal-metni"' in icmal and "data-yazdir" in icmal and 'class="yazdirma"' in icmal
     assert 'id="icmal-metni"' in icmal and "rapor-sayfasi" in icmal and "DERS YOKLAMASI İCMALİ" in icmal
+    assert 'class="sekmeler bolum-serit"' in icmal and '<a href="/yoklama/icmal" aria-current="page">' in icmal
     for yol in ("/yoklama/gir?sube=10/A&ders_no=1", "/ogretmenler", "/ogrenciler?sube=10/A"):
         sayfa = panel.get(yol)
-        assert sayfa.status_code == 200 and 'class="sekmeler"' in sayfa.text, yol
+        assert sayfa.status_code == 200 and 'class="sekmeler bolum-serit"' in sayfa.text, yol
     assert "Ayşe YILMAZ" in panel.get("/yoklama/gir?sube=10/A&ders_no=1").text
 
 

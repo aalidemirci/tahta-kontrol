@@ -3,15 +3,16 @@
 {% block baslik %}Son günler · Yoklama · Tahta Kontrol{% endblock %}
 {% block icerik %}
 {# Okul geneli "son günler" listesi (0.14.0). Bağlam: panel_defter.py SÖZLEŞME — liste, esik, adli_not, n_gun_notu.
-   Türetilmiş listedir: saklanmaz, dışa aktarılmaz; yalnız yazdırılır. Mazeret türü gösterilmez. #}
-{% with bolum='son_gunler', bas_baslik='Son günlerde derste görülmeyenler',
+   Türetilmiş listedir: saklanmaz, dışa aktarılmaz; yalnız yazdırılır. Mazeret türü gösterilmez.
+   0.19.0: şeritte Şube defteri etkindir (sayfa onun altındadır; ayrı sekmesi yok). #}
+{% with bolum='sube', bas_baslik='Son günlerde derste görülmeyenler',
         bas_aciklama='Alınan yoklamalara göre art arda en az ' ~ esik ~ ' gündür, yoklaması alınan bütün derslerde yok yazılan öğrenciler.' %}
 {% include "_yoklama_bas.html" %}
 {% endwith %}
 <p class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ n_gun_notu }} Yoklaması hiç alınmamış gün sayılmaz; zinciri de kırmaz.</p>
 
 <div class="arac-cubugu yazdirma" role="toolbar" aria-label="Liste">
-  <a class="dugme" href="/yoklama">← Günlük görünüm</a>
+  <a class="dugme" href="/yoklama/sube">← Şube defteri</a>
   <form method="get" action="/yoklama/son-gunler" class="satir-ici tarih-sec">
     <label class="satir"><input type="checkbox" name="ozurluler" value="1" {% if liste.ozurluler %}checked{% endif %}> Özürlüleri de göster</label>
     <button>Göster</button>

@@ -1,5 +1,13 @@
 # Tahta Kontrol
 
+Yerel geliştirme **0.19.0**: panel arayüzünün yeniden düzeninde 5. aşama — bölüm sekmeleri ve tek sayfalık
+duyuru formu. Yoklama şeridi sadeleşti (Günlük · Şube defteri · Mazeret ve izin · Panelden gir · Devamsızlık
+icmali); Öğrenciler, Öğretmenler ve PIN, USB anahtarlar "Kişiler ve anahtarlar"ın kendi şeridinde; Program
+şeridi günlük iş ve kurulum diye kümelendi; Acil durumda geçmiş ayrı sekme. Yeni duyuru tek sayfada üç adım
+(Ne yazılsın · Kime · Ne zaman) ve göndermeden önce kaç tahtaya, ne zaman gideceğini yazan gönder çubuğu.
+Adresler, gönderim uçları, alan adları, doğrulama ve tahtalar değişmedi. [Sürüm notları](docs/surum-0.19.0.md).
+Dağıtılmadı; okul bilgisayarlarında, gerçek telefonda ve gerçek tahtalarla denenmedi.
+
 Yerel geliştirme **0.18.0**: panel arayüzünün yeniden düzeninde 4. aşama — açılış sayfası artık "Bugün":
 şu an (ders/teneffüs, program kilidi), "Sizi bekleyenler" (eskiden tahta listesinin üstündeki bantlara
 dağılmış uyarılar tek listede, role göre), tahtaların durum sayıları ve konum çipleri, onaylı
@@ -47,9 +55,9 @@ Bu değişiklikler henüz kurulu sunucuya/istemciye dağıtılmadı.
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.18.0 yerel geliştirme; saha denemesindeki sürüm 0.12.0.** Debian 12 ve Pardus 25
+> **Durum: 0.19.0 yerel geliştirme; saha denemesindeki sürüm 0.12.0.** Debian 12 ve Pardus 25
 > masaüstünde denendi; gerçek bir Pardus ETAP tahtasında ilk deneme yapıldı (0.8.0; bulgular 0.9.0'da
-> giderildi), sonraki sürümler (0.13.x, 0.14.0, 0.15.0, 0.16.0, 0.17.0 ve 0.18.0 dahil) gerçek tahtada henüz denenmedi. Okul genelinde
+> giderildi), sonraki sürümler (0.13.x, 0.14.0, 0.15.0, 0.16.0, 0.17.0, 0.18.0 ve 0.19.0 dahil) gerçek tahtada henüz denenmedi. Okul genelinde
 > kullanmadan önce tek tahtada deneyin (`docs/saha-denemesi.md`).
 
 ## Ne yapar

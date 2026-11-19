@@ -33,7 +33,8 @@ def kaydet(uygulama, y) -> None:
             if k["rol"] != "yonetici":
                 return y.yonlendir("/acil", "Şablonları yalnız yönetici düzenler.", hata=True)
             return sablon_ciz(istek, k)
-        return ciz(istek, k)
+        # 0.19.0: "Geçmiş ve raporlar" ayrı sekmedir; yok / boş / bilinmeyen değer "Yayın başlat"tır (yönlendirme yok).
+        return ciz(istek, k, sekme="gecmis" if istek.query_params.get("sekme") == "gecmis" else "")
 
     def sablon_ciz(istek: Request, k, sablon_formu: list | None = None, hata: str = "") -> HTMLResponse:
         """Acil › Şablonlar görünümü (yalnız yönetici). Doğrulama hatasında (hata) gönderilen değerlerle aynı
@@ -57,9 +58,11 @@ def kaydet(uygulama, y) -> None:
 
     y.acil_sablon_sayfasi = sablon_ciz  # web.acil_sablonlarini_kaydet doğrulama hatasında bunu çizer
 
-    def ciz(istek: Request, k, girilen: dict | None = None, hata: str = "") -> HTMLResponse:
+    def ciz(istek: Request, k, girilen: dict | None = None, hata: str = "", sekme: str = "") -> HTMLResponse:
         """Acil sayfası. Başlatma reddedilince (hata) sayfa aynı yanıtta 400 ile yeniden çizilir:
-        tür, şablon, başlık, metin ve süre korunur; parola ve onay boş gelir."""
+        tür, şablon, başlık, metin ve süre korunur; parola ve onay boş gelir.
+
+        sekme: "" = Yayın başlat (hata çizimi her zaman budur), "gecmis" = Geçmiş ve raporlar. Bağlam ikisinde aynıdır."""
         ek: dict = {"mesaj": hata, "mesaj_hata": True} if hata else {}
         simdi = vt.simdi()
         with vt.islem() as b:
@@ -88,7 +91,7 @@ def kaydet(uygulama, y) -> None:
             "acil.html",
             k,
             durum_kodu=400 if hata else 200,
-            sekme="",
+            sekme=sekme,
             girilen=girilen or {},
             **ek,
             aktif=aktif,

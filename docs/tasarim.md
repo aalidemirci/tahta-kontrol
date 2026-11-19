@@ -393,13 +393,14 @@ seçimde korunur.
 - **GTK'da iki stil sağlayıcısı:** ölçüler bir kez yüklenir, renkler tema
   değişince aynı sağlayıcıya yeniden yüklenir (pencere yeniden açılmaz).
 
-### 11.1 Panel kabuğu ve arayüzün yeniden düzeni (0.15.0, 0.16.0, 0.17.0, 0.18.0)
+### 11.1 Panel kabuğu ve arayüzün yeniden düzeni (0.15.0, 0.16.0, 0.17.0, 0.18.0, 0.19.0)
 
 Kullanıcı (18.11.2026) paneli "ilkel ve karışık" buldu. Bütün panel için bir arayüz taslağı hazırlandı
 (tıklanabilir prototip ve ölçümler; **taslak depo dışında tutulur**), kullanıcı taslağı gördü ve aynı gün
 "Evet, başla" diyerek 1. aşamaya, 0.15.0'ı gördükten sonra 19.11.2026'da "Ayarlar'a geç" diyerek 2. aşamaya,
 0.16.0'ı gördükten sonra aynı gün "Önce Tahtalar'a geç" diyerek 3. aşamaya, 0.17.0'ı gördükten sonra yine
-19.11.2026'da "Bugün'e geç" diyerek 4. aşamaya onay verdi. Sonraki aşamalar ayrı sürüm ve ayrı onaydır.
+19.11.2026'da "Bugün'e geç" diyerek 4. aşamaya, 0.18.0'ı gördükten sonra aynı gün "Sekmelere geç" diyerek
+5. aşamaya onay verdi. Sonraki aşama ayrı sürüm ve ayrı onaydır.
 
 | Aşama | Sürüm | İçerik | Durum |
 |---|---|---|---|
@@ -407,7 +408,7 @@ Kullanıcı (18.11.2026) paneli "ilkel ve karışık" buldu. Bütün panel için
 | 2. Ayarlar | 0.16.0 | Ayarlar giriş sayfası (bölüm kartları, değer özetleri, kurulum listesi, Ayarlar içi arama), 11 bölüm sayfası, her kartın kendi Kaydet'i, Kullanıcılar bir bölüm, acil şablonları Acil'de | Uygulandı (yerel) |
 | 3. Tahtalar | 0.17.0 | `/tahtalar` listesi (konuma göre gruplu satırlar, satırda duruma göre tek düğme + "⋯" menüsü, seçim çubuğu, `?durum=` süzgeci), `/islem`'e `tek` ve `kapsam=hepsi`, duyuru formunda tahta ön seçimi, tahta sayfası dört sekme, Tahtalar bölümünün sekme şeridi | Uygulandı (yerel) |
 | 4. Bugün | 0.18.0 | `/` "Bugün" sayfası: şu an (ders/teneffüs, program kilidi ve "Durdur"), "Sizi bekleyenler" (tek işlev, role göre), tahtalar özeti (durum sayıları + konum çipleri), "Hepsini kilitle…", bugünün yoklama özeti ve duyurular; `/tahtalar` yalnız liste; menüde ve alt çubukta "Bugün" | Uygulandı (yerel) |
-| 5. Sekmeler | — | Yoklama / Program / Kişiler sekmelerinin ayrışması, tek sayfalık duyuru formu | Onay bekliyor |
+| 5. Sekmeler | 0.19.0 | Bölüm sekme şeritlerinin tek tanımı (`bolum_serit.py`): Yoklama (beş sekme + yöneticiye ayarlar bağlantısı), Kişiler ve anahtarlar (kendi şeridi), Program (üç küme, dokuz sekme), Duyurular, Acil durum (Geçmiş ve raporlar ayrı sekme); tek sayfalık duyuru formu (Ne · Kime · Ne zaman, gönder çubuğu); adresler ve uçlar aynı | Uygulandı (yerel) |
 | 6. Arama | — | Genel arama (rolle süzülür; dizinde kişi adı yok) | Onay bekliyor |
 
 Birinci aşamanın kuralları:
@@ -585,6 +586,55 @@ denenmeyenler `docs/surum-0.18.0.md`'dedir):
 - **`/tahtalar`'da kalan bantlar:** onay bekleyen tahtalar (Bugün'deki satırın hedefi; adlar yalnız orada
   ve yalnız yöneticiye), "kilit kodu tanımlı değil" (komutun verildiği yerde durur), sayfa başındaki
   otomatik kapatma özeti, yenile ve acil bantları. `_pano_bantlar.html` silindi.
+
+Beşinci aşamanın kuralları (0.19.0; "hangi sayfa ve sekme nereye gitti" çizelgesi, varsayılan kararlar ve
+denenmeyenler `docs/surum-0.19.0.md`'dedir):
+
+- **Adres değişmez.** Yeni adres açılmadı, hiçbir adres kalkmadı ve yönlenmiyor; sekme gereken tek yerde var
+  olan sayfa `?sekme=` aldı (`/acil?sekme=gecmis`). Sayfa içerikleri, gönderim uçları, alan adları,
+  doğrulama, şema ve ajan aynıdır. Menü üç küme ve tam on öğedir (öğe eklenmedi, çıkmadı).
+- **Şeritlerin TEK tanımı `bolum_serit.py`'dir** (FastAPI'siz, saf): `SERITLER` altı bölümün (yoklama,
+  kisiler, program, duyurular, acil, tahtalar) kümelerini ve sekmelerini tutar; `gorunum(ad, rol, etkin,
+  sayilar)` role göre süzülmüş şeridi verir, çizim tek makrodadır (`_serit.html::ciz`; şablon evrenseli
+  `bolum_seridi`). Şablona ya da `web.py`'ye ikinci sekme listesi yazılmaz. Rolle gizlenen sekme görünümde
+  hiç dönmez (CSS ile gizlenmez), boş kalan küme ve ayracı düşer; her şeritte tam bir etkin sekme vardır.
+  Başka bölüme giden sekme (`dis`; Yoklama ayarları ↗) hiçbir zaman etkin olmaz.
+- **Etkin sekmeyi şablon verir, istek yolundan çıkarılmaz:** aynı şablon başka uçta yeniden çizilir
+  (`POST /duyurular` 400, `POST /acil/baslat` 400, `POST /program/gecmis/{id}/geri-yukle` onay adımı).
+  Etkin anahtar rolle gizlenen bir sekmeyse şeridin ilk sekmesi etkin olur.
+- **Şerit yalnız görünümdür;** yetki denetimi uçlardadır. Şerit çizen her sayfa menüde o bölümün
+  `esler`'indedir (`/ogretmen-programi` Program'a taşındı; yetkisiz dönüşü de `/program`'dır). Testi
+  `bolum_serit.sayfa_onekleri` ile menüyü karşılaştırır.
+- **Bölümler:** Yoklama — Günlük · Şube defteri · Mazeret ve izin · Panelden gir · Devamsızlık icmali |
+  Yoklama ayarları* ↗; "Son günler" ayrı sekme değildir, Şube defteri altında çizilir (şeritte o etkin).
+  Kişiler ve anahtarlar — Öğrenciler · Öğretmenler ve PIN · USB anahtarlar (`_kisiler_bas.html`;
+  `_yoklama_bas.html` ile aynı bağlam: başlık, şerit, KVKK bandı). Program — Günü önizle · Zil saatleri ·
+  Derslik programları · Öğretmen programı* | Kurallar · İstisnalar · Uyarılar (rozetli) | İçe aktar* ·
+  Önceki programlar*; şeridi çizen HER Program sayfası `serit` (program özeti) bağlamını verir; Derslik'teki
+  "Önceki programlar" kutusu kalktı, liste ve geri yükleme yalnız `/program/gecmis`'tedir. Duyurular —
+  Duyurular ve planlar · Yeni duyuru (plan düzenleme sayfasında liste etkin). Acil durum — Yayın başlat ·
+  Geçmiş ve raporlar | Şablonlar*; şerit idareciye de çizilir; süren yayın kutusu (`_acil_aktif.html`) iki
+  sekmede aynı kimliklerle çizilir; başlatma hatası her zaman "Yayın başlat"ı çizer. Parola + onay kutusu ve
+  kural 10/26 değişmedi. (* yalnız yönetici.)
+- **Şerit her genişlikte sarar; kaydırmaz, yapışmaz.** Küme (`.sekme-kume`) geniş ekranda birlikte sarar;
+  ayraç kümenin ilk çocuğudur, satır başına düşen kümenin ayracı kırpılır, dar ekranda (≤ 640 px) ayraç
+  satır başıdır. Yana kaydırma bilerek yoktur (0.15.0/0.17.0: taşan öğe sayfayı ve alt çubuğu genişletir).
+  Baskıda şerit gizlidir. JS yoktur: her sekme tam sayfa GET'tir.
+- **Duyuru formu tek sayfadır, sunucu yolu aynıdır.** Bölümler DOM sırasıyla 1. Ne yazılsın? · 2. Kime? ·
+  3. Ne zaman?; tek form, tek uç, alan adları sözleşmedir (`zamanlama.form_coz` ve `hedef.formdan`
+  değişmedi; `panel_duyuru.py`'ye yalnız `hata_yeri` görünüm bilgisi eklendi). `zaman` radyolarından biri HER
+  ZAMAN işaretli çizilir (sunucu eksik `zaman`'ı "hemen" sayar). Gönder düğmesi düz `submit`'tir
+  (`data-onay`, `type="button"`, `required`, `data-kirli-izle` yok): JS'siz bütün bölümler ve üç zaman bloğu
+  görünür, seçili olmayan zamanın alanları sunucuda yok sayılır (`<noscript>` notu söyler). Kapalı
+  `<details>` içindeki kutular da gönderilir; seçim varsa açık çizilir.
+- **Gönder çubuğu onay penceresinin yerine geçen önlemdir, bu yüzden bayat kalamaz:** özet `hidden` çizilir
+  ve yalnız `panel.js` açar; hedef değişince sayı hemen "hesaplanıyor…", ağ hatasında "alınamadı" olur;
+  zaman kısmı seçilen tarih, saat ve günleri yazar, eksik alanı açıkça söyler. JS'sizken düğme yansızdır
+  ("Yayımla ya da planı kaydet"). Hızlı gün düğmeleri tarihi sunucunun `data-bugun`'undan hesaplar.
+- **Doğrulama iletisi ilgili bölümde de çizilir:** `panel_duyuru.hata_yeri` → `icerik | kime | zaman` (yalnız
+  görünüm; doğrulama aynı). İkinci kopya `role="alert"` taşımaz. `/api/hedef-onizleme` ve 0.17.0'ın
+  `?tahta=…&secimden=1` ön seçimi aynıdır.
+- Yeni varsayımlar §17 soru 82–90'dadır. Ders başlığı ve öğretmen bilgisi eklenmedi (soru 75 onaylanmadı).
 
 ## 12. Ders programı ve program kilidi
 
@@ -1648,7 +1698,8 @@ izlenir. Kurulu (PyInstaller) programda sistem sertifika deposunun bulunduğu he
 | P1 | Panel arayüzü 1. aşama (kabuk): sol menü (üç küme, role göre), dar ekranda çekmece ve telefon alt çubuğu, Acil en üstte, ölçek belirteçleri, şekilli rozet, dokunma hedefi (§11.1) | 0.15.0 — testlerle ve deneme sunucusunda başsız tarayıcı ölçümüyle (uydurma veri; 1366 ve 390 px, açık/koyu) denendi; okulun bilgisayarlarında, gerçek telefonda ve ekran okuyucuyla denenecek |
 | P2 | Panel arayüzü 2. aşama (Ayarlar): giriş sayfası (bölüm kartları, değer özetleri, kurulum listesi, arama), 11 bölüm sayfası, yeni `bolum=okul`/`kapatma`/`kilit_kodu` (her biri yalnız kendi anahtarını yazar), Kullanıcılar Ayarlar'da, acil şablonları Acil'de (§11.1) | 0.16.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri; JS açık ve kapalı kayıt denemesi, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek ayarlarla ve kurulu hizmette denenecek |
 | P3 | Panel arayüzü 3. aşama (Tahtalar): `/tahtalar` listesi (konuma göre gruplu satırlar, duruma göre tek düğme, "⋯" menüsü, seçim çubuğu, JS'siz `?durum=` süzgeci), `/islem`'e `tek=<tür>:<kimlik>` (yalnız o tahta) ve `kapsam=hepsi` (yalnız kilitle; onaylı + çevrimiçi), duyuru formunda tahta ön seçimi, tahta sayfası dört sekme, Tahtalar bölümünün sekme şeridi (§11.1) | 0.17.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri, benzetilmiş ajanlar; JS açık ve kapalı komut denemesi, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek telefonda ve gerçek tahtalarla denenecek |
-| P4 | Panel arayüzü 4. aşama (Bugün): `/` Bugün sayfası (şu an + "Program kilidini durdur", "Sizi bekleyenler" — tek işlev `bugun.bekleyenler`, role göre; durum sayıları ve konum çipleri; onaylı "Hepsini kilitle…"; yoklama özeti ve duyurular), `/tahtalar` yalnız liste, menüde ve alt çubukta "Bugün", `/api/durum`'a `bekleyen_is`; varsayılan iki karar: V1 (satırda güncelleme rozeti yok) ve V2 (toplu kilit sınavdakileri atlar) (§11.1, §17 soru 80–81) | 0.18.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri, benzetilmiş ajanlar; JS açık ve kapalı komut denemesi, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek telefonda ve gerçek tahtalarla denenecek. 5–6. aşamalar onay bekliyor |
+| P4 | Panel arayüzü 4. aşama (Bugün): `/` Bugün sayfası (şu an + "Program kilidini durdur", "Sizi bekleyenler" — tek işlev `bugun.bekleyenler`, role göre; durum sayıları ve konum çipleri; onaylı "Hepsini kilitle…"; yoklama özeti ve duyurular), `/tahtalar` yalnız liste, menüde ve alt çubukta "Bugün", `/api/durum`'a `bekleyen_is`; varsayılan iki karar: V1 (satırda güncelleme rozeti yok) ve V2 (toplu kilit sınavdakileri atlar) (§11.1, §17 soru 80–81) | 0.18.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri, benzetilmiş ajanlar; JS açık ve kapalı komut denemesi, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek telefonda ve gerçek tahtalarla denenecek |
+| P5 | Panel arayüzü 5. aşama (Sekmeler): bölüm sekme şeritlerinin tek tanımı (`bolum_serit.py`, `_serit.html`) — Yoklama, Kişiler ve anahtarlar, Program (üç küme), Duyurular, Acil durum (Geçmiş ve raporlar ayrı sekme), Tahtalar; tek sayfalık duyuru formu (Ne · Kime · Ne zaman, gönder çubuğu, iletinin ilgili bölümde çizilmesi); adresler, uçlar, alan adları ve doğrulama aynı; varsayılan kararlar §17 soru 82–90 (§11.1) | 0.19.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri, benzetilmiş ajanlar; JS açık ve kapalı duyuru gönderimi veritabanından doğrulanarak, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek telefonda ve gerçek tahtalarla denenecek. 6. aşama onay bekliyor |
 | 3C | Sihirbaza e-Okul "Haftalık Ders Programları" raporu (OOK11002_R01, .XLS): blok ayrıştırma, rapordan zil çizelgesi, zorunlu şube eşlemesi, şubenin tahtasına yazma (§12.4) | 0.12.0 — testlerle (uydurma matris) ve geliştirme bilgisayarında gerçek bir raporla (ayrı veri dizini, uydurma tahtalar) uçtan uca denendi; okulda denenecek |
 
 Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" ve "Seçili
@@ -1804,7 +1855,7 @@ Ders yoklaması (0.6.0):
 68. **Aydınlatma:** okulun aydınlatma metni tahtada okul numarası ile adın birlikte görünmesini ve mazeret
     türünün (raporlu dahil) okul sunucusunda tutulmasını kapsıyor mu? (Soru 33'ün devamı.)
 
-Panel arayüzü (0.15.0–0.18.0; taslağın soruları — yanıt gelene kadar **önerilen** seçenek geçerlidir, §11.1):
+Panel arayüzü (0.15.0–0.19.0; taslağın soruları — yanıt gelene kadar **önerilen** seçenek geçerlidir, §11.1):
 
 69. **Panel kullanıcıları nerede dursun?** Öneri: Ayarlar içinde bir bölüm. (0.16.0'da öneri uygulandı:
     `/ayarlar/kullanicilar`; menüde ayrı öğe kalktı. Geri istenirse menü öğesi tek satırdır.)
@@ -1816,13 +1867,15 @@ Panel arayüzü (0.15.0–0.18.0; taslağın soruları — yanıt gelene kadar *
 72. **Genel arama ne zaman?** Öneri: son aşamada; önce yalnız Ayarlar içinde (0.16.0'da Ayarlar araması var).
 73. **Sol menünün rengi:** öneri okulun şerit rengi (0.15.0'da böyle); öbür seçenek nötr koyu gri.
 74. **Yoklama'ya tıklayınca ilk sayfa:** öneri Günlük (bugünkü gibi); öbür seçenek şube defteri.
+    (0.19.0'da öneri VARSAYILDI: şeridin ilk sekmesi Günlük'tür.)
 75. **Tahta ayrıntısında bugünün ders başlıkları gösterilsin mi?** Öneri: gösterilsin, öğretmen adı olmadan.
     Kural 12 istisnası bugün yalnız kilit ekranı kutusu içindir; panelde göstermek yeni bir kullanımdır ve
     uygulanmadan önce açıkça onaylanmalıdır. (0.17.0'da ONAYLANMADI ve uygulanmadı: tahta listesinde ve tahta
     sayfasında ders başlığı ya da öğretmen bilgisi yoktur.)
 76. **Açık/koyu görünüm elle seçilebilsin mi?** Öneri: hayır, işletim sistemini izlesin (0.15.0'da böyle).
 77. **Menü adı:** öneri "Kişiler ve anahtarlar" (0.15.0'da böyle); öbür seçenekler "Okul verisi",
-    "Öğrenci ve öğretmenler".
+    "Öğrenci ve öğretmenler". (0.19.0'da bölüm bu adla kendi sekme şeridini aldı; ad yalnız `web.py::MENU`
+    ve `bolum_serit.py`'dedir.)
 78. **"Hepsini kilitle" kime gitsin?** Öneri: çevrimiçi ve onaylı bütün tahtalara (3. aşama); öbür seçenek
     bugünkü gibi yalnız seçilenlere. (0.17.0'da öneri SUNUCUDA uygulandı: `/islem` `kapsam=hepsi`, yalnız
     kilitle. 0.18.0'da düğmesi Bugün'e geldi: onay penceresiyle, yönetici ve idareciye. Sınav ayrımı: soru 81.)
@@ -1839,6 +1892,29 @@ Panel arayüzü (0.15.0–0.18.0; taslağın soruları — yanıt gelene kadar *
     açıktır.** Geri almak: `web.py::islem`'in `kapsam` dalındaki sınav süzmesi kaldırılır; onay penceresinin
     "atlanacak" cümlesi ve `bugun.tahta_ozeti`'ndeki `kilit_hedefi` hesabı buna göre düzeltilir. Ayrıca
     açık: acil yayın sürerken sunucu `kapsam=hepsi`'yi reddetsin mi? (Bugün yalnız düğme çizilmiyor.)
+82. **Duyuruda "Tüm tahtalar + hemen" için ek onay istensin mi?** Öneri: hayır; önlem gönder çubuğundaki
+    özettir (kaç tahtaya, ne zaman). **0.19.0'da öneri VARSAYILDI; soru açıktır.** Onay istenirse JS'siz
+    gönderim bozulmasın diye sunucuda iki adımlı onay gerekir (doğrulama yolu değişir; ayrı iş).
+83. **"Hemen" seçiliyken dolu plan alanları (ya da tersi) reddedilsin mi?** Öneri: hayır, eskisi gibi yok
+    sayılsın; JS'siz kullanıcıya `<noscript>` notu söyler. **Varsayıldı.** Reddetmek sunucu doğrulamasını
+    değiştirir.
+84. **"Son günler" ayrı sekme mi olsun?** Öneri: hayır; Şube defteri altında, iki girişle (Günlük'ün araç
+    çubuğu ve şube defteri). **Varsayıldı.** Değiştirmek: `bolum_serit.py`'de bir satır + şablonda `bolum`.
+85. **Menüde Program'a tıklayınca ilk sayfa:** öneri Zil saatleri (eskisi gibi); öbür seçenek Günü önizle.
+    **Varsayıldı.** Değiştirmek: `web.py::MENU`'de Program öğesinin `yol`'u. Bağlı soru: "Günü önizle" hem
+    kendi sekmesinde hem Zil saatleri'ndeki küçük formda duruyor; biri kaldırılsın mı?
+86. **Derslik'teki "Önceki programlar" kutusu:** öneri kalksın, liste ve geri yükleme yalnız sekmede
+    (yönetici). **Varsayıldı.** Geri almak: kutu `program.html`'e geri konur.
+87. **Acil şeridi idareciye de çizilsin mi?** Öneri: evet (iki sekme); geçmiş ayrı sekmeye indiği için
+    gerekli. **Varsayıldı.**
+88. **Sekme adları** taslaktaki gibi mi ("Günlük", "Mazeret ve izin", "Öğrenciler")? **Varsayıldı;** bazı
+    sayfa başlıkları ve bağlantı metinleri eski adlarıyla duruyor ("Öğrenci listesi", "Panelden yoklama",
+    "Günlük görünüm"). Hepsi sekme adına çekilsin mi?
+89. **Dar ekranda şerit sarsın mı, yana mı kaysın?** Öneri: sarsın, yapışmasın. **Varsayıldı.** Sonucu:
+    telefonda yöneticide Program şeridi 4, Yoklama 3 satır tutar. Kısaltmak için sekme adı ya da sayısı
+    değişmeli; yana kaydırma gizli sekme ve sayfa genişlemesi riski taşır.
+90. **Devamsızlık icmali her açılışta işlem kaydına satır düşsün mü?** Var olan davranıştır; icmal sekme
+    olduğu için daha sık açılabilir ve kayıt kalabalıklaşabilir. **Varsayıldı: değişmedi.**
 
 Altyapı (0.7.0 ve 6B):
 

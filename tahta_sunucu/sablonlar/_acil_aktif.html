@@ -1,0 +1,25 @@
+{# 0.19.0 — süren acil yayın kutusu: Acil › Yayın başlat ve Geçmiş ve raporlar sekmelerinde AYNI kimliklerle çizilir
+   (panel.js::acilKur #acil-aktif, #acil-teslim, #acil-kalan, #acil-bitti'ye bağlıdır). Bağlam: aktif, yetkili,
+   acil_donus (bitirme formunun ve "Sayfayı yenileyin"in döneceği sekme adresi).
+   Bitirme tetiği type="button" + data-onay: JS'siz gönderilmez (bilerek). #}
+{# Teslim sayacı ve kalan süre panel.js ile 4 sn'de bir /api/durum'dan güncellenir. #}
+<section class="acil-kutu" data-tur="{{ aktif.tur }}" id="acil-aktif" data-acil-id="{{ aktif.id }}" aria-labelledby="acil-aktif-baslik">
+  <p class="acil-tur"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ 'TATBİKAT YAYINI SÜRÜYOR' if aktif.tur == 'tatbikat' else 'ACİL DURUM YAYINI SÜRÜYOR' }}</p>
+  <h2 id="acil-aktif-baslik">{{ aktif.baslik }}</h2>
+  <p class="acil-metin">{{ aktif.metin }}</p>
+  <dl class="acil-sayilar">
+    <div><dt>Görüntülenen</dt><dd><span id="acil-teslim">{{ aktif.teslim }}/{{ aktif.hedef }}</span> tahta</dd></div>
+    <div><dt>Kalan</dt><dd><span id="acil-kalan">{{ (aktif.kalan_sn / 60) | round(0, 'ceil') | int }}</span> dk</dd></div>
+    <div><dt>Başlatan</dt><dd>{{ aktif.baslatan }} · {{ aktif.baslangic | saat }}</dd></div>
+  </dl>
+  <p id="acil-bitti" class="bant" role="status" hidden>Yayın sona erdi. <a href="{{ acil_donus }}">Sayfayı yenileyin</a>.</p>
+  <div class="dugme-satiri">
+    {% if yetkili %}
+    <form method="post" action="/acil/{{ aktif.id }}/bitir" class="satir-ici" id="acil-bitir">
+      <input type="hidden" name="donus" value="{{ acil_donus }}">
+      <button type="button" class="tehlike-dolu" data-onay="acil_bitir" aria-haspopup="dialog">Yayını bitir…</button>
+    </form>
+    {% endif %}
+    <a class="dugme" href="/acil/{{ aktif.id }}">Rapor</a>
+  </div>
+</section>

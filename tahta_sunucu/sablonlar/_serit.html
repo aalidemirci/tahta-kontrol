@@ -1,0 +1,22 @@
+{# 0.19.0 — bölüm sekme şeridinin TEK çizimi. `s` = bolum_seridi(ad, rol, etkin, sayilar) (bolum_serit.gorunum).
+   Çıktı biçimi testlerle bağlıdır: href'ten HEMEN sonra aria-current gelir, araya öznitelik girmez.
+   Küme (`sekme-kume`) geniş ekranda birlikte sarar; ayraç kümenin İLK çocuğudur (satır başına düşen kümenin ayracı
+   kırpılır, dar ekranda satır başı olur — stil.css kabuk katmanı).
+   Şerit yalnız görünümdür (yetki uçta); rolle gizlenen sekme `s` içinde hiç yoktur. JS yok. #}
+{% macro ciz(s) -%}
+<nav class="sekmeler bolum-serit" aria-label="{{ s.etiket }}">
+{%- for kume in s.kumeler %}
+  <span class="sekme-kume">
+{%- if not loop.first %}
+  <span class="sekme-ayrac" aria-hidden="true"></span>
+{%- endif %}
+{%- for sekme in kume %}
+  <a href="{{ sekme.yol }}"{% if sekme.etkin %} aria-current="page"{% endif %}>{{ sekme.ad }}
+    {%- if sekme.sayi %} <span class="sayi-rozet">{{ sekme.sayi }}</span><span class="gizli"> {{ sekme.sayi_eki }}</span>{% endif %}
+    {%- if sekme.dis %} <span aria-hidden="true">↗</span><span class="gizli"> ({{ sekme.dis }})</span>{% endif -%}
+  </a>
+{%- endfor %}
+  </span>
+{%- endfor %}
+</nav>
+{%- endmacro %}

@@ -1,11 +1,11 @@
 {% extends "taban.html" %}
 {% block baslik %}Öğretmen programını aktar · Tahta Kontrol{% endblock %}
 {% block icerik %}
-{% with bolum='ogretmen_program', bas_baslik='Öğretmen programını aktar',
-        bas_aciklama='Gün, ders saati, şube ve öğretmen eşlemesi. Bu program bilgilendirme içindir; nöbet veya boş ders nedeniyle başka şubenin yoklamasını almaya engel olmaz.' %}
-{% include "_yoklama_bas.html" %}
-{% endwith %}
-<p class="geri"><a href="/ogretmenler">← Öğretmenler ve PIN</a></p>
+{# 0.19.0: sayfa Program bölümündedir (şerit: Öğretmen programı). Bağlam: serit (program_is.program_ozeti),
+   bolum='ogretmen_program'; gerisi panel_ogretmen_program.sayfa. #}
+{% include "_program_bas.html" %}
+<h2>Öğretmen programını aktar</h2>
+<p>Gün, ders saati, şube ve öğretmen eşlemesi. Bu program bilgilendirme içindir; nöbet veya boş ders nedeniyle başka şubenin yoklamasını almaya engel olmaz. Eşleme <a href="/ogretmenler">Öğretmenler ve PIN</a> sayfasındaki kayıtlarla yapılır.</p>
 <p class="bant uyari" role="note">Bu sayfa öğretmen adları içerir. Dosyalar diske yazılmaz; önizleme yalnız bellekte en çok 15 dakika tutulur, “Vazgeç” hemen siler. Kaynak öğretmen adları kalıcı saklanmaz, onaylanan eşleme sistemdeki öğretmen kimliğine bağlanır. Öğrenci listesi yüklemeniz gerekmez.</p>
 {% if aktarim_hatasi %}<p class="bant uyari" role="alert">{{ aktarim_hatasi }}</p>{% endif %}
 {% if onizleme %}

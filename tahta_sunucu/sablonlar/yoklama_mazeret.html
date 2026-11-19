@@ -1,10 +1,10 @@
 {% extends "taban.html" %}
-{% block baslik %}Mazeret/izin · Yoklama · Tahta Kontrol{% endblock %}
+{% block baslik %}Mazeret ve izin · Yoklama · Tahta Kontrol{% endblock %}
 {% block icerik %}
 {# Mazeret/izin (0.14.0). Bağlam: panel_defter.py SÖZLEŞME. Serbest açıklama alanı YOKTUR (sağlık verisi birikmesin);
    tür yalnız bu sayfada ve öğrenci görünümünün mazeret bölümünde görünür. Giriş iki adımdır: önizle → onayla.
    Kaldırma tetikleri type="button" + data-onay="mazeret_kaldir" (JS yoksa hiçbir şey gönderilmez). #}
-{% with bolum='mazeret', bas_baslik='Mazeret/izin',
+{% with bolum='mazeret', bas_baslik='Mazeret ve izin',
         bas_aciklama='İzinli, raporlu, mazeretli ya da görevli öğrenciyi girin: yoklamada "yok" yazıldığı saatler defterde "özürlü" (Ö) görünür. Öğretmenin yoklama kaydı değişmez.' %}
 {% include "_yoklama_bas.html" %}
 {% endwith %}

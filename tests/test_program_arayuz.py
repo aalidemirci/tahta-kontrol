@@ -37,7 +37,7 @@ def test_menu_sirasi_ortak_sozluge_uyar(uygulama, panel):
     [
         ("zil", ['data-onay="zil_sil"', "08:20–09:00", 'action="/program/zil/yukle"', 'action="/program/haftalik"',
                  'action="/program/cizelge"', 'action="/program/tarihli"', 'action="/program/gun"']),
-        ("derslik", ['href="/program/aktar?yeni=1"', 'href="/program/aktar/mevcut.csv"', "Program yok", "Önceki programlar"]),
+        ("derslik", ['href="/program/aktar?yeni=1"', 'href="/program/aktar/mevcut.csv"', "Program yok", 'href="/program/gecmis">Önceki programlar']),
         ("kurallar", ['name="pk_etkin"', "Kuralları kaydet", "öğretmen adı tutulmaz"]),
         ("istisnalar", ['name="bas_tarih"', 'value="1sa"', "Öğrenci ya da kişi adı yazmayın."]),
     ],
@@ -52,6 +52,8 @@ def test_program_sekmeleri_yonetici(uygulama, panel, tahta, bolum, beklenen):
     for parca in beklenen:
         assert parca in metin, (bolum, parca)
     assert 'id="program-serit"' in metin and "Program kilidi etkin" in metin and "Program kilidi açık" not in metin
+    # 0.19.0: önceki programlar ve geri yükleme kendi sekmesindedir; Derslik'te yalnız şerit bağlantısı kalır.
+    assert 'action="/program/gecmis/' not in metin and "Geri yükle" not in metin
     # Sekme yalnız kendi bölümünü çizer.
     if bolum != "kurallar":
         assert 'name="pk_etkin"' not in metin

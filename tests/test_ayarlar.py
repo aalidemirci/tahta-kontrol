@@ -726,7 +726,10 @@ def test_acil_sablon_sekmesi_yalniz_yonetici(okul):
     kullanici_ekle(okul, "idareci1")
     gir(okul, "idareci1")
     sayfa = okul.get("/acil").text
-    assert "Acil durum bölümleri" not in sayfa and "sekme=sablonlar" not in sayfa and 'id="acil-formu"' in sayfa
+    # 0.19.0: idareciye de şerit çizilir (Yayın başlat · Geçmiş ve raporlar); Şablonlar sekmesi HTML'inde hiç yoktur.
+    serit = sayfa.split('aria-label="Acil durum bölümleri"')[1].split("</nav>")[0]
+    assert re.findall(r'<a href="([^"]+)"', serit) == ["/acil", "/acil?sekme=gecmis"] and "sekme-ayrac" not in serit
+    assert "sekme=sablonlar" not in sayfa and "Şablonlar" not in serit and 'id="acil-formu"' in sayfa
     yanit = okul.get(SABLON_SAYFASI)
     assert yanit.status_code == 303 and yanit.headers["location"].startswith("/acil?m=") and "t=hata" in yanit.headers["location"]
     assert ileti(yanit) == "Şablonları yalnız yönetici düzenler."

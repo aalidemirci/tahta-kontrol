@@ -22,7 +22,7 @@
       <select id="gir-ogretmen" name="ogretmen_id" class="alan-oto"><option value="">— (panel)</option>{% for o in ogretmenler %}<option value="{{ o.id }}" {% if o.id == ogretmen_id %}selected{% endif %}>{{ o.etiket }}</option>{% endfor %}</select></div>
     <div><button>Listeyi getir</button></div>
   </div>
-  {% if not subeler %}<p class="bant uyari"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Öğrenci listesi yüklenmemiş. <a href="/ogrenciler">Öğrenci listesi</a> sekmesinden yükleyin.</p>{% endif %}
+  {% if not subeler %}<p class="bant uyari"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Öğrenci listesi yüklenmemiş. <a href="/ogrenciler">Kişiler ve anahtarlar › Öğrenciler</a> sayfasından yükleyin.</p>{% endif %}
   {% if sube and not ders_no %}<p class="ipucu">Ders saatlerini {{ sube }} şubesinin devresine göre görmek için şubeyi seçip "Listeyi getir" deyin, sonra ders saatini seçin.</p>{% endif %}
 </form>
 

@@ -1,20 +1,12 @@
-{# Yoklama sayfalarının ortak başı: başlık, sayfa içi sekmeler (menüye girmez; ortak sözlük §4) ve
-   öğrenci adı içeren sayfalarda KVKK notu. Bağlam: bolum (gunluk|sube|mazeret|gir|ogretmenler|ogrenciler|usb|…),
-   bas_baslik, bas_aciklama, adli_not (varsa). #}
+{# Yoklama sayfalarının ortak başı: başlık, bölüm sekme şeridi (bolum_serit.SERITLER["yoklama"]; _serit.html) ve
+   öğrenci adı içeren sayfalarda KVKK notu. Bağlam: bolum (gunluk|sube|mazeret|gir|icmal), bas_baslik, bas_aciklama,
+   adli_not (varsa). Kişi sayfaları _kisiler_bas.html'i çizer (0.19.0). #}
+{% import "_serit.html" as serit_ %}
 <div class="sayfa-bas">
   <div class="bas-yazi">
     <h1>{{ bas_baslik }}</h1>
     {% if bas_aciklama %}<p>{{ bas_aciklama }}</p>{% endif %}
   </div>
 </div>
-<nav class="sekmeler" aria-label="Yoklama bölümleri">
-  <a href="/yoklama" {% if bolum == 'gunluk' %}aria-current="page"{% endif %}>Günlük görünüm</a>
-  <a href="/yoklama/sube" {% if bolum == 'sube' %}aria-current="page"{% endif %}>Şube defteri</a>
-  <a href="/yoklama/mazeret" {% if bolum == 'mazeret' %}aria-current="page"{% endif %}>Mazeret/izin</a>
-  <a href="/yoklama/gir" {% if bolum == 'gir' %}aria-current="page"{% endif %}>Panelden gir</a>
-  <a href="/ogretmenler" {% if bolum == 'ogretmenler' %}aria-current="page"{% endif %}>Öğretmenler ve PIN</a>
-  <a href="/ogrenciler" {% if bolum == 'ogrenciler' %}aria-current="page"{% endif %}>Öğrenci listesi</a>
-  <a href="/usb-anahtarlar" {% if bolum == 'usb' %}aria-current="page"{% endif %}>USB anahtarlar</a>
-  {% if kullanici.rol == 'yonetici' %}<a href="/ogretmen-programi" {% if bolum == 'ogretmen_program' %}aria-current="page"{% endif %}>Öğretmen programı</a>{% endif %}
-</nav>
+{{ serit_.ciz(bolum_seridi('yoklama', kullanici.rol, bolum)) }}
 {% if adli_not %}<p class="bant uyari kvkk-bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ adli_not }}</p>{% endif %}

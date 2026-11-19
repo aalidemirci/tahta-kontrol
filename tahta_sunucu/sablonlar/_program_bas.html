@@ -1,6 +1,10 @@
-{# Program sayfası ve Uyarılar sekmesinin ortak başı: başlık, bugünün durum şeridi, sekmeler.
-   Bağlam: serit (program_is.program_ozeti), bolum (zil|derslik|kurallar|istisnalar|uyarilar). #}
-{% set donus_yolu = '/program/uyarilar' if bolum == 'uyarilar' else '/program?bolum=' ~ bolum %}
+{# Program bölümünün ortak başı: başlık, bugünün durum şeridi, bölüm sekme şeridi (bolum_serit.SERITLER["program"]).
+   Bağlam: serit (program_is.program_ozeti — şeridi çizen HER sayfa verir), bolum
+   (gun|zil|derslik|ogretmen_program|kurallar|istisnalar|uyarilar|aktar|gecmis). #}
+{% import "_serit.html" as serit_ %}
+{% set donus_yollari = {'gun': '/program/gun', 'uyarilar': '/program/uyarilar', 'aktar': '/program/aktar',
+                        'gecmis': '/program/gecmis', 'ogretmen_program': '/ogretmen-programi'} %}
+{% set donus_yolu = donus_yollari.get(bolum) or '/program?bolum=' ~ bolum %}
 <div class="sayfa-bas">
   <div class="bas-yazi">
     <h1>Program</h1>
@@ -35,11 +39,4 @@
 <p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Ders saatleri tanımlı değil — bir çizelge oluşturup haftalık düzende günlere atayın ya da Okul Zili'nden alın.</p>
 {% endif %}
 
-<nav class="sekmeler" aria-label="Program bölümleri">
-  <a href="/program?bolum=zil" {% if bolum == 'zil' %}aria-current="page"{% endif %}>Zil saatleri</a>
-  <a href="/program?bolum=derslik" {% if bolum == 'derslik' %}aria-current="page"{% endif %}>Derslik programları</a>
-  {% if kullanici.rol == 'yonetici' %}<a href="/ogretmen-programi">Öğretmen programı</a>{% endif %}
-  <a href="/program?bolum=kurallar" {% if bolum == 'kurallar' %}aria-current="page"{% endif %}>Kurallar</a>
-  <a href="/program?bolum=istisnalar" {% if bolum == 'istisnalar' %}aria-current="page"{% endif %}>İstisnalar</a>
-  <a href="/program/uyarilar" {% if bolum == 'uyarilar' %}aria-current="page"{% endif %}>Uyarılar{% if serit.uyari_sayisi %} <span class="sayi-rozet">{{ serit.uyari_sayisi }}</span>{% endif %}</a>
-</nav>
+{{ serit_.ciz(bolum_seridi('program', kullanici.rol, bolum, {'uyari': serit.uyari_sayisi})) }}

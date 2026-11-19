@@ -216,6 +216,62 @@ def test_acil_rapor_sayfasi_ve_panel_bandi(okul, panel, tahta, saat):
     assert "TATBİKAT YAYINI SÜRÜYOR" in sayfa and f'action="/acil/{acil_id}/bitir"' in sayfa
 
 
+# ---- 0.19.0: sekmeler (Yayın başlat · Geçmiş ve raporlar | Şablonlar) ---------------------------------------------------
+def acil_seridi(sayfa: str) -> str:
+    assert sayfa.count('aria-label="Acil durum bölümleri"') == 1
+    return sayfa.split('aria-label="Acil durum bölümleri"', 1)[1].split("</nav>", 1)[0]
+
+
+def test_acil_sekmeleri_icerik(okul, panel):
+    baslat(panel, tur="tatbikat", baslik="TATBİKAT")
+    acil_id = sorgu("SELECT id FROM acil_yayin")[0]["id"]
+    panel.post(f"/acil/{acil_id}/bitir", data={})
+    ilk = panel.get("/acil").text
+    assert 'id="acil-formu"' in ilk and 'id="acil-gecmis"' not in ilk and f'href="/acil/{acil_id}"' not in ilk
+    assert '<a href="/acil" aria-current="page">Yayın başlat</a>' in acil_seridi(ilk)
+    assert '<a href="/acil?sekme=gecmis">Geçmiş ve raporlar</a>' in acil_seridi(ilk)
+    # Parola ve onay kutusu başlatma formunda (kural 26); geçmiş sekmesinde form yok.
+    assert 'name="parola"' in ilk and 'name="onay"' in ilk
+    gecmis = panel.get("/acil?sekme=gecmis").text
+    assert 'id="acil-gecmis"' in gecmis and f'href="/acil/{acil_id}"' in gecmis and 'id="acil-formu"' not in gecmis
+    assert 'name="parola"' not in gecmis
+    assert '<a href="/acil?sekme=gecmis" aria-current="page">Geçmiş ve raporlar</a>' in acil_seridi(gecmis)
+    for deger in ("yok-boyle", "", "//kotu.example", "<b>"):  # bilinmeyen değer: Yayın başlat, yönlendirme yok, yansıma yok
+        yanit = panel.get("/acil", params={"sekme": deger})
+        assert yanit.status_code == 200 and 'id="acil-formu"' in yanit.text and "kotu.example" not in yanit.text
+        assert '<a href="/acil" aria-current="page">' in acil_seridi(yanit.text)
+    rapor = panel.get(f"/acil/{acil_id}").text
+    assert '<a href="/acil?sekme=gecmis" aria-current="page">' in acil_seridi(rapor)
+
+
+def test_acil_surerken_iki_sekmede_aktif_kutu_ve_bitirme_donusu(okul, panel):
+    baslat(panel)
+    acil_id = sorgu("SELECT id FROM acil_yayin")[0]["id"]
+    for yol in ("/acil", "/acil?sekme=gecmis"):
+        sayfa = panel.get(yol).text
+        assert sayfa.count('id="acil-aktif"') == 1 and sayfa.count('id="acil-teslim"') == 1, yol
+        kutu = sayfa.split('id="acil-aktif"', 1)[1].split("</section>", 1)[0]
+        assert f'action="/acil/{acil_id}/bitir"' in kutu and f'name="donus" value="{yol}"' in kutu, yol
+        assert 'type="button" class="tehlike-dolu" data-onay="acil_bitir"' in kutu, yol  # JS'siz gönderilmez (bilerek)
+    yanit = panel.post(f"/acil/{acil_id}/bitir", data={"donus": "/acil?sekme=gecmis"})
+    assert yanit.status_code == 303 and yanit.headers["location"].startswith("/acil?sekme=gecmis")
+    assert sorgu("SELECT bitis FROM acil_yayin")[0]["bitis"]
+    # Dış adres dönüş olarak kabul edilmez.
+    baslat(panel)
+    yeni_id = sorgu("SELECT MAX(id) AS id FROM acil_yayin")[0]["id"]
+    yer = panel.post(f"/acil/{yeni_id}/bitir", data={"donus": "//kotu.example/x"}).headers["location"]
+    assert "kotu.example" not in yer and yer.startswith("/")
+
+
+def test_acil_baslatma_hatasi_baslat_sekmesinde(okul, panel):
+    for alanlar in ({"parola": "yanlis"}, {"onay": None}, {"parola": None}):
+        yanit = baslat(panel, baslik="DENEME BAŞLIĞI", **alanlar)
+        assert yanit.status_code == 400 and sorgu("SELECT * FROM acil_yayin") == [], alanlar
+        assert '<a href="/acil" aria-current="page">Yayın başlat</a>' in acil_seridi(yanit.text)
+        assert 'id="acil-formu"' in yanit.text and "DENEME BAŞLIĞI" in yanit.text and 'id="acil-gecmis"' not in yanit.text
+        assert 'value="yanlis"' not in yanit.text  # parola geri yazılmaz
+
+
 def test_ayri_acil_yetkisi_kaldirildi(okul, panel):
     """K4: kullanıcılar sayfasında acil yetkisi sütunu ve düğmesi yok; eski sekmeden gelen istek reddedilip kayda düşer."""
     sayfa = panel.get("/ayarlar/kullanicilar").text

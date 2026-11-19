@@ -254,23 +254,6 @@
 <p class="bos-not">Onaylı tahta yok.</p>
 {% endif %}
 
-{% if yonetici %}
-<section class="kutu" aria-labelledby="onceki-programlar">
-  <h2 id="onceki-programlar">Önceki programlar</h2>
-  {% if derslik.gecmis %}
-  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="gecmis-tablo-baslik">
-  <table>
-    <caption id="gecmis-tablo-baslik" class="gizli">Önceki derslik programları (en çok 10)</caption>
-    <thead><tr><th scope="col">Tarih</th><th scope="col">Kullanıcı</th><th scope="col">Neden</th><th scope="col">Tahta</th><th scope="col">Satır</th><th scope="col"><span class="gizli">İşlem</span></th></tr></thead>
-    <tbody>{% for g in derslik.gecmis %}<tr><th scope="row" class="tarih-hucre">{{ g.zaman_metni }}</th><td data-etiket="Kullanıcı">{{ g.kullanici }}</td><td data-etiket="Neden">{{ g.neden_adi }}{% if g.bicim_adi %} · {{ g.bicim_adi }}{% endif %}</td>
-      <td data-etiket="Tahta" class="sayi-hucre">{{ g.tahta_sayisi }}</td><td data-etiket="Satır" class="sayi-hucre">{{ g.satir_sayisi }}</td>
-      <td data-etiket="İşlem"><form method="post" action="/program/gecmis/{{ g.id }}/geri-yukle" class="satir-ici"><button>Geri yükle</button></form></td></tr>{% endfor %}</tbody>
-  </table>
-  </div>
-  {% else %}<p class="bos-not">Önceki program yok; her içe aktarmadan önce mevcut program burada saklanır.</p>{% endif %}
-</section>
-{% endif %}
-
 {% elif bolum == 'kurallar' %}
 {# ---- Kurallar ------------------------------------------------------------------------- #}
 {% if not yonetici %}<p class="bant" role="status">Kuralları yalnız yönetici değiştirir; idareci İstisnalar bölümünden program kilidini durdurabilir.</p>{% endif %}

@@ -185,17 +185,21 @@ def test_etkin_oge_isaretleri(uygulama, panel, tahta):
     yanit = panel.get("/acil").text
     assert yanit.count('class="acil-dugme" href="/acil" aria-current="page"') == 2
     assert yan_menu(yanit).count('aria-current="page"') == 1  # yalnız Acil; kümelerde etkin öğe yok
-    # Yoklama şeridini çizen dört kişi sayfası (öğretmen programı dahil) menüde aynı bölümdedir: şeritte sekmeden
-    # sekmeye geçince vurgu Program'a zıplamaz. Program şeridi çizen sayfalarda Program etkindir.
-    for yol in ("/ogretmen-programi", "/usb-anahtarlar", "/ogretmenler", "/ogrenciler"):
+    # 0.19.0: üç kişi sayfası kendi şeridini çizer (Yoklama şeridini değil) ve menüde aynı bölümdedir: şeritte
+    # sekmeden sekmeye geçince vurgu başka bölüme zıplamaz. Öğretmen programı Program şeridindedir.
+    for yol in ("/usb-anahtarlar", "/ogretmenler", "/ogrenciler"):
         yanit = panel.get(yol).text
-        assert 'aria-label="Yoklama bölümleri"' in yanit, yol
+        assert 'aria-label="Kişiler ve anahtarlar bölümü"' in yanit and "Yoklama bölümleri" not in yanit, yol
         m = yan_menu(yanit)
         assert re.search(r'<a href="/ogrenciler" aria-current="page">.*?<span>Kişiler ve anahtarlar</span>', m, re.S), yol
+        assert m.count('aria-current="page"') == 1, yol
         assert '<a href="/yoklama">' in m and '<a href="/program">' in m, yol  # öteki bölümler etkin değil
-    for yol in ("/program", "/program/uyarilar", "/program/gun"):
+    for yol in ("/program", "/program/uyarilar", "/program/gun", "/program/aktar", "/program/gecmis", "/ogretmen-programi"):
         yanit = panel.get(yol).text
-        assert 'aria-label="Program bölümleri"' in yanit and '<a href="/program" aria-current="page">' in yan_menu(yanit), yol
+        m = yan_menu(yanit)
+        assert 'aria-label="Program bölümleri"' in yanit and "Yoklama bölümleri" not in yanit, yol
+        assert '<a href="/program" aria-current="page">' in m and m.count('aria-current="page"') == 1, yol
+        assert '<a href="/ogrenciler">' in m, yol  # Kişiler etkin değil
 
 
 def test_her_menu_adresinde_html_de_tek_etkin_oge(uygulama, panel, tahta):

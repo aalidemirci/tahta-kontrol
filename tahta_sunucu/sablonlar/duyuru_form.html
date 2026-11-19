@@ -1,9 +1,16 @@
 {% extends "taban.html" %}
+{% import "_serit.html" as serit_ %}
 {% block baslik %}{{ 'Duyuru planı' if plan else 'Yeni duyuru' }} · Tahta Kontrol{% endblock %}
 {% block icerik %}
-{# Alan adları sözleşmedir (panel_duyuru.py, zamanlama.form_coz, hedef.formdan). JS kapalıyken bütün
-   alanlar görünür ve form yine çalışır; koşullu alanları, sayacı ve canlı önizlemeyi panel.js ekler. #}
-<p class="geri"><a href="/duyurular">← Duyurular</a></p>
+{# 0.19.0 — tek sayfalık form, üç bölüm: 1. Ne yazılsın? · 2. Kime? · 3. Ne zaman? (DOM sırası = görsel sıra).
+   Alan adları SÖZLEŞMEDİR (panel_duyuru.py, zamanlama.form_coz, hedef.formdan); TEK form, tek uç.
+   JS kapalıyken bütün bölümler ve üç zaman bloğu görünür ve form yine kaydedilir; koşullu alanları, sayacı, hızlı süre
+   ve gün düğmelerini, tahta önizlemesini ve gönder çubuğu özetini panel.js (duyuruFormuKur) ekler.
+   DİKKAT: sunucu eksik `zaman`'ı "hemen" sayar — `zaman` radyolarından biri HER ZAMAN işaretli çizilir (zaman_).
+   Gönder düğmesi submit'tir: data-onay ya da type="button" verilmez (JS'siz gönderilemezdi). Forma data-kirli-izle
+   konmaz. Etkin sekme şablondan gelir: POST /duyurular hata çiziminde de "Yeni duyuru". #}
+{% set zaman_ = form.zaman if form.zaman in ('bir_kez', 'tekrarli') or (form.zaman == 'hemen' and not plan) else ('bir_kez' if plan else 'hemen') %}
+{% set h = form.hedef or {} %}
 <div class="sayfa-bas">
   <div class="bas-yazi">
     <h1>{{ 'Duyuru planı #' ~ plan.id if plan else 'Yeni duyuru' }}
@@ -13,7 +20,13 @@
   </div>
   {% if plan %}<p class="dugme-satiri"><a class="dugme" href="/duyurular/yeni?kopya={{ plan.id }}">Çoğalt</a></p>{% endif %}
 </div>
-{% if hata %}<div class="bant hata" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span class="gizli">Hata: </span>{{ hata }}</div>{% endif %}
+{{ serit_.ciz(bolum_seridi('duyurular', kullanici.rol, 'liste' if plan else 'yeni')) }}
+{% if plan %}<p class="geri"><a href="/duyurular">← Duyurular ve planlar</a></p>{% endif %}
+{% if hata %}<div class="bant hata" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span class="gizli">Hata: </span>{{ hata }}</div>{% if hata_yeri %}<p class="not hata-git"><a href="#hata-yeri">↓ İletinin ilgili olduğu bölüme git</a></p>{% endif %}{% endif %}
+{# Uzun formda sayfa başındaki ileti alandan uzak kalır: aynı ileti ilgili bölümün içinde de çizilir (hata_yeri =
+   icerik | kime | zaman; panel_duyuru.hata_yeri). JS varsa sayfa o bölüme kayar; JS'siz yukarıdaki bağlantı götürür.
+   İkinci kopya role="alert" taşımaz (ekran okuyucu iki kez okumasın). #}
+{% macro bolum_hatasi(yer) %}{% if hata and hata_yeri == yer %}<p class="bant hata" id="hata-yeri" tabindex="-1"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span class="gizli">Hata: </span>{{ hata }}</p>{% endif %}{% endmacro %}
 {# 0.17.0: Tahtalar sayfasından gelen ön seçim (?tahta=…). Geçerli tahta yoksa "Kime" yine "Seçime göre"dir; form
    "Tüm tahtalar"a düşmez. #}
 {% if on_secim is not none and on_secim %}
@@ -22,135 +35,180 @@
 {% endif %}
 {% if plan and not duzenlenebilir %}<div class="bant uyari" role="status">Bu plan {{ plan.olusturan }} kullanıcısına ait; yalnız oluşturan ya da yönetici değiştirebilir. Aşağıdaki bilgiler salt okunurdur; <a href="/duyurular/yeni?kopya={{ plan.id }}">çoğaltarak</a> kendi planınızı oluşturabilirsiniz.</div>{% endif %}
 
-<form method="post" action="{{ '/duyurular/plan/' ~ plan.id if plan else '/duyurular' }}" id="duyuru-formu" class="duyuru-formu">
+<form method="post" action="{{ '/duyurular/plan/' ~ plan.id if plan else '/duyurular' }}" id="duyuru-formu" class="duyuru-formu" data-bugun="{{ bugun }}">
   {% if plan %}<input type="hidden" name="eylem" value="kaydet">{% endif %}
   {# Sahibi olmayan kullanıcıda bütün alanlar devre dışı (salt okunur görünüm). #}
   <fieldset class="duz"{% if not duzenlenebilir %} disabled{% endif %}>
   <legend class="gizli">Duyuru</legend>
-  <div class="iki-sutun">
-    <section class="kutu" aria-labelledby="icerik-baslik">
-      <h2 id="icerik-baslik">İçerik</h2>
-      <label for="baslik">Başlık (isteğe bağlı)</label>
-      <input type="text" id="baslik" name="baslik" maxlength="200" value="{{ form.baslik }}" placeholder="DUYURU">
-      <label for="metin">Duyuru metni</label>
-      <textarea id="metin" name="metin" maxlength="4000" rows="6" aria-describedby="metin-sayac">{{ form.metin }}</textarea>
-      <p class="ipucu sayac" id="metin-sayac" data-sayac="metin">En çok 4000 karakter.</p>
-      <label for="sure_dk">Ekranda kalma süresi (dakika)</label>
-      <input type="number" id="sure_dk" name="sure_dk" class="alan-dar" min="{{ sure_siniri[0] }}" max="{{ sure_siniri[1] }}" value="{{ form.sure_dk }}">
-      <label class="satir"><input type="checkbox" name="kapatilabilir" value="1" {% if form.kapatilabilir %}checked{% endif %}> Öğretmen tahtadan kapatabilsin</label>
-      <p class="bant uyari kvkk-not"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Tahta bütün sınıfa açık ekrandır. Öğrenci adı, numarası ya da kişisel bilgi yazmayın.</p>
-    </section>
-
-    <section class="kutu" aria-labelledby="zaman-baslik">
-      <h2 id="zaman-baslik">Ne zaman</h2>
-      <fieldset class="secim-grubu">
-        <legend class="gizli">Gösterim zamanı</legend>
-        <div class="dugme-secim">
-          {% if not plan %}<label><input type="radio" name="zaman" value="hemen" {% if form.zaman == 'hemen' %}checked{% endif %}> Hemen</label>{% endif %}
-          <label><input type="radio" name="zaman" value="bir_kez" {% if form.zaman == 'bir_kez' %}checked{% endif %}> Bir kez</label>
-          <label><input type="radio" name="zaman" value="tekrarli" {% if form.zaman == 'tekrarli' %}checked{% endif %}> Tekrarlı</label>
+  <div class="duyuru-duzen">
+    <div class="duyuru-bolumler">
+      {# ---- 1. Ne yazılsın? ---- #}
+      <section class="kutu" aria-labelledby="icerik-baslik">
+        <h2 id="icerik-baslik">1. Ne yazılsın?</h2>
+        {{ bolum_hatasi('icerik') }}
+        <label for="baslik">Başlık (isteğe bağlı)</label>
+        <input type="text" id="baslik" name="baslik" maxlength="200" value="{{ form.baslik }}" placeholder="DUYURU">
+        <label for="metin">Duyuru metni</label>
+        <textarea id="metin" name="metin" maxlength="4000" rows="5" aria-describedby="metin-sayac">{{ form.metin }}</textarea>
+        <p class="ipucu sayac" id="metin-sayac" data-sayac="metin">En çok 4000 karakter.</p>
+        <label for="sure_dk">Ekranda kalma süresi (dakika)</label>
+        <div class="sure-satiri">
+          <input type="number" id="sure_dk" name="sure_dk" class="alan-dar" min="{{ sure_siniri[0] }}" max="{{ sure_siniri[1] }}" value="{{ form.sure_dk }}" aria-describedby="sure-ipucu">
+          {# Hızlı seçim: yalnız JS ile görünür (hidden'ı panel.js kaldırır); alan JS'siz de elle yazılır. #}
+          <span class="hizli-secim" data-hizli-sure hidden>
+            <button type="button" data-sure="5">5 dk</button><button type="button" data-sure="15">15 dk</button><button type="button" data-sure="40">40 dk</button>
+          </span>
         </div>
-      </fieldset>
+        <p class="ipucu" id="sure-ipucu">{{ sure_siniri[0] }}–{{ sure_siniri[1] }} dakika. Süre dolunca kendiliğinden kalkar.</p>
+        <label class="satir"><input type="checkbox" name="kapatilabilir" value="1" {% if form.kapatilabilir %}checked{% endif %}> Öğretmen tahtadan kapatabilsin</label>
+        <p class="bant uyari kvkk-not"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Tahta bütün sınıfa açık ekrandır. Öğrenci adı, numarası ya da kişisel bilgi yazmayın.</p>
+      </section>
 
-      {% if not plan %}
-      <div class="kosullu" data-kosul="zaman" data-deger="hemen">
-        <p class="not">Duyuru "Kime" bölümündeki tahtalara hemen gönderilir; çevrimdışı tahta süre içinde açılırsa kalan süreyle alır.</p>
-      </div>
-      {% endif %}
-
-      <div class="kosullu" data-kosul="zaman" data-deger="bir_kez">
-        <div class="alan-cifti">
-          <div><label for="bir_tarih">Tarih</label><input type="date" id="bir_tarih" name="bir_tarih" value="{{ form.bir_tarih }}" min="{{ bugun }}"></div>
-          <div><label for="bir_saat">Saat</label><input type="time" id="bir_saat" name="bir_saat" value="{{ form.bir_saat }}"></div>
-        </div>
-      </div>
-
-      <div class="kosullu" data-kosul="zaman" data-deger="tekrarli">
+      {# ---- 2. Kime? ---- #}
+      <section class="kutu" aria-labelledby="kime-baslik">
+        <h2 id="kime-baslik">2. Kime?</h2>
+        {{ bolum_hatasi('kime') }}
         <fieldset class="secim-grubu">
-          <legend>Sıklık</legend>
+          <legend class="gizli">Hedef</legend>
           <div class="dugme-secim">
-            <label><input type="radio" name="siklik" value="gunluk" {% if form.siklik == 'gunluk' %}checked{% endif %}> Günlük</label>
-            <label><input type="radio" name="siklik" value="haftalik" {% if form.siklik == 'haftalik' %}checked{% endif %}> Haftalık</label>
+            <label><input type="radio" name="kime" value="tumu" {% if form.kime == 'tumu' %}checked{% endif %}> Tüm tahtalar</label>
+            <label><input type="radio" name="kime" value="secim" {% if form.kime == 'secim' %}checked{% endif %}> Seçime göre</label>
           </div>
         </fieldset>
-        <div class="kosullu" data-kosul="siklik" data-deger="gunluk">
-          <label class="satir"><input type="checkbox" name="hafta_sonu" value="1" {% if form.hafta_sonu %}checked{% endif %}> Hafta sonu da gösterilsin</label>
+        <div class="kosullu hedef-secimi" data-kosul="kime" data-deger="secim">
+          <p class="ipucu">Aynı satırdaki seçeneklerden biri yeter; farklı satırlar birlikte aranır. Gruplar ve tek tek seçilen tahtalar bunlara eklenir.</p>
+          <fieldset class="olcut">
+            <legend>Gruplar</legend>
+            <div class="secenekler">{% for g in secenekler.gruplar %}<label{% if g.aciklama %} title="{{ g.aciklama }}"{% endif %}><input type="checkbox" name="grup" value="{{ g.id }}" {% if g.id in (h.gruplar or []) %}checked{% endif %}> {{ g.ad }} <span class="not">({{ g.uye_sayisi }})</span></label>{% else %}<span class="not">Grup yok. <a href="/gruplar">Gruplar</a> sayfasından eklenir.</span>{% endfor %}</div>
+          </fieldset>
+          {# Kapalı <details> içindeki kutular da gönderilir; seçim varsa (hata çizimi, kopya, plan) açık çizilir. #}
+          <details class="olcutler"{% if h.bina or h.kat or h.duzey or h.devre %} open{% endif %}>
+            <summary>Bina, kat, düzey ve devreye göre</summary>
+            <fieldset class="olcut">
+              <legend>Bina</legend>
+              <div class="secenekler">{% for v in secenekler.binalar %}<label><input type="checkbox" name="bina" value="{{ v }}" {% if v in (h.bina or []) %}checked{% endif %}> {{ v }}</label>{% else %}<span class="not">Tahtalara henüz bina atanmadı.</span>{% endfor %}</div>
+            </fieldset>
+            <fieldset class="olcut">
+              <legend>Kat</legend>
+              <div class="secenekler">{% for v, ad in secenekler.katlar %}<label><input type="checkbox" name="kat" value="{{ v }}" {% if v in (h.kat or []) %}checked{% endif %}> {{ ad }}</label>{% else %}<span class="not">Tahtalara henüz kat atanmadı.</span>{% endfor %}</div>
+            </fieldset>
+            <fieldset class="olcut">
+              <legend>Düzey</legend>
+              <div class="secenekler">{% for v, ad in secenekler.duzeyler %}<label><input type="checkbox" name="duzey" value="{{ v }}" {% if v in (h.duzey or []) %}checked{% endif %}> {{ ad }}</label>{% else %}<span class="not">Tahtalara henüz düzey atanmadı.</span>{% endfor %}</div>
+            </fieldset>
+            <fieldset class="olcut">
+              <legend>Devre</legend>
+              <div class="secenekler">{% for v, ad in secenekler.devreler %}<label><input type="checkbox" name="devre" value="{{ v }}" {% if v in (h.devre or []) %}checked{% endif %}> {{ ad }}</label>{% else %}<span class="not">Tahtalara henüz devre atanmadı.</span>{% endfor %}</div>
+              {% if secenekler.devreler %}<p class="not">Devre alanı boş tahtalarda ikili eğitimin derslik programına bakılır; iki devrede dersi olan tahta ikisine de girer.</p>{% endif %}
+            </fieldset>
+          </details>
+          <details class="tek-tek"{% if h.tahtalar %} open{% endif %}>
+            <summary>Tahtaları tek tek seç{% if h.tahtalar %} ({{ h.tahtalar | length }} seçili){% endif %}</summary>
+            <div class="secim-listesi">
+              {% for t in secenekler.tahtalar %}<label class="satir"><input type="checkbox" name="hedef_tahta" value="{{ t.id }}" {% if t.id in (h.tahtalar or []) %}checked{% endif %}> <span>{{ t.ad }}{% if t.derslik %} · {{ t.derslik }}{% endif %}{% if t.alanlar %} <span class="not">· {{ t.alanlar }}</span>{% endif %}</span></label>{% endfor %}
+            </div>
+          </details>
         </div>
-        <fieldset class="secim-grubu kosullu" data-kosul="siklik" data-deger="haftalik">
-          <legend>Günler</legend>
-          <div class="gunler">
-            {% for g in gun_kisa %}<label><input type="checkbox" name="gun" value="{{ loop.index0 }}" {% if loop.index0 in form.gunler %}checked{% endif %}> {{ g }}</label>{% endfor %}
-          </div>
-        </fieldset>
-        <label for="tekrar_saat">Saat</label>
-        <input type="time" id="tekrar_saat" name="tekrar_saat" class="alan-dar" value="{{ form.tekrar_saat }}">
-        <div class="alan-cifti">
-          <div><label for="baslangic">Başlangıç</label><input type="date" id="baslangic" name="baslangic" value="{{ form.baslangic or bugun }}"></div>
-          <div><label for="bitis">Bitiş</label><input type="date" id="bitis" name="bitis" value="{{ form.bitis }}" min="{{ bugun }}"></div>
+        {# Canlı önizleme: panel.js 300 ms gecikmeyle /api/hedef-onizleme'yi sorar. #}
+        <div id="hedef-onizleme" class="hedef-onizleme" role="status" aria-live="polite"{% if onizleme and not onizleme.sayi %} data-durum="uyari"{% endif %}>
+          {% if onizleme %}
+          <p><svg class="simge" aria-hidden="true"><use href="#s-{{ 'acik' if onizleme.sayi else 'sorun' }}"/></svg>
+            <span data-alan="ozet">Şu an <strong>{{ onizleme.sayi }} tahtaya</strong> ulaşır · {{ onizleme.ozet }}</span></p>
+          {% else %}
+          <p><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg><span data-alan="ozet">Tahtaları seçin; kaç tahtaya ulaşacağı burada görünür.</span></p>
+          {% endif %}
+          <details class="onizleme-liste" hidden><summary>Tahtalar</summary><ul></ul></details>
         </div>
-        <p class="not">Resmî tatil ve ara tatil bilinmez: tatil günlerinde planı duraklatın. En çok bir yıl sürebilir.</p>
-      </div>
-    </section>
-  </div>
+      </section>
 
-  <section class="kutu" aria-labelledby="kime-baslik">
-    <h2 id="kime-baslik">Kime</h2>
-    <fieldset class="secim-grubu">
-      <legend class="gizli">Hedef</legend>
-      <div class="dugme-secim">
-        <label><input type="radio" name="kime" value="tumu" {% if form.kime == 'tumu' %}checked{% endif %}> Tüm tahtalar</label>
-        <label><input type="radio" name="kime" value="secim" {% if form.kime == 'secim' %}checked{% endif %}> Seçime göre</label>
-      </div>
-    </fieldset>
-    {% set h = form.hedef or {} %}
-    <div class="kosullu hedef-secimi" data-kosul="kime" data-deger="secim">
-      <p class="ipucu">Aynı satırdaki seçeneklerden biri yeter; farklı satırlar birlikte aranır. Gruplar ve tek tek seçilen tahtalar bunlara eklenir.</p>
-      <fieldset class="olcut">
-        <legend>Bina</legend>
-        <div class="secenekler">{% for v in secenekler.binalar %}<label><input type="checkbox" name="bina" value="{{ v }}" {% if v in (h.bina or []) %}checked{% endif %}> {{ v }}</label>{% else %}<span class="not">Tahtalara henüz bina atanmadı.</span>{% endfor %}</div>
-      </fieldset>
-      <fieldset class="olcut">
-        <legend>Kat</legend>
-        <div class="secenekler">{% for v, ad in secenekler.katlar %}<label><input type="checkbox" name="kat" value="{{ v }}" {% if v in (h.kat or []) %}checked{% endif %}> {{ ad }}</label>{% else %}<span class="not">Tahtalara henüz kat atanmadı.</span>{% endfor %}</div>
-      </fieldset>
-      <fieldset class="olcut">
-        <legend>Düzey</legend>
-        <div class="secenekler">{% for v, ad in secenekler.duzeyler %}<label><input type="checkbox" name="duzey" value="{{ v }}" {% if v in (h.duzey or []) %}checked{% endif %}> {{ ad }}</label>{% else %}<span class="not">Tahtalara henüz düzey atanmadı.</span>{% endfor %}</div>
-      </fieldset>
-      <fieldset class="olcut">
-        <legend>Devre</legend>
-        <div class="secenekler">{% for v, ad in secenekler.devreler %}<label><input type="checkbox" name="devre" value="{{ v }}" {% if v in (h.devre or []) %}checked{% endif %}> {{ ad }}</label>{% else %}<span class="not">Tahtalara henüz devre atanmadı.</span>{% endfor %}</div>
-        {% if secenekler.devreler %}<p class="not">Devre alanı boş tahtalarda ikili eğitimin derslik programına bakılır; iki devrede dersi olan tahta ikisine de girer.</p>{% endif %}
-      </fieldset>
-      <fieldset class="olcut">
-        <legend>Gruplar</legend>
-        <div class="secenekler">{% for g in secenekler.gruplar %}<label{% if g.aciklama %} title="{{ g.aciklama }}"{% endif %}><input type="checkbox" name="grup" value="{{ g.id }}" {% if g.id in (h.gruplar or []) %}checked{% endif %}> {{ g.ad }} <span class="not">({{ g.uye_sayisi }})</span></label>{% else %}<span class="not">Grup yok. <a href="/gruplar">Gruplar</a> sayfasından eklenir.</span>{% endfor %}</div>
-      </fieldset>
-      <details class="tek-tek"{% if h.tahtalar %} open{% endif %}>
-        <summary>Tahtaları tek tek seç{% if h.tahtalar %} ({{ h.tahtalar | length }} seçili){% endif %}</summary>
-        <div class="secim-listesi">
-          {% for t in secenekler.tahtalar %}<label class="satir"><input type="checkbox" name="hedef_tahta" value="{{ t.id }}" {% if t.id in (h.tahtalar or []) %}checked{% endif %}> <span>{{ t.ad }}{% if t.derslik %} · {{ t.derslik }}{% endif %}{% if t.alanlar %} <span class="not">· {{ t.alanlar }}</span>{% endif %}</span></label>{% endfor %}
+      {# ---- 3. Ne zaman? ---- #}
+      <section class="kutu" aria-labelledby="zaman-baslik">
+        <h2 id="zaman-baslik">3. Ne zaman?</h2>
+        {{ bolum_hatasi('zaman') }}
+        <fieldset class="secim-grubu">
+          <legend class="gizli">Gösterim zamanı</legend>
+          <div class="dugme-secim">
+            {% if not plan %}<label><input type="radio" name="zaman" value="hemen" {% if zaman_ == 'hemen' %}checked{% endif %}> Hemen</label>{% endif %}
+            <label><input type="radio" name="zaman" value="bir_kez" {% if zaman_ == 'bir_kez' %}checked{% endif %}> Bir kez</label>
+            <label><input type="radio" name="zaman" value="tekrarli" {% if zaman_ == 'tekrarli' %}checked{% endif %}> Tekrarlı</label>
+          </div>
+        </fieldset>
+
+        {% if not plan %}
+        <div class="kosullu" data-kosul="zaman" data-deger="hemen">
+          <p class="not">Duyuru "Kime" bölümündeki tahtalara hemen gönderilir; çevrimdışı tahta süre içinde açılırsa kalan süreyle alır.</p>
         </div>
-      </details>
+        {% endif %}
+
+        <div class="kosullu zaman-blok" data-kosul="zaman" data-deger="bir_kez">
+          <h3 class="js-yokken">Bir kez</h3>
+          {# Gün düğmeleri: yalnız JS ile görünür; tarih sunucunun verdiği data-bugun'dan hesaplanır (tarayıcı saati değil). #}
+          <p class="hizli-secim" data-hizli-gun hidden>
+            <span class="not">Gün:</span>
+            <button type="button" data-gun="0" aria-pressed="false">Bugün</button><button type="button" data-gun="1" aria-pressed="false">Yarın</button>
+          </p>
+          <div class="alan-cifti">
+            <div><label for="bir_tarih">Tarih</label><input type="date" id="bir_tarih" name="bir_tarih" value="{{ form.bir_tarih }}" min="{{ bugun }}"></div>
+            <div><label for="bir_saat">Saat</label><input type="time" id="bir_saat" name="bir_saat" value="{{ form.bir_saat }}"></div>
+          </div>
+        </div>
+
+        <div class="kosullu zaman-blok" data-kosul="zaman" data-deger="tekrarli">
+          <h3 class="js-yokken">Tekrarlı</h3>
+          <fieldset class="secim-grubu">
+            <legend>Sıklık</legend>
+            <div class="dugme-secim">
+              <label><input type="radio" name="siklik" value="gunluk" {% if form.siklik == 'gunluk' %}checked{% endif %}> Günlük</label>
+              <label><input type="radio" name="siklik" value="haftalik" {% if form.siklik == 'haftalik' %}checked{% endif %}> Haftalık</label>
+            </div>
+          </fieldset>
+          <div class="kosullu" data-kosul="siklik" data-deger="gunluk">
+            <label class="satir"><input type="checkbox" name="hafta_sonu" value="1" {% if form.hafta_sonu %}checked{% endif %}> Hafta sonu da gösterilsin</label>
+          </div>
+          <fieldset class="secim-grubu kosullu" data-kosul="siklik" data-deger="haftalik">
+            <legend>Günler</legend>
+            <div class="gunler">
+              {% for g in gun_kisa %}<label><input type="checkbox" name="gun" value="{{ loop.index0 }}" {% if loop.index0 in form.gunler %}checked{% endif %}> {{ g }}</label>{% endfor %}
+            </div>
+          </fieldset>
+          <div class="alan-cifti">
+            <div><label for="tekrar_saat">Saat</label><input type="time" id="tekrar_saat" name="tekrar_saat" value="{{ form.tekrar_saat }}"></div>
+            <div><label for="baslangic">Başlangıç</label><input type="date" id="baslangic" name="baslangic" value="{{ form.baslangic or bugun }}"></div>
+            <div><label for="bitis">Bitiş (zorunlu)</label><input type="date" id="bitis" name="bitis" value="{{ form.bitis }}" min="{{ bugun }}" aria-describedby="bitis-not"></div>
+          </div>
+          {# `required` verilmez: JS'siz üç zaman bloğu da görünür, "Hemen" gönderimi boş bitişe takılırdı. #}
+          <p class="not" id="bitis-not">Bitiş tarihi seçilmeden tekrarlı plan kaydedilmez; en çok bir yıl sürebilir. Resmî tatil ve ara tatil bilinmez: tatil günlerinde planı duraklatın.</p>
+        </div>
+      </section>
     </div>
-    {# Canlı önizleme: panel.js 300 ms gecikmeyle /api/hedef-onizleme'yi sorar. #}
-    <div id="hedef-onizleme" class="hedef-onizleme" role="status" aria-live="polite"{% if onizleme and not onizleme.sayi %} data-durum="uyari"{% endif %}>
-      {% if onizleme %}
-      <p><svg class="simge" aria-hidden="true"><use href="#s-{{ 'acik' if onizleme.sayi else 'sorun' }}"/></svg>
-        <span data-alan="ozet">Şu an <strong>{{ onizleme.sayi }} tahtaya</strong> ulaşır · {{ onizleme.ozet }}</span></p>
-      {% else %}
-      <p><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg><span data-alan="ozet">Tahtaları seçin; kaç tahtaya ulaşacağı burada görünür.</span></p>
-      {% endif %}
-      <details class="onizleme-liste" hidden><summary>Tahtalar</summary><ul></ul></details>
-    </div>
-  </section>
+
+    {# ---- Tahtada böyle görünür: yaklaşık önizleme. Sunucu ilk değeri çizer; panel.js yazdıkça textContent ile
+            günceller (HTML basılmaz). Ekran okuyucu metni alanların kendisinden okur. Dar ekranda formun sonuna iner. ---- #}
+    <aside class="duyuru-yan kutu" aria-hidden="true">
+      <h2>Tahtada böyle görünür</h2>
+      <div class="duyuru-oniz">
+        <b data-alan="oniz-baslik">{{ form.baslik or 'DUYURU' }}</b>
+        <span data-alan="oniz-metin">{{ form.metin }}</span>
+      </div>
+      <p class="not">Yaklaşık önizleme.</p>
+    </aside>
+  </div>
   </fieldset>
 
   {% if duzenlenebilir %}
-  <p class="dugme-satiri">
-    <button class="ana" id="duyuru-gonder" data-hemen="Şimdi yayımla" data-plan="Planı kaydet">{{ 'Şimdi yayımla' if form.zaman == 'hemen' and not plan else 'Planı kaydet' }}</button>
+  {# Gönder çubuğu: ekranın altına yapışır (telefonda alt çubuğun üstünde). Yanlış hedef / yanlış zaman riskine karşı
+     onay penceresi yerine budur; bu yüzden BAYAT KALAMAZ: özet `hidden` çizilir ve yalnız panel.js açar (JS'siz
+     seçim değişince güncellenemezdi), hedef değişince sayı "hesaplanıyor…" olur, zaman kısmı seçilen tarih ve saati
+     yazar. Düğme metni de JS'sizken yansızdır (kullanıcı "Bir kez"i seçince "Şimdi yayımla" yazılı kalmasın). #}
+  <div class="gonder-cubugu">
+    <p class="gonder-ozet" data-alan="gonder-ozet" hidden>
+      <strong><span data-alan="ozet-hedef">{% if onizleme %}{{ onizleme.sayi ~ ' tahtaya' if onizleme.sayi else 'Hiçbir tahtaya ulaşmıyor' }}{% else %}Tahta seçilmedi{% endif %}</span> · <span data-alan="ozet-zaman">{{ {'hemen': 'hemen', 'bir_kez': 'bir kez', 'tekrarli': 'tekrarlı'}[zaman_] }}</span></strong>
+      <span class="not"><span data-alan="ozet-sure">{{ form.sure_dk }}</span> dk ekranda · <span data-alan="ozet-kapat">{{ 'öğretmen kapatabilir' if form.kapatilabilir else 'öğretmen kapatamaz' }}</span></span>
+    </p>
     <a class="dugme" href="/duyurular">Vazgeç</a>
-  </p>
+    <button class="ana" id="duyuru-gonder" data-hemen="Şimdi yayımla" data-plan="Planı kaydet">{{ 'Planı kaydet' if plan else 'Yayımla ya da planı kaydet' }}</button>
+    <noscript><p class="not">Düğme “Ne zaman?” bölümünde seçili olana göre çalışır: Hemen seçiliyse duyuru şimdi yayımlanır; Bir kez ya da Tekrarlı seçiliyse plan kaydedilir. Seçili olmayan zamanın alanları dikkate alınmaz.</p></noscript>
+  </div>
   {% endif %}
 </form>
 {% endblock %}

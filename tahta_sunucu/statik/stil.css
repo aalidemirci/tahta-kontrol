@@ -1320,6 +1320,27 @@
     .genis-sayfa .sekmeler { flex-wrap: wrap; overflow-x: visible; box-shadow: none; }
     .genis-sayfa .sekmeler a { box-shadow: inset 0 -1px 0 var(--cizgi); }
   }
+  /* 0.19.0 — dar ekranda bölüm şeridi: küme ayracı SATIR BAŞIDIR (çizgi satır sonunda tek başına kalıp neyi ayırdığı
+     anlaşılmıyordu); her küme kendi satırından başlar, sekme dolgusu daralır. Satır sayısı artmaz; sekme yüksekliği
+     (dokunma hedefi) aynı kalır. Bu katmanda: sekme dolgusunu yukarıdaki kural verir. */
+  /* Küme (çizgiyle ayrılan sekme grubu): dar ve orta ekranda yalnız sarmalayıcıdır (display: contents); sabit menülü
+     genişlikte birlikte sarar — "İçe aktar" bir satırda, "Önceki programlar" öbüründe kalmaz. Ayraç kümenin
+     solundaki boşlukta durur; satır başına düşen kümenin ayracı şeridin dışında kalır ve kırpılır (overflow-x: clip),
+     böylece çizgi satır sonunda ya da başında tek başına görünmez. */
+  .bolum-serit .sekme-kume { display: contents; }
+  @media (min-width: 64rem) {
+    nav.sekmeler.bolum-serit { column-gap: 1.0625rem; overflow-x: clip; overflow-y: visible; }
+    .bolum-serit .sekme-kume { display: flex; gap: .25rem; position: relative; }
+    .bolum-serit .sekme-kume > .sekme-ayrac { position: absolute; inset-inline-start: -.5625rem; inset-block-start: 50%;
+      translate: 0 -50%; margin: 0; }
+  }
+  @media (max-width: 39.99rem) {
+    .bolum-serit { gap: 0 .125rem; margin-block-end: var(--b3); }
+    .bolum-serit a { padding-inline: .5rem; }
+    .bolum-serit .sekme-ayrac { flex: 0 0 100%; inline-size: auto; block-size: 1px; margin: 0; background: none; }
+    /* Program: bugünün durum bandı telefonda sıkışır (başlık + bant + şerit ilk ekranın üçte ikisini alıyordu). */
+    .program-serit { padding: .375rem .625rem; gap: .25rem .75rem; margin-block-end: var(--b2); }
+  }
 
   /* Tablolar: içerik yan menü kadar daraldı (1366 px'te 1238 → 1069 px). Sabit menülü orta genişlikte hücre yatay
      dolgusu küçülür; işlem düğmeleri tek satırda kalır (yoksa satır iki düğme sırası kadar uzuyordu). Yana kayan
@@ -1927,3 +1948,73 @@
   }
 }
 /* ---- 0.18.0 sonu ---- */
+
+/* ---- 0.19.0: sekmeler (arayüz 5. aşama) — bölüm sekme şeridi her genişlikte sarar; tek sayfalık duyuru formu
+        (Ne · Kime · Ne zaman, tahta önizlemesi, yapışkan gönder çubuğu). Yalnız anlamsal belirteçler ve var olan
+        tahta renkleri (--t-*); yeni renk kodu yok.
+        BÖLÜM ŞERİDİ KAYDIRMAZ VE YAPIŞMAZ: dokuz sekmeli Program şeridi 1366 px'te tek satıra sığmaz; yana kayan şerit
+        son sekmeleri ve Uyarılar sayısını gizlerdi. Yapışkan ikinci şerit, içerikteki yapışkan öğelerin
+        (--yapiskan-ust) payını bozar ve telefonda ekranı kapatırdı. ---- */
+@layer bilesen {
+  .bolum-serit { flex-wrap: wrap; overflow-x: visible; box-shadow: none; }
+  .bolum-serit a { box-shadow: inset 0 -1px 0 var(--cizgi); }
+
+  /* Duyuru formu: solda üç bölüm alt alta, sağda önizleme. Eşik içerik enine göredir (sabit menülü sayfada içerik =
+     pencere − 15rem): 72rem altında tek sütun, önizleme formun sonuna iner. */
+  .duyuru-duzen { display: grid; grid-template-columns: minmax(0, 1fr) 19rem; gap: var(--b4); align-items: start; }
+  .duyuru-bolumler { display: grid; gap: var(--b4); min-inline-size: 0; }
+  .duyuru-bolumler > .kutu, .duyuru-yan.kutu { margin-block-end: 0; }
+  .duyuru-yan { position: sticky; inset-block-start: calc(var(--yapiskan-ust) + var(--b3)); }
+  .duyuru-yan > h2 { font-size: var(--yazi-m); }
+  .duyuru-oniz { display: grid; align-content: center; justify-items: center; gap: var(--b2); min-block-size: 9rem;
+    padding: var(--b4); border-radius: var(--kose-m); background: var(--t-zemin); color: var(--t-metin); text-align: center;
+    overflow-wrap: anywhere; }
+  .duyuru-oniz b { font-size: var(--yazi-l); }
+  .duyuru-oniz span { font-size: var(--yazi-s); white-space: pre-wrap; max-block-size: 12rem; overflow: hidden; }
+  .duyuru-yan > .not { margin-block: var(--b2) 0; }
+  @media (max-width: 71.99rem) {
+    .duyuru-duzen { grid-template-columns: minmax(0, 1fr); }
+    .duyuru-yan { position: static; }
+  }
+  .sure-satiri { display: flex; flex-wrap: wrap; align-items: center; gap: var(--b2) var(--b3); }
+  .hizli-secim { display: flex; flex-wrap: wrap; align-items: center; gap: var(--b2); margin: 0; }
+  .hizli-secim[hidden] { display: none; }
+  p.hizli-secim { margin-block: var(--b3) var(--b1); }
+  .hizli-secim button[aria-pressed="true"] { background: var(--ana-hafif); border-color: var(--ana-yazi); font-weight: 650; }
+  details.olcutler { padding-block: .6rem; border-block-start: 1px solid var(--cizgi); }
+  details.olcutler > summary { cursor: pointer; font-weight: 600; font-size: .875rem; }
+  .hedef-secimi > fieldset.olcut:first-of-type { border-block-start: 0; }
+  /* JS'siz üç zaman bloğu da görünür: başlıkları hangisinin hangi seçeneğe ait olduğunu söyler. JS'li formda yalnız
+     seçili blok görünür, başlık gereksizdir. */
+  .zaman-blok > h3 { margin-block: var(--b4) var(--b1); font-size: var(--yazi-s); }
+  .js-duyuru .js-yokken { display: none; }
+
+  /* Gönder çubuğu: formun sonunda, ekranın altına yapışır; telefonda alt çubuğun üstünde durur. Sarar ama taşmaz. */
+  .gonder-cubugu { position: sticky; inset-block-end: 0; z-index: 3; display: flex; flex-wrap: wrap; align-items: center;
+    gap: var(--b2) var(--b3); margin-block-start: var(--b4); padding: var(--b3) var(--b4); background: var(--yuzey);
+    border: 1px solid var(--cizgi); border-radius: var(--kose-m) var(--kose-m) 0 0; box-shadow: var(--golge-2); }
+  .gonder-cubugu > * { min-inline-size: 0; }
+  .gonder-ozet { flex: 1 1 12rem; display: grid; margin: 0; overflow-wrap: anywhere; }
+  .hata-git { margin-block: 0 var(--b3); }
+  .gonder-ozet[hidden] { display: none; } /* JS'siz özet güncellenemez: sunucu gizli çizer, panel.js açar */
+  .duyuru-formu .kutu > .bant { margin-block: var(--b2) var(--b3); scroll-margin-block: calc(var(--yapiskan-ust) + var(--b4)); }
+  .gonder-cubugu noscript { flex: 1 0 100%; }
+  .gonder-cubugu noscript p { margin: 0; }
+  @media (max-width: 39.99rem) {
+    body.kabuklu .gonder-cubugu { inset-block-end: calc(var(--alt-boy) + env(safe-area-inset-bottom)); padding: var(--b2) var(--b3); }
+    /* Telefonda çubuk TEK satırdır (özet + birincil düğme): iki satırlı çubuk görünen alanın ~%15'ini örtüyordu.
+       "Vazgeç" JS'li formda gizlenir (aynı adres şeritteki "Duyurular ve planlar" sekmesidir); özet yoksa (JS'siz)
+       durur. */
+    .js-duyuru .gonder-cubugu { flex-wrap: nowrap; }
+    .js-duyuru .gonder-cubugu > a.dugme { display: none; }
+    .js-duyuru .gonder-cubugu > button { flex: none; }
+    .js-duyuru .gonder-ozet { flex: 1 1 0; font-size: var(--yazi-s); }
+  }
+  @media (forced-colors: active) {
+    .gonder-cubugu, .duyuru-oniz { border: 2px solid CanvasText; }
+  }
+  @media print {
+    .gonder-cubugu, .duyuru-yan { display: none !important; }
+  }
+}
+/* ---- 0.19.0 sonu ---- */

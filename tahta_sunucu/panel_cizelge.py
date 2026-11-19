@@ -268,7 +268,7 @@ def kaydet(uygulama, y) -> None:
         with vt.islem() as b:
             baglam = gun_baglami(b, gun)
             serit = program_is.program_ozeti(b, simdi_dt())
-        return y.sayfa(istek, "program_gun.html", k, gun=baglam, serit=serit, bolum="zil", yonetici=k["rol"] == "yonetici")
+        return y.sayfa(istek, "program_gun.html", k, gun=baglam, serit=serit, bolum="gun", yonetici=k["rol"] == "yonetici")
 
     # ---- yeni çizelge ---------------------------------------------------------------------------------
     @uygulama.post("/program/cizelge")

@@ -187,7 +187,7 @@ def kaydet(uygulama, y) -> None:
             if istek.query_params.get("yeni") == "1":  # "Başka bir dosya yükle": önizleme dursa da kaynak adımı
                 baglam["adim"] = "kaynak"
             serit = program_is.program_ozeti(b, simdi_dt())
-        return y.sayfa(istek, "program_aktar.html", k, aktar=baglam, serit=serit, bolum="derslik", yonetici=True)
+        return y.sayfa(istek, "program_aktar.html", k, aktar=baglam, serit=serit, bolum="aktar", yonetici=True)
 
     # ---- kaynak: aSc XML ------------------------------------------------------------------------------------
     @uygulama.post("/program/aktar/asc")
@@ -287,7 +287,7 @@ def kaydet(uygulama, y) -> None:
                     baglam["yz_hata"] = str(hata)
                     serit = program_is.program_ozeti(b, simdi_dt())
                 return y.sayfa(istek, "program_aktar.html", k, durum_kodu=422, aktar=baglam, serit=serit,
-                               bolum="derslik", yonetici=True)  # fmt: skip
+                               bolum="aktar", yonetici=True)  # fmt: skip
             return y.yonlendir(donus, str(hata), hata=True)
         okunan["uyarilar"] = uyarilar + okunan["uyarilar"]
         return onizle_ve_yonlendir(istek, k, "tablo", bicim, program_aktar.ozet(kaynak_bayt), okunan)
@@ -525,7 +525,8 @@ def kaydet(uygulama, y) -> None:
             return engel
         with vt.islem() as b:
             liste = program_aktar.surum_listesi(b)
-        return y.sayfa(istek, "program_gecmis.html", k, gecmis=liste, onay_surumu=None, bolum="derslik")
+            serit = program_is.program_ozeti(b, simdi_dt())
+        return y.sayfa(istek, "program_gecmis.html", k, gecmis=liste, onay_surumu=None, serit=serit, bolum="gecmis")
 
     @uygulama.post("/program/gecmis/{surum_id}/geri-yukle")
     async def geri_yukle(istek: Request, surum_id: int):
@@ -541,7 +542,8 @@ def kaydet(uygulama, y) -> None:
                 return y.yonlendir("/program?bolum=derslik", "Sürüm bulunamadı.", hata=True)
             if form.get("onay") != "1":
                 onay = {**surum, "metin": f"Bu işlem bütün derslik programını {surum['zaman_metni']} tarihli sürüme döndürür."}
-                return y.sayfa(istek, "program_gecmis.html", k, gecmis=liste, onay_surumu=onay, bolum="derslik")
+                serit = program_is.program_ozeti(b, simdi_dt())
+                return y.sayfa(istek, "program_gecmis.html", k, gecmis=liste, onay_surumu=onay, serit=serit, bolum="gecmis")
             sonuc = program_aktar.geri_yukle(b, surum_id, k["ad"])
             if sonuc is None:
                 return y.yonlendir("/program?bolum=derslik", "Sürüm okunamadı.", hata=True)
