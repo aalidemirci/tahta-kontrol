@@ -1,5 +1,21 @@
 # CLAUDE.md — Tahta Kontrol
 
+Yerel geliştirme 0.19.0 (kullanıcı onayı 19.11.2026, "Sekmelere geç"): panel arayüzünün yeniden düzeninde 5. aşama,
+bölüm sekmeleri ve tek sayfalık duyuru formu. Sekme şeritlerinin TEK tanımı `bolum_serit.py`'dir (çizim
+`_serit.html`): Yoklama (Günlük · Şube defteri · Mazeret ve izin · Panelden gir · Devamsızlık icmali | Yoklama
+ayarları* ↗), Kişiler ve anahtarlar (Öğrenciler · Öğretmenler ve PIN · USB anahtarlar; kendi şeridi), Program (Günü
+önizle · Zil saatleri · Derslik programları · Öğretmen programı* | Kurallar · İstisnalar · Uyarılar | İçe aktar* ·
+Önceki programlar*), Duyurular (Duyurular ve planlar · Yeni duyuru), Acil durum (Yayın başlat · Geçmiş ve raporlar |
+Şablonlar*), Tahtalar (aynı). Yeni duyuru formu tek sayfadır (1. Ne yazılsın? · 2. Kime? · 3. Ne zaman? + gönder
+çubuğu). HİÇBİR adres değişmedi/kalkmadı/yönlenmiyor (tek ek: `/acil?sekme=gecmis`); şema, ajan, komut ömürleri,
+gönderim uçları, alan adları ve doğrulama aynı (sunucuya yalnız görünüm bilgisi eklendi: `panel_duyuru.hata_yeri`;
+sürüm statik dosya önbelleği için yükseldi). Menü yine tam on öğe. Dokuz karar VARSAYILDI, kullanıcı ayrıca
+yanıtlamadı (§17 soru 82–90, açık). Soru 75 ONAYLANMADI: hiçbir sayfaya ders başlığı/öğretmen bilgisi eklenmez.
+`docs/surum-0.19.0.md` ("hangi sayfa ve sekme nereye gitti" çizelgesi), tasarım §11.1 (6. aşama, genel arama, AYRI
+onay ister). Testlerle ve deneme sunucusunda başsız Edge ile (uydurma veri, benzetilmiş ajanlar; JS açık/kapalı duyuru
+gönderimi veritabanından doğrulanarak; 1366 ve 390 px) denendi; dağıtılmadı, okul bilgisayarında, gerçek telefonda ve
+gerçek tahtalarla denenmedi.
+
 Yerel geliştirme 0.18.0 (kullanıcı onayı 19.11.2026, "Bugün'e geç"): panel arayüzünün yeniden düzeninde 4. aşama,
 Bugün. `/` artık Bugün sayfasıdır (şu an + "Program kilidini durdur", "Sizi bekleyenler", tahtaların durum sayıları
 ve konum çipleri, onaylı "Hepsini kilitle…", bugünün yoklama özeti, duyurular); `/tahtalar` yalnız listedir ve
@@ -82,7 +98,11 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.18.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.18.0: panel
+- Durum: **0.19.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.19.0: panel
+  arayüzü 5. aşama — bölüm sekme şeritleri (tek tanım `bolum_serit.py`; Yoklama, Kişiler ve anahtarlar, Program,
+  Duyurular, Acil durum) ve tek sayfalık duyuru formu; adresler, uçlar, alan adları ve doğrulama aynı; yalnız
+  sunucu, ajan değişmedi; testlerle ve deneme sunucusunda başsız tarayıcıyla (JS açık/kapalı duyuru gönderimi, 1366
+  ve 390 px, uydurma veri) denendi, gerçek tahtayla denenmedi; tasarım §11.1; 0.18.0: panel
   arayüzü 4. aşama — `/` Bugün sayfası (bekleyen işler tek listede, durum sayıları ve çipler, onaylı "Hepsini
   kilitle…", yoklama özeti yalnız sayı, duyurular), `/tahtalar` yalnız liste; V1 ve V2 varsayıldı (§17 soru
   80–81); yalnız sunucu, ajan değişmedi; testlerle ve deneme sunucusunda başsız tarayıcıyla (JS açık/kapalı
@@ -167,7 +187,13 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 `sayfa()` menü rozetlerini `bugun.bekleyenler(…, yalniz_rozet=True)` → `rozet_sayilari`'ndan alır;
                 /api/durum'a eklemeli `bekleyen_is {sayi, imza}`; `yerel_ipler` (60 sn) ve `kurulum_onbellegi`
                 (30 sn) süreç içi bellek; `islem` kapsam dalında sınav süzmesi (V2); `altyapi_uyarilari` SİLİNDİ
-  panel_duyuru.py   duyuru/plan uçları, /api/hedef-onizleme   (web.py'den `kaydet(uygulama, y)` ile)
+  panel_duyuru.py   duyuru/plan uçları, /api/hedef-onizleme   (web.py'den `kaydet(uygulama, y)` ile);
+                    0.19.0: hata_yeri (icerik | kime | zaman — iletinin tek sayfalık formda çizileceği bölüm; YALNIZ
+                    görünüm, doğrulama yolu değişmedi)
+  bolum_serit.py    bölüm sekme şeritlerinin TEK tanımı (0.19.0, FastAPI'siz, saf): SERITLER (yoklama, kisiler, program,
+                    duyurular, acil, tahtalar; küme listeleri; sekmede `rol`/`sayi`/`dis`), gorunum(ad, rol, etkin,
+                    sayilar) (rolle süzer, boş küme düşer, tam bir etkin sekme), sayfa_onekleri (menü `esler` testi);
+                    şablon evrenseli `bolum_seridi`; çizim sablonlar/_serit.html::ciz
   panel_tahtalar.py gruplar, /tahtalar.csv ve CSV içe aktarma
   tahta_liste.py    tahta listesi (0.17.0, FastAPI'siz, saf): SUZGECLER, durum_ozeti (satırın durumu, rozetleri,
                     birincil düğmesi, menü pasiflikleri — durum kuralının TEK yeri), menu_ogeleri, gruplar (bina ·
@@ -187,7 +213,8 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                     tahtada grup kipi), yoklama_ozeti (yalnız sayı + şube adı; `yoklama_defter.Veri`), duyuru_ozeti
                     (başlık, tahta sayısı, saat; metin SELECT edilmez). Ürettiği sözlüklerde kişi adı, okul no,
                     mazeret türü, ders başlığı, arıza açıklaması, duyuru metni, bekleyen tahtanın adı/adresi yok
-  panel_acil.py     /acil: başlatma, bitirme, rapor
+  panel_acil.py     /acil: başlatma, bitirme, rapor; `?sekme=` '' (Yayın başlat) | gecmis (0.19.0) | sablonlar (yalnız
+                    yönetici); hata çizimi her zaman "Yayın başlat"; süren yayın kutusu _acil_aktif.html (iki sekmede)
   panel_program.py  /program (sekmeler: zil, derslik, kurallar, istisnalar), /program/uyarilar, /tahta/{id}/program;
                     zil_baglami (zil sekmesinin çizelge kısmı), Okul Zili'nden al → cizelge.okulzili_yaz
   panel_cizelge.py  zil düzenleyici (0.10.0): /program/cizelge[/{id}[/hizli|kopyala|sil|csv]], /program/haftalik,
@@ -233,12 +260,19 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 _bugun.html (makrolar: is_satiri, cip, durum_kutulari); _pano_bantlar.html SİLİNDİ; tahtalar.html
                 yalnız /tahtalar'ı çizer (kalan bantlar: onay bekleyen, kilit kodu yok, yenile; grup `id="grup-<no>"`);
                 yeni simgeler `m-bugun`, `s-ariza`;
-                program.html, uyarilar.html ve ortak başları _program_bas.html (şerit + sekmeler);
+                0.19.0: _serit.html (bölüm sekme şeridinin TEK makrosu `ciz`; `href`'ten hemen sonra `aria-current`),
+                _kisiler_bas.html (Öğrenciler, Öğretmenler ve PIN, USB anahtarlar; _yoklama_bas ile aynı bağlam),
+                _acil_aktif.html (süren yayın kutusu), duyuru_form.html tek sayfa (Ne · Kime · Ne zaman, gönder çubuğu);
+                program.html, uyarilar.html ve ortak başları _program_bas.html (durum şeridi + bölüm sekme şeridi; bolum =
+                gun|zil|derslik|ogretmen_program|kurallar|istisnalar|uyarilar|aktar|gecmis; çizen HER sayfa `serit` verir:
+                program_gun, program_aktar, program_gecmis, ogretmen_program dahil);
                 cizelge.html, program_gun.html, _zaman_cizgisi.html (SVG + liste makrosu), program_aktar.html,
                 program_gecmis.html (0.10.0);
                 sinavlar.html, sinav.html, sinav_yoklama.html, sinav_kodlar.html, sinav_icmal.html, _sinav.html;
                 yoklama*.html, ogretmenler.html, ogretmen_program.html (0.13.0), ogretmen_pusula.html, ogrenciler.html, ogrenci_onizleme.html
-                ve ortak başları _yoklama_bas.html (sekmeler + KVKK notu); usb_anahtarlar.html, usb_anahtar_uretildi.html;
+                ve ortak başları _yoklama_bas.html (Yoklama şeridi + KVKK notu; bolum = gunluk|sube|mazeret|gir|icmal;
+                0.19.0: kişi sayfaları _kisiler_bas.html'i, ogretmen_program.html _program_bas.html'i çizer; son günler
+                şeritte `sube` etkin çizilir); usb_anahtarlar.html, usb_anahtar_uretildi.html;
                 0.14.0: yoklama_sube.html (şube defteri), yoklama_son_gunler.html, yoklama_mazeret.html,
                 yoklama_mazeret_onizleme.html, yoklama_ogrenci.html, _yoklama_hucre.html (hücre makrosu + lejant);
                 yedekler.html, yedek_onay.html, yedek_geri_yukle.html, envanter.html, arizalar.html,
@@ -565,6 +599,44 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
 
 ## Bilinen tuzaklar
 
+- **Sekme eklemek/taşımak = `bolum_serit.SERITLER`'de bir satır (0.19.0):** şablona ya da `web.py`'ye ikinci sekme
+  listesi yazılmaz; çizim tek makrodur (`_serit.html::ciz`). Makronun çıktı biçimi testlerle bağlıdır: `href`'ten
+  HEMEN sonra `aria-current` gelir, araya öznitelik girmez. Şerit yalnız görünümdür; yetki uçtadır. Yeni adres
+  açılmaz: sekme gerekiyorsa var olan sayfa `?sekme=` alır.
+- **Etkin sekmeyi şablon verir, istek yolundan çıkarılmaz (0.19.0):** aynı şablon başka uçta yeniden çizilir
+  (`POST /duyurular` 400, `POST /acil/baslat` 400, `POST /program/gecmis/{id}/geri-yukle` onay adımı); yoldan
+  çıkarılsaydı hata çiziminde yanlış sekme (ya da hiçbiri) işaretlenirdi.
+- **Program şeridini çizen HER sayfa `serit` (program_is.program_ozeti) bağlamını verir (0.19.0):**
+  `_program_bas.html` durum şeridini ve Uyarılar rozetini ondan çizer; `serit` vermeyen sayfa 500 verir. POST'un
+  yeniden çizimleri de (geri yükleme onayı, içe aktarma 422, öğretmen programı önizleme) verir.
+- **Bölüm şeridi sarar; kaydırma kabı yapılmaz, yapıştırılmaz (0.19.0):** `.bolum-serit`'e `overflow-x` ya da
+  `nowrap` verilirse telefonda gizli sekme fark edilmez; taşarsa sayfa 390 px'ten genişler ve alt çubuk da taşar
+  (0.15.0 tuzağı). Ayraç kümenin (`.sekme-kume`) İLK çocuğudur: geniş ekranda satır başına düşen kümenin ayracı
+  kırpılır, ≤ 640 px'te ayraç satır başıdır. Telefonda yöneticide Program 4, Yoklama 3 satırdır (bilinen sınır,
+  soru 89); dokuzuncudan sonra sekme eklemeden önce 390 px'te ölç.
+- **Duyuru formunda `zaman` radyolarından biri HER ZAMAN işaretli çizilir (0.19.0):** sunucu eksik `zaman`'ı "hemen"
+  sayar; işaretsiz çizilen grup JS'siz gönderimde planlanmak istenen duyuruyu o an yayımlar. Şablondaki `zaman_`
+  hesabı (yeni duyuruda `hemen`, plan sayfasında `bir_kez`) kaldırılmaz.
+- **Duyurunun gönder düğmesi düz `submit`'tir; zaman alanlarına `required` verilmez (0.19.0):** `data-onay` ya da
+  `type="button"` JS'siz gönderimi keser (0.16.0'daki onaylı düğme kalıbı burada YANLIŞTIR). JS'siz üç zaman bloğu
+  da görünür: `bitis`'e `required` konursa "Hemen" gönderimi boş bitişe takılır. Seçili olmayan zamanın dolu alanları
+  sunucuda yok sayılır (soru 83; `<noscript>` notu söyler). Forma `data-kirli-izle` konmaz.
+- **Gönder çubuğunun özeti bayat kalamaz (0.19.0):** onay penceresinin yerine geçen tek önlemdir (soru 82). Özet
+  `hidden` çizilir ve yalnız `panel.js` açar (JS'siz seçim değişince güncellenemezdi; düğme de JS'sizken yansızdır:
+  "Yayımla ya da planı kaydet"). Hedef değişince sayı HEMEN "hesaplanıyor…" olur, ağ hatasında "alınamadı"; eski
+  sayı ekranda bırakılmaz. Zaman kısmı seçilen tarih/saat/günleri yazar, eksik alanı açıkça söyler.
+- **Duyuru formunun gün düğmeleri tarayıcı saatini kullanmaz (0.19.0):** "Bugün"/"Yarın" tarihi formun `data-bugun`
+  özniteliğinden (sunucunun günü) hesaplanır; `new Date()` gece yarısına yakın ve saati yanlış bilgisayarda yanlış
+  güne plan yazar.
+- **Kapalı `<details>` içindeki işaretli kutu da gönderilir (0.19.0):** duyuru formunda bina/kat/düzey/devre ve
+  "tek tek seç" açılırları, içinde seçim varsa (hata çizimi, kopya, plan, 0.17.0 ön seçimi) AÇIK çizilir; yoksa
+  görünmeyen seçim hedefi sessizce daraltır ya da genişletir.
+- **Uzun formda doğrulama iletisi ilgili bölümde de çizilir (0.19.0):** `panel_duyuru.hata_yeri` → `icerik | kime |
+  zaman`; ikinci kopya `role="alert"` taşımaz (ekran okuyucu iki kez okumasın). Yeni doğrulama iletisi eklenirse
+  `hata_yeri`'nin öneki/`yer` eşlemesi de güncellenir (eşleşmeyen ileti "zaman" bölümüne düşer).
+- **Acil'in süren yayın kutusu iki sekmede AYNI kimliklerle çizilir (0.19.0):** `_acil_aktif.html` (`#acil-aktif`,
+  `#acil-teslim`, `#acil-kalan`) `panel.js`'in canlı sayacına bağlıdır; "Geçmiş ve raporlar"da kutu çizilmezse süren
+  yayın o sekmede görünmez kalır ve "Yayını bitir…" bulunamaz. Dönüş adresi sekmeyi taşır (`acil_donus`).
 - **Bekleyen iş eklemek = `bugun.py`'de bir üretici + iki rol için test (0.18.0):** uyarıyı şablona ya da başka
   sayfaya bant olarak yazma; `bekleyenler` tek listedir ve menü rozeti, satır sayısı, `/api/durum.bekleyen_is`
   ondan çıkar. Rol süzmesi üreticinin İÇİNDEDİR: idareci satırının `yol`'u `/ayarlar…`, `/yedekler…`, `/ekle`,
@@ -646,9 +718,11 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
   sekmesiz dönüş Genel'e düşer ve ileti başka sekmede kalır. Bölüm kimlikleri (`#program`, `#temizlik`,
   `#envanter`, `#arizalar`, `#baglanti`) eski yer imleri için korunur; `panel.js::tahtaEskiParcaKur` onları sekmeye
   taşır. Yeni alan ya da uç eklenince `tests/test_tahta_sekmeleri.py`'deki alan listesi de güncellenir.
-- **Tahtalar şeridini çizen sayfa menüde Tahtalar'ın `esler`'indedir (0.17.0):** rolle gizlenen sekmenin sayfası
-  da (idareci `/gruplar`'ı adresle açarsa) "Tahtalar"ı etkin göstermelidir. Yönetici sekmeleri idareci HTML'inde
-  çizilmez (CSS ile gizlenmez); `test_idareci_htmlinde_yonetici_ogesi_yok` adları ve adresleri arar.
+- **Bir bölümün şeridini çizen sayfa menüde o bölümün `esler`'indedir (0.17.0; 0.19.0'da bütün bölümler):** rolle
+  gizlenen sekmenin sayfası da (idareci `/gruplar`'ı adresle açarsa) bölümünü etkin göstermelidir. Yönetici
+  sekmeleri idareci HTML'inde çizilmez (CSS ile gizlenmez); `test_idareci_htmlinde_yonetici_ogesi_yok` ve
+  `tests/test_bolum_serit.py` adları ve adresleri arar. `/ogretmen-programi` Program'ın `esler`'indedir (0.19.0'a
+  kadar Kişiler'deydi); `bolum_serit.sayfa_onekleri` ile `MENU` testle eşlenir.
 - **İşaretsiz onay kutusu gönderilmez; "formda yok" ile "kapalı" ayırt edilemez (0.16.0):** bir bölümün POST'u
   eksik gövdeyle gelirse kutular kapalı sayılıp ayar ezilir. Yeni bölümler (`okul`, `kapatma`, `kilit_kodu`) formun
   o form olduğunu gösteren nöbetçi alanı ister, yoksa hiçbir şey yazmaz; `bolum=genel` otomatik kapatmayı yalnız
@@ -751,8 +825,9 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
   tarayıcı eskisini tutmaya devam eder. Statik dosya değiştiyse sürüm yükseltilir (16.11.2026).
 - **Panel menüsünde açılır grup yoktur (0.15.0'dan beri; eskiden JS'siz `<details>` idi).** Yan menüde alt
   liste de yoktur (0.17.0; bölüm içi gezinme sekme şeritleriyle). JS'siz açılır
-  `<details>` "Program kilidini durdur"da (Program şeridi ve 0.18.0'dan beri Bugün › Şu an) ve Bugün'ün "Diğer N iş"
-  katlamasında kaldı. `<form>` `<p>` içine konmaz (tarayıcı
+  `<details>` "Program kilidini durdur"da (Program şeridi ve 0.18.0'dan beri Bugün › Şu an), Bugün'ün "Diğer N iş"
+  katlamasında ve duyuru formunun "Kime" açılırlarında (0.19.0; bina/kat/düzey/devre, tek tek seç) vardır.
+  `<form>` `<p>` içine konmaz (tarayıcı
   `<p>`yi kapatır, düğme satırı dağılır); düğme satırında `<div class="dugme-satiri">` kullanılır.
 - **Acil sayfası da `yigin.show_all()`'dan önce eklenir** ve rengi pencereye eklenen stil
   sınıfından (`acil`/`tatbikat`) gelir; başka sayfaya geçince sınıf kaldırılır. Acil renkleri
