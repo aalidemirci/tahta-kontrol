@@ -1,5 +1,11 @@
 # Tahta Kontrol
 
+Yerel geliştirme **0.17.0**: panel arayüzünün yeniden düzeninde 3. aşama — tahta kartları yerine konuma göre
+gruplu tahta listesi (satırda duruma göre tek düğme, "⋯" menüsü, seçince çıkan seçim çubuğu, duruma göre
+süzgeç) ve dört sekmeli tahta sayfası (Genel · Program · Bakım · Bilgiler). Komutlar, ömürleri ve tahtalar
+değişmedi; satır düğmesi yalnız kendi tahtasına gider. [Sürüm notları](docs/surum-0.17.0.md). Dağıtılmadı;
+okul bilgisayarlarında ve gerçek tahtalarla denenmedi.
+
 Yerel geliştirme **0.16.0**: panel arayüzünün yeniden düzeninde 2. aşama — Ayarlar tek uzun sayfa yerine
 giriş sayfası (bölüm kartları ve o anki değerleri, kurulum listesi, Ayarlar içi arama) ve on bir bölüm
 sayfasıdır; her kart yalnız kendi ayarını kaydeder. Ayarların kendisi, var olan gönderim uçları ve tahtalar
@@ -34,9 +40,9 @@ Bu değişiklikler henüz kurulu sunucuya/istemciye dağıtılmadı.
 Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. İnternet
 gerektirmez; veri okulda kalır, dışarıya hiçbir şey gönderilmez.
 
-> **Durum: 0.16.0 yerel geliştirme; saha denemesindeki sürüm 0.12.0.** Debian 12 ve Pardus 25
+> **Durum: 0.17.0 yerel geliştirme; saha denemesindeki sürüm 0.12.0.** Debian 12 ve Pardus 25
 > masaüstünde denendi; gerçek bir Pardus ETAP tahtasında ilk deneme yapıldı (0.8.0; bulgular 0.9.0'da
-> giderildi), sonraki sürümler (0.13.x, 0.14.0, 0.15.0 ve 0.16.0 dahil) gerçek tahtada henüz denenmedi. Okul genelinde
+> giderildi), sonraki sürümler (0.13.x, 0.14.0, 0.15.0, 0.16.0 ve 0.17.0 dahil) gerçek tahtada henüz denenmedi. Okul genelinde
 > kullanmadan önce tek tahtada deneyin (`docs/saha-denemesi.md`).
 
 ## Ne yapar

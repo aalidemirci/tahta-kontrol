@@ -90,14 +90,16 @@ def test_tahta_sayfasi_program_izgarasi(uygulama, panel, tahta):
     hazirla(panel)
     t = kimlik(tahta_ekle(panel, tahta, "T-1", durum()))
     panel.post(f"/tahta/{t}/program", data={"d_0_normal_1": "1", "sube_0_normal_1": "9/a"})
-    sayfa = panel.get(f"/tahta/{t}").text
+    assert "/tahta/" in panel.post(f"/tahta/{t}/program", data={"d_0_normal_1": "1", "sube_0_normal_1": "9/a"}).headers["location"]
+    sayfa = panel.get(f"/tahta/{t}?sekme=program").text  # 0.17.0: Program sekmesi
+    assert 'id="program"' not in panel.get(f"/tahta/{t}").text  # Genel'de ızgara yok, yalnız "Şu an" satırı
     kutu = sayfa.split('id="program"')[1].split("</section>")[0]
     assert 'name="d_0_normal_1" value="1" checked' in kutu and 'name="sube_0_normal_1" value="9/A"' in kutu
     assert 'name="d_4_normal_8"' in kutu and 'data-izgara="hepsi"' in kutu
     assert "1 / 40" in kutu
     kullanici_ekle(panel, "idareci1")
     gir(panel, "idareci1")
-    kutu = panel.get(f"/tahta/{t}").text.split('id="program"')[1].split("</section>")[0]
+    kutu = panel.get(f"/tahta/{t}?sekme=program").text.split('id="program"')[1].split("</section>")[0]
     assert 'action="/tahta/' not in kutu and "Ders · 9/A" in kutu and 'value="1sa"' in kutu
 
 

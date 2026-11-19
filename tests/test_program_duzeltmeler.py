@@ -121,5 +121,10 @@ def test_elle_giris_gun_kisaltmalari_tekil(uygulama, panel, saat):
 
 
 def test_pano_bos_ders_rozeti_cevrimdisi_tahtada_da_cizilir():
+    # 0.17.0: rozet kuralı sunucudadır (tahta_liste.durum_ozeti); panel.js yeniden hesaplamaz.
+    from tahta_sunucu import tahta_liste
+
     js = (KOK / "tahta_sunucu" / "statik" / "panel.js").read_text(encoding="utf-8")
-    assert "t.cevrimici && p.bos_ders" not in js and "if (p.bos_ders)" in js
+    assert "bos_ders" not in js
+    kapali = {"id": 1, "cevrimici": False, "program": {"bos_ders": "2. ders (kapalı)"}, "son_gorulme": "1 sa önce"}
+    assert [r["m"] for r in tahta_liste.durum_ozeti(kapali)["rozetler"]] == ["Çevrimdışı", "Boş ders: 2. ders (kapalı)"]

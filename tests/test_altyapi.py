@@ -597,7 +597,7 @@ def test_ayarlar_adres_listesini_alan_tahta_sayisi(kurulu, tahta):
     bekle(tahta, basliklar, yeni_durum(adres_listesi_ozet=adresler.ozet(["https://10.0.0.5:8788"]),
                                        sunucu_adresi="https://10.0.0.5:8788"))  # fmt: skip
     assert "1/1 tahta güncel adres listesini aldı" in kurulu.get("/ayarlar/sunucu").text
-    sayfa = kurulu.get(f"/tahta/{kimlik(basliklar)}").text
+    sayfa = kurulu.get(f"/tahta/{kimlik(basliklar)}?sekme=bakim").text
     assert "https://10.0.0.5:8788" in sayfa and "güncel" in sayfa
 
 
@@ -613,7 +613,7 @@ def test_envanter_yalniz_istenince_gonderilir_ve_saklanir(kurulu, tahta):
     assert bekle(tahta, basliklar, yeni_durum(envanter_ozet="ffffffffffffffff"))["envanter_iste"] is True
     eski = bekle(tahta, basliklar, {"kilitli": False})  # yeteneksiz (eski) ajana alan gitmez
     assert "envanter_iste" not in eski
-    sayfa = kurulu.get(f"/tahta/{kimlik(basliklar)}").text
+    sayfa = kurulu.get(f"/tahta/{kimlik(basliklar)}?sekme=bakim").text
     assert "ORN75X000123" in sayfa and "7,7 GB" in sayfa
     assert "ET-75 Etkileşimli Tahta" in kurulu.get("/envanter").text
 
@@ -646,7 +646,7 @@ def test_donanim_kimligi_degisince_islem_kaydi_dusulur(kurulu, tahta):
     govde = {**govde, "durum": yeni_durum(envanter_ozet="2222222222222222"), "envanter": {**ENV, "urun_seri": "BASKA999"}}
     tahta.post("/ajan/bekle", headers=basliklar, json=govde)
     assert any(k["islem"] == "Tahtanın donanım kimliği değişti" for k in sorgu("SELECT islem FROM kayit"))
-    sayfa = kurulu.get(f"/tahta/{kimlik(basliklar)}").text
+    sayfa = kurulu.get(f"/tahta/{kimlik(basliklar)}?sekme=bakim").text
     assert "donanım kimliği (seri no) değişti" in sayfa
     assert kurulu.get("/api/durum").json()["tahtalar"][0]["donanim_degisti"] is True
     kurulu.post(f"/tahta/{kimlik(basliklar)}/donanim-goruldu")
@@ -819,7 +819,7 @@ def test_eski_ajan_yeni_sunucuyla_calisir(kurulu, tahta):
     yanit = bekle(tahta, basliklar, {"kilitli": False}, surum="0.1.2")
     assert yanit["durum"] == "onayli" and "envanter_iste" not in yanit and "ariza_alindi" not in yanit
     assert yanit["ayar"]["sunucu_adresleri"] == ["https://10.0.0.5:8788"]
-    assert "Envanter ve arıza bildirimi için ajanı güncelleyin" in kurulu.get(f"/tahta/{kimlik(basliklar)}").text
+    assert "Envanter ve arıza bildirimi için ajanı güncelleyin" in kurulu.get(f"/tahta/{kimlik(basliklar)}?sekme=bakim").text
     assert "Ajan güncellenmeli" in kurulu.get("/envanter").text
 
 

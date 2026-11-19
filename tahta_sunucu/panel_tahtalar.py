@@ -407,4 +407,4 @@ def kaydet(uygulama, y) -> None:
             if cozum["yeni_gruplar"]:
                 ayrinti += "; yeni grup: " + ", ".join(cozum["yeni_gruplar"])
             vt.kayit_dus(b, k["ad"], "Tahta alanları içe aktarıldı", ayrinti, y.istemci_ip(istek))
-        return y.yonlendir("/", f"Tahta alanları içe aktarıldı: {ayrinti}.")
+        return y.yonlendir("/tahtalar", f"Tahta alanları içe aktarıldı: {ayrinti}.")

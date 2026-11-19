@@ -1227,7 +1227,7 @@ def test_baska_sayfalardaki_ayar_baglantilari(okul, tahta):
     basliklar = tahta_ekle(okul, tahta, "T-1", durum={"kilitli": False, "yetenekler": ["dugme", "temizlik"]})
     kimlik = basliklar["X-Tahta-Id"]
     assert 'href="/ayarlar/kilit"' in okul.get("/").text  # "Kilit kodu tanımlı değil" bandı
-    sayfa = okul.get(f"/tahta/{kimlik}").text
+    sayfa = okul.get(f"/tahta/{kimlik}?sekme=bakim").text  # 0.17.0: yetenek satırları Bakım sekmesinde
     assert 'href="/ayarlar/yuzer"' in sayfa
     assert 'href="/ayarlar/yoklama"' in okul.get("/yoklama").text
     assert 'href="/ayarlar/usb"' in okul.get("/usb-anahtarlar").text

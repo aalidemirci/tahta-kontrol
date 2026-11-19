@@ -243,7 +243,7 @@
     <td data-etiket="Derslik">{{ t.derslik or '—' }}</td>
     <td data-etiket="Haftalık dersli saat">{% if t.programli %}{{ t.dersli }} / {{ t.toplam }}{% else %}<span class="not">Program yok</span>{% endif %}</td>
     <td data-etiket="Program kilidi">{% if t.muaf %}<span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Muaf</span>{% else %}Uygulanır{% endif %}</td>
-    <td data-etiket="İşlem"><a class="dugme" href="/tahta/{{ t.id }}#program">{{ 'Düzenle' if yonetici else 'Göster' }}</a></td>
+    <td data-etiket="İşlem"><a class="dugme" href="/tahta/{{ t.id }}?sekme=program">{{ 'Düzenle' if yonetici else 'Göster' }}</a></td>
   </tr>
   {% endfor %}
   </tbody>
@@ -288,7 +288,7 @@
     {% if kurallar.yetersiz_tahtalar %}
     <div class="bant uyari"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg><strong>Program kilidi için ajan güncellenmeli ({{ kurallar.yetersiz_tahtalar | length }} tahta):</strong>
       {% for t in kurallar.yetersiz_tahtalar %}<a href="/tahta/{{ t.id }}">{{ t.ad }}</a>{% if t.surum %} <span class="not">({{ t.surum }})</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
-      <br><span class="not">Panodan seçip “Ajanı güncelle” ile güncellenir.</span></div>
+      <br><span class="not">Tahtalar sayfasında seçip “Ajanı güncelle” ile güncellenir.</span></div>
     {% endif %}
   </section>
   <section class="kutu" aria-labelledby="bd-baslik">

@@ -14,6 +14,7 @@
     <p>{% if ariza.tahta_kaldirildi %}{{ ariza.tahta_adi }} (kaldırıldı){% else %}<a href="/tahta/{{ ariza.tahta_id }}">{{ ariza.tahta_adi }}</a>{% endif %}{% if ariza.derslik %} · {{ ariza.derslik }}{% endif %}</p>
   </div>
 </div>
+{% include "_tahtalar_bas.html" %}
 
 <div class="iki-sutun">
   <section class="kutu" aria-labelledby="ayrinti-baslik">

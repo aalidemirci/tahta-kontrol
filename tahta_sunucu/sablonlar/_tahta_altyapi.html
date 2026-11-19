@@ -1,15 +1,16 @@
-{# A6 (§6.3) tahta sayfası eklemeleri: envanter, arızalar, sunucu bağlantısı.
+{# A6 (§6.3) tahta sayfası eklemeleri: envanter, arızalar, sunucu bağlantısı. 0.17.0'dan beri Bakım sekmesindedir
+   (dönüş adresleri ?sekme=bakim#…); "Bağlantı ve ajan" ile "Bu tahtada neler çalışır?" eski Durum kutusundan geldi.
    Bağlam: envanter (envanter.gorunum() ya da None), envanter_zamani, demirbas_no, envanter_notu, arizalar (bu tahtanın
    açık+inceleniyor kayıtları), ariza_kategorileri, baglanti {adres, listede, liste_guncel, imza}, t.donanim_degisti. #}
 {% from "_ariza.html" import durum_rozeti, acma_formu %}
 <div class="iki-sutun">
 <section class="kutu" id="envanter" aria-labelledby="envanter-baslik">
   <div class="kutu-bas">
-    <h2 id="envanter-baslik">Envanter</h2>
+    <h2 id="envanter-baslik">Envanter ve demirbaş</h2>
     {% if t.durum == 'onayli' and t.envanter_yetenegi %}
     <form method="post" action="/islem" class="satir-ici">
       <input type="hidden" name="tahta" value="{{ t.id }}">
-      <input type="hidden" name="donus" value="/tahta/{{ t.id }}#envanter">
+      <input type="hidden" name="donus" value="/tahta/{{ t.id }}?sekme=bakim#envanter">
       <button name="tur" value="envanter">Envanteri yenile</button>
     </form>
     {% endif %}
@@ -88,14 +89,19 @@
   {% if t.durum == 'onayli' %}
   <details class="kutu ic-kutu"{% if not arizalar %} open{% endif %}>
     <summary>Arıza kaydı aç</summary>
-    {{ acma_formu(ariza_kategorileri, tahta_id=t.id, donus='/tahta/' ~ t.id ~ '#arizalar', kimlik='tahta-ariza') }}
+    {{ acma_formu(ariza_kategorileri, tahta_id=t.id, donus='/tahta/' ~ t.id ~ '?sekme=bakim#arizalar', kimlik='tahta-ariza') }}
   </details>
   {% endif %}
 </section>
 
 <section class="kutu" id="baglanti" aria-labelledby="baglanti-baslik">
-  <h2 id="baglanti-baslik">Sunucu bağlantısı</h2>
+  <h2 id="baglanti-baslik">Bağlantı ve ajan</h2>
   <dl class="ozellikler">
+    <dt>Kayıt zamanı</dt><dd>{{ ham.kayit_zamani | zaman }}</dd>
+    <dt>IP · MAC</dt><dd class="kod">{{ ham.ip or '—' }} · {{ ham.mac or '—' }}</dd>
+    <dt>Makine adı</dt><dd>{{ ham.makine_adi or '—' }}</dd>
+    <dt>İşletim sistemi</dt><dd>{{ ham.platform or '—' }}</dd>
+    <dt>Ajan sürümü</dt><dd>{{ ham.surum or '—' }}{% if ham.surum and not t.guncel %} <span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Güncelleme var</span>{% endif %}</dd>
     <dt>Bağlandığı adres</dt>
     <dd>{% if baglanti.adres %}<span class="kod">{{ baglanti.adres }}</span>{% else %}—{% endif %}
       {% if baglanti.listede == False %}<div><span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Bağlandığı adres listede yok</span></div>{% endif %}</dd>
@@ -105,7 +111,24 @@
       {% else %}<span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Eski</span><div class="not">Tahta bir sonraki bağlantısında yeni listeyi alır.</div>{% endif %}</dd>
     <dt>Paket imzası</dt><dd>{{ 'destekliyor' if baglanti.imza else 'desteklemiyor' }}</dd>
   </dl>
-  <p class="not">Adres listesi <a href="/ayarlar/sunucu#adresler">Ayarlar › Sunucu ve ağ</a> bölümündedir.</p>
+  {% if kullanici.rol == 'yonetici' %}<p class="not">Adres listesi <a href="/ayarlar/sunucu#adresler">Ayarlar › Sunucu ve ağ</a> bölümündedir.</p>{% endif %}
+</section>
+
+<section class="kutu" id="yetenekler" aria-labelledby="yetenek-baslik">
+  <h2 id="yetenek-baslik">Bu tahtada neler çalışır?</h2>
+  <dl class="ozellikler">
+    {# 0.9.0 (G3): yüzer düğme yalnız `dugme` yeteneği bildiren ajanda görünür. #}
+    <dt>Yüzer düğme</dt><dd>{% if t.dugme_yetenegi %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Destekleniyor</span>{% if kullanici.rol == 'yonetici' %} <a href="/ayarlar/yuzer">Ayarlar</a>{% endif %}
+      {%- elif ham.surum %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Yüzer düğme için ajan güncellenmeli</span>{% else %}—{% endif %}</dd>
+    <dt>Ders yoklaması</dt><dd>{% if t.yoklama_yetenegi %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Yoklama: destekleniyor</span>{% if t.yoklama_acik %} <span class="rozet" data-durum="duyuru"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Şu an yoklama alınıyor</span>{% endif %}
+      {%- elif ham.surum %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Yoklama: ajan güncellenmeli</span>{% else %}—{% endif %}
+      {% if not t.subeler %}<span class="not"> · Şube(ler) alanı boş: tahtada şube önerisi gelmez.</span>{% endif %}</dd>
+    {% if usb_etkin %}
+    {# 0.11.0: USB anahtarı tanımayan (eski) ajan belleğe bakmaz; satır yalnız özellik açıkken. #}
+    <dt>USB anahtar</dt><dd>{% if t.usb_anahtar_yetenegi %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>USB anahtar: destekleniyor</span>{% if durum.usb_izleme == 'desteklenmiyor' %} <span class="not">· bu tahtada bellekler izlenemiyor (tanılamaya bakın)</span>{% endif %}
+      {%- elif ham.surum %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>USB anahtar: ajan güncellenmeli</span>{% else %}—{% endif %}</dd>
+    {% endif %}
+  </dl>
 </section>
 </div>
 </div>

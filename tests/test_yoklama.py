@@ -619,10 +619,11 @@ def test_komut_istemcisi_ekran_sayilmaz_ve_tahta_sayfasi_yoklama_rozeti(panel, t
     bekle(tahta, hazir["basliklar"], dict(YOKLAMA_DURUMU, ekranlar=[{"arayuz": "komut"}]))
     assert {t["ad"]: t for t in panel.get("/api/durum").json()["tahtalar"]}["10A Tahtası"]["ekran_bagli"] is False
     bekle(tahta, hazir["basliklar"], dict(YOKLAMA_DURUMU, yoklama_acik=True))
-    sayfa = panel.get(f"/tahta/{tid}").text
+    sayfa = panel.get(f"/tahta/{tid}?sekme=bakim").text
     assert "Yoklama: destekleniyor" in sayfa and "Şu an yoklama alınıyor" in sayfa
+    assert "Şu an yoklama alınıyor" in panel.get(f"/tahta/{tid}").text  # Genel › Durum'da da görünür
     eski = tahta_ekle(panel, tahta, "Eski", durum=yeni_ajan_durumu())
-    assert "Yoklama: ajan güncellenmeli" in panel.get(f"/tahta/{kimlik(eski)}").text
+    assert "Yoklama: ajan güncellenmeli" in panel.get(f"/tahta/{kimlik(eski)}?sekme=bakim").text
 
 
 def test_yoklama_sayfalari_bilesen_dili_ve_kancalar(panel, tahta, hazir):

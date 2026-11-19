@@ -1,10 +1,11 @@
 /* Tahta Kontrol paneli — kütüphane yok, derleme yok.
-   Sayfa kancalarına göre bölümler: onay (tehlikeli işlem dialogu), pano (canlı durum,
-   seçim, süzgeç, duyurucu, acil rozetleri), menu (açılır grupların kapanışı), sayac,
+   Sayfa kancalarına göre bölümler: onay (tehlikeli işlem dialogu), tahtalar (0.17.0: tahta listesinin canlı durumu,
+   seçim çubuğu, süzgeç hapları, duyurucu; durum kuralı SUNUCUDADIR, burada yalnız /api/durum'un `liste` alanı yazılır),
+   menu (açılır menülerin kapanışı ve yönü), sayac,
    duyuru formu (koşullu alanlar, hedef önizlemesi), acil (tür, şablon, teslim sayacı),
    yazdir, acil şablonları, ayarlar (renk önizlemesi, logo; 0.16.0: kaydedilmemiş değişiklik çubuğu, Ayarlar içi
    arama, eski parça adresleri), kopyala, dogrulama,
-   program (pano şeridi ve kart rozetleri pano bölümünde; tahta ızgarasında "Tümünü işaretle"),
+   program (program şeridi tahtalar bölümünde; tahta ızgarasında "Tümünü işaretle"),
    sinav (sınav sayfasının canlı salon durumu, sınavdaki tahtaya duyuru/kilit açma ek onayı,
    salon yoklamasında gelmeyen sayısı), yoklama (Aşama 5: "e-Okul'a işlendi" kutusunun kendiliğinden
    gönderimi, yok sayacı, icmal metnini kopyalama ve yazdırma, yoklama silme onayı, panoda "Yoklama alınıyor"),
@@ -44,12 +45,12 @@
     kapat: {
       ad: "tur", deger: "kapat", evet: "Kapat",
       metin: "Açık çalışmalar kaybolabilir. Tahtayı kullanan kişi uyarılmaz.",
-      baslik: function (n) { return n === null ? "Bu tahta kapatılsın mı?" : n + " tahta kapatılsın mı?"; }
+      baslik: function (n, ad) { return n === null ? (ad ? "“" + ad + "” tahtası" : "Bu tahta") + " kapatılsın mı?" : n + " tahta kapatılsın mı?"; }
     },
     yeniden_baslat: {
       ad: "tur", deger: "yeniden_baslat", evet: "Yeniden başlat",
       metin: "Açık çalışmalar kaybolabilir.",
-      baslik: function (n) { return n === null ? "Bu tahta yeniden başlatılsın mı?" : n + " tahta yeniden başlatılsın mı?"; }
+      baslik: function (n, ad) { return n === null ? (ad ? "“" + ad + "” tahtası" : "Bu tahta") + " yeniden başlatılsın mı?" : n + " tahta yeniden başlatılsın mı?"; }
     },
     sil: {
       ad: "eylem", deger: "sil", evet: "Tahtayı kaldır",
@@ -118,7 +119,7 @@
     temizlik: {
       ad: "eylem", deger: "temizle", evet: "Temizle",
       metin: "Tahta kullanılıyorsa 60 saniyelik uyarı çıkar ve kullanan kişi vazgeçebilir. Açık pencereler kapanır, tarayıcı oturumları ve çerezler silinir; dosyalara, geçmişe ve kayıtlı parolalara dokunulmaz.",
-      baslik: function () { return "Bu tahtada oturum temizliği yapılsın mı?"; }
+      baslik: function (n, ad) { return (ad ? "“" + ad + "” tahtasında" : "Bu tahtada") + " oturum temizliği yapılsın mı?"; }
     },
     /* USB anahtar (0.11.0): anlık ve geri alınmaz */
     usb_iptal: {
@@ -164,7 +165,12 @@
     if (!n) return "";
     return panoFormu ? "Seçili tahtalardan " + n + " tanesinde sınav sürüyor." : "Bu tahtada sınav sürüyor.";
   }
-  var pano = null; // pano bölümü kurulunca doldurulur
+  var pano = null; // tahtalar bölümü kurulunca doldurulur (form, seçili satırlar, sınav ve etki özetleri)
+  // Tek tahtaya yıkıcı komutun etki cümleleri (liste satırı ve tahta sayfası aynı metni kullanır).
+  var ETKI = {
+    oturum: "Bu tahtada açık oturum var; derste kullanılıyor olabilir.",
+    cevrimdisi: "Tahta çevrimdışı; 2 dakika içinde bağlanmazsa komut düşer."
+  };
 
   function onayKur() {
     var diyalog = $("onay-diyalog");
@@ -183,7 +189,7 @@
       bekleyen.forEach(function (f) { f(); });
     });
 
-    // Formdaki seçili tahtalardan kaçı sınav penceresinde (pano: /api/durum t.sinav; tahta sayfası: data-sinavdaki).
+    // Formdaki seçili tahtalardan kaçı sınav penceresinde (liste: /api/durum t.sinav; tahta sayfası: data-sinavdaki).
     function sinavdaki(form) {
       if (pano && form === pano.form) return pano.sinavdakiSayisi();
       return parseInt(form.getAttribute("data-sinavdaki") || "0", 10) || 0;
@@ -209,17 +215,20 @@
       if (!form) return;
       form.addEventListener("submit", function (olay) {
         var gonderen = olay.submitter;
-        if (!gonderen || gonderen === evet || gonderen.name !== "tur") return;
-        var ek = SINAV_EK_ONAY[gonderen.value];
+        if (!gonderen || gonderen === evet) return;
+        // Satır düğmesi ve satır menüsü `tek=<tur>:<id>` gönderir: yalnız o tahta sınavdaysa ek onay istenir.
+        var tek = gonderen.name === "tek";
+        if (!tek && gonderen.name !== "tur") return;
+        var ek = SINAV_EK_ONAY[tek ? String(gonderen.value).split(":")[0] : gonderen.value];
         if (!ek) return;
-        var n = sinavdaki(form);
+        var n = tek ? (pano && pano.sinavdaMi(String(gonderen.value).split(":")[1]) ? 1 : 0) : sinavdaki(form);
         if (!n) return;
         olay.preventDefault();
         liste.textContent = "";
         liste.hidden = true;
         uyari.textContent = "";
         uyari.hidden = true;
-        ac(form, sinavCumlesi(n, kimlik === "islem") + " Devam edilsin mi?", ek.metin, "tur", gonderen.value, ek.evet);
+        ac(form, sinavCumlesi(n, kimlik === "islem" && !tek) + " Devam edilsin mi?", ek.metin, gonderen.name, gonderen.value, ek.evet);
       });
     });
 
@@ -235,21 +244,47 @@
         liste.hidden = true;
         uyari.textContent = "";
         uyari.hidden = true;
+        // Açık komut menüsü dialogun arkasında açık kalmasın.
+        var acikMenu = tetik.closest("details");
+        if (acikMenu) acikMenu.open = false;
+        // data-tek (satır menüsü): işaretli başka tahtalar olsa da onay YALNIZ o tahta içindir ve yalnız `tek` gönderilir.
+        // KAPALI HATA: data-tek taşıyan tetik hiçbir koşulda `tur` ile (işaretli bütün tahtalara) gönderilmez;
+        // liste kurulamadıysa (pano yok) hiçbir şey yapılmaz.
+        var tekDeger = tetik.getAttribute("data-tek") || "";
+        if (tetik.hasAttribute("data-tek")) {
+          if (!pano || form !== pano.form || !/^[a-z_]+:[1-9][0-9]*$/.test(tekDeger)) return;
+          var tekKimlik = tekDeger.split(":")[1] || "";
+          var tekAd = tetik.getAttribute("data-onay-ad") || "";
+          if (!tekAd) { // ad başlıkta yazar; yoksa listede kimlik yerine satırın adı aranır
+            var tekSatir = document.createElement("li");
+            tekSatir.textContent = "Tahta #" + tekKimlik;
+            liste.appendChild(tekSatir);
+            liste.hidden = false;
+          }
+          var tekCumleler = pano.tekOzeti(tekKimlik);
+          if (pano.sinavdaMi(tekKimlik)) tekCumleler.unshift(sinavCumlesi(1, false));
+          if (tekCumleler.length) {
+            uyari.textContent = tekCumleler.join(" ");
+            uyari.hidden = false;
+          }
+          ac(form, tanim.baslik(null, tekAd), tanim.metin, "tek", tekDeger, tanim.evet);
+          return;
+        }
         var sinavUyarisi = tanim.ad === "tur" ? sinavCumlesi(sinavdaki(form), !!(pano && form === pano.form)) : "";
         if (sinavUyarisi) {
           uyari.textContent = sinavUyarisi;
           uyari.hidden = false;
         }
         if (pano && form === pano.form) {
-          var secili = pano.seciliKartlar();
+          var secili = pano.seciliSatirlar();
           if (!secili.length) {
             pano.uyar("Önce en az bir tahta seçin.");
             return;
           }
           n = secili.length;
-          secili.slice(0, 12).forEach(function (kart) {
+          secili.slice(0, 12).forEach(function (satir) {
             var li = document.createElement("li");
-            li.textContent = kart.querySelector(".ad a").textContent;
+            li.textContent = pano.satirAdi(satir);
             liste.appendChild(li);
           });
           if (secili.length > 12) {
@@ -264,126 +299,70 @@
             uyari.textContent = cumleler.join(" ");
             uyari.hidden = false;
           }
+        } else if (tanim.ad === "tur") {
+          // Tahta sayfası (kapat, yeniden başlat): listedeki uyarıların aynısı, sunucunun forma yazdığı durumdan.
+          var sayfaCumleleri = sinavUyarisi ? [sinavUyarisi] : [];
+          if (form.hasAttribute("data-oturum-acik")) sayfaCumleleri.push(ETKI.oturum);
+          if (form.hasAttribute("data-cevrimdisi")) sayfaCumleleri.push(ETKI.cevrimdisi);
+          if (sayfaCumleleri.length) {
+            uyari.textContent = sayfaCumleleri.join(" ");
+            uyari.hidden = false;
+          }
         }
         ac(form, tanim.baslik(n, tetik.getAttribute("data-onay-ad") || ""), tanim.metin, tanim.ad, tanim.deger, tanim.evet);
       });
     });
   }
 
-  /* ---- pano: canlı durum, seçim, süzgeç, duyurucu ----------------------------- */
-  var SIMGE = {
-    acik: "s-acik", cevrimdisi: "s-kapali", kilitli: "s-kilit",
-    duyuru: "s-duyuru", sorun: "s-sorun", guncelleme: "s-guncel"
-  };
-  var METIN = {
-    acik: "Açık", cevrimdisi: "Çevrimdışı", kilitli: "Kilitli",
-    duyuru: "Duyuru ekranda", sorun: "Ekran yardımcısı yok", guncelleme: "Güncelleme var",
-    acil_ekranda: "Acil yayın ekranda", eski_ajan: "Eski ajan (yedek duyuru)"
-  };
-  // Rozet anahtarı → renk (data-durum). Belirtilmeyen anahtarın rengi kendi adıdır.
-  var RENK = { acil_ekranda: "sorun", eski_ajan: "uyari" };
-  SIMGE.acil_ekranda = "s-sorun";
-  SIMGE.eski_ajan = "s-guncel";
+  /* ---- tahtalar: canlı durum, seçim, süzgeç, duyurucu -------------------------- */
+  // Satırın durumu, rozetleri, birincil düğmesi ve menü pasiflikleri SUNUCUDA hesaplanır (tahta_liste.durum_ozeti);
+  // /api/durum her tahtada şablondakiyle aynı `liste` sözlüğünü verir. Burada yalnız yazılır: kural JS'te yinelenmez.
   var DEGISIM = {
     acik: "açıldı", cevrimdisi: "çevrimdışı oldu", kilitli: "kilitlendi",
     duyuru: "duyuru gösteriyor", sorun: "ekran yardımcısını yitirdi"
   };
+  var DUGME_KORUMA_MS = 700; // canlı tazelemede değişen birincil düğme bu süre tıklama almaz
 
-  // Program kilidi rozeti: "Teneffüs kilidi · 10:40" (neden ve açılış /api/durum'daki tahta.program'dan).
-  var PROGRAM_KILIT_ADI = { "Teneffüs": "Teneffüs kilidi", "Öğle arası": "Öğle arası kilidi" };
-  // Sınav penceresindeki tahta (sunucunun hesabı, /api/durum t.sinav): "Sınav: giriş" / "Sınav sürüyor".
-  function sinavRozeti(t) {
-    if (!t.sinav) return null;
-    var m = t.sinav.evre === "giris" ? "Sınav: giriş" : "Sınav sürüyor";
-    if (t.surum && t.sinav_yetenegi === false) m += " · ajan güncellenmeli";
-    return { d: "uyari", m: m, s: "s-onay" };
-  }
-  function programRozetleri(t, programKilidiAcik) {
-    var p = t.program || {};
-    var ek = [];
-    var sr = sinavRozeti(t);
-    if (sr) ek.push(sr);
-    // Ders yoklaması (A5): ajanın bildirdiği bayrak; şube, öğretmen, öğrenci bilgisi gelmez.
-    if (t.cevrimici && t.yoklama_acik) ek.push({ d: "duyuru", m: "Yoklama alınıyor", s: "s-onay" });
-    // Kapalı (çevrimdışı) tahta boş dersin en sık nedenidir; rozet o durumda da çizilir.
-    if (p.bos_ders) ek.push({ d: "sorun", m: "Boş ders: " + p.bos_ders, s: "s-sorun" });
-    if (p.muaf) ek.push({ d: "bilgi", m: "Programdan muaf", s: "s-bilgi" });
-    // Sürümü eski ajanda "Güncelleme var" rozeti bu metne döner (guncelMetni); ayrı rozet yalnız o yoksa.
-    if (programAjaniEski(t, programKilidiAcik) && t.guncel) {
-      ek.push({ d: "bilgi", m: "Ajan güncellenmeli", s: "s-guncel" });
-    }
-    return ek;
-  }
-  // A6: süren (açık + inceleniyor) arıza sayısı ve donanım kimliği değişimi; sunucunun /api/durum alanlarından.
-  function altyapiRozetleri(t) {
-    var ek = [];
-    if (t.ariza_sayisi > 0) ek.push({ d: "sorun", m: t.ariza_sayisi > 1 ? t.ariza_sayisi + " arıza" : "Arıza", s: "s-sorun" });
-    if (t.donanim_degisti) ek.push({ d: "uyari", m: "Donanım değişti", s: "s-sorun" });
-    return ek;
-  }
-  function programAjaniEski(t, programKilidiAcik) {
-    return !!(programKilidiAcik && t.cevrimici && t.surum && t.program && t.program.program_yetenegi === false);
-  }
-  function kilitMetni(t) {
-    var p = t.program || {};
-    if (p.kilit_kaynak !== "program") return METIN.kilitli;
-    var ad = PROGRAM_KILIT_ADI[p.neden] || "Program kilidi";
-    return p.acilis ? ad + " · " + p.acilis : ad;
+  function siteIciYol(yol) {
+    return typeof yol === "string" && yol.charAt(0) === "/" && yol.charAt(1) !== "/";
   }
 
-  function durumHesapla(t, acilSuruyor, programKilidiAcik) {
-    var birincil;
-    if (!t.cevrimici) birincil = "cevrimdisi";
-    else if (!t.ekran_bagli) birincil = "sorun";
-    else if (t.duyuru_var) birincil = "duyuru";
-    else if (t.kilitli) birincil = "kilitli";
-    else birincil = "acik";
-    var rozetler = [birincil];
-    // Acil yayın sürerken: ekrana aldıysa kırmızı rozet; ajan acil yeteneği bildirmiyorsa
-    // yayını yedek duyuru olarak alır (kapatılamaz) ve güncellenmelidir.
-    // acil_gorundu "bir kez ekrana aldı" demektir; çevrimdışı tahtada "şu an ekranda" denmez.
-    if (acilSuruyor && t.acil_gorundu && t.cevrimici) rozetler.unshift("acil_ekranda");
-    else if (acilSuruyor && t.cevrimici && !t.acil_yetenegi) rozetler.push("eski_ajan");
-    if ((birincil === "duyuru" || birincil === "sorun") && t.kilitli) rozetler.push("kilitli");
-    if (t.surum && !t.guncel) rozetler.push("guncelleme");
-    rozetler = rozetler.slice(0, 4);
-    return {
-      birincil: birincil,
-      rozetler: rozetler,
-      kilitMetni: kilitMetni(t),
-      guncelMetni: programAjaniEski(t, programKilidiAcik) ? "Ajan güncellenmeli" : METIN.guncelleme,
-      ek: altyapiRozetleri(t).concat(programRozetleri(t, programKilidiAcik)).slice(0, 3),
-      oturum: t.cevrimici ? (t.oturum || "") : "",
-      alt: "Son görülme: " + t.son_gorulme + (t.surum ? " · ajan " + t.surum : "")
-    };
-  }
-
-  function panoKur() {
+  function tahtalarKur() {
     var form = $("islem");
     var ilk = $("ilk-veri");
     if (!form || !ilk) return;
     var panoVeri = {};
     try { panoVeri = JSON.parse(($("pano-veri") || {}).textContent || "{}"); } catch (e) { panoVeri = {}; }
-    var kartlar = new Map();
-    Array.prototype.forEach.call(form.querySelectorAll("article.tahta[data-id]"), function (k) {
-      kartlar.set(String(k.getAttribute("data-id")), k);
+    var satirlar = new Map();
+    Array.prototype.forEach.call(form.querySelectorAll("tr.tahta-satir[data-id]"), function (tr) {
+      satirlar.set(String(tr.getAttribute("data-id")), tr);
     });
     var kutular = Array.prototype.slice.call(form.querySelectorAll('input[name="tahta"]'));
+    var grupKutulari = Array.prototype.slice.call(form.querySelectorAll("input[data-grup-sec]"));
     var imzalar = new Map();
+    var dugmeImzalari = new Map();
+    var menuImzalari = new Map();
     var birinciller = new Map();
     var sonVeri = new Map();
     var secimSayisi = $("secim-sayisi");
     var canliBolge = $("canli-bolge");
     var canli = $("canli");
-    var ozet = $("ozet");
+    var haplar = $("haplar");
     var hepsiniSec = $("hepsini-sec");
+    var secimTemizle = $("secim-temizle");
+    var suzgecBos = $("suzgec-bos");
     var yenileBandi = $("yenile-bandi");
     var diyalog = $("onay-diyalog");
-    var suzgec = "hepsi";
+    var donusAlani = form.querySelector('input[name="donus"]');
+    var listeYolu = form.getAttribute("data-liste-yolu") || "/tahtalar";
+    var suzgecBaglantilari = Array.prototype.slice.call(document.querySelectorAll("a[data-suzgec]"));
+    var etkinHap = haplar && haplar.querySelector('a[aria-current="true"]');
+    var suzgec = etkinHap ? (etkinHap.getAttribute("data-suzgec") || "") : "";
+    // Telefonda haplar tek satırda yatay kayar: etkin hap görünür alana getirilir (sayfa kaymaz).
+    if (etkinHap && haplar.scrollWidth > haplar.clientWidth) haplar.scrollLeft = Math.max(0, etkinHap.offsetLeft - haplar.offsetLeft - 8);
     var sonBasari = Date.now();
-    var acilSuruyor = !!panoVeri.acil;
-    var programKilidiAcik = !!panoVeri.program_kilidi;
     var programSeridi = $("pano-program");
+    var fareVar = !!(window.matchMedia && window.matchMedia("(hover: hover)").matches);
 
     /* Duyurucu: yalnız değişimi, en çok 5 sn'de bir, birikenleri tek cümlede söyler. */
     var kuyruk = [];
@@ -427,43 +406,143 @@
       if (!duyuruZamani) duyuruZamani = setTimeout(kuyruguBosalt, 0);
     }
 
-    function kartiYaz(kart, h) {
-      kart.setAttribute("data-durum", h.birincil);
-      kart.setAttribute("data-durumlar", h.rozetler.join(" "));
-      kart.classList.toggle("cevrimdisi", h.birincil === "cevrimdisi");
-      var alan = kart.querySelector('[data-alan="rozetler"]');
-      alan.textContent = "";
-      h.rozetler.forEach(function (d) {
-        var m = d === "kilitli" ? h.kilitMetni : d === "guncelleme" ? h.guncelMetni : METIN[d];
-        alan.appendChild(rozet(RENK[d] || d, m, SIMGE[d]));
+    function alan(tr, ad) { return tr.querySelector('[data-alan="' + ad + '"]'); }
+
+    function rozetleriYaz(tr, liste) {
+      var kap = alan(tr, "rozetler");
+      if (!kap) return;
+      kap.textContent = "";
+      (liste.rozetler || []).forEach(function (r) {
+        var e = rozet(r.d, r.m, r.s);
+        if (siteIciYol(r.yol)) { // arıza rozeti arıza listesine bağlanır
+          var a = document.createElement("a");
+          a.className = "rozet";
+          a.setAttribute("data-durum", r.d);
+          a.setAttribute("href", r.yol);
+          while (e.firstChild) a.appendChild(e.firstChild);
+          e = a;
+        }
+        kap.appendChild(e);
+        kap.appendChild(document.createTextNode(" "));
       });
-      h.ek.forEach(function (r) { alan.appendChild(rozet(r.d, r.m, r.s)); });
-      kart.querySelector('[data-alan="oturum"]').textContent = h.oturum;
-      kart.querySelector('[data-alan="alt"]').textContent = h.alt;
+    }
+
+    // Birincil düğme: imleç ya da odak DÜĞMENİN ÜSTÜNDEYKEN (satırın işlem hücresi) ya da onay penceresi açıkken
+    // DEĞİŞTİRİLMEZ (parmağın altında "Kilitle"den "Kilidi aç"a dönmesin); değişen düğme DUGME_KORUMA_MS boyunca
+    // tıklama almaz. Koruma satırın bütününe yayılmaz: seçim kutusunda ya da kapalı menü özetinde kalan odak
+    // düğmeyi dondurur, rozetle ("Kilitli") düğme ("Kilitle") çelişirdi.
+    function dugmeYaz(tr, t, ilkCizim) {
+      var id = String(t.id);
+      var d = t.liste.dugme || null;
+      var imza = JSON.stringify(d);
+      if (dugmeImzalari.get(id) === imza) return;
+      if (ilkCizim) { dugmeImzalari.set(id, imza); return; } // ilk boyama sunucudandır
+      var kap = alan(tr, "dugme");
+      if (!kap) return;
+      var hucre = kap.closest(".satir-eylem") || kap;
+      if (dialogAcik() || kap.contains(document.activeElement) || (fareVar && hucre.matches(":hover"))) return;
+      kap.textContent = "";
+      if (d) {
+        var e;
+        if (d.yol) {
+          if (!siteIciYol(d.yol)) return;
+          e = document.createElement("a");
+          e.className = "dugme";
+          e.setAttribute("href", d.yol);
+        } else {
+          e = document.createElement("button");
+          e.type = "submit";
+          e.name = "tek";
+          e.value = d.tur + ":" + id;
+          if (d.tur === "kilitle") e.appendChild(simge("s-kilit"));
+        }
+        var yazi = document.createElement("span");
+        yazi.textContent = d.ad;
+        e.appendChild(yazi);
+        var ek = document.createElement("span");
+        ek.className = "gizli";
+        ek.textContent = " (" + t.ad + ")";
+        e.appendChild(ek);
+        e.setAttribute("data-degisti", String(Date.now()));
+        kap.appendChild(e);
+      }
+      dugmeImzalari.set(id, imza);
+    }
+
+    // Menü pasiflikleri: açık menü yeniden çizilmez (kullanıcı seçim yaparken öğe yer değiştirmesin).
+    function menuYaz(tr, t, ilkCizim) {
+      var id = String(t.id);
+      var pasif = t.liste.pasif || {};
+      var ipucu = t.liste.ipucu || {};
+      var imza = JSON.stringify([pasif, ipucu]);
+      if (menuImzalari.get(id) === imza) return;
+      if (ilkCizim) { menuImzalari.set(id, imza); return; }
+      var menu = tr.querySelector("details.satir-menu");
+      if (!menu || menu.open) return;
+      Array.prototype.forEach.call(menu.querySelectorAll("button[data-komut]"), function (b) {
+        var komut = b.getAttribute("data-komut");
+        var neden = Object.prototype.hasOwnProperty.call(pasif, komut) ? String(pasif[komut]) : "";
+        b.disabled = !!neden;
+        if (!b.hasAttribute("data-onay")) { // onay isteyen düğme hep type="button" kalır
+          if (neden) {
+            b.type = "button";
+            b.removeAttribute("name");
+            b.removeAttribute("value");
+          } else {
+            b.type = "submit";
+            b.name = "tek";
+            b.value = komut + ":" + id;
+          }
+        }
+        var kucuk = b.querySelector("small");
+        if (kucuk) {
+          var alt = neden || (Object.prototype.hasOwnProperty.call(ipucu, komut) ? String(ipucu[komut]) : "");
+          kucuk.textContent = alt;
+          kucuk.hidden = !alt;
+        }
+      });
+      menuImzalari.set(id, imza);
+    }
+
+    function satiriYaz(tr, t) {
+      var l = t.liste;
+      tr.setAttribute("data-birincil", l.birincil);
+      tr.setAttribute("data-durumlar", (l.durumlar || []).join(" "));
+      rozetleriYaz(tr, l);
+      var o = alan(tr, "oturum");
+      if (o) o.textContent = l.oturum || "—";
+      var g = alan(tr, "gorulme");
+      if (g) g.textContent = t.son_gorulme || "";
+      var s = alan(tr, "surum");
+      if (s) s.textContent = t.surum || "—";
     }
 
     function ciz(liste, ilkCizim) {
       var bilinmeyen = false;
       liste.forEach(function (t) {
         var id = String(t.id);
-        var kart = kartlar.get(id);
+        var tr = satirlar.get(id);
         sonVeri.set(id, t);
-        if (!kart) { bilinmeyen = true; return; }
-        var h = durumHesapla(t, acilSuruyor, programKilidiAcik);
-        var imza = JSON.stringify(h);
+        if (!tr) { bilinmeyen = true; return; }
+        if (!t.liste) return;
+        var imza = JSON.stringify([t.liste.birincil, t.liste.durumlar, t.liste.rozetler, t.liste.oturum, t.son_gorulme, t.surum]);
         if (imzalar.get(id) !== imza) {
-          kartiYaz(kart, h);
+          if (!ilkCizim) satiriYaz(tr, t);
           imzalar.set(id, imza);
         }
+        dugmeYaz(tr, t, ilkCizim);
+        menuYaz(tr, t, ilkCizim);
         var onceki = birinciller.get(id);
-        if (!ilkCizim && onceki && onceki !== h.birincil && DEGISIM[h.birincil]) {
-          kuyruga(t.ad, DEGISIM[h.birincil]);
+        if (!ilkCizim && onceki && onceki !== t.liste.birincil && DEGISIM[t.liste.birincil]) {
+          kuyruga(t.ad, DEGISIM[t.liste.birincil]);
         }
-        birinciller.set(id, h.birincil);
+        birinciller.set(id, t.liste.birincil);
       });
       if (bilinmeyen) yenileGoster();
-      ozetGuncelle();
-      suzgecUygula();
+      if (!ilkCizim) {
+        sayilariGuncelle();
+        suzgecUygula();
+      }
     }
 
     /* Program şeridi: şu anki ders, program kilidi rozeti, boş ders uyarısı sayısı. */
@@ -496,28 +575,64 @@
       if (durdur && !durdur.open) durdur.hidden = p.kilit !== "acik";
     }
 
-    function ozetGuncelle() {
-      if (!ozet) return;
-      Array.prototype.forEach.call(ozet.querySelectorAll("button[data-suzgec]"), function (d) {
-        var anahtar = d.getAttribute("data-suzgec");
-        var sayi = 0;
-        kartlar.forEach(function (kart) {
-          var durumlar = (kart.getAttribute("data-durumlar") || "").split(" ");
-          if (anahtar === "hepsi" || durumlar.indexOf(anahtar) >= 0) sayi++;
+    function durumlari(tr) { return (tr.getAttribute("data-durumlar") || "").split(" "); }
+
+    // Hap sayıları süzgeçten bağımsızdır (bütün onaylı tahtalar); başlıktaki "çevrimiçi" sayısı da buradan.
+    function sayilariGuncelle() {
+      if (haplar) {
+        Array.prototype.forEach.call(haplar.querySelectorAll("a[data-suzgec]"), function (a) {
+          var anahtar = a.getAttribute("data-suzgec") || "";
+          var sayi = 0;
+          satirlar.forEach(function (tr) {
+            if (!anahtar || durumlari(tr).indexOf(anahtar) >= 0) sayi++;
+          });
+          var b = a.querySelector("b");
+          if (b) b.textContent = String(sayi);
+          if (anahtar) a.classList.toggle("bos", sayi === 0);
         });
-        d.querySelector(".sayi").textContent = String(sayi);
-      });
+      }
+      var cevrimici = document.querySelector('#tahta-ozet [data-alan="cevrimici"]');
+      if (cevrimici) {
+        var n = 0;
+        satirlar.forEach(function (tr) { if (tr.getAttribute("data-birincil") !== "cevrimdisi") n++; });
+        cevrimici.textContent = String(n);
+      }
     }
 
     function gorunenKutular() {
-      return kutular.filter(function (k) { return !k.closest("article.tahta").hidden; });
+      return kutular.filter(function (k) { return !k.disabled && !k.closest("tr").hidden; });
     }
-    function seciliKartlar() {
-      return kutular.filter(function (k) { return k.checked; }).map(function (k) { return k.closest("article.tahta"); });
+    function seciliSatirlar() {
+      return kutular.filter(function (k) { return k.checked && !k.disabled; }).map(function (k) { return k.closest("tr"); });
+    }
+    function ucDurum(kutu, liste) {
+      var secili = liste.filter(function (k) { return k.checked; }).length;
+      kutu.checked = liste.length > 0 && secili === liste.length;
+      kutu.indeterminate = secili > 0 && secili < liste.length;
+      kutu.disabled = liste.length === 0;
+    }
+    function grupKutulariOf(grupKutusu) {
+      var govde = grupKutusu.closest("tbody");
+      return gorunenKutular().filter(function (k) { return k.closest("tbody") === govde; });
     }
     function say() {
-      var n = kutular.filter(function (k) { return k.checked; }).length;
-      secimSayisi.textContent = n ? n + " tahta seçili" : "";
+      var n = seciliSatirlar().length;
+      form.classList.toggle("secili", n > 0);
+      if (secimSayisi) {
+        secimSayisi.textContent = "";
+        if (n) {
+          var sayi = document.createElement("b");
+          sayi.textContent = String(n);
+          var orta = document.createElement("span");
+          orta.className = "yalniz-genis";
+          orta.textContent = " tahta";
+          secimSayisi.appendChild(sayi);
+          secimSayisi.appendChild(orta);
+          secimSayisi.appendChild(document.createTextNode(" seçili"));
+        }
+      }
+      if (hepsiniSec) ucDurum(hepsiniSec, gorunenKutular());
+      grupKutulari.forEach(function (g) { ucDurum(g, grupKutulariOf(g)); });
     }
 
     var suzgecBekliyor = false;
@@ -531,31 +646,72 @@
         }
         return;
       }
-      kartlar.forEach(function (kart) {
-        var durumlar = (kart.getAttribute("data-durumlar") || "").split(" ");
-        var gizle = suzgec !== "hepsi" && durumlar.indexOf(suzgec) < 0;
-        kart.hidden = gizle;
-        if (gizle) { // gizli kart komut almasın
-          var k = kart.querySelector('input[name="tahta"]');
-          if (k) k.checked = false;
+      var gorunen = 0;
+      var dusen = 0;
+      satirlar.forEach(function (tr) {
+        var gizle = !!suzgec && durumlari(tr).indexOf(suzgec) < 0;
+        tr.hidden = gizle;
+        var k = tr.querySelector('input[name="tahta"]');
+        if (k) { // gizli satır komut almasın: kutusu işaretsiz ve devre dışı (forma girmez)
+          if (gizle && k.checked) dusen++;
+          if (gizle) k.checked = false;
+          k.disabled = gizle;
+        }
+        if (!gizle) gorunen++;
+      });
+      Array.prototype.forEach.call(form.querySelectorAll("tbody[data-grup]"), function (govde) {
+        var baslik = govde.querySelector("tr.grup");
+        if (!baslik) return;
+        var gorunenSatir = govde.querySelectorAll("tr.tahta-satir:not([hidden])").length;
+        baslik.hidden = !gorunenSatir;
+        // Süzgeçliyken başlık "1 / 2 tahta" der: "grubu seç" yalnız görüneni seçer.
+        var sayi = baslik.querySelector('[data-alan="grup-sayi"]');
+        if (sayi) {
+          var toplam = parseInt(sayi.getAttribute("data-toplam"), 10) || 0;
+          sayi.textContent = "(" + (gorunenSatir !== toplam ? gorunenSatir + " / " : "") + toplam + " tahta)";
         }
       });
-      if (hepsiniSec) hepsiniSec.textContent = suzgec === "hepsi" ? "Tümünü seç" : "Görünenleri seç";
+      if (suzgecBos) suzgecBos.hidden = !(suzgec && gorunen === 0);
       say();
+      // Süzgeç dışında kalan satırın işareti sessizce düşmesin: seçim çubuğunda ve canlı bölgede söylenir.
+      if (dusen) {
+        var not = "Süzgeç dışında kalan " + dusen + " tahtanın seçimi kaldırıldı.";
+        if (secimSayisi && seciliSatirlar().length) {
+          var ek = document.createElement("span");
+          ek.className = "not secim-notu";
+          ek.textContent = " · " + dusen + " seçim süzgeç dışında kaldı";
+          secimSayisi.appendChild(ek);
+        }
+        duyur(not);
+      }
     }
 
-    if (ozet) {
-      ozet.hidden = false;
-      ozet.addEventListener("click", function (olay) {
-        var d = olay.target.closest("button[data-suzgec]");
-        if (!d) return;
-        suzgec = d.getAttribute("data-suzgec");
-        Array.prototype.forEach.call(ozet.querySelectorAll("button[data-suzgec]"), function (b) {
-          b.setAttribute("aria-pressed", b === d ? "true" : "false");
+    // Hap tıklaması sayfayı yenilemez: adres ve dönüş alanı güncellenir, satırlar gizlenir/gösterilir.
+    function suzgecSec(deger) {
+      suzgec = deger;
+      if (haplar) {
+        Array.prototype.forEach.call(haplar.querySelectorAll("a[data-suzgec]"), function (a) {
+          if ((a.getAttribute("data-suzgec") || "") === suzgec) a.setAttribute("aria-current", "true");
+          else a.removeAttribute("aria-current");
         });
-        suzgecUygula();
-      });
+      }
+      var adres = listeYolu + (suzgec ? "?durum=" + encodeURIComponent(suzgec) : "");
+      if (donusAlani) donusAlani.value = adres;
+      // "Program kilidini durdur" formu da süzgeçli listeye döner.
+      var seritDonus = programSeridi && programSeridi.querySelector('input[name="donus"]');
+      if (seritDonus) seritDonus.value = adres;
+      var yenile = yenileBandi && yenileBandi.querySelector("a");
+      if (yenile) yenile.setAttribute("href", adres);
+      try { history.replaceState(null, "", adres); } catch (e) { /* adres değişmese de süzgeç çalışır */ }
+      suzgecUygula();
     }
+    suzgecBaglantilari.forEach(function (a) {
+      a.addEventListener("click", function (olay) {
+        if (olay.ctrlKey || olay.metaKey || olay.shiftKey || olay.altKey || olay.button) return;
+        olay.preventDefault();
+        suzgecSec(a.getAttribute("data-suzgec") || "");
+      });
+    });
 
     var sonTiklanan = null;
     kutular.forEach(function (k) {
@@ -574,14 +730,53 @@
       k.addEventListener("change", say);
     });
 
+    // Seçim yardımcıları yalnız JS'liyken görünür: yalnız görünen ve devre dışı olmayan kutuları etkiler.
     if (hepsiniSec) {
-      hepsiniSec.addEventListener("click", function () {
-        var gorunen = gorunenKutular();
-        var hepsi = gorunen.length > 0 && gorunen.every(function (k) { return k.checked; });
-        gorunen.forEach(function (k) { k.checked = !hepsi; });
+      var hepsiKap = $("hepsini-sec-kap");
+      if (hepsiKap) hepsiKap.hidden = false;
+      hepsiniSec.addEventListener("change", function () {
+        var isaretle = hepsiniSec.checked;
+        gorunenKutular().forEach(function (k) { k.checked = isaretle; });
         say();
       });
     }
+    grupKutulari.forEach(function (g) {
+      var etiket = g.closest("label");
+      if (etiket) etiket.hidden = false;
+      g.addEventListener("change", function () {
+        var isaretle = g.checked;
+        grupKutulariOf(g).forEach(function (k) { k.checked = isaretle; });
+        say();
+      });
+    });
+    if (secimTemizle) {
+      secimTemizle.hidden = false;
+      secimTemizle.addEventListener("click", function () {
+        kutular.forEach(function (k) { k.checked = false; });
+        say();
+        duyur("Seçim temizlendi.");
+        if (hepsiniSec) hepsiniSec.focus(); // çubuk gizlenince odak kaybolmasın
+      });
+    }
+    form.classList.add("js-secim");
+
+    // Enter (ikinci kat; asıl koruma formun başındaki devre dışı nöbetçi düğmedir): seçim kutusunda Enter formu
+    // örtük gönderip ilk satırın düğmesini tıklamasın. Düğme, bağlantı ve menü özetinde Enter olağan çalışır.
+    form.addEventListener("keydown", function (olay) {
+      if (olay.key !== "Enter") return;
+      var h = olay.target;
+      if (h && h.tagName === "INPUT" && h.type === "checkbox") olay.preventDefault();
+    });
+
+    // Canlı tazelemede az önce değişen düğme tıklama almaz (yanlış komuta basılmasın).
+    form.addEventListener("click", function (olay) {
+      var d = olay.target.closest && olay.target.closest("[data-degisti]");
+      if (!d) return;
+      if (Date.now() - (parseInt(d.getAttribute("data-degisti"), 10) || 0) < DUGME_KORUMA_MS) {
+        olay.preventDefault();
+        olay.stopPropagation();
+      }
+    }, true);
 
     /* Canlı gösterge ve yoklama */
     function iki(n) { return (n < 10 ? "0" : "") + n; }
@@ -616,11 +811,7 @@
       }).then(function (v) {
         if (!v) return;
         sonBasari = Date.now();
-        acilSuruyor = !!v.acil;
-        if (v.program) {
-          programKilidiAcik = v.program.kilit !== "kapali";
-          seritYaz(v.program);
-        }
+        if (v.program) seritYaz(v.program);
         ciz(v.tahtalar || [], false);
         if (typeof v.bekleyen === "number" && v.bekleyen !== (panoVeri.bekleyen || 0)) yenileGoster();
         canliYaz(true);
@@ -640,24 +831,22 @@
       }
     });
 
+    function veri(tr) { return sonVeri.get(String(tr.getAttribute("data-id"))); }
     pano = {
       form: form,
-      seciliKartlar: seciliKartlar,
-      uyar: function (metin) {
-        secimSayisi.textContent = metin;
-        duyur(metin);
-      },
+      seciliSatirlar: seciliSatirlar,
+      satirAdi: function (tr) { return tr.getAttribute("data-ad") || ""; },
+      uyar: duyur,
       sinavdakiSayisi: function () {
-        return seciliKartlar().filter(function (kart) {
-          var t = sonVeri.get(String(kart.getAttribute("data-id")));
-          return !!(t && t.sinav);
-        }).length;
+        return seciliSatirlar().filter(function (tr) { var t = veri(tr); return !!(t && t.sinav); }).length;
       },
+      // Tek satır (satır düğmesi / satır menüsü): o tahta sınav penceresinde mi?
+      sinavdaMi: function (id) { var t = sonVeri.get(String(id)); return !!(t && t.sinav); },
       etkiOzeti: function (secili) {
         var oturumlu = 0;
         var cevrimdisi = 0;
-        secili.forEach(function (kart) {
-          var t = sonVeri.get(String(kart.getAttribute("data-id")));
+        secili.forEach(function (tr) {
+          var t = veri(tr);
           if (!t) return;
           if (t.oturum_acik) oturumlu++;
           if (!t.cevrimici) cevrimdisi++;
@@ -666,13 +855,37 @@
         if (oturumlu) c.push(oturumlu + " tahtada açık oturum var; derste kullanılıyor olabilir.");
         if (cevrimdisi) c.push(cevrimdisi + " tahta çevrimdışı; 2 dakika içinde bağlanmazsa komut düşer.");
         return c;
+      },
+      tekOzeti: function (id) {
+        var t = sonVeri.get(String(id));
+        var c = [];
+        if (!t) return c;
+        if (t.oturum_acik) c.push(ETKI.oturum);
+        if (!t.cevrimici) c.push(ETKI.cevrimdisi);
+        return c;
       }
     };
 
     var ilkListe = [];
     try { ilkListe = JSON.parse(ilk.textContent || "[]"); } catch (e) { ilkListe = []; }
     ciz(ilkListe, true);
+    // Sunucunun çizdiği süzgeç (hidden + disabled) geçerlidir; geri/ileri önbelleğinden dönen sayfada kutular
+    // tarayıcının hatırladığı durumda olabilir, bu yüzden bir kez de burada uygulanır.
+    suzgecUygula();
     zamanlayici = setTimeout(yokla, 4000);
+  }
+
+  // Tahta sayfasının eski parça adresleri (/tahta/3#program …) sunucuya gitmez: sekme yoksa ilgili sekmeye taşınır.
+  var TAHTA_ESKI_PARCA = {
+    program: "program", envanter: "bakim", arizalar: "bakim", temizlik: "bakim", baglanti: "bakim",
+    "tani-baslik": "bakim", "komut-baslik": "bakim", "tahta-bilgi": "bilgiler"
+  };
+  function tahtaEskiParcaKur() {
+    var parca = (location.hash || "").slice(1);
+    if (!parca || !/^\/tahta\/\d+$/.test(location.pathname) || /[?&]sekme=/.test(location.search)) return;
+    if (!Object.prototype.hasOwnProperty.call(TAHTA_ESKI_PARCA, parca)) return;
+    var sorgu = location.search ? location.search + "&" : "?";
+    location.replace(location.pathname + sorgu + "sekme=" + TAHTA_ESKI_PARCA[parca] + "#" + parca);
   }
 
   /* ---- ayarlar: renk önizlemesi ve logo ---------------------------------------- */
@@ -973,9 +1186,12 @@
   // (#ileti) zaten bandı gösterir; tarayıcı parçaya kaydırırken odağı sıfırlayabildiği için odak
   // yükleme bittikten sonra verilir.
   function iletiKur() {
-    var bant = document.querySelector(".bant[data-odakla]");
+    // Tahta listesinde satır komutundan dönüş (#t-<id>): ileti o satırda da çizilir (.satir-ileti) ve o odaklanır;
+    // sayfa zaten satıra kaydığı için odak sayfayı yeniden kaydırmaz.
+    var bant = document.querySelector(".satir-ileti[data-odakla], .bant[data-odakla]");
     if (!bant) return;
-    var odakla = function () { setTimeout(function () { bant.focus({ preventScroll: location.hash === "#ileti" }); }, 0); };
+    var kaydirma = location.hash === "#ileti" || bant.classList.contains("satir-ileti");
+    var odakla = function () { setTimeout(function () { bant.focus({ preventScroll: kaydirma }); }, 0); };
     if (document.readyState === "complete") odakla();
     else window.addEventListener("load", odakla, { once: true });
   }
@@ -1004,7 +1220,7 @@
     // Liste sığmayıp kayıyorsa (kısa pencere, telefon çekmecesi) etkin öğe görünür alana gelir; sayfa kaymaz
     // (yan menü sabit konumludur, en yakın kaydırma kutusu listenin kendisidir).
     function etkiniGoster() {
-      var etkin = menu.querySelector('.yan-gezinme a[aria-current="page"]') || menu.querySelector(".yan-gezinme li[data-icinde] > a");
+      var etkin = menu.querySelector('.yan-gezinme a[aria-current="page"]');
       if (etkin && etkin.scrollIntoView) etkin.scrollIntoView({ block: "nearest" });
     }
     function ac(tetik) {
@@ -1059,19 +1275,70 @@
     parcadanAc();
   }
 
-  /* ---- menu: açılır gruplar (<details>) — JS'siz de çalışır; burada yalnız kapanış --- */
+  /* ---- menu: açılır menüler (<details>) — JS'siz de çalışır; burada kapanış ve açılış yönü --- */
+  var MENU_SECICI = "details.durdur-menu, details.satir-menu";
   function menuKur() {
-    // Program şeridindeki "Program kilidini durdur" açılır menüsü de aynı biçimde kapanır.
-    var gruplar = Array.prototype.slice.call(document.querySelectorAll("details.durdur-menu"));
+    // "Program kilidini durdur", satırın "⋯" menüsü ve "Diğer" menüleri: aynı anda tek menü açık kalır.
+    var gruplar = Array.prototype.slice.call(document.querySelectorAll(MENU_SECICI));
     if (!gruplar.length) return;
     function kapat(haric) {
       gruplar.forEach(function (g) { if (g !== haric) g.open = false; });
     }
     gruplar.forEach(function (g) {
-      g.addEventListener("toggle", function () { if (g.open) kapat(g); });
+      var sabitYon = g.classList.contains("yukari"); // seçim çubuğunun menüsü hep yukarı açılır
+      g.addEventListener("toggle", function () {
+        if (!g.open) return;
+        kapat(g);
+        // Yön GÖRÜNTÜ ALANINA göre seçilir (belgenin sonuna göre değil): üstte yapışkan üst çubuk, altta telefonun
+        // alt çubuğu ve seçim çubuğu düşülür. Hiçbir yöne sığmayan liste kendi içinde kayar (liste kabı kaydırma
+        // kabı değildir; kayan yalnız listenin kendisidir): "Kapat…" ekran dışında ya da alt çubuğun arkasında kalmaz.
+        var liste = g.querySelector(".menu-liste");
+        if (!liste) return;
+        liste.style.maxBlockSize = "";
+        if (!sabitYon) g.classList.remove("yukari");
+        var ozet = g.querySelector("summary").getBoundingClientRect();
+        var ustSinir = 0;
+        var altSinir = window.innerHeight;
+        var ustCubuk = document.querySelector(".ust-cubuk");
+        if (ustCubuk) {
+          var uk = ustCubuk.getBoundingClientRect();
+          if (uk.height && uk.top <= 0 && uk.bottom > 0) ustSinir = uk.bottom;
+        }
+        [document.querySelector(".alt-cubuk"), g.closest(".secim-cubugu") ? null : $("secim-cubugu")].forEach(function (o) {
+          if (!o) return;
+          var k = o.getBoundingClientRect();
+          if (k.height && k.top > ozet.bottom && k.top < altSinir) altSinir = k.top;
+        });
+        var pay = 12;
+        var asagi = altSinir - ozet.bottom - pay;
+        var yukari = ozet.top - ustSinir - pay;
+        var boy = liste.getBoundingClientRect().height;
+        if (sabitYon) { // seçim çubuğu ekrana yapışıktır: sayfa kaydırmak yer açmaz
+          if (boy > yukari) liste.style.maxBlockSize = Math.max(yukari, 132) + "px";
+          return;
+        }
+        if (boy <= asagi) return;
+        if (boy <= yukari) { g.classList.add("yukari"); return; }
+        // İki yöne de sığmıyor: sayfa, liste bütünüyle görünecek kadar kaydırılır (özet görünür kalıyorsa);
+        // o da olmuyorsa (kısa pencere, sayfanın başı/sonu) liste kendi içinde kayar.
+        var kok = document.scrollingElement || document.documentElement;
+        var eksik = boy - asagi;
+        if (ozet.top - eksik >= ustSinir + pay && kok.scrollHeight - window.innerHeight - window.scrollY >= eksik) {
+          window.scrollBy(0, eksik);
+          return;
+        }
+        eksik = boy - yukari;
+        if (ozet.bottom + eksik <= altSinir - pay && window.scrollY >= eksik) {
+          g.classList.add("yukari");
+          window.scrollBy(0, -eksik);
+          return;
+        }
+        if (yukari > asagi) g.classList.add("yukari");
+        liste.style.maxBlockSize = Math.max(Math.max(yukari, asagi), 132) + "px";
+      });
     });
     document.addEventListener("click", function (olay) {
-      var icinde = olay.target.closest && olay.target.closest("details.durdur-menu");
+      var icinde = olay.target.closest && olay.target.closest(MENU_SECICI);
       kapat(icinde || null);
     });
     document.addEventListener("keydown", function (olay) {
@@ -1828,7 +2095,8 @@
     });
   }
 
-  panoKur();
+  tahtalarKur();
+  tahtaEskiParcaKur();
   defterKur();
   cizelgeKur();
   siralamaKur();

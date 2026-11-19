@@ -113,8 +113,8 @@ def test_tahta_olayi_uzunlugu_ve_bicimi_sinirli(panel, tahta, okul):
 
 
 def test_tahta_sayfasi_dugme_yetenegi(panel, tahta, okul):
-    assert "Yüzer düğme</dt><dd><span class=\"rozet\" data-durum=\"tamam\"" in panel.get(f"/tahta/{kimlik(okul['yeni'])}").text
-    assert "Yüzer düğme için ajan güncellenmeli" in panel.get(f"/tahta/{kimlik(okul['eski'])}").text
+    assert "Yüzer düğme</dt><dd><span class=\"rozet\" data-durum=\"tamam\"" in panel.get(f"/tahta/{kimlik(okul['yeni'])}?sekme=bakim").text
+    assert "Yüzer düğme için ajan güncellenmeli" in panel.get(f"/tahta/{kimlik(okul['eski'])}?sekme=bakim").text
 
 
 def test_tahta_ekle_yonergesi_sudo_istemez_ve_etapadmin_notu(panel, okul):

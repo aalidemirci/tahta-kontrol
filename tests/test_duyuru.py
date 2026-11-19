@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 
 import pytest
@@ -291,3 +292,77 @@ def test_plan_sayfalari_ve_cogaltma(okul, panel):
     assert f'action="/duyurular/plan/{plan_id}"' in duzen and 'value="hemen"' not in duzen
     yanit = panel.post(f"/duyurular/plan/{plan_id}", data=plan_formu(eylem="kaydet", zaman="hemen"))
     assert yanit.status_code == 400 and "Hemen" in yanit.text
+
+
+# ---- Tahtalar sayfasından ön seçim (0.17.0): GET /duyurular/yeni?tahta=… -------------------------------------
+def isaretli_tahtalar(sayfa: str) -> list[str]:
+    return re.findall(r'name="hedef_tahta" value="(\d+)" checked', sayfa)
+
+
+def test_yeni_duyuru_tahta_on_secimi(okul, panel, tahta):
+    ikinci = kimlik(tahta_ekle(panel, tahta, "11-B"))
+    ucuncu = kimlik(tahta_ekle(panel, tahta, "11-C"))
+    sayfa = panel.get(f"/duyurular/yeni?tahta={kimlik(okul)}&tahta={ikinci}&tahta={ikinci}&secimden=1&donus=/tahtalar").text
+    assert 'name="kime" value="secim" checked' in sayfa and 'name="kime" value="tumu" checked' not in sayfa
+    assert isaretli_tahtalar(sayfa) == [str(kimlik(okul)), str(ikinci)] and str(ucuncu) not in isaretli_tahtalar(sayfa)
+    assert 'data-on-secim="2"' in sayfa and "Tahtalar sayfasında seçtiğiniz 2 tahta işaretli." in sayfa and "bulunamadı" not in sayfa
+    # Başka ölçüt işaretlenmez; süre, kapatma ve zamanlama varsayılanında.
+    for alan in ("bina", "kat", "duzey", "devre", "grup"):
+        assert f'name="hedef_{alan}"' not in sayfa or not re.search(rf'name="hedef_{alan}"[^>]* checked', sayfa), alan
+    assert 'name="zaman" value="hemen" checked' in sayfa and 'name="kapatilabilir" value="1" checked' in sayfa
+    # Form bu hedefle gönderilince yalnız o tahtalara gider (tek yayın yolu).
+    yanit = panel.post("/duyurular", data=plan_formu(kime="secim", hedef_tahta=[str(kimlik(okul)), str(ikinci)]))
+    assert "t=hata" not in yanit.headers["location"]
+    assert sorted(k["tahta_id"] for k in sorgu("SELECT tahta_id FROM komut WHERE tur = 'duyuru'")) == [kimlik(okul), ikinci]
+    # Tek tahta (satır menüsü ve tahta sayfası bağlantısı).
+    tek = panel.get(f"/duyurular/yeni?tahta={ucuncu}").text
+    assert isaretli_tahtalar(tek) == [str(ucuncu)] and "Tahtalar sayfasında seçtiğiniz 1 tahta işaretli." in tek
+    # Ön seçim yoksa form bugünkü gibi "Tüm tahtalar"la açılır ve bant çizilmez.
+    duz = panel.get("/duyurular/yeni").text
+    assert 'name="kime" value="tumu" checked' in duz and "data-on-secim" not in duz
+
+
+def test_on_secim_gecersiz_kimlikleri_atar_ve_tumuye_dusmez(okul, panel, tahta):
+    panel.post("/ekle", data={"eylem": "ac"})
+    kod = panel.get("/ekle").text.split('class="buyuk-kod">')[1].split("<")[0]
+    bekleyen = tahta.post("/ajan/kaydol", json={"kod": kod, "makine_adi": "etap", "surum": "0.17.0"}).json()["tahta_id"]
+    sayfa = panel.get(f"/duyurular/yeni?tahta={kimlik(okul)}&tahta=999&tahta={bekleyen}&tahta=abc&tahta=99999999999&tahta=-1").text
+    assert isaretli_tahtalar(sayfa) == [str(kimlik(okul))] and 'name="kime" value="secim" checked' in sayfa
+    assert "seçtiğiniz 1 tahta işaretli. 5 tahta bulunamadı." in sayfa
+    for sorgu_ in ("secimden=1", "tahta=999", f"tahta={bekleyen}", "tahta=abc&secimden=1", "tahta="):
+        bos = panel.get(f"/duyurular/yeni?{sorgu_}").text
+        # Geçerli tahta kalmasa da "Tüm tahtalar"a düşülmez: boş hedef, uyarı; gönderilirse reddedilir.
+        assert 'name="kime" value="secim" checked' in bos and 'name="kime" value="tumu" checked' not in bos, sorgu_
+        assert isaretli_tahtalar(bos) == [] and 'data-on-secim="0"' in bos, sorgu_
+        assert "Seçilen tahtalar bulunamadı; kime gideceğini aşağıdan seçin." in bos, sorgu_
+    yanit = panel.post("/duyurular", data=plan_formu(kime="secim"))
+    assert yanit.status_code == 400 and not sorgu("SELECT 1 FROM komut WHERE tur = 'duyuru'")
+    # Sorgu değeri sayfaya yansımaz.
+    assert "<script>" not in panel.get("/duyurular/yeni?tahta=%3Cscript%3E").text
+
+
+def test_on_secim_kopya_ve_yayin_varken_yok_sayilir(okul, panel, tahta):
+    ikinci = kimlik(tahta_ekle(panel, tahta, "11-B"))
+    plan_id = plan_kur(panel, zaman="tekrarli", siklik="gunluk", tekrar_saat="08:00", bitis="2026-12-31", kime="secim",
+                       hedef_tahta=str(kimlik(okul)))  # fmt: skip
+    kopya = panel.get(f"/duyurular/yeni?kopya={plan_id}&tahta={ikinci}&secimden=1").text
+    assert isaretli_tahtalar(kopya) == [str(kimlik(okul))] and "data-on-secim" not in kopya
+    panel.post("/islem", data={"tur": "duyuru", "tahta": kimlik(okul), "metin": "Tören 10.00'da."})
+    yayin = yayinlar()[0]["id"]
+    yeniden = panel.get(f"/duyurular/yeni?yayin={yayin}&tahta={ikinci}").text
+    assert "Tören 10.00" in yeniden and "data-on-secim" not in yeniden and str(ikinci) not in isaretli_tahtalar(yeniden)
+
+
+def test_on_secim_bulunamayan_kopyada_calisir_ve_sinavdaki_tahtayi_soyler(okul, panel, tahta, monkeypatch):
+    from tahta_sunucu import sinav
+
+    t = kimlik(okul)
+    # Olmayan plan/yayın kopyası ön seçimi yutmaz ("Tüm tahtalar"a düşmez).
+    for sorgu_ in (f"kopya=99999&tahta={t}", f"yayin=99999&tahta={t}"):
+        sayfa = panel.get(f"/duyurular/yeni?{sorgu_}").text
+        assert isaretli_tahtalar(sayfa) == [str(t)] and 'data-on-secim="1"' in sayfa and 'name="kime" value="tumu" checked' not in sayfa, sorgu_
+    assert "sınav sürüyor" not in sayfa
+    # Seçilen tahta sınav penceresindeyse form bandı uyarır (satır içi duyuru formunun eski ek onayının yerine).
+    monkeypatch.setattr(sinav, "pencere_haritasi", lambda b, an: {t: {"sinav_id": 1}})
+    sayfa = panel.get(f"/duyurular/yeni?tahta={t}").text
+    assert 'data-sinavda="1"' in sayfa and "1 tahtada sınav sürüyor:" in sayfa and "sınav ekranının üstünde görünür" in sayfa

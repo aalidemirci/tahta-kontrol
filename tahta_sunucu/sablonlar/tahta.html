@@ -1,93 +1,86 @@
 {% extends "taban.html" %}
+{% from "_tahta_komut.html" import rozetler, birincil_dugme, komut_menusu %}
+{% from "_ariza.html" import durum_rozeti %}
 {% block baslik %}{{ t.ad }} · Tahta Kontrol{% endblock %}
-{# Oturum temizliği iletisi sayfa başında değil, #temizlik bölümünde çizilir. #}
-{% block mesaj_yeri %}{% if mesaj and ileti_yeri != 'temizlik' %}{% include "_ileti.html" %}{% endif %}{% endblock %}
+{# 0.17.0 (arayüz 3. aşama) — tahta sayfası dört sekmedir: ?sekme=genel (varsayılan) · program · bakim · bilgiler
+   (tahta_liste.sekme_coz; yönlendirme yok). Sayfa başı her sekmede aynıdır: kırıntı, ad + durum rozeti, birincil düğme,
+   "Program kilidini durdur" (program kilidi açıksa ve tahta muaf değilse), "Duyuru gönder", "Diğer" (bugünkü 8 komut + oturum temizliği). Formların alan adları ve uçları
+   0.16.0 ile aynıdır; yalnız dönüş adresleri sekmeye gider. Bölüm kimlikleri (#program, #temizlik, #envanter,
+   #arizalar, #baglanti, #tani-baslik, #komut-baslik, #tahta-bilgi) korunur; eski parça adreslerini panel.js sekmeye taşır.
+   Ders başlığı ve öğretmen bilgisi bu sayfaya EKLENMEZ (kural 12; yalnız program.durum_metni). #}
+{# Oturum temizliği iletisi sayfa başında değil, Bakım'daki #temizlik bölümünde çizilir. #}
+{% block mesaj_yeri %}{% if mesaj and not (ileti_yeri == 'temizlik' and sekme == 'bakim' and t.durum == 'onayli') %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}
-<p class="geri"><a href="/">← Tahtalar</a></p>
-<div class="sayfa-bas">
-  <h1>{{ t.ad }}
-    {% if t.durum == 'bekliyor' %}<span class="rozet" data-durum="onay"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Onay bekliyor</span>
-    {% elif t.cevrimici %}<span class="rozet" data-durum="cevrimici"><svg class="simge" aria-hidden="true"><use href="#s-acik"/></svg>Çevrimiçi</span>
-    {% else %}<span class="rozet" data-durum="cevrimdisi"><svg class="simge" aria-hidden="true"><use href="#s-kapali"/></svg>Çevrimdışı</span>{% endif %}
-  </h1>
+{% set yonetici = kullanici.rol == 'yonetici' %}
+{% set onayli = t.durum == 'onayli' %}
+{% set taban_yolu = '/tahta/' ~ t.id %}
+<nav class="kirinti" aria-label="Konum"><a href="/tahtalar">Tahtalar</a><span aria-hidden="true">›</span><span>{{ t.ad }}</span></nav>
+<div class="sayfa-bas tahta-bas">
+  <div class="bas-yazi">
+    <h1>{{ t.ad }}
+      {% if t.durum == 'bekliyor' %}<span class="rozet" data-durum="onay"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Onay bekliyor</span>
+      {% else %}{% set r = t.liste.rozetler[0] %}<span class="rozet" data-durum="{{ r.d }}"><svg class="simge" aria-hidden="true"><use href="#{{ r.s }}"/></svg>{{ r.m }}</span>{% endif %}
+    </h1>
+    <p>{{ t.derslik or 'Derslik atanmadı' }}{% if t.alanlar %} · {{ t.alanlar }}{% endif %}{% if t.subeler %} · {{ t.subeler | join(', ') }}{% endif %}
+      · {{ t.oturum if t.cevrimici else 'çevrimdışı' }} · son görülme {{ t.son_gorulme }}</p>
+  </div>
+  {% if onayli %}
+  <div class="tahta-eylem" role="toolbar" aria-label="Bu tahtaya komut">
+    <form method="post" action="/islem" id="tahta-islem" class="satir-ici"{% if t.sinav %} data-sinavdaki="1"{% endif %}{% if t.oturum_acik %} data-oturum-acik="1"{% endif %}{% if not t.cevrimici %} data-cevrimdisi="1"{% endif %}>
+      <input type="hidden" name="tahta" value="{{ t.id }}">
+      <input type="hidden" name="donus" value="{{ sekme_yolu }}">
+      {{ birincil_dugme(t, 'tur', 'ana') }}
+    </form>
+    {# Program kilidi kapalıyken ya da tahta muafken sayfa başında çizilmez; Program sekmesindeki düğmeler hep durur. #}
+    {% if program_kilidi_acik and not program.muaf %}
+    <details class="acilir durdur-menu">
+      <summary class="dugme">Program kilidini durdur<svg class="simge" aria-hidden="true"><use href="#s-asagi"/></svg></summary>
+      <form method="post" action="/program/istisna" class="acilir-ic">
+        <input type="hidden" name="tahta" value="{{ t.id }}">
+        <input type="hidden" name="donus" value="{{ sekme_yolu }}">
+        <p class="not">Program kilidi yalnız bu tahtada durur; program kaynaklı kilitliyse hemen açılır.</p>
+        <div class="dugme-satiri"><button name="sure" value="1sa">1 saat</button><button name="sure" value="bugun">Bugün</button></div>
+      </form>
+    </details>
+    {% endif %}
+    <a class="dugme" href="/duyurular/yeni?tahta={{ t.id }}"><svg class="simge" aria-hidden="true"><use href="#s-duyuru"/></svg>Duyuru gönder</a>
+    {{ komut_menusu(t, menu_ogeleri, 'tur', baglantilar=false, form_kimligi='tahta-islem',
+                    temizlik={'form': 'tahta-temizlik-menu', 'pasif': '' if (temizlik.yetenekli and t.cevrimici) else ('çevrimdışı' if temizlik.yetenekli else 'ajan güncellenmeli')}) }}
+    {# "Diğer" menüsündeki "Oturumu şimdi temizle…" bu boş formu gönderir (onay penceresi eylem=temizle ekler). #}
+    <form method="post" action="{{ taban_yolu }}/temizlik" id="tahta-temizlik-menu" hidden></form>
+  </div>
+  {% endif %}
 </div>
 
+<nav class="sekmeler" aria-label="Tahta bölümleri">
+  <a href="{{ taban_yolu }}"{% if sekme == 'genel' %} aria-current="page"{% endif %}>Genel</a>
+  {% if onayli %}<a href="{{ taban_yolu }}?sekme=program"{% if sekme == 'program' %} aria-current="page"{% endif %}>Program</a>{% endif %}
+  <a href="{{ taban_yolu }}?sekme=bakim"{% if sekme == 'bakim' %} aria-current="page"{% endif %}>Bakım{% if t.ariza_sayisi %} <span class="sayi-rozet">{{ t.ariza_sayisi }}</span><span class="gizli"> süren arıza</span>{% endif %}</a>
+  {% if yonetici %}
+  <span class="sekme-ayrac" aria-hidden="true"></span>
+  <a href="{{ taban_yolu }}?sekme=bilgiler"{% if sekme == 'bilgiler' %} aria-current="page"{% endif %}>Bilgiler ve düzenle</a>
+  {% endif %}
+</nav>
+
+{% if sekme == 'genel' %}
+{# ---- Genel: durum, süren arızalar, son komutlar ---- #}
+{% if t.durum == 'bekliyor' %}
+<div class="bant uyari" role="status">Bu tahta onay bekliyor: onaylanana kadar komut almaz.
+  {% if yonetici %}<a href="{{ taban_yolu }}?sekme=bilgiler">Adlandır ve onayla</a>{% else %}Yöneticinin onayını bekliyor.{% endif %}</div>
+{% endif %}
 <div class="iki-sutun">
-  <div class="kutu">
-    <h2>Tahta bilgileri</h2>
-    {% if kullanici.rol == 'yonetici' %}
-    <form method="post" action="/tahta/{{ t.id }}/kaydet" class="form-dar" id="tahta-bilgi">
-      <label for="ad">Tahtanın adı</label>
-      <input type="text" id="ad" name="ad" value="{{ t.ad }}" maxlength="60" required>
-      <label for="derslik">Derslik</label>
-      <input type="text" id="derslik" name="derslik" value="{{ t.derslik }}" maxlength="60" placeholder="ör. D-204, 11/A sınıfı">
-      {# Nitelik alanları: gizli "alanlar=1" işareti varsa sunucu bina/kat/düzey/devre/şube/grubu yazar. #}
-      <input type="hidden" name="alanlar" value="1">
-      <fieldset class="nitelikler">
-        <legend>Hedefleme nitelikleri</legend>
-        <p class="ipucu">Duyurular bina, kat, düzey, devre ve gruba göre hedeflenir. Boş bırakılan alan o ölçüte uymaz.
-          Toplu doldurmak için <a href="/tahtalar/ice-aktar">CSV ile içe aktarın</a>.</p>
-        <div class="alan-cifti">
-          <div>
-            <label for="bina">Bina</label>
-            <input type="text" id="bina" name="bina" value="{{ t.bina }}" maxlength="40" list="binalar" placeholder="ör. A Blok">
-            <datalist id="binalar">{% for b_ in binalar %}<option value="{{ b_ }}">{% endfor %}</datalist>
-          </div>
-          <div>
-            <label for="kat">Kat</label>
-            <select id="kat" name="kat">{% for v, ad in katlar %}<option value="{{ '' if v is none else v }}" {% if v == t.kat %}selected{% endif %}>{{ ad }}</option>{% endfor %}</select>
-          </div>
-        </div>
-        <fieldset class="olcut"><legend>Düzey</legend><div class="secenekler">{% for v, ad in duzeyler.items() %}<label><input type="checkbox" name="duzey" value="{{ v }}" {% if v in t.duzeyler %}checked{% endif %}> {{ ad }}</label>{% endfor %}</div></fieldset>
-        <div class="alan-cifti">
-          <div>
-            <label for="devre">Devre</label>
-            <select id="devre" name="devre"><option value="">Belirtilmemiş</option>{% for v, ad in devreler.items() %}<option value="{{ v }}" {% if v == t.devre %}selected{% endif %}>{{ ad }}</option>{% endfor %}</select>
-          </div>
-          <div>
-            <label for="subeler">Şube(ler)</label>
-            <input type="text" id="subeler" name="subeler" value="{{ t.subeler | join(', ') }}" placeholder="ör. 9/A ya da 9/A, 10/B">
-          </div>
-        </div>
-        {% if gruplar %}<fieldset class="olcut"><legend>Gruplar</legend><div class="secenekler">{% for g in gruplar %}<label><input type="checkbox" name="grup" value="{{ g.id }}" {% if g.id in t.gruplar %}checked{% endif %}> {{ g.ad }}</label>{% endfor %}</div></fieldset>
-        {% else %}<p class="not">Grup yok; <a href="/gruplar">Gruplar</a> sayfasından eklenir.</p>{% endif %}
-      </fieldset>
-      <p class="dugme-satiri">
-        {% if t.durum == 'bekliyor' %}
-        <button name="eylem" value="onayla" class="ana">Onayla ve kaydet</button>
-        {% else %}
-        <button name="eylem" value="kaydet" class="ana">Kaydet</button>
-        {% endif %}
-        <button type="button" class="tehlike" data-onay="sil" aria-haspopup="dialog">Tahtayı kaldır…</button>
-      </p>
-    </form>
-    {% else %}
-    <p>Derslik: {{ t.derslik or '—' }}</p>
-    <p>Nitelikler: {{ t.alanlar or '—' }}{% if t.subeler %} · {{ t.subeler | join(', ') }}{% endif %}</p>
-    {% endif %}
-  </div>
-  <div class="kutu">
-    <h2>Durum</h2>
+  <section class="kutu" aria-labelledby="durum-baslik">
+    <div class="kutu-bas">
+      <h2 id="durum-baslik">Durum</h2>
+      <a class="sag" href="{{ taban_yolu }}?sekme=bakim#baglanti">Teknik ayrıntı</a>
+    </div>
     <dl class="ozellikler">
       <dt>Son görülme</dt><dd>{{ ham.son_gorulme | zaman }}</dd>
-      <dt>Kayıt zamanı</dt><dd>{{ ham.kayit_zamani | zaman }}</dd>
-      <dt>IP · MAC</dt><dd class="kod">{{ ham.ip or '—' }} · {{ ham.mac or '—' }}</dd>
-      <dt>Makine adı</dt><dd>{{ ham.makine_adi or '—' }}</dd>
-      <dt>İşletim sistemi</dt><dd>{{ ham.platform or '—' }}</dd>
-      <dt>Ajan sürümü</dt><dd>{{ ham.surum or '—' }}{% if ham.surum and not t.guncel %} <span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Güncelleme var</span>{% endif %}</dd>
       <dt>Oturum</dt><dd>{{ t.oturum }}</dd>
       <dt>Ekran yardımcısı</dt><dd>{{ 'Bağlı' if t.ekran_bagli else 'Bağlı değil' }}</dd>
-      {# 0.9.0 (G3): yüzer düğme yalnız `dugme` yeteneği bildiren ajanda görünür. #}
-      <dt>Yüzer düğme</dt><dd>{% if t.dugme_yetenegi %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Destekleniyor</span> <a href="/ayarlar/yuzer">Ayarlar</a>
-        {%- elif ham.surum %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Yüzer düğme için ajan güncellenmeli</span>{% else %}—{% endif %}</dd>
-      <dt>Ders yoklaması</dt><dd>{% if t.yoklama_yetenegi %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Yoklama: destekleniyor</span>{% if t.yoklama_acik %} <span class="rozet" data-durum="duyuru"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Şu an yoklama alınıyor</span>{% endif %}
-        {%- elif ham.surum %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Yoklama: ajan güncellenmeli</span>{% else %}—{% endif %}
-        {% if not t.subeler %}<span class="not"> · Şube(ler) alanı boş: tahtada şube önerisi gelmez.</span>{% endif %}</dd>
-      {% if usb_etkin %}
-      {# 0.11.0: USB anahtarı tanımayan (eski) ajan belleğe bakmaz; satır yalnız özellik açıkken. #}
-      <dt>USB anahtar</dt><dd>{% if t.usb_anahtar_yetenegi %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>USB anahtar: destekleniyor</span>{% if durum.usb_izleme == 'desteklenmiyor' %} <span class="not">· bu tahtada bellekler izlenemiyor (tanılamaya bakın)</span>{% endif %}
-        {%- elif ham.surum %}<span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>USB anahtar: ajan güncellenmeli</span>{% else %}—{% endif %}</dd>
-      {% endif %}
+      <dt>Ajan sürümü</dt><dd>{{ ham.surum or '—' }}{% if ham.surum and not t.guncel %} <span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Güncelleme var</span>{% endif %}</dd>
+      {% if onayli %}<dt>Program</dt><dd>{{ program.durum_metni }} · <a href="{{ taban_yolu }}?sekme=program">Program</a></dd>{% endif %}
+      {% if t.yoklama_acik %}<dt>Ders yoklaması</dt><dd><span class="rozet" data-durum="duyuru"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Şu an yoklama alınıyor</span></dd>{% endif %}
       {% if t.sinav %}
       {# A4: sunucunun hesabıyla sınav penceresi (ajan sürümünden bağımsız). #}
       <dt>Sınav</dt><dd><a href="/sinav/{{ t.sinav.sinav_id }}">{{ t.sinav.sinav_adi }}</a> · {{ t.sinav.salon_adi }}
@@ -95,27 +88,51 @@
         · bitiş {{ t.sinav.bitis_saat }}{% if not t.sinav_yetenegi %} <span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Ajan güncellenmeli: sınav ekranı açılmaz</span>{% endif %}</dd>
       {% endif %}
     </dl>
-  </div>
+    {# Sayfa başındaki ilk rozetin ardından gelenler (arıza, güncelleme, boş ders, muaf…) #}
+    {# "Güncelleme var" yukarıda Ajan sürümü satırında yazar; burada yinelenmez. #}
+    {% set ek_rozetler = t.liste.rozetler[1:] | rejectattr('m', 'equalto', 'Güncelleme var') | list %}
+    {% if ek_rozetler %}<div class="rozetler genel-rozetler">{{ rozetler(ek_rozetler) }}</div>{% endif %}
+  </section>
+
+  <section class="kutu" aria-labelledby="genel-ariza-baslik">
+    <div class="kutu-bas">
+      <h2 id="genel-ariza-baslik">Süren arızalar</h2>
+      <a class="sag" href="{{ taban_yolu }}?sekme=bakim#arizalar">Bakım: arıza, envanter</a>
+    </div>
+    {% if arizalar %}
+    <ul class="ariza-liste">
+      {% for a in arizalar[:3] %}
+      <li>{{ durum_rozeti(a.durum, a.durum_adi) }} <a href="/ariza/{{ a.id }}">#{{ a.id }} {{ a.kategori_adi }}</a>
+        <div class="not">{{ a.olusturma | tarih }} · {{ a.kaynak_metni }}</div></li>
+      {% endfor %}
+    </ul>
+    {% if arizalar | length > 3 %}<p class="not">+{{ arizalar | length - 3 }} kayıt daha</p>{% endif %}
+    {% else %}
+    <p class="not">Bu tahtada süren arıza kaydı yok.</p>
+    {% endif %}
+  </section>
 </div>
 
-{% if t.durum == 'onayli' %}
-<form method="post" action="/islem" class="arac-cubugu" id="tahta-islem" role="toolbar" aria-label="Bu tahtaya komut"{% if t.sinav %} data-sinavdaki="1"{% endif %}>
-  <input type="hidden" name="tahta" value="{{ t.id }}">
-  <input type="hidden" name="donus" value="/tahta/{{ t.id }}">
-  <button name="tur" value="kilitle">Kilitle</button>
-  <button name="tur" value="kilit_ac">Kilidi aç</button>
-  <button name="tur" value="duyuru_kaldir">Duyuruyu kaldır</button>
-  <button name="tur" value="tani" class="ana">Tanılama çalıştır</button>
-  <button name="tur" value="guncelle">Ajanı güncelle</button>
-  <button type="button" class="tehlike" data-onay="kapat" aria-haspopup="dialog">Kapat…</button>
-  <button type="button" class="tehlike" data-onay="yeniden_baslat" aria-haspopup="dialog">Yeniden başlat…</button>
-  <button name="tur" value="uyandir" title="Tahtanın donanımına ve BIOS ayarına bağlıdır; çoğu cihazda çalışmaz.">Uzaktan aç (deneysel)</button>
-</form>
-{% endif %}
+<section class="kutu" aria-labelledby="genel-komut-baslik">
+  <div class="kutu-bas">
+    <h2 id="genel-komut-baslik">Son komutlar</h2>
+    <a class="sag" href="{{ taban_yolu }}?sekme=bakim#komut-baslik">Tümü</a>
+  </div>
+  {% if komutlar %}
+  <ul class="komut-ozet">
+    {% for k in komutlar[:3] %}
+    <li><span class="not">{{ k.olusturma | zaman }}</span> <strong>{{ komut_adi.get(k.tur, k.tur) }}</strong>
+      <span class="not">{{ k.olusturan }} · {{ komut_durumu.get(k.durum, k.durum) }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="not">Bu tahtaya henüz komut verilmedi.</p>
+  {% endif %}
+</section>
 
-{# Program kutusu (Aşama 3): haftalık derslik ızgarası, muafiyet, bu tahtanın istisnaları.
-   Alan adları sözleşmedir: d_{gun}_{devre}_{no}=1, sube_{gun}_{devre}_{no}, program_muaf=1. #}
-{% if t.durum == 'onayli' %}
+{% elif sekme == 'program' %}
+{# ---- Program: haftalık derslik ızgarası, muafiyet, bu tahtanın istisnaları.
+   Alan adları sözleşmedir: d_{gun}_{devre}_{no}=1, sube_{gun}_{devre}_{no}, program_muaf=1. ---- #}
 <section class="kutu" id="program" aria-labelledby="program-baslik">
   <div class="kutu-bas">
     <h2 id="program-baslik">Program</h2>
@@ -128,8 +145,8 @@
     {% if not program.program_yetenegi %}<dt>Ajan</dt><dd><span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Program kilidi için ajan güncellenmeli</span></dd>{% endif %}
     {% if program.yetim_sayisi %}<dt>Uyarı</dt><dd>{{ program.yetim_sayisi }} işaret artık olmayan ders saatine ait; yok sayılır.</dd>{% endif %}
   </dl>
-  {% if kullanici.rol == 'yonetici' %}
-  <form method="post" action="/tahta/{{ t.id }}/program" id="tahta-program" class="izgara-formu">
+  {% if yonetici %}
+  <form method="post" action="{{ taban_yolu }}/program" id="tahta-program" class="izgara-formu">
     <label class="satir"><input type="checkbox" name="program_muaf" value="1" {% if program.muaf %}checked{% endif %}> Program kilidi bu tahtaya uygulanmaz (ör. kütüphane, öğretmenler odası)</label>
     {% if program.izgaralar %}
     <p class="ipucu">Bu derslikte ders olan saatleri işaretleyin; şube isteğe bağlıdır (ör. 9/A) ve yalnız panelde görünür.</p>
@@ -183,26 +200,27 @@
   {% if program.istisnalar %}
   <ul class="istisna-listesi">
     {% for i in program.istisnalar %}<li><span class="rozet" data-durum="{{ 'uyari' if i.durum == 'etkin' else 'onay' }}">{{ i.durum_adi }}</span> {{ i.aralik }} · {{ i.kapsam }}{% if i.neden %} · {{ i.neden }}{% endif %}
-      {% if i.iptal_edilebilir %}<form method="post" action="/program/istisna/{{ i.id }}/iptal" class="satir-ici"><input type="hidden" name="donus" value="/tahta/{{ t.id }}#program"><button>İptal et</button></form>{% endif %}</li>{% endfor %}
+      {% if i.iptal_edilebilir %}<form method="post" action="/program/istisna/{{ i.id }}/iptal" class="satir-ici"><input type="hidden" name="donus" value="{{ taban_yolu }}?sekme=program"><button>İptal et</button></form>{% endif %}</li>{% endfor %}
   </ul>
   {% else %}<p class="not">Etkin ya da ileri tarihli istisna yok.</p>{% endif %}
   <form method="post" action="/program/istisna" class="dugme-satiri">
     <input type="hidden" name="tahta" value="{{ t.id }}">
-    <input type="hidden" name="donus" value="/tahta/{{ t.id }}#program">
+    <input type="hidden" name="donus" value="{{ taban_yolu }}?sekme=program">
     <button name="sure" value="1sa">Bu tahtada 1 saat durdur</button>
     <button name="sure" value="bugun">Bu tahtada bugün durdur</button>
   </form>
 </section>
-{% endif %}
 
+{% elif sekme == 'bakim' %}
+{# ---- Bakım: oturum temizliği, envanter ve demirbaş, arızalar, bağlantı ve ajan, yetenekler, tanılama, komutlar ---- #}
+{% if onayli %}
 {# Oturum temizliği (K7): son sonuç (komut geçmişinden) ve elle "Şimdi temizle" (onay dialoglu). #}
-{% if t.durum == 'onayli' %}
 <section class="kutu" id="temizlik" aria-labelledby="temizlik-baslik">
   <h2 id="temizlik-baslik">Oturum temizliği</h2>
   {% if mesaj and ileti_yeri == 'temizlik' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
   <dl class="ozellikler">
     <dt>Gün sonu temizliği</dt><dd>{% if temizlik.ayar.etkin %}Açık · {{ temizlik_zamanlari[temizlik.ayar.zaman] }}{% if temizlik.ayar.zaman == 'saat' %} ({{ temizlik.ayar.saat }}){% endif %}{% else %}Kapalı{% endif %}
-      {%- if kullanici.rol == 'yonetici' %} · <a href="/ayarlar/gunsonu#temizlik">Ayarlar</a>{% endif %}</dd>
+      {%- if yonetici %} · <a href="/ayarlar/gunsonu#temizlik">Ayarlar</a>{% endif %}</dd>
     <dt>Son temizlik</dt><dd>{% if temizlik.son %}{{ temizlik.son.zaman | zaman }} · {{ temizlik.son.sonuc }}{% if temizlik.son.olusturan != 'sistem' %} (elle: {{ temizlik.son.olusturan }}){% endif %}{% else %}Henüz yapılmadı.{% endif %}</dd>
     {% if temizlik.bekleyen %}<dt>Şu an</dt><dd><span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Temizlik sürüyor ya da tahtada uyarı gösteriliyor</span></dd>{% endif %}
     {% if not temizlik.yetenekli %}<dt>Ajan</dt><dd><span class="rozet" data-durum="guncelleme"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>Oturum temizliği için ajan güncellenmeli</span></dd>{% endif %}
@@ -211,7 +229,7 @@
     kapatma isteği gider (kaydedilmemiş belge sorulur), tarayıcılar kapatılır ve yalnız çerez ve oturum dosyaları silinir.
     Dosyalara (İndirilenler, Masaüstü, Belgeler), tarayıcı geçmişine ve kayıtlı parolalara dokunulmaz.</p>
   {% if temizlik.yetenekli %}
-  <form method="post" action="/tahta/{{ t.id }}/temizlik" id="tahta-temizlik" class="dugme-satiri">
+  <form method="post" action="{{ taban_yolu }}/temizlik" id="tahta-temizlik" class="dugme-satiri">
     <button type="button" class="tehlike" data-onay="temizlik" aria-haspopup="dialog"{% if not t.cevrimici %} disabled title="Tahta çevrimdışı"{% endif %}>Şimdi temizle…</button>
   </form>
   {% endif %}
@@ -242,7 +260,7 @@
 </table>
 </div>
 {% else %}
-<p class="not">Henüz tanılama raporu yok. Tahta çevrimiçiyken “Tanılama çalıştır” düğmesine basın; rapor birkaç saniye içinde bu sayfada görünür.</p>
+<p class="not">Henüz tanılama raporu yok. Tahta çevrimiçiyken sayfa başındaki “Diğer” menüsünden “Tanılama çalıştır” deyin; rapor birkaç saniye içinde burada görünür.</p>
 {% endif %}
 
 <h2 id="komut-baslik">Son komutlar</h2>
@@ -266,5 +284,57 @@
 </div>
 {% else %}
 <p class="not">Bu tahtaya henüz komut verilmedi.</p>
+{% endif %}
+
+{% elif sekme == 'bilgiler' and yonetici %}
+{# ---- Bilgiler ve düzenle (yalnız yönetici; sekme_coz idareciyi Genel'e indirir) ---- #}
+<div class="kutu">
+  <h2>Tahta bilgileri</h2>
+  <form method="post" action="{{ taban_yolu }}/kaydet" class="form-dar" id="tahta-bilgi">
+    <label for="ad">Tahtanın adı</label>
+    <input type="text" id="ad" name="ad" value="{{ t.ad }}" maxlength="60" required>
+    <label for="derslik">Derslik</label>
+    <input type="text" id="derslik" name="derslik" value="{{ t.derslik }}" maxlength="60" placeholder="ör. D-204, 11/A sınıfı">
+    {# Nitelik alanları: gizli "alanlar=1" işareti varsa sunucu bina/kat/düzey/devre/şube/grubu yazar. #}
+    <input type="hidden" name="alanlar" value="1">
+    <fieldset class="nitelikler">
+      <legend>Hedefleme nitelikleri</legend>
+      <p class="ipucu">Duyurular bina, kat, düzey, devre ve gruba göre hedeflenir; tahta listesi bina ve kata göre gruplanır.
+        Boş bırakılan alan o ölçüte uymaz. Toplu doldurmak için <a href="/tahtalar/ice-aktar">CSV ile içe aktarın</a>.</p>
+      <div class="alan-cifti">
+        <div>
+          <label for="bina">Bina</label>
+          <input type="text" id="bina" name="bina" value="{{ t.bina }}" maxlength="40" list="binalar" placeholder="ör. A Blok">
+          <datalist id="binalar">{% for b_ in binalar %}<option value="{{ b_ }}">{% endfor %}</datalist>
+        </div>
+        <div>
+          <label for="kat">Kat</label>
+          <select id="kat" name="kat">{% for v, ad in katlar %}<option value="{{ '' if v is none else v }}" {% if v == t.kat %}selected{% endif %}>{{ ad }}</option>{% endfor %}</select>
+        </div>
+      </div>
+      <fieldset class="olcut"><legend>Düzey</legend><div class="secenekler">{% for v, ad in duzeyler.items() %}<label><input type="checkbox" name="duzey" value="{{ v }}" {% if v in t.duzeyler %}checked{% endif %}> {{ ad }}</label>{% endfor %}</div></fieldset>
+      <div class="alan-cifti">
+        <div>
+          <label for="devre">Devre</label>
+          <select id="devre" name="devre"><option value="">Belirtilmemiş</option>{% for v, ad in devreler.items() %}<option value="{{ v }}" {% if v == t.devre %}selected{% endif %}>{{ ad }}</option>{% endfor %}</select>
+        </div>
+        <div>
+          <label for="subeler">Şube(ler)</label>
+          <input type="text" id="subeler" name="subeler" value="{{ t.subeler | join(', ') }}" placeholder="ör. 9/A ya da 9/A, 10/B">
+        </div>
+      </div>
+      {% if gruplar %}<fieldset class="olcut"><legend>Gruplar</legend><div class="secenekler">{% for g in gruplar %}<label><input type="checkbox" name="grup" value="{{ g.id }}" {% if g.id in t.gruplar %}checked{% endif %}> {{ g.ad }}</label>{% endfor %}</div></fieldset>
+      {% else %}<p class="not">Grup yok; <a href="/gruplar">Gruplar</a> sayfasından eklenir.</p>{% endif %}
+    </fieldset>
+    <div class="dugme-satiri">
+      {% if t.durum == 'bekliyor' %}
+      <button name="eylem" value="onayla" class="ana">Onayla ve kaydet</button>
+      {% else %}
+      <button name="eylem" value="kaydet" class="ana">Kaydet</button>
+      {% endif %}
+      <button type="button" class="tehlike" data-onay="sil" aria-haspopup="dialog">Tahtayı kaldır…</button>
+    </div>
+  </form>
+</div>
 {% endif %}
 {% endblock %}

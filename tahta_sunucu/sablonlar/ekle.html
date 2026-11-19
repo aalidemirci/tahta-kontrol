@@ -2,12 +2,13 @@
 {% block baslik %}Tahta ekle · Tahta Kontrol{% endblock %}
 {% block icerik %}
 <div class="sayfa-bas"><h1>Tahta ekle</h1></div>
+{% include "_tahtalar_bas.html" %}
 
 <div class="kutu kod-bilet">
   {% if acik %}
   <p>Tahta ekleme <strong>açık</strong>. Eşleştirme kodu:</p>
   <p class="buyuk-kod">{{ kod }}</p>
-  <p class="not">Kod {{ bitis | zaman }} saatine kadar geçerlidir. Kodla kaydolan tahta komut almaz; önce panoda onaylamanız gerekir.</p>
+  <p class="not">Kod {{ bitis | zaman }} saatine kadar geçerlidir. Kodla kaydolan tahta komut almaz; önce Tahtalar sayfasındaki onay bandından adlandırıp onaylamanız gerekir.</p>
   {% if kullanici.rol == 'yonetici' %}
   <div class="dugme-satiri">
     <form method="post" action="/ekle" class="satir-ici"><button name="eylem" value="kapat">Tahta eklemeyi kapat</button></form>

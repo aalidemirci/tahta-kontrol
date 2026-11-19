@@ -1,0 +1,47 @@
+{# 0.17.0 — tahta komut parçaları: durum rozetleri, satırın/sayfanın birincil düğmesi ve komut menüsü.
+   Kural sunucudadır (tahta_liste.durum_ozeti → t.liste; menü öğeleri tahta_liste.menu_ogeleri); burada yalnız çizilir.
+   bicim='tek': tahta listesi satırı — komut `tek=<tur>:<id>` ile gider (yalnız o tahta işlenir).
+   bicim='tur': tahta sayfası — düğme formun `tur` alanıdır (form gizli `tahta` alanını taşır).
+   Onay isteyen komut (Kapat…, Yeniden başlat…, Şimdi temizle…) her zaman type="button" + data-onay'dır: JS yoksa gitmez.
+   Pasif öğe name/value taşımaz. Satır menülerinde id kullanılmaz (aynı id iki kez çizilmesin). #}
+
+{% macro rozetler(liste) -%}
+{% for r in liste -%}
+{% if r.yol %}<a class="rozet" data-durum="{{ r.d }}" href="{{ r.yol }}"><svg class="simge" aria-hidden="true"><use href="#{{ r.s }}"/></svg>{{ r.m }}</a>
+{%- else %}<span class="rozet" data-durum="{{ r.d }}"><svg class="simge" aria-hidden="true"><use href="#{{ r.s }}"/></svg>{{ r.m }}</span>{% endif %}
+{% endfor %}
+{%- endmacro %}
+
+{% macro birincil_dugme(t, bicim='tek', sinif='') -%}
+{% set d = t.liste.dugme -%}
+{% if d and d.yol %}<a class="dugme {{ sinif }}" href="{{ d.yol }}">{{ d.ad }}<span class="gizli"> ({{ t.ad }})</span></a>
+{%- elif d and bicim == 'tek' %}<button type="submit" class="{{ sinif }}" name="tek" value="{{ d.tur }}:{{ t.id }}">{% if d.tur == 'kilitle' %}<svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>{% endif %}<span>{{ d.ad }}</span><span class="gizli"> ({{ t.ad }})</span></button>
+{%- elif d %}<button type="submit" class="{{ sinif }}" name="tur" value="{{ d.tur }}">{% if d.tur == 'kilitle' %}<svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>{% endif %}<span>{{ d.ad }}</span></button>{% endif %}
+{%- endmacro %}
+
+{# ogeler: tahta_liste.menu_ogeleri çıktısı. baglantilar=false ise bağlantı öğeleri (Duyuru gönder, Ayrıntı, Bilgiler)
+   çizilmez (tahta sayfasında bunlar sayfa başında ve sekme şeridinde durur).
+   temizlik: tahta sayfasında {"form": <form id>, "pasif": gerekçe ya da ""} — "Oturumu şimdi temizle…" öğesi. #}
+{% macro komut_menusu(t, ogeler, bicim='tek', baglantilar=true, form_kimligi='', temizlik=none, ozet='') -%}
+<details class="acilir satir-menu">
+  {% if bicim == 'tek' -%}
+  <summary class="dugme simge-dugme" aria-label="{{ t.ad }} için diğer işlemler"><svg class="simge" aria-hidden="true"><use href="#s-daha"/></svg></summary>
+  {%- else -%}
+  <summary class="dugme">{{ ozet or 'Diğer' }}<svg class="simge" aria-hidden="true"><use href="#s-asagi"/></svg></summary>
+  {%- endif %}
+  <ul class="menu-liste">
+    {% for o in ogeler -%}
+    {% if o.bicim == 'baglanti' %}{% if baglantilar %}<li><a href="{{ o.yol }}">{{ o.ad }}</a></li>{% endif %}
+    {% elif o.bicim == 'ayrac' %}
+    {% if temizlik is not none %}<li>{% if temizlik.pasif %}<button type="button" disabled><span>Oturumu şimdi temizle</span><small>{{ temizlik.pasif }}</small></button>
+      {%- else %}<button type="button" class="tehlike" data-onay="temizlik" data-onay-ad="{{ t.ad }}" form="{{ temizlik.form }}" aria-haspopup="dialog">Oturumu şimdi temizle…</button>{% endif %}</li>{% endif %}
+    <li class="ayrac" role="separator"></li>
+    {% elif o.bicim == 'onay' %}<li><button type="button" class="tehlike" data-komut="{{ o.tur }}" data-onay="{{ o.tur }}"{% if bicim == 'tek' %} data-tek="{{ o.tur }}:{{ t.id }}"{% endif %} data-onay-ad="{{ t.ad }}"{% if form_kimligi %} form="{{ form_kimligi }}"{% endif %} aria-haspopup="dialog"{% if o.pasif %} disabled{% endif %}><span>{{ o.ad }}</span><small{% if not o.pasif %} hidden{% endif %}>{{ o.pasif }}</small></button></li>
+    {% elif o.pasif %}<li><button type="button" disabled data-komut="{{ o.tur }}"><span>{{ o.ad }}</span><small>{{ o.pasif }}</small></button></li>
+    {% elif bicim == 'tek' %}<li><button type="submit" name="tek" value="{{ o.tur }}:{{ t.id }}" data-komut="{{ o.tur }}"><span>{{ o.ad }}</span><small{% if not o.alt %} hidden{% endif %}>{{ o.alt }}</small></button></li>
+    {% else %}<li><button type="submit" name="tur" value="{{ o.tur }}" data-komut="{{ o.tur }}"{% if form_kimligi %} form="{{ form_kimligi }}"{% endif %}><span>{{ o.ad }}</span><small{% if not o.alt %} hidden{% endif %}>{{ o.alt }}</small></button></li>
+    {% endif %}
+    {%- endfor %}
+  </ul>
+</details>
+{%- endmacro %}

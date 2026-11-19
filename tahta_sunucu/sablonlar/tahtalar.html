@@ -1,0 +1,140 @@
+{% extends "taban.html" %}
+{% from "_tahta_komut.html" import rozetler, birincil_dugme, komut_menusu %}
+{% block baslik %}Tahtalar · Tahta Kontrol{% endblock %}
+{# 0.17.0 (arayüz 3. aşama) — tahta listesi: konuma göre gruplu satırlar, satırda duruma göre TEK birincil düğme +
+   "⋯" menüsü, seçim çubuğu, ?durum= süzgeci (JS'siz çalışır). "/" ve "/tahtalar" bu şablonu çizer.
+   Bağlam: gruplar [{ad, baslik, tahtalar}], onayli (ilk-veri; /api/durum ile aynı biçim), sayilar, suzgecler, suzgec,
+   bekleyen (yalnız yöneticide dolu), bekleyen_sayisi, liste_yolu, donus + _pano_bantlar.html bağlamı.
+   Durum kuralı sunucudadır (t.liste); panel.js yalnız /api/durum'daki aynı sözlüğü satıra yazar.
+   Komut güvenliği: satır düğmeleri `tek=<tur>:<id>` gönderir (sunucu yalnız o tahtayı işler); süzgeç dışı satırın
+   kutusu disabled'dır (forma girmez); onay isteyen düğmeler type="button"dır (JS yoksa hiçbir şey göndermez).
+   ENTER: formun ağaç sırasındaki İLK gönder düğmesi zararsız bir nöbetçidir (`nobetci=1`). Seçim kutusu odaktayken
+   Enter örtük gönderim yapar ve tarayıcı ilk ETKİN gönder düğmesini tıklar; nöbetçi olmasa bu, ilk satırın `tek=`
+   düğmesi olurdu (seçilmemiş tahtaya komut). Nöbetçi DEVRE DIŞI YAPILMAZ: Chromium seçim kutusundaki Enter'da devre
+   dışı düğmeyi atlayıp sıradaki etkin düğmeyi tıklar (başsız Edge'de ölçüldü). `nobetci` alanını gören /islem hiçbir
+   komut yazmaz (tahta_liste.islem_hedefi, ilk dal). Nöbetçi kaldırılmaz, önüne gönder düğmesi konmaz; panel.js ayrıca
+   seçim kutusunda Enter'ı yutar (JS'liyken sayfa hiç gönderilmez). Formda metin alanı da yoktur.
+   Satır komutunun iletisi (`?s=<id>`) sayfa başına ek olarak o satırda da çizilir (sayfa `#t-<id>` ile satıra kayar). #}
+{% block icerik %}
+{% set yonetici = kullanici.rol == 'yonetici' %}
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>Tahtalar</h1>
+    <p><span id="tahta-ozet">{{ sayilar.hepsi }} onaylı tahta{% if sayilar.hepsi %} · <span data-alan="cevrimici">{{ sayilar.cevrimici }}</span> çevrimiçi{% endif %}</span>
+      · otomatik kapatma: {{ kapatma or 'kapalı' }}{% if yonetici %} · <a href="/ayarlar/gunsonu">Ayarla</a>{% endif %}</p>
+    {% if gruplar %}<span class="canli" id="canli" data-durum="cevrimici"><svg class="simge" aria-hidden="true"><use href="#s-acik"/></svg><span>Canlı</span></span>{% endif %}
+  </div>
+  {% if yonetici %}<p class="dugme-satiri sayfa-eylem"><a class="dugme" href="/ekle">Tahta ekle</a></p>{% endif %}
+</div>
+
+{% include "_tahtalar_bas.html" %}
+{% include "_pano_bantlar.html" %}
+
+{% if bekleyen_sayisi %}
+{% if yonetici %}
+<div class="bant uyari" role="status" id="onay-bekleyen">
+  <strong>{{ bekleyen_sayisi }} yeni tahta onay bekliyor.</strong>
+  <span>Kurulumu yapılan tahta, ad ve derslik verilip onaylanınca komut alır; onaysız tahta komut almaz.</span>
+  <ul>
+    {% for t in bekleyen %}
+    <li><a href="/tahta/{{ t.id }}?sekme=bilgiler">{{ t.ad }}<span class="gizli">: adlandır ve onayla</span></a> <span class="not">· {{ t.ip }} · {{ t.son_gorulme }} · adlandır ve onayla</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% else %}
+<p class="bant" role="status" id="onay-bekleyen">{{ bekleyen_sayisi }} yeni tahta yöneticinin onayını bekliyor; onaylanınca bu listeye girer.</p>
+{% endif %}
+{% endif %}
+
+<div class="bant uyari" id="yenile-bandi" hidden>Yeni tahta onaylandı ya da onay bekleyen sayısı değişti. <a href="{{ donus }}">Sayfayı yenile</a></div>
+
+{% if not gruplar %}
+<div class="kutu bos-durum">
+  {% if bekleyen_sayisi %}
+  <p>Onaylanan tahtalar burada listelenir.</p>
+  {% elif yonetici %}
+  <p>Henüz tahta yok. Tahtalara ajanı kurmak için eşleştirme kodunu ve kurulum paketini alın.</p>
+  <p class="dugme-satiri"><a class="dugme ana" href="/ekle">Tahta ekle</a></p>
+  {% else %}
+  <p>Henüz tahta yok. Yönetici tahta ekleyince burada görünür.</p>
+  {% endif %}
+</div>
+{% else %}
+<nav class="haplar" id="haplar" aria-label="Duruma göre süz">
+  <a class="hap" href="{{ liste_yolu }}" data-suzgec=""{% if not suzgec %} aria-current="true"{% endif %}>Hepsi <b>{{ sayilar.hepsi }}</b></a>
+  {% for anahtar, ad in suzgecler.items() %}
+  <a class="hap{% if not sayilar[anahtar] %} bos{% endif %}" href="{{ liste_yolu }}?durum={{ anahtar }}" data-suzgec="{{ anahtar }}" data-durum="{{ 'sorun' if anahtar == 'ariza' else anahtar }}"{% if suzgec == anahtar %} aria-current="true"{% endif %}>{{ ad }} <b>{{ sayilar[anahtar] }}</b></a>
+  {% endfor %}
+</nav>
+
+<form method="post" action="/islem" id="islem" data-liste-yolu="{{ liste_yolu }}">
+  <button type="submit" name="nobetci" value="1" hidden tabindex="-1" aria-hidden="true" data-nobetci></button>
+  <input type="hidden" name="donus" value="{{ donus }}">
+  {# Seçim çubuğundaki "Duyuru gönder" GET gönderimi: seçim yokken form "Tüm tahtalar"a düşmesin (panel_duyuru._on_secim). #}
+  <input type="hidden" name="secimden" value="1">
+  <div class="tahta-liste-kap">
+  <table class="tahta-liste">
+    <caption class="gizli">Tahtalar, konuma göre gruplu</caption>
+    <thead>
+      <tr>
+        <th scope="col" class="c-sec"><label class="sec-kap" id="hepsini-sec-kap" hidden><input type="checkbox" id="hepsini-sec"><span class="gizli">Görünen bütün tahtaları seç</span><span class="kart-etiket" aria-hidden="true">Görünenlerin hepsini seç</span></label></th>
+        <th scope="col">Tahta</th><th scope="col">Durum</th><th scope="col">Oturum</th><th scope="col">Son görülme</th><th scope="col">Sürüm</th>
+        <th scope="col" class="c-eylem"><span class="gizli">İşlemler</span></th>
+      </tr>
+    </thead>
+    {% for g in gruplar %}
+    {% set grup_no = loop.index %}
+    <tbody data-grup="{{ grup_no }}">
+      {% if g.baslik %}
+      <tr class="grup"{% if not g.gorunen %} hidden{% endif %}><th colspan="7" scope="colgroup"><div class="grup-ic"><span class="grup-ad">{{ g.ad }}</span> <span class="not" data-alan="grup-sayi" data-toplam="{{ g.tahtalar | length }}">({% if suzgec and g.gorunen != g.tahtalar | length %}{{ g.gorunen }} / {% endif %}{{ g.tahtalar | length }} tahta)</span>
+        <label class="grup-sec" hidden><input type="checkbox" data-grup-sec="{{ grup_no }}"> <span>grubu seç</span><span class="gizli">: {{ g.ad }}</span></label></div></th></tr>
+      {% endif %}
+      {% for t in g.tahtalar %}
+      {% set gizli = suzgec and suzgec not in t.liste.durumlar %}
+      <tr class="tahta-satir" id="t-{{ t.id }}" data-id="{{ t.id }}" data-ad="{{ t.ad }}" data-birincil="{{ t.liste.birincil }}" data-durumlar="{{ t.liste.durumlar | join(' ') }}"{% if gizli %} hidden{% endif %}>
+        <td class="c-sec"><label class="sec-kap"><input type="checkbox" name="tahta" value="{{ t.id }}"{% if gizli %} disabled{% endif %}><span class="gizli">{{ t.ad }} seç</span></label></td>
+        <th scope="row" class="c-ad"><a href="/tahta/{{ t.id }}">{{ t.ad }}</a>
+          <span class="alt-satir">{{ t.alt_satir }}</span></th>
+        <td class="c-durum" data-etiket="Durum"><div class="rozetler" data-alan="rozetler">{{ rozetler(t.liste.rozetler) }}</div>
+          {% if mesaj and not mesaj_hata and ileti_satiri == t.id %}<p class="satir-ileti" role="status" tabindex="-1" data-odakla><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>{{ mesaj }}</p>{% endif %}</td>
+        <td class="c-oturum" data-etiket="Oturum" data-alan="oturum">{{ t.liste.oturum or '—' }}</td>
+        <td class="c-gorulme" data-etiket="Son görülme" data-alan="gorulme">{{ t.son_gorulme }}</td>
+        <td class="c-surum" data-etiket="Sürüm" data-alan="surum">{{ t.surum or '—' }}</td>
+        <td class="c-eylem"><div class="satir-eylem"><span class="birincil" data-alan="dugme">{{ birincil_dugme(t, 'tek') }}</span>{{ komut_menusu(t, t.menu, 'tek') }}</div></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    {% endfor %}
+  </table>
+  </div>
+  <p class="kutu bos-durum" id="suzgec-bos"{% if not suzgec or sayilar[suzgec] %} hidden{% endif %}>Bu durumda tahta yok. <a href="{{ liste_yolu }}" data-suzgec="">Hepsini göster</a></p>
+
+  {# Seçim çubuğu: JS yokken formun sonunda hep görünür; JS forma js-secim sınıfını verince yalnız seçim varken görünür
+     ve ekranın altına (telefonda alt çubuğun üstüne) yapışır. Hiçbir komut duruma göre pasifleşmez. #}
+  <div class="secim-cubugu" id="secim-cubugu" role="toolbar" aria-label="Seçili tahtalara komut">
+    <span class="secim-sayi" id="secim-sayisi">Seçili tahtalara:</span>
+    <button type="submit" name="tur" value="kilitle" class="ana"><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg><span>Kilitle</span></button>
+    <button type="submit" name="tur" value="kilit_ac">Kilidi aç</button>
+    <button type="submit" class="yalniz-genis" formmethod="get" formaction="/duyurular/yeni"><svg class="simge" aria-hidden="true"><use href="#s-duyuru"/></svg><span>Duyuru gönder</span></button>
+    <details class="acilir satir-menu yukari">
+      <summary class="dugme">Diğer<svg class="simge" aria-hidden="true"><use href="#s-asagi"/></svg></summary>
+      <ul class="menu-liste">
+        <li class="yalniz-dar"><button type="submit" formmethod="get" formaction="/duyurular/yeni">Duyuru gönder</button></li>
+        <li><button type="submit" name="tur" value="duyuru_kaldir">Duyuruyu kaldır</button></li>
+        <li><button type="submit" name="tur" value="tani">Tanılama çalıştır</button></li>
+        <li><button type="submit" name="tur" value="guncelle">Ajanı güncelle</button></li>
+        <li class="ayrac" role="separator"></li>
+        <li><button type="button" class="tehlike" data-onay="kapat" aria-haspopup="dialog">Kapat…</button></li>
+        <li><button type="button" class="tehlike" data-onay="yeniden_baslat" aria-haspopup="dialog">Yeniden başlat…</button></li>
+      </ul>
+    </details>
+    <button type="button" class="secim-temizle" id="secim-temizle" hidden aria-label="Seçimi temizle"><svg class="simge" aria-hidden="true"><use href="#m-kapat"/></svg><span class="yalniz-genis">Seçimi temizle</span></button>
+  </div>
+  <noscript><p class="not">Kapatma ve yeniden başlatma onay penceresi ister; tarayıcıda JavaScript kapalıyken kullanılamaz.</p></noscript>
+</form>
+
+<p id="canli-bolge" class="gizli" aria-live="polite"></p>
+<script id="ilk-veri" type="application/json">{{ onayli | tojson }}</script>
+<script id="pano-veri" type="application/json">{{ {"bekleyen": bekleyen_sayisi, "acil": aktif_acil is not none, "program_kilidi": program.kilit != 'kapali'} | tojson }}</script>
+{% endif %}
+{% endblock %}

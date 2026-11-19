@@ -1,13 +1,13 @@
 {% extends "taban.html" %}
 {% block baslik %}Tahtaları içe aktar · Tahta Kontrol{% endblock %}
 {% block icerik %}
-<p class="geri"><a href="/gruplar">← Gruplar</a></p>
 <div class="sayfa-bas">
   <div class="bas-yazi">
     <h1>Tahta niteliklerini içe aktar</h1>
     <p>Bina, kat, düzey, devre, şube ve grupları bir CSV dosyasıyla toplu doldurun. Önce önizlenir; "Uygula" demeden hiçbir şey değişmez.</p>
   </div>
 </div>
+{% include "_tahtalar_bas.html" %}
 {% if hata %}<div class="bant hata" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span class="gizli">Hata: </span>{{ hata }}</div>{% endif %}
 {% if not cozum %}
 <ol class="adimlar">

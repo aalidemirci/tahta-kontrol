@@ -91,26 +91,28 @@ def test_her_sayfada_tek_etkin_oge(uygulama):
     for yol in yollar:
         acil = web._secili(web.MENU_ACIL, yol)
         ogeler = ust_ogeler(web.menu_gorunumu(YONETICI, yol))
-        secili = sum(o["secili"] + sum(a["secili"] for a in o["alt"]) for o in ogeler) + acil
+        secili = sum(o["secili"] for o in ogeler) + acil
         assert secili == 1, yol
         # İdareci: yöneticiye özel sayfalar (ona zaten açılmaz) dışında her sayfada bir üst öğe vurguludur.
         if any(web._secili(o, yol) for o in yalniz_yonetici):
             continue
         ogeler = ust_ogeler(web.menu_gorunumu(IDARECI, yol))
-        assert sum(o["secili"] + o["icinde"] for o in ogeler) + acil >= 1, yol
+        assert sum(o["secili"] for o in ogeler) + acil >= 1, yol
 
 
-def test_menu_gorunumu_rol_sayi_ve_icinde():
+def test_menu_gorunumu_rol_sayi_ve_esler():
     yonetici = web.menu_gorunumu(YONETICI, "/arizalar", {"ariza": 3})
     idareci = web.menu_gorunumu(IDARECI, "/gruplar", {"ariza": 3})
     assert len(ust_ogeler(yonetici)) == 9 and len(ust_ogeler(idareci)) == 7  # 0.16.0: Kullanıcılar Ayarlar'ın bölümü
+    # 0.17.0: alt liste yok; bölümün sekme şeridindeki sayfalar üst öğeyi seçer, arıza rozeti üst öğededir.
     tahtalar = ust_ogeler(yonetici)[0]
-    assert (tahtalar["ad"], tahtalar["secili"], tahtalar["icinde"], tahtalar["sayi"]) == ("Tahtalar", False, True, 3)
-    assert [a["ad"] for a in tahtalar["alt"]] == ["Arızalar", "Envanter", "Gruplar", "Tahta ekle"]
-    assert [(a["secili"], a["sayi"]) for a in tahtalar["alt"]][:2] == [(True, 3), (False, 0)]
-    # İdareci: rolle gizlenen alt öğe (Gruplar) listede yok ama üst öğe yine vurgulu.
-    tahtalar = ust_ogeler(idareci)[0]
-    assert [a["ad"] for a in tahtalar["alt"]] == ["Arızalar", "Envanter"] and tahtalar["icinde"]
+    assert (tahtalar["ad"], tahtalar["yol"], tahtalar["secili"], tahtalar["sayi"]) == ("Tahtalar", "/tahtalar", True, 3)
+    assert "alt" not in tahtalar and all("alt" not in o for k in web.MENU for o in k["ogeler"])
+    # İdareci: rolle gizlenen sekmenin (Gruplar) sayfasında da üst öğe vurgulu.
+    assert ust_ogeler(idareci)[0]["secili"]
+    for yol in ("/", "/tahtalar", "/tahtalar/ice-aktar", "/tahta/3", "/ariza/2", "/envanter", "/ekle"):
+        assert ust_ogeler(web.menu_gorunumu(IDARECI, yol))[0]["secili"], yol
+    assert not ust_ogeler(web.menu_gorunumu(YONETICI, "/tahtalar.csv"))[0]["secili"]  # sayfa değil
     assert [k["ad"] for k in idareci["kumeler"]] == ["Her gün", "Dönemlik", "Yönetim"]
     assert [o["ad"] for o in idareci["kumeler"][2]["ogeler"]] == ["İşlem kaydı"]
     assert [o["ad"] for o in yonetici["alt_cubuk"]] == ["Tahtalar", "Duyurular", "Yoklama"]
@@ -126,8 +128,12 @@ def test_idareci_menusunde_yonetici_ogesi_yok(uygulama, panel):
         for yol in ("/ayarlar", "/yedekler", "/kullanicilar", "/ekle", "/gruplar"):
             assert f'href="{yol}"' not in parca, yol
     menu = yan_menu(sayfa)
-    for yol in ("/arizalar", "/envanter", "/kayit", "/acil"):
+    for yol in ("/tahtalar", "/kayit", "/acil"):
         assert f'href="{yol}"' in menu, yol
+    # 0.17.0: Arızalar ve Envanter yan menüde değil, Tahtalar bölümünün sekme şeridindedir.
+    assert 'href="/arizalar"' not in menu and 'class="yan-alt"' not in sayfa
+    serit = sayfa.split('aria-label="Tahtalar bölümü"')[1].split("</nav>")[0]
+    assert 'href="/arizalar"' in serit and 'href="/envanter"' in serit and "/gruplar" not in serit and "/ekle" not in serit
     assert menu.count('<use href="#m-') - menu.count("#m-kapat") - menu.count("#m-cikis") == 7
     assert ">Yönetim<" in menu and ">İdareci<" in menu
 
@@ -162,11 +168,10 @@ def test_etkin_oge_isaretleri(uygulama, panel, tahta):
         assert yanit.status_code == 200, yol
         return yan_menu(yanit.text)
 
-    m = menu("/arizalar")
-    assert 'href="/arizalar" aria-current="page"' in m and m.count('aria-current="page"') == 1
-    assert re.search(r'<li data-icinde>\s*<a href="/">', m)
-    m = menu(f"/tahta/{kimlik}")
-    assert '<a href="/" aria-current="page">' in m and "<li data-secili>" in m and "data-icinde" not in m
+    for yol in ("/arizalar", f"/tahta/{kimlik}", "/tahtalar", "/", "/envanter", "/gruplar", "/tahtalar/ice-aktar", "/ekle"):
+        m = menu(yol)
+        assert '<a href="/tahtalar" aria-current="page">' in m and m.count('aria-current="page"') == 1, yol
+        assert "<li data-secili>" in m and "data-icinde" not in m, yol
     yanit = panel.get("/acil").text
     assert yanit.count('class="acil-dugme" href="/acil" aria-current="page"') == 2
     assert yan_menu(yanit).count('aria-current="page"') == 1  # yalnız Acil; kümelerde etkin öğe yok
@@ -188,22 +193,22 @@ def test_her_menu_adresinde_html_de_tek_etkin_oge(uygulama, panel, tahta):
     kur_ve_gir(panel)
     kimlik = tahta_ekle(panel, tahta, "T-1")["X-Tahta-Id"]
     assert panel.post("/arizalar", data={"tahta_id": kimlik, "kategori": "acilis", "aciklama": ""}).status_code == 303
-    yollar = [o["yol"] for k in web.MENU for u in k["ogeler"] for o in [u, *u.get("alt", [])]] + [web.MENU_ACIL["yol"]]
-    assert len(yollar) == 14
+    yollar = [o["yol"] for k in web.MENU for o in k["ogeler"]] + [web.MENU_ACIL["yol"]]
+    assert len(yollar) == 10
     for yol in yollar:
         sayfa = panel.get(yol)
         assert sayfa.status_code == 200, yol
         menu = yan_menu(sayfa.text)
         assert menu.count('aria-current="page"') == 1, yol
         assert re.search(rf'href="{re.escape(yol)}"[^>]* aria-current="page"', menu), yol
-        # Rozet: sayı + ekran okuyucu metni; yalnız yan menüde (Tahtalar ve Arızalar), alt çubukta yok.
-        assert menu.count('<span class="sayi-rozet">1</span><span class="gizli"> açık arıza</span>') == 2, yol
+        # Rozet: sayı + ekran okuyucu metni; yalnız yan menüde (Tahtalar), alt çubukta yok.
+        assert menu.count('<span class="sayi-rozet">1</span><span class="gizli"> açık arıza</span>') == 1, yol
         assert "sayi-rozet" not in alt_cubuk(sayfa.text), yol
     # İki açıcı da aynı adı taşır.
     assert sayfa.text.count('<use href="#m-menu"/></svg><span>Menü</span></a>') == 2 and "Tümü" not in sayfa.text
 
 
-def test_idareci_gizli_alt_ogenin_sayfasinda_ust_oge_vurgulu(uygulama, panel):
+def test_idareci_gizli_sekmenin_sayfasinda_ust_oge_vurgulu(uygulama, panel):
     kur_ve_gir(panel)
     kullanici_ekle(panel, "idareci1")
     gir(panel, "idareci1")
@@ -211,20 +216,20 @@ def test_idareci_gizli_alt_ogenin_sayfasinda_ust_oge_vurgulu(uygulama, panel):
         yanit = panel.get(yol)
         assert yanit.status_code == 200, yol
         menu = yan_menu(yanit.text)
-        assert re.search(r'<li data-icinde>\s*<a href="/">', menu) and "aria-current" not in menu, yol
-        assert f'href="{yol}"' not in menu, yol
-        assert '<a href="/" aria-current="page">' in alt_cubuk(yanit.text), yol
+        assert re.search(r'<li data-secili>\s*<a href="/tahtalar" aria-current="page">', menu), yol
+        assert f'href="{yol}"' not in yanit.text, yol  # ne menüde ne sekme şeridinde
+        assert '<a href="/tahtalar" aria-current="page">' in alt_cubuk(yanit.text), yol
 
 
 def test_alt_cubuk_ogeleri(uygulama, panel):
     kur_ve_gir(panel)
     cubuk = alt_cubuk(panel.get("/duyurular").text)
-    assert re.findall(r'<a (?:class="menu-ac" )?href="([^"]+)"', cubuk) == ["/", "/duyurular", "/yoklama", "#menu"]
+    assert re.findall(r'<a (?:class="menu-ac" )?href="([^"]+)"', cubuk) == ["/tahtalar", "/duyurular", "/yoklama", "#menu"]
     assert '<a href="/duyurular" aria-current="page">' in cubuk and cubuk.count("aria-current") == 1
     cubuk = alt_cubuk(panel.get("/yoklama/sube").text)
     assert '<a href="/yoklama" aria-current="page">' in cubuk
-    # Alt öğedeyken (Arızalar) alt çubukta üst öğe (Tahtalar) etkindir.
-    assert '<a href="/" aria-current="page">' in alt_cubuk(panel.get("/arizalar").text)
+    # Bölümün sekme sayfasındayken (Arızalar) alt çubukta Tahtalar etkindir.
+    assert '<a href="/tahtalar" aria-current="page">' in alt_cubuk(panel.get("/arizalar").text)
 
 
 def test_giris_ve_kurulum_kabuksuz(uygulama, panel):
@@ -293,7 +298,7 @@ def test_stil_katman_ve_belirtecler():
     assert STIL.count("body.kabuklu.genis-sayfa {") == 1
     # Kip JS'te değil CSS'te durur; yapışkan içerik üst çubuğun payını belirteçten alır.
     assert "--kb-kip: cekmece" in STIL and STIL.count("--kb-kip: sabit") == 2
-    assert "#islem .arac-cubugu, .firca-serit { inset-block-start: var(--yapiskan-ust); }" in STIL
+    assert ".firca-serit { inset-block-start: var(--yapiskan-ust); }" in STIL and "#islem .arac-cubugu" not in STIL
 
 
 def test_ust_cubuk_cekmece_kipinin_her_genisliginde_yapiskan():
@@ -302,7 +307,7 @@ def test_ust_cubuk_cekmece_kipinin_her_genisliginde_yapiskan():
     kabuk = STIL.split("@layer kabuk {")[1]
     duz = re.sub(r"@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}", "", kabuk)  # @media blokları dışında kalan kurallar
     assert ".ust-cubuk { position: sticky; inset-block-start: 0; }" in duz
-    assert "#islem .arac-cubugu, .firca-serit { inset-block-start: var(--yapiskan-ust); }" in duz
+    assert ".firca-serit { inset-block-start: var(--yapiskan-ust); }" in duz
     assert "--yapiskan-ust: var(--ust-boy);" in duz and kabuk.count("--yapiskan-ust: 0px;") == 3  # iki sabit kip + baskı
     assert "html:has(body.kabuklu.genis-sayfa) { scroll-padding-block-start:" in ortam_blogu(kabuk, "@media (max-width: 99.99rem)")
     # Defterin yapışkan başlık satırı üst çubuğun altında kalmaz.
@@ -407,9 +412,8 @@ def test_daralan_icerikte_tablo_ve_sayfa_basi():
     ekran = ortam_blogu(kabuk.split("işlem düğmeleri tek satırda kalır")[1], "@media screen {")
     assert ekran.strip().startswith(".tablo-kap {")
     assert ekran.count("no-repeat local") == 2 and ekran.count("no-repeat scroll") == 2 and "var(--yuzey); }" in ekran
-    # Alt satıra inen durum çipleri sola yaslanır; dar ekranda araç çubuğu ayırıcısı çizilmez.
-    assert ".sayfa-bas:has(> .ozet) { justify-content: space-between; }" in kabuk
-    assert ".sayfa-bas > .ozet { margin-inline-start: 0; }" in kabuk
+    # Dar ekranda araç çubuğu ayırıcısı çizilmez (0.17.0: pano özet çipleri kalktı, kuralları da).
+    assert ".sayfa-bas > .ozet" not in STIL
     assert "@media (max-width: 84.99rem) { .arac-cubugu .ayrac { display: none; } }" in kabuk
 
 
@@ -432,7 +436,7 @@ def test_panel_js_kabuk_kancalari():
 def test_eski_kabuk_artigi_metin_yok(uygulama, panel, tahta):
     kur_ve_gir(panel)
     kimlik = tahta_ekle(panel, tahta, "T-1")["X-Tahta-Id"]
-    assert '<a href="/">← Tahtalar</a>' in panel.get(f"/tahta/{kimlik}").text
+    assert 'class="kirinti" aria-label="Konum"><a href="/tahtalar">Tahtalar</a>' in panel.get(f"/tahta/{kimlik}").text
     assert "<title>Tahtalar · Tahta Kontrol</title>" in panel.get("/").text
     ayarlar = panel.get("/ayarlar/okul").text
     assert "üst şeritte" not in ayarlar and "Ana renk panelin menüsünde" in ayarlar

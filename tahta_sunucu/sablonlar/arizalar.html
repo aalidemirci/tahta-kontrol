@@ -13,6 +13,7 @@
   </div>
   <p class="dugme-satiri sag"><a class="dugme ana" href="#yeni-ariza">Yeni arıza kaydı</a></p>
 </div>
+{% include "_tahtalar_bas.html" %}
 
 <nav class="sekmeler" aria-label="Duruma göre süz">
   <a href="/arizalar{{ '?tahta=' ~ tahta_suzgeci.id if tahta_suzgeci else '' }}" {% if not secili_durum %}aria-current="page"{% endif %}>Süren <span class="sekme-sayi">{{ suren_sayisi }}</span></a>

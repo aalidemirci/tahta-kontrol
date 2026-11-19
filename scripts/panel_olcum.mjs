@@ -39,6 +39,10 @@ mkdirSync(CIKTI, { recursive: true });
 const BUGUN = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 export const SAYFALAR = [
   ["pano", "/"], ["tahta-ayrinti", "/tahta/1"], ["tahta-onay-bekleyen", "/tahta/13"], ["tahta-ekle", "/ekle"],
+  // 0.17.0: tahta listesi (süzgeçli de) ve tahta sayfasının sekmeleri ("tahta-" / "tahtalar" önekiyle süzülür).
+  ["tahtalar", "/tahtalar"], ["tahtalar-kilitli", "/tahtalar?durum=kilitli"], ["tahta-program", "/tahta/1?sekme=program"],
+  ["tahta-bakim", "/tahta/1?sekme=bakim"], ["tahta-bilgiler", "/tahta/1?sekme=bilgiler"],
+  ["duyuru-on-secim", "/duyurular/yeni?tahta=1&tahta=2&secimden=1"],
   ["gruplar", "/gruplar"], ["tahtalar-ice-aktar", "/tahtalar/ice-aktar"], ["duyurular", "/duyurular"],
   ["duyuru-yeni", "/duyurular/yeni"], ["program-zil", "/program?bolum=zil"], ["program-derslik", "/program?bolum=derslik"],
   ["program-kurallar", "/program?bolum=kurallar"], ["program-istisnalar", "/program?bolum=istisnalar"],
@@ -72,7 +76,7 @@ const OLCUM = `(() => {
   const kirpilir = (e) => { for (let k = e.parentElement; k && k !== document.body; k = k.parentElement) {
     if (getComputedStyle(k).overflowX !== "visible") return true; } return false; };
   const tasan = g("body *").filter((e) => gorunur(e) && kutu(e).right > innerWidth + 1)
-    .filter((e) => !e.closest(".gizli, dialog") && !kirpilir(e)).map(ad);
+    .filter((e) => !e.closest(".gizli, dialog, details:not([open]) > :not(summary)") && !kirpilir(e)).map(ad); // kapalı menünün içeriği çizilmez
   const cnv = document.createElement("canvas"); cnv.width = cnv.height = 1;
   const cv = cnv.getContext("2d", { willReadFrequently: true });
   const coz = (s) => { if (!s || s === "transparent" || s === "rgba(0, 0, 0, 0)") return { r: 0, g: 0, b: 0, a: 0 };
@@ -97,7 +101,7 @@ const OLCUM = `(() => {
   const yaz = (x) => ad(x.e) + " '" + x.e.textContent.trim().slice(0, 20) + "' " + x.o.toFixed(2);
   const kucuk = metinli.filter((e) => parseFloat(getComputedStyle(e).fontSize) < 12);
   const esik = innerWidth < 1024 ? 44 : 36;
-  const hedefler = g("button, a.dugme, summary.dugme, .sekmeler a, .yan-menu a, .ust-cubuk a, .alt-cubuk a, "
+  const hedefler = g("button, a.dugme, summary.dugme, .sekmeler a, .yan-menu a, .ust-cubuk a, .alt-cubuk a, .hap, label.sec-kap, "
     + ".ayar-liste a, .ayar-menu li a, .ayar-menu summary, details.nedir > summary, details.ozet-satir > summary").filter(gorunur)
     .filter((e) => !e.closest(".firca-sec, .defter, dialog:not([open])"));
   const kucukHedef = hedefler.filter((e) => kutu(e).height < esik - .5);

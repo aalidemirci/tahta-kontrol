@@ -303,7 +303,11 @@ def test_pano_kancalari_yerinde(ortam):
         'data-alan="rozetler"',
         'name="tahta"',
         'name="tur" value="kilitle"',
-        'name="tur" value="duyuru"',
+        'formaction="/duyurular/yeni"',  # 0.17.0: satır içi duyuru formu kalktı; seçimle duyuru formuna gidilir
+        'class="tahta-satir"',
+        'id="secim-cubugu"',
+        'id="haplar"',
+        'id="canli"',
         'data-onay="kapat"',
         'data-onay="yeniden_baslat"',
         'id="onay-diyalog"',
@@ -311,14 +315,15 @@ def test_pano_kancalari_yerinde(ortam):
         'id="canli-bolge"',
     ):
         assert kanca in sayfa, kanca
-    assert re.search(r'<button type="button" id="hepsini-sec">', sayfa)
+    assert 'name="tur" value="duyuru"' not in sayfa and "article" not in sayfa
+    assert re.search(r'<input type="checkbox" id="hepsini-sec">', sayfa)
     # Tehlikeli tetikler kendi başına form göndermez.
     for tetik in re.findall(r"<button[^>]*data-onay=[^>]*>", sayfa):
-        assert 'type="button"' in tetik and "name=" not in tetik
+        assert 'type="button"' in tetik and " name=" not in tetik
     assert "<script>" not in sayfa
     durum = panel.get("/api/durum").json()["tahtalar"][0]
     assert durum["oturum_acik"] is True
-    assert 'data-onay="sil"' in panel.get(f"/tahta/{durum['id']}").text
+    assert 'data-onay="sil"' in panel.get(f"/tahta/{durum['id']}?sekme=bilgiler").text
 
 
 # ---- inceleme düzeltmeleri ----------------------------------------------------------

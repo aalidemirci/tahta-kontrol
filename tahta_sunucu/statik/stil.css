@@ -215,38 +215,13 @@
   .rozet.kirmizi { --d: var(--d-sorun); --dz: var(--dz-sorun); }
   .rozet.sari { --d: var(--d-duyuru); --dz: var(--dz-duyuru); }
 
-  /* Pano */
-  .ozet { display: flex; flex-wrap: wrap; gap: .5rem; margin-inline-start: auto; }
-  .ozet[hidden] { display: none; }
-  .ozet button { min-block-size: 2.5rem; border-radius: .625rem; }
-  .ozet button[data-durum] .sayi { color: var(--d); }
-  .ozet .sayi { font-size: 1.125rem; font-weight: 700; }
-  .ozet button[aria-pressed="true"] { border-color: var(--ana-yazi); outline: 2px solid var(--ana-yazi); outline-offset: -1px; background: var(--ana-hafif); }
+  /* Tahtalar sayfası başı (liste kuralları dosya sonunda, 0.17.0 bloğunda) */
   .canli { font-size: .8125rem; color: var(--soluk); display: inline-flex; align-items: center; gap: .35rem; }
   .canli .simge { color: var(--d); }
   .bas-yazi { display: grid; gap: .25rem; }
   .arac-cubugu { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .625rem .75rem; margin-block-end: 1rem;
     background: color-mix(in oklab, var(--yuzey) 92%, transparent); border: 1px solid var(--cizgi); border-radius: .75rem; }
   .arac-cubugu .ayrac { inline-size: 1px; align-self: stretch; background: var(--cizgi); margin-inline: .25rem; }
-  .arac-cubugu #secim-sayisi { margin-inline-start: auto; font-size: .8125rem; color: var(--soluk); }
-  @media (min-width: 48rem) { #islem .arac-cubugu { position: sticky; inset-block-start: 0; z-index: 2; backdrop-filter: blur(6px); } }
-
-  .izgara { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: .75rem; }
-  /* --d burada TANIMLANMAZ: temel katmandaki [data-durum] eşlemesini ezer (katman sırası özgüllükten güçlüdür) */
-  .tahta { container-type: inline-size; display: grid; gap: .4rem; align-content: start;
-    background: var(--yuzey); border: 1px solid var(--cizgi); border-inline-start: 5px solid var(--d, var(--d-kapali));
-    border-radius: .75rem; padding: .75rem .875rem; transition: background-color .15s, border-color .15s; }
-  .tahta.cevrimdisi { background: var(--yuzey2); }
-  .tahta:has(input:checked) { background: var(--ana-hafif); border-color: var(--ana-yazi); border-inline-start-color: var(--d, var(--d-kapali));
-    outline: 2px solid var(--ana-yazi); outline-offset: -1px; }
-  .tahta[hidden] { display: none; }
-  .tahta .bas { display: flex; gap: .6rem; align-items: start; }
-  .tahta .bas input { inline-size: 1.25rem; block-size: 1.25rem; margin: .15rem 0 0; flex: none; }
-  .tahta .ad a { font-weight: 650; font-size: 1rem; color: var(--metin); text-decoration: none; }
-  .tahta .ad a:hover { text-decoration: underline; }
-  .tahta .derslik, .tahta .satir { color: var(--soluk); font-size: .8125rem; }
-  .tahta .satir:empty { display: none; }
-  .tahta .rozetler { display: flex; flex-wrap: wrap; gap: .3rem; }
 
   details.kutu > summary { cursor: pointer; font-weight: 600; min-block-size: 2rem; display: flex; align-items: center; }
   details.kutu[open] > summary { margin-block-end: .5rem; }
@@ -409,10 +384,8 @@
   .dugmeler form { display: contents; }
 
   @media (forced-colors: active) {
-    .rozet, .tahta, .bant, .kutu { border: 1px solid CanvasText; }
-    .tahta:has(input:checked) { outline: 3px solid Highlight; }
+    .rozet, .bant, .kutu { border: 1px solid CanvasText; }
     :where(button, .dugme).ana { border: 2px solid ButtonText; }
-    .ozet button[aria-pressed="true"] { outline: 3px solid Highlight; }
   }
 }
 
@@ -459,7 +432,6 @@
   :where(button, .dugme).uyari-dolu:hover:not(:disabled) { background: color-mix(in oklab, var(--d-duyuru) 88%, var(--metin)); }
   fieldset.duz { margin: 0; }
   fieldset.duz:disabled :where(input, select, textarea, label) { opacity: .75; cursor: not-allowed; }
-  .alanlar-satiri { color: var(--soluk); font-size: .75rem; }
 
   /* Seçim düğmeleri: radyo/onay kutusu etiketi hap biçiminde (dokunmatik tahtaya uygun büyüklük) */
   .secim-grubu { margin-block: .75rem 0; }
@@ -1039,7 +1011,7 @@
   .defter-bes .y3 .rozet { font-size: .6875rem; padding-inline: .3rem; white-space: nowrap; }
   .defter tr.vurgulu > .y1 { box-shadow: inset 4px 0 0 var(--d-sorun); }
   .defter .gun-ilk { border-inline-start: 2px solid var(--metin); }
-  /* display: panonun genel .ozet kuralı (flex) tablo hücresini bozuyordu: alt satırdaki sayılar tek sütunda alt alta diziliyordu. */
+  /* display: açıkça verilir (0.16.0'a dek panonun genel .ozet kuralı (flex) bu hücreyi bozuyordu; başka bir .ozet kuralı da bozmasın). */
   .defter .ozet { display: table-cell; margin: 0; font-weight: 600; border-inline-start: 2px solid var(--metin); }
   .defter-bes td.ozet { position: sticky; inset-inline-end: 0; z-index: 1; } /* Y / G sütunu yatay kaydırmada kenarda kalır */
   .defter-bes thead th.ozet-bas { inset-inline-end: 0; z-index: 3; border-inline-start: 2px solid var(--metin); }
@@ -1166,7 +1138,7 @@
         main, html ve body'ye overflow / yükseklik VERİLMEZ (içerikteki yapışkan şeritler pencere kaydırmasına bağlı). ---- */
 @layer kabuk {
   /* Kip: çekmece (varsayılan) ya da sabit. Kabuk kuralları yalnız bu özellikleri okur; panel.js kipi --kb-kip'ten
-     öğrenir (eşik JS'te yinelenmez). --kb-perde ve --kb-alt çekmecede tanımsızdır (geri düşüş: block). */
+     öğrenir (eşik JS'te yinelenmez). --kb-perde çekmecede tanımsızdır (geri düşüş: block). */
   body.kabuklu {
     --kb-kip: cekmece; --kb-dolgu: 0px; --kb-kaydir: translateX(-102%); --kb-gorunur: hidden; --kb-cekmece: flex;
     --kb-en: min(20rem, 88vw); --kb-oge: var(--dokunma); --kb-z: 51;
@@ -1176,7 +1148,7 @@
   @media (min-width: 64rem) {
     body.kabuklu:not(.genis-sayfa) {
       --kb-kip: sabit; --kb-dolgu: var(--yan-en); --kb-kaydir: none; --kb-gorunur: visible; --kb-cekmece: none;
-      --kb-perde: none; --kb-alt: none; --kb-en: var(--yan-en); --kb-oge: var(--dokunma-kucuk); --kb-z: 40; --kb-golge: none;
+      --kb-perde: none; --kb-en: var(--yan-en); --kb-oge: var(--dokunma-kucuk); --kb-z: 40; --kb-golge: none;
       --yapiskan-ust: 0px;
     }
   }
@@ -1184,7 +1156,7 @@
   @media (min-width: 100rem) {
     body.kabuklu.genis-sayfa {
       --kb-kip: sabit; --kb-dolgu: var(--yan-en); --kb-kaydir: none; --kb-gorunur: visible; --kb-cekmece: none;
-      --kb-perde: none; --kb-alt: none; --kb-en: var(--yan-en); --kb-oge: var(--dokunma-kucuk); --kb-z: 40; --kb-golge: none;
+      --kb-perde: none; --kb-en: var(--yan-en); --kb-oge: var(--dokunma-kucuk); --kb-z: 40; --kb-golge: none;
       --yapiskan-ust: 0px;
     }
   }
@@ -1252,13 +1224,8 @@
   .yan-gezinme a:focus-visible { outline-offset: -3px; } /* kaydırma kutusu dışa taşan halkayı kırpar */
   .yan-gezinme a[aria-current="page"] { background: color-mix(in oklab, var(--serit-yazi) 16%, transparent); font-weight: 650;
     box-shadow: inset 3px 0 0 var(--vurgu-serit); }
-  .yan-gezinme li[data-icinde] > a { font-weight: 650; box-shadow: inset 3px 0 0 var(--vurgu-serit); }
   .yan-gezinme .simge { inline-size: 1.25rem; block-size: 1.25rem; }
   .yan-gezinme .sayi-rozet { margin-inline-start: auto; }
-  /* Alt liste HTML'de hep vardır: sabit kipte yalnız etkin bölümünki, çekmecede hepsi görünür */
-  .yan-alt { display: var(--kb-alt, block); }
-  .yan-gezinme li:is([data-secili], [data-icinde]) > .yan-alt { display: block; }
-  .yan-alt a { padding-inline-start: 2.75rem; font-size: var(--yazi-s); }
 
   .yan-son { display: flex; align-items: center; gap: var(--b2); padding-block-start: var(--b2);
     border-block-start: 1px solid color-mix(in oklab, var(--serit-yazi) 20%, transparent); }
@@ -1295,7 +1262,7 @@
      tablette ve şube defterinin 64–100rem arasındaki çekmece kipinde de hep elin altında. İçerikteki yapışkan
      şeritler ve defterin başlık satırı --yapiskan-ust kadar aşağıdan yapışır. */
   .ust-cubuk { position: sticky; inset-block-start: 0; }
-  #islem .arac-cubugu, .firca-serit { inset-block-start: var(--yapiskan-ust); }
+  .firca-serit { inset-block-start: var(--yapiskan-ust); }
   @media (min-width: 85rem) {
     .defter-kap.sigar .defter thead th { inset-block-start: var(--yapiskan-ust); }
     .defter-formu:has(.firca-serit) .defter-kap.sigar .defter-gun thead th { inset-block-start: calc(var(--yapiskan-ust) + 3.25rem); }
@@ -1318,6 +1285,8 @@
       background: var(--yuzey); border-block-start: 1px solid var(--cizgi); box-shadow: var(--golge-1);
       view-transition-name: kabuk-alt; }
     body.kabuklu main { padding-block-end: calc(4rem + var(--alt-boy) + env(safe-area-inset-bottom)); }
+    /* İçerikte ekranın altına yapışan öğe (Tahtalar'ın seçim çubuğu) alt çubuğun ÜSTÜNDE durur; eşik yalnız buradadır. */
+    body.kabuklu { --alt-cubuk-pay: calc(var(--alt-boy) + env(safe-area-inset-bottom)); }
   }
   .alt-cubuk a { display: grid; justify-items: center; align-content: center; gap: 1px; min-block-size: var(--alt-boy);
     padding: var(--b1); color: var(--metin); text-decoration: none; font-size: var(--yazi-xs); line-height: 1.2; }
@@ -1367,10 +1336,7 @@
         var(--yuzey); }
   }
 
-  /* Daralan içerikte sayfa başı ve araç çubuğu: alt satıra inen durum çipleri sağa değil sola yaslanır (aynı satıra
-     sığıyorsa yine sağdadır); araç çubuğu sarınca satır başında / sonunda asılı kalan ayırıcı çizgi 85rem altında çizilmez. */
-  .sayfa-bas:has(> .ozet) { justify-content: space-between; }
-  .sayfa-bas > .ozet { margin-inline-start: 0; }
+  /* Daralan içerikte araç çubuğu: sarınca satır başında / sonunda asılı kalan ayırıcı çizgi 85rem altında çizilmez. */
   @media (max-width: 84.99rem) { .arac-cubugu .ayrac { display: none; } }
 
   /* Telefonda sayfayı pencereden genişleten iki eski taşma (alt çubuk sabit konumlu olduğundan birlikte uzuyordu):
@@ -1626,3 +1592,190 @@
   }
 }
 /* ---- 0.16.0 sonu ---- */
+
+/* ---- 0.17.0: tahtalar (arayüz 3. aşama) — tahta listesi (konuma göre gruplu tablo; dar ekranda kart), süzgeç hapları,
+        satır menüsü, seçim çubuğu, tahta sayfasının başı ve sekmeleri, Tahtalar bölümünün sekme şeridi. Yalnız anlamsal
+        belirteçler; yeni renk kodu yok.
+        LİSTE KABI KAYDIRMA KABI DEĞİLDİR ve kap sorgusu (container-type) TAŞIMAZ: ikisi de satır menüsünü keser ya da
+        sayfanın sonuna taşan menüye kaydırılamaz yapar. Dar düzen bu yüzden @media ile verilir; eşikler içerik enine
+        göredir (sabit menülü sayfada içerik = pencere − 15rem). ---- */
+@layer bilesen {
+  .kirinti { display: flex; flex-wrap: wrap; align-items: center; gap: var(--b2); margin-block-end: var(--b2);
+    color: var(--soluk); font-size: var(--yazi-s); }
+  .sekme-ayrac { flex: none; align-self: center; inline-size: 1px; block-size: 1.5rem; margin-inline: var(--b2); background: var(--cizgi); }
+  .bos-durum { color: var(--soluk); }
+  .bos-durum[hidden] { display: none; }
+  .kutu-bas > .sag { margin-inline-start: auto; font-size: var(--yazi-s); }
+
+  /* Süzgeç hapları: bağlantıdır (JS yokken sayfayı ?durum= ile yeniden yükler) */
+  .haplar { display: flex; flex-wrap: wrap; gap: var(--b2); margin-block-end: var(--b3); }
+  .hap { display: inline-flex; align-items: center; gap: var(--b2); min-block-size: var(--dokunma-kucuk); padding: var(--b1) var(--b3);
+    border: 1px solid var(--cizgi); border-radius: var(--kose-hap); background: var(--yuzey); color: var(--metin);
+    font-size: var(--yazi-s); font-weight: 550; text-decoration: none; white-space: nowrap; }
+  .hap[data-durum]::before { content: ""; flex: none; inline-size: .625em; block-size: .625em; border-radius: 50%; background: var(--d); }
+  .hap b { font-weight: 700; }
+  .hap.bos, .hap.bos b { color: var(--soluk); font-weight: 500; }
+  .hap:hover { background: var(--yuzey2); }
+  .hap[aria-current="true"] { background: var(--ana-hafif); border-color: var(--ana-yazi); box-shadow: inset 0 0 0 1px var(--ana-yazi);
+    color: var(--metin); font-weight: 650; }
+
+  /* Liste */
+  .tahta-liste-kap { margin-block-end: var(--b4); background: var(--yuzey); border: 1px solid var(--cizgi); border-radius: var(--kose-l); }
+  .tahta-liste { font-size: var(--yazi-s); }
+  .tahta-liste :is(th, td) { vertical-align: middle; padding: var(--b1) var(--b3); }
+  .tahta-liste thead th { inset-block-start: var(--yapiskan-ust); z-index: 2; block-size: var(--dokunma); white-space: nowrap; }
+  .tahta-liste thead th:first-child { border-start-start-radius: var(--kose-l); }
+  .tahta-liste thead th:last-child { border-start-end-radius: var(--kose-l); }
+  .tahta-liste tr[hidden] { display: none; }
+  .tahta-liste tr.grup th { padding-block: var(--b2); background: var(--yuzey2); color: var(--soluk); font-size: var(--yazi-xs); font-weight: 650; }
+  .tahta-liste tr.grup .grup-ad { color: var(--metin); }
+  .tahta-liste tr.grup .not { font-weight: 400; }
+  .grup-ic { display: flex; flex-wrap: wrap; align-items: center; gap: var(--b1) var(--b2); min-block-size: 1.5rem; }
+  .grup-sec { display: inline-flex; align-items: center; gap: var(--b2); margin: 0 0 0 var(--b3); font-size: var(--yazi-xs); font-weight: 500; cursor: pointer; }
+  .grup-sec[hidden], .sec-kap[hidden] { display: none; }
+  .tahta-satir > * { block-size: 3.125rem; } /* + çizgi = 51 px; iki satır rozet sığmazsa satır uzar */
+  .tahta-satir { scroll-margin-block-start: calc(var(--yapiskan-ust) + 6rem); }
+  .tahta-satir:has(input[name="tahta"]:checked) > * { background: var(--ana-hafif); }
+  .tahta-satir:target > * { background: color-mix(in oklab, var(--ana-hafif) 55%, var(--yuzey)); }
+  .tahta-liste .c-sec { inline-size: var(--dokunma); padding: 0; }
+  .sec-kap { display: grid; place-items: center; inline-size: var(--dokunma); min-block-size: var(--dokunma); margin: 0; cursor: pointer; }
+  .sec-kap input, .grup-sec input { inline-size: 1.25rem; block-size: 1.25rem; margin: 0; }
+  .sec-kap .kart-etiket { display: none; }
+  .tahta-liste .c-ad { min-inline-size: 11rem; font-weight: 400; }
+  .tahta-liste .c-ad a { color: var(--metin); font-size: var(--yazi-m); font-weight: 650; text-decoration: none; }
+  .tahta-liste .c-ad a:hover { text-decoration: underline; }
+  .tahta-liste .alt-satir { display: block; color: var(--soluk); font-size: var(--yazi-xs); }
+  .tahta-liste .rozetler, .genel-rozetler { display: flex; flex-wrap: wrap; gap: var(--b1); }
+  /* Satır komutunun iletisi: sayfa #t-<id> ile satıra kaydığında sayfa başındaki bant ekran dışında kalır */
+  .satir-ileti { display: flex; align-items: center; gap: var(--b1); margin: var(--b1) 0 0; color: var(--d-acik); font-size: var(--yazi-xs);
+    font-weight: 650; }
+  .satir-ileti .simge { flex: none; }
+  .secim-notu { font-weight: 400; }
+  .tahta-liste :is(.c-oturum, .c-gorulme, .c-surum) { color: var(--soluk); }
+  .tahta-liste :is(.c-gorulme, .c-surum) { white-space: nowrap; }
+  @media (min-width: 85rem) { .tahta-liste .c-oturum { white-space: nowrap; } }
+  .tahta-liste .c-eylem { text-align: end; }
+  .satir-eylem { display: flex; align-items: center; justify-content: flex-end; gap: var(--b2); }
+  .satir-eylem .birincil:empty { display: none; }
+  .satir-eylem .birincil > :is(button, .dugme) { min-inline-size: 8.75rem; justify-content: center; white-space: nowrap; }
+  .simge-dugme { justify-content: center; inline-size: var(--dokunma-kucuk); padding: 0; }
+  @media (max-width: 84.99rem) { .tahta-liste .c-surum, .tahta-liste thead th:nth-child(6) { display: none; } }
+  @media (min-width: 64rem) and (max-width: 74.99rem), (max-width: 55.99rem) {
+    .tahta-liste .c-gorulme, .tahta-liste thead th:nth-child(5) { display: none; }
+  }
+
+  /* Komut menüsü: satırın "⋯" menüsü, seçim çubuğunun ve tahta sayfasının "Diğer" menüsü */
+  /* summary, details'in gölge yuvasından content-box devralır (sıfırlama zinciri orada kopar): düğme görünümlü özet
+     dolgusu kadar uzuyordu (36 yerine 50 px). */
+  summary.dugme { box-sizing: border-box; }
+  details.satir-menu { position: relative; }
+  details.satir-menu[open] { flex-basis: auto; order: 0; }
+  .satir-menu > summary { cursor: pointer; white-space: nowrap; }
+  .satir-menu > summary .simge { transition: transform .15s; }
+  .satir-menu[open] > summary:not(.simge-dugme) .simge { transform: rotate(180deg); }
+  .menu-liste { position: absolute; inset-inline-end: 0; inset-block-start: calc(100% + var(--b1)); z-index: 6; margin: 0; padding: var(--b1);
+    list-style: none; inline-size: max-content; min-inline-size: 13rem; max-inline-size: min(20rem, calc(100vw - 2rem));
+    background: var(--yuzey); border: 1px solid var(--cizgi); border-radius: var(--kose-m); box-shadow: var(--golge-2);
+    text-align: start; font-weight: 400; overflow-y: auto; overscroll-behavior: contain; }
+  .satir-menu.yukari .menu-liste { inset-block-start: auto; inset-block-end: calc(100% + var(--b1)); }
+  .menu-liste :is(a, button) { display: flex; align-items: center; justify-content: flex-start; gap: var(--b3); inline-size: 100%;
+    min-block-size: var(--dokunma-kucuk); padding: var(--b1) var(--b3); border: 0; border-radius: var(--kose-s); background: none;
+    color: var(--metin); font-size: var(--yazi-s); font-weight: 500; text-align: start; text-decoration: none; }
+  .menu-liste :is(a, button):hover:not(:disabled) { background: var(--yuzey2); }
+  .menu-liste button.tehlike { color: var(--d-sorun); }
+  .menu-liste button.tehlike:hover:not(:disabled) { background: var(--dz-sorun); }
+  /* Pasif öğe soluk yazıyla anlatılır (saydamlık kontrastı düşürür); gerekçe yanında yazar */
+  .menu-liste button:disabled { opacity: 1; color: var(--soluk); cursor: not-allowed; }
+  .menu-liste small { margin-inline-start: auto; color: var(--soluk); font-size: var(--yazi-xs); font-weight: 400; white-space: nowrap; }
+  .menu-liste small[hidden] { display: none; }
+  .menu-liste li.ayrac { block-size: 1px; margin: var(--b1) 0; background: var(--cizgi); }
+  .menu-liste .yalniz-dar { display: none; }
+
+  /* Seçim çubuğu: JS yokken formun sonunda hep görünür ve sarar; JS forma js-secim verince yalnız seçim varken görünür,
+     ekranın altına yapışır, SARMAZ ve taşmaz (taşan şerit sayfayı ve telefondaki sabit alt çubuğu genişletir). */
+  .secim-cubugu { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: var(--b2); padding: var(--b2) var(--b3);
+    margin-block-end: var(--b4); background: var(--yuzey); border: 1px solid var(--cizgi); border-radius: var(--kose-l); }
+  .secim-sayi { margin-inline-end: var(--b2); font-size: var(--yazi-s); font-weight: 650; white-space: nowrap; }
+  .secim-temizle { margin-inline-start: auto; }
+  .secim-temizle[hidden] { display: none; }
+  .js-secim .secim-cubugu { position: sticky; inset-block-end: calc(var(--alt-cubuk-pay, 0px) + var(--b3)); z-index: 30;
+    flex-wrap: nowrap; border-color: var(--ana-yazi); box-shadow: var(--golge-2), 0 calc(var(--b3) + 1px) 0 0 var(--zemin); }
+  .js-secim .secim-cubugu > * { min-inline-size: 0; }
+  .js-secim .secim-cubugu > button, .js-secim .secim-cubugu summary { flex: none; }
+  .js-secim:not(.secili) .secim-cubugu { display: none; }
+  @media (max-width: 39.99rem) {
+    .secim-cubugu { gap: var(--b1); padding-inline: var(--b2); }
+    .secim-cubugu .yalniz-genis, .secim-cubugu > button:not(.secim-temizle) .simge, .secim-cubugu summary .simge { display: none; }
+    .secim-cubugu .menu-liste .yalniz-dar { display: block; }
+    .secim-cubugu :is(button, summary) { padding-inline: .625rem; }
+    .secim-sayi { margin-inline-end: 0; overflow: hidden; text-overflow: ellipsis; }
+  }
+
+  /* Tahta sayfası: başı, komutları, Genel sekmesi */
+  .tahta-bas { align-items: flex-start; }
+  .tahta-eylem { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: var(--b2); margin-inline-start: auto; }
+  .tahta-eylem > form.satir-ici { display: contents; }
+  .komut-ozet { display: grid; gap: var(--b2); margin: 0; padding: 0; list-style: none; font-size: var(--yazi-s); }
+  .komut-ozet li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--b1) var(--b3); }
+  .genel-rozetler { margin-block-start: var(--b3); }
+
+  /* Dar ekran: satır karta döner (yatay kaydırma yok); açılır listeler satırın / çubuğun enine yayılır (ekran dışına taşmaz) */
+  @media (max-width: 47.99rem) {
+    .tahta-liste, .tahta-liste :is(thead, tbody, tr.grup, tr.grup th) { display: block; }
+    .tahta-liste thead tr { display: flex; }
+    .tahta-liste thead th { position: static; flex: 1; padding: 0; background: none; border-radius: 0; }
+    .tahta-liste thead th:not(.c-sec) { display: none; }
+    .tahta-liste thead .sec-kap { display: flex; justify-content: flex-start; gap: var(--b2); inline-size: auto; padding-inline: .75rem;
+      font-size: var(--yazi-s); font-weight: 500; color: var(--metin); }
+    .tahta-liste thead .sec-kap[hidden] { display: none; }
+    .sec-kap .kart-etiket { display: inline; }
+    .tahta-satir { position: relative; display: grid; grid-template-columns: var(--dokunma) minmax(0, 1fr) auto;
+      grid-template-areas: "sec ad eylem" "sec durum durum" "sec bilgi bilgi"; align-items: center; gap: 0 var(--b2);
+      padding: var(--b2) var(--b3) var(--b2) 0; border-block-start: 1px solid var(--cizgi); }
+    .tahta-satir[hidden] { display: none; }
+    .tahta-satir > * { display: block; block-size: auto; padding: 0; border: 0; }
+    .tahta-satir:has(input[name="tahta"]:checked), .tahta-satir:target { background: var(--ana-hafif); }
+    .tahta-satir:has(input[name="tahta"]:checked) > *, .tahta-satir:target > * { background: none; }
+    .tahta-liste .c-sec { grid-area: sec; align-self: start; inline-size: auto; }
+    .tahta-liste .c-ad { grid-area: ad; }
+    .tahta-liste .c-eylem { grid-area: eylem; }
+    .tahta-liste .c-durum { grid-area: durum; padding-block: var(--b1); }
+    /* Oturum (solda) ve son görülme (sağda) aynı satırı paylaşır */
+    .tahta-liste .c-oturum { grid-area: bilgi; justify-self: start; font-size: var(--yazi-xs); }
+    .tahta-liste .c-gorulme { display: block; grid-area: bilgi; justify-self: end; font-size: var(--yazi-xs); }
+    .satir-eylem .birincil > :is(button, .dugme) { min-inline-size: 0; }
+    .tahta-satir details.satir-menu, .secim-cubugu details.satir-menu, .tahta-eylem details:is(.satir-menu, .durdur-menu) { position: static; }
+    .tahta-satir .menu-liste { inset-inline: var(--b3); inset-block-start: var(--dokunma); inline-size: auto; max-inline-size: none; margin-block-start: var(--b2); }
+    .tahta-satir .satir-menu.yukari .menu-liste { inset-block-start: auto; inset-block-end: calc(100% - var(--b2)); }
+    .secim-cubugu .menu-liste, .tahta-eylem .menu-liste, .tahta-eylem .durdur-menu .acilir-ic { inset-inline: 0; inline-size: auto; max-inline-size: none; }
+    .tahta-eylem { inline-size: 100%; margin-inline-start: 0; }
+    /* Sayfa başı kısa kalsın (ilk tahta satırı iki ekran aşağıda başlıyordu): süzgeç hapları telefonda TEK satırdır ve
+       kendi içinde yatay kayar (sayfayı genişletmez); boş (0) haplar çizilmez (etkin olan hariç). */
+    .haplar { flex-wrap: nowrap; gap: var(--b1); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; padding-block-end: var(--b1); }
+    .hap { flex: none; }
+    .hap:focus-visible { outline-offset: -2px; } /* kaydırma kutusu dışa taşan halkayı kırpar */
+    .hap.bos:not([aria-current]) { display: none; }
+    /* Dokunma hedefi: ad hücresinin tamamı (ad + alt satır) tahta sayfasına gider; rozet bağlantısı 44 px'e uzar */
+    .tahta-liste .c-ad { position: relative; display: flex; flex-direction: column; justify-content: center; min-block-size: var(--dokunma); }
+    .tahta-liste .c-ad a::after { content: ""; position: absolute; inset: 0; }
+    .tahta-liste a.rozet { position: relative; }
+    .tahta-liste a.rozet::after { content: ""; position: absolute; inset: -.625rem 0; }
+  }
+
+  /* Dokunma hedefi (dar ekran ya da kaba işaretçi): düğmelerin 44 px tabanı kabuk katmanından gelir; kalanlar burada */
+  @media screen and (max-width: 63.99rem), screen and (pointer: coarse) {
+    .hap, .grup-sec { min-block-size: var(--dokunma); }
+    .simge-dugme { inline-size: var(--dokunma); }
+    .kirinti a { display: inline-flex; align-items: center; min-block-size: var(--dokunma); }
+  }
+
+  @media print {
+    .haplar, .secim-cubugu, .tahta-liste .c-sec, .tahta-liste .c-eylem, .tahta-eylem, .bolum-serit { display: none !important; }
+    .tahta-liste-kap { border-color: #999; }
+  }
+  @media (forced-colors: active) {
+    .hap[aria-current="true"], .tahta-satir:has(input[name="tahta"]:checked) { outline: 2px solid Highlight; outline-offset: -2px; }
+    .menu-liste, .secim-cubugu, .tahta-liste-kap { border: 1px solid CanvasText; }
+  }
+}
+/* ---- 0.17.0 sonu ---- */

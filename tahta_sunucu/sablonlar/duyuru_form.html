@@ -14,6 +14,12 @@
   {% if plan %}<p class="dugme-satiri"><a class="dugme" href="/duyurular/yeni?kopya={{ plan.id }}">Çoğalt</a></p>{% endif %}
 </div>
 {% if hata %}<div class="bant hata" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span class="gizli">Hata: </span>{{ hata }}</div>{% endif %}
+{# 0.17.0: Tahtalar sayfasından gelen ön seçim (?tahta=…). Geçerli tahta yoksa "Kime" yine "Seçime göre"dir; form
+   "Tüm tahtalar"a düşmez. #}
+{% if on_secim is not none and on_secim %}
+{% if on_secim.idler %}<div class="bant" role="status" data-on-secim="{{ on_secim.idler | length }}">Tahtalar sayfasında seçtiğiniz {{ on_secim.idler | length }} tahta işaretli.{% if on_secim.atlanan %} {{ on_secim.atlanan }} tahta bulunamadı.{% endif %}{% if on_secim.sinavda %} <strong data-sinavda="{{ on_secim.sinavda }}">{{ on_secim.sinavda }} tahtada sınav sürüyor:</strong> duyuru sınav ekranının üstünde görünür; süre dolunca ya da kapatılınca sınav ekranı geri gelir.{% endif %} Kime gideceğini aşağıdaki “Kime” bölümünden değiştirebilirsiniz.</div>
+{% else %}<div class="bant uyari" role="status" data-on-secim="0">Seçilen tahtalar bulunamadı; kime gideceğini aşağıdan seçin.</div>{% endif %}
+{% endif %}
 {% if plan and not duzenlenebilir %}<div class="bant uyari" role="status">Bu plan {{ plan.olusturan }} kullanıcısına ait; yalnız oluşturan ya da yönetici değiştirebilir. Aşağıdaki bilgiler salt okunurdur; <a href="/duyurular/yeni?kopya={{ plan.id }}">çoğaltarak</a> kendi planınızı oluşturabilirsiniz.</div>{% endif %}
 
 <form method="post" action="{{ '/duyurular/plan/' ~ plan.id if plan else '/duyurular' }}" id="duyuru-formu" class="duyuru-formu">

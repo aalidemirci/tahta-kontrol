@@ -393,18 +393,19 @@ seçimde korunur.
 - **GTK'da iki stil sağlayıcısı:** ölçüler bir kez yüklenir, renkler tema
   değişince aynı sağlayıcıya yeniden yüklenir (pencere yeniden açılmaz).
 
-### 11.1 Panel kabuğu ve arayüzün yeniden düzeni (0.15.0, 0.16.0)
+### 11.1 Panel kabuğu ve arayüzün yeniden düzeni (0.15.0, 0.16.0, 0.17.0)
 
 Kullanıcı (18.11.2026) paneli "ilkel ve karışık" buldu. Bütün panel için bir arayüz taslağı hazırlandı
 (tıklanabilir prototip ve ölçümler; **taslak depo dışında tutulur**), kullanıcı taslağı gördü ve aynı gün
-"Evet, başla" diyerek 1. aşamaya, 0.15.0'ı gördükten sonra 19.11.2026'da "Ayarlar'a geç" diyerek 2. aşamaya
-onay verdi. Sonraki aşamalar ayrı sürüm ve ayrı onaydır.
+"Evet, başla" diyerek 1. aşamaya, 0.15.0'ı gördükten sonra 19.11.2026'da "Ayarlar'a geç" diyerek 2. aşamaya,
+0.16.0'ı gördükten sonra aynı gün "Önce Tahtalar'a geç" diyerek 3. aşamaya onay verdi. Sonraki aşamalar ayrı
+sürüm ve ayrı onaydır.
 
 | Aşama | Sürüm | İçerik | Durum |
 |---|---|---|---|
 | 1. Kabuk | 0.15.0 | Sol menü, çekmece, telefon alt çubuğu, Acil en üstte, ölçek belirteçleri, şekilli rozet, 44 px dokunma hedefi, görünür odak, menüde rol | Uygulandı (yerel) |
 | 2. Ayarlar | 0.16.0 | Ayarlar giriş sayfası (bölüm kartları, değer özetleri, kurulum listesi, Ayarlar içi arama), 11 bölüm sayfası, her kartın kendi Kaydet'i, Kullanıcılar bir bölüm, acil şablonları Acil'de | Uygulandı (yerel) |
-| 3. Tahtalar | — | Ayrı `/tahtalar` listesi, satır düğmeleri, tahta sayfası sekmeleri | Onay bekliyor |
+| 3. Tahtalar | 0.17.0 | `/tahtalar` listesi (konuma göre gruplu satırlar, satırda duruma göre tek düğme + "⋯" menüsü, seçim çubuğu, `?durum=` süzgeci), `/islem`'e `tek` ve `kapsam=hepsi`, duyuru formunda tahta ön seçimi, tahta sayfası dört sekme, Tahtalar bölümünün sekme şeridi | Uygulandı (yerel) |
 | 4. Bugün | — | "Bugün" masası: şu an, bekleyen işler, yoklama ve duyuru kutuları | Onay bekliyor |
 | 5. Sekmeler | — | Yoklama / Program / Kişiler sekmelerinin ayrışması, tek sayfalık duyuru formu | Onay bekliyor |
 | 6. Arama | — | Genel arama (rolle süzülür; dizinde kişi adı yok) | Onay bekliyor |
@@ -459,6 +460,58 @@ Birinci aşamanın kuralları:
 - **Kullanıcılar** Ayarlar'ın bölümüdür (soru 69, öneri); menü dokuz öğedir, `GET /kullanicilar` bölüme
   yönlenir, `POST /kullanicilar` aynı uçtur. **Acil şablonları** `/acil?sekme=sablonlar` görünümündedir (yalnız
   yöneticiye çizilir; uç ve alanlar aynı).
+
+Üçüncü aşamanın kuralları (0.17.0; sonuçlar, bilinen sınırlar ve denenmeyenler `docs/surum-0.17.0.md`'dedir):
+
+- **Tek liste uygulaması:** `GET /` ve `GET /tahtalar` aynı işleyici, aynı şablon (`tahtalar.html`), aynı
+  bağlamdır; `/` yönlendirme yapmaz (iletili eski dönüşler bozulmasın). Menü, kırıntı ve tahta işlerinin
+  dönüşleri `/tahtalar`'ı kullanır. 4. aşamada `/` "Bugün" olur, `/tahtalar` yerinde kalır. Pano bantları
+  (program şeridi, "Program kilidini durdur", altyapı uyarıları, yeni sürüm notu) o zamana kadar listenin
+  üstünde aynen durur (`_pano_bantlar.html`).
+- **Durum kuralı tek yerde, sunucuda:** satırın durumu, rozetleri, tek düğmesi ve menü pasiflikleri
+  `tahta_liste.durum_ozeti` ile hesaplanır; şablon ve `/api/durum` aynı `liste` sözlüğünü kullanır,
+  `panel.js` kuralı yeniden hesaplamaz (yalnız yazar). `/api/durum`'un var olan anahtarları değişmedi; tek ek
+  `tahtalar[].liste`'dir. `?durum=` süzgeci bu yüzden JS'siz çalışır: sunucu bütün satırları çizer, süzgeç
+  dışı satır `hidden`, kutusu `disabled` olur (devre dışı kutu forma girmez).
+- **Durum → tek düğme (ilk uyan):** acil sürüyor → yok; sınav penceresinde → "Sınavı aç" bağlantısı
+  (komut değil); çevrimdışı → yok; ekran yardımcısı yok → Tanıla; duyuru var → Duyuruyu kaldır; kilitli →
+  Kilidi aç; diğer → Kilitle. Satırın tek düğmesi hiçbir durumda yıkıcı komut olmaz. Öbür bütün komutlar
+  "⋯" menüsünde ve seçim çubuğundadır; menüde yalnız kesin etkisiz komut pasiftir ve gerekçesini yazar,
+  seçim çubuğunda hiçbir komut pasifleşmez (bayat durum komutu engellemesin).
+- **`/islem` hedef seçimi sıralıdır ve dallar arasında düşme yoktur** (`tahta_liste.islem_hedefi`):
+  nöbetçi → `tek` → `kapsam` → işaretli liste. `tek=<tür>:<kimlik>` gelince yalnız o tahta işlenir; formdaki
+  `tur` ve `tahta` okunmaz. `tek` bozuk, çift, bilinmeyen türde ya da onaysız tahtaya ise hiçbir komut
+  yazılmaz. `kapsam=hepsi` yalnız `kilitle` ile, yalnız başına (tek ya da listeyle birlikte reddedilir) ve
+  yalnız onaylı + çevrimiçi tahtalara gider (taslak Karar 10, soru 78); bu sürümde onu gönderen arayüz yoktur.
+  Komut yazımı, ömürler, yetki, duyuru yolu ve işaretli liste yolu değişmedi.
+- **Enter komut vermez:** liste formunun ağaç sırasındaki ilk gönder düğmesi görünmez, ETKİN bir nöbetçidir
+  (`nobetci=1`); bu alanı gören `/islem` hiçbir komut yazmaz. Seçim kutusunda Enter'ın örtük gönderimi ilk
+  etkin gönder düğmesini tıklar; nöbetçi olmasa bu ilk satırın `tek=` düğmesi olurdu. Devre dışı nöbetçi işe
+  yaramaz (Chromium atlayıp sıradaki etkin düğmeyi tıklar). `panel.js` ayrıca seçim kutusunda Enter'ı yutar.
+- **Yıkıcı komut JS'siz gönderilmez:** Kapat…, Yeniden başlat…, Oturumu şimdi temizle…, Tahtayı kaldır…
+  `type="button"` + `data-onay`'dır (0.16.0 kalıbı); JS'siz ayrı onay sayfası yoktur, sayfa `<noscript>`
+  notuyla söyler. Satırdan açılan onay `data-tek` taşır: liste ve sayı yalnız o tahtadır, onay düğmesi `tek`
+  gönderir; `data-tek` taşıyan tetik hiçbir koşulda işaretli tahtalara gönderilmez.
+- **Canlı tazeleme düğmeyi parmağın altında değiştirmez:** imleç ya da odak düğmenin hücresindeyken tek
+  düğme yeniden yazılmaz; değişen düğme 700 ms tıklama almaz. Açık menü yeniden çizilmez.
+- **Satır komutunun dönüşü:** `tek` dalı liste adresine dönerken `s=<kimlik>` ve `#t-<kimlik>` ekler; ileti
+  sayfa başına ek olarak o satırda çizilir (JS'siz de) ve sayfa satırda kalır. Dönüş adresi
+  `tahta_liste.guvenli_donus`'tan geçer (`//…` reddedilir); bütün hata dönüşleri de `donus`'a gider.
+- **Duyuru ön seçimi:** `GET /duyurular/yeni?tahta=…` (seçim çubuğu, satır menüsü, tahta sayfası) formu
+  `kime=secim` ve o tahtalar işaretli açar. Geçerli tahta kalmasa da form "Tüm tahtalar"a düşmez
+  (`secimden=1`). Panodaki satır içi duyuru kutusu kalktı; `/islem`'in `tur=duyuru` dalı sunucuda durur.
+  `POST /duyurular` ve formun düzeni değişmedi.
+- **Tahta sayfası:** `?sekme=` genel · program · bakim · bilgiler (`tahta_liste.sekme_coz`; yönlendirme yok,
+  bilinmeyen değer Genel). Bilgiler yalnız yöneticiye çizilir; bekleyen tahtada Program yoktur ve yönetici
+  doğrudan Bilgiler'i görür. Formların uçları ve alan adları aynıdır; her biri kendi sekmesine döner. Bölüm
+  kimlikleri korunur, eski `#parça` adreslerini `panel.js` sekmeye taşır. Sayfaya ders başlığı ve öğretmen
+  bilgisi eklenmedi (soru 75 onaylanmadı; kural 12).
+- **Bölüm şeridi:** Tahtalar · Arızalar · Envanter | yöneticiye Gruplar · CSV ile içe/dışa aktar · Ajan
+  kurulum paketi (`_tahtalar_bas.html`; yalnız var olan sayfalara bağlanır). Yan menüde Tahtalar'ın alt
+  listesi kalktı; şeridi çizen her sayfa menü öğesinin `esler`'indedir. Şerit ve menü yalnız görünümdür;
+  yönetici öğeleri idareci HTML'inde çizilmez, yetki denetimi uçlarda kalır.
+- **Liste kabı kaydırma kabı değildir** (satır menüsü kırpılmasın, çift dikey kaydırma olmasın); dar ekranda
+  satır karta döner. Seçim çubuğu alta yapışır, telefonda alt çubuğun üstünde durur, sarmaz ve taşmaz.
 
 ## 12. Ders programı ve program kilidi
 
@@ -1520,7 +1573,8 @@ izlenir. Kurulu (PyInstaller) programda sistem sertifika deposunun bulunduğu he
 | 3B | Zil düzenleyici (çizelgeler, haftalık düzen, tarihe özel çizelge, günü önizle, CSV; Okul Zili'nden alma aynı yapıya yazar) ve ders programını içe aktarma sihirbazı (aSc XML deneme, şablon CSV/XLSX, yapay zekâ istemi, önceki programlar) | 0.10.0 (§12.2–12.3) — testlerle ve tarayıcıda uydurma veriyle denendi; gerçek aSc dosyası ve okulun gerçek zil saatleriyle denenecek |
 | 5C | Yoklama yeniden tasarımı: tahtada kaydırmasız şube/ders seçimi, okul no sıralı liste, devrenin ilk dersinde geç, saate göre ders ön seçimi; panelde şube defteri (son beş öğretim günü, düzeltme katmanı), mazeret/izin, son günler listesi (§14.2) | 0.14.0 — testlerle, Debian 12 kabında (Xvfb) ekran ölçümüyle ve tarayıcıda uydurma veriyle denendi; ETAP'ta ve gerçek sınıfta denenecek |
 | P1 | Panel arayüzü 1. aşama (kabuk): sol menü (üç küme, role göre), dar ekranda çekmece ve telefon alt çubuğu, Acil en üstte, ölçek belirteçleri, şekilli rozet, dokunma hedefi (§11.1) | 0.15.0 — testlerle ve deneme sunucusunda başsız tarayıcı ölçümüyle (uydurma veri; 1366 ve 390 px, açık/koyu) denendi; okulun bilgisayarlarında, gerçek telefonda ve ekran okuyucuyla denenecek |
-| P2 | Panel arayüzü 2. aşama (Ayarlar): giriş sayfası (bölüm kartları, değer özetleri, kurulum listesi, arama), 11 bölüm sayfası, yeni `bolum=okul`/`kapatma`/`kilit_kodu` (her biri yalnız kendi anahtarını yazar), Kullanıcılar Ayarlar'da, acil şablonları Acil'de (§11.1) | 0.16.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri; JS açık ve kapalı kayıt denemesi, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek ayarlarla ve kurulu hizmette denenecek. 3–6. aşamalar onay bekliyor |
+| P2 | Panel arayüzü 2. aşama (Ayarlar): giriş sayfası (bölüm kartları, değer özetleri, kurulum listesi, arama), 11 bölüm sayfası, yeni `bolum=okul`/`kapatma`/`kilit_kodu` (her biri yalnız kendi anahtarını yazar), Kullanıcılar Ayarlar'da, acil şablonları Acil'de (§11.1) | 0.16.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri; JS açık ve kapalı kayıt denemesi, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek ayarlarla ve kurulu hizmette denenecek |
+| P3 | Panel arayüzü 3. aşama (Tahtalar): `/tahtalar` listesi (konuma göre gruplu satırlar, duruma göre tek düğme, "⋯" menüsü, seçim çubuğu, JS'siz `?durum=` süzgeci), `/islem`'e `tek=<tür>:<kimlik>` (yalnız o tahta) ve `kapsam=hepsi` (yalnız kilitle; onaylı + çevrimiçi), duyuru formunda tahta ön seçimi, tahta sayfası dört sekme, Tahtalar bölümünün sekme şeridi (§11.1) | 0.17.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri, benzetilmiş ajanlar; JS açık ve kapalı komut denemesi, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek telefonda ve gerçek tahtalarla denenecek. 4–6. aşamalar onay bekliyor |
 | 3C | Sihirbaza e-Okul "Haftalık Ders Programları" raporu (OOK11002_R01, .XLS): blok ayrıştırma, rapordan zil çizelgesi, zorunlu şube eşlemesi, şubenin tahtasına yazma (§12.4) | 0.12.0 — testlerle (uydurma matris) ve geliştirme bilgisayarında gerçek bir raporla (ayrı veri dizini, uydurma tahtalar) uçtan uca denendi; okulda denenecek |
 
 Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" ve "Seçili
@@ -1676,11 +1730,12 @@ Ders yoklaması (0.6.0):
 68. **Aydınlatma:** okulun aydınlatma metni tahtada okul numarası ile adın birlikte görünmesini ve mazeret
     türünün (raporlu dahil) okul sunucusunda tutulmasını kapsıyor mu? (Soru 33'ün devamı.)
 
-Panel arayüzü (0.15.0, 0.16.0; taslağın soruları — yanıt gelene kadar **önerilen** seçenek geçerlidir, §11.1):
+Panel arayüzü (0.15.0–0.17.0; taslağın soruları — yanıt gelene kadar **önerilen** seçenek geçerlidir, §11.1):
 
 69. **Panel kullanıcıları nerede dursun?** Öneri: Ayarlar içinde bir bölüm. (0.16.0'da öneri uygulandı:
     `/ayarlar/kullanicilar`; menüde ayrı öğe kalktı. Geri istenirse menü öğesi tek satırdır.)
-70. **Ana sayfanın adı:** öneri "Bugün" (4. aşama). Şimdi menüde "Tahtalar", adres `/`.
+70. **Ana sayfanın adı:** öneri "Bugün" (4. aşama). 0.17.0'dan beri menüdeki "Tahtalar" `/tahtalar`'a gider;
+    `/` 4. aşamaya kadar aynı listeyi çizer.
 71. **Bugün ekranında tahtalar:** öneri kat/blok çipleri ve durum sayıları, tam liste Tahtalar'da; öbür
     seçenek bugünkü kart ızgarası.
 72. **Genel arama ne zaman?** Öneri: son aşamada; önce yalnız Ayarlar içinde (0.16.0'da Ayarlar araması var).
@@ -1688,12 +1743,15 @@ Panel arayüzü (0.15.0, 0.16.0; taslağın soruları — yanıt gelene kadar **
 74. **Yoklama'ya tıklayınca ilk sayfa:** öneri Günlük (bugünkü gibi); öbür seçenek şube defteri.
 75. **Tahta ayrıntısında bugünün ders başlıkları gösterilsin mi?** Öneri: gösterilsin, öğretmen adı olmadan.
     Kural 12 istisnası bugün yalnız kilit ekranı kutusu içindir; panelde göstermek yeni bir kullanımdır ve
-    uygulanmadan önce açıkça onaylanmalıdır.
+    uygulanmadan önce açıkça onaylanmalıdır. (0.17.0'da ONAYLANMADI ve uygulanmadı: tahta listesinde ve tahta
+    sayfasında ders başlığı ya da öğretmen bilgisi yoktur.)
 76. **Açık/koyu görünüm elle seçilebilsin mi?** Öneri: hayır, işletim sistemini izlesin (0.15.0'da böyle).
 77. **Menü adı:** öneri "Kişiler ve anahtarlar" (0.15.0'da böyle); öbür seçenekler "Okul verisi",
     "Öğrenci ve öğretmenler".
 78. **"Hepsini kilitle" kime gitsin?** Öneri: çevrimiçi ve onaylı bütün tahtalara (3. aşama); öbür seçenek
-    bugünkü gibi yalnız seçilenlere.
+    bugünkü gibi yalnız seçilenlere. (0.17.0'da öneri SUNUCUDA uygulandı: `/islem` `kapsam=hepsi`, yalnız
+    kilitle. Düğmesi 4. aşamada gelir; o zaman sorulacak: sınavdaki tahtalar da kilitlensin mi? Bugün sunucu
+    ayrım yapmaz.)
 79. **Koyu görünümde birincil düğme tonu:** öneri olduğu gibi kalsın (kontrast eşiği tutuyor, `tema.py`
     değişmez); öbür seçenek koyuda ayrı ton türetmek.
 

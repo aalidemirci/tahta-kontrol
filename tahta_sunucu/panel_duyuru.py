@@ -13,11 +13,14 @@ from datetime import datetime
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from . import duyuru, guvenlik, hedef, metin, program, vt, zamanlama
+from . import duyuru, guvenlik, hedef, metin, program, sinav, vt, zamanlama
 from .zamanlama import ISTANBUL
 
 GECMIS_EN_COK = 100
 YETKI_ILETISI = "Bu {tur} {sahip} kullanıcısına ait; yalnız oluşturan ya da yönetici değiştirebilir."
+
+
+ON_SECIM_EN_COK = 500  # /duyurular/yeni?tahta=… ön seçiminde okunan en çok değer
 
 
 def yetkili_mi(k, sahip: str) -> bool:
@@ -151,7 +154,7 @@ def secenekler(b) -> dict:
 
 
 def kaydet(uygulama, y) -> None:  # noqa: C901 (uç tanımları)
-    def form_sayfasi(istek: Request, k, form: dict, *, plan=None, hata: str = "", durum_kodu: int = 200):
+    def form_sayfasi(istek: Request, k, form: dict, *, plan=None, hata: str = "", durum_kodu: int = 200, on_secim=None):
         with vt.islem() as b:
             sec = secenekler(b)
             onizleme = None
@@ -172,6 +175,7 @@ def kaydet(uygulama, y) -> None:  # noqa: C901 (uç tanımları)
             hata=hata,
             secenekler=sec,
             onizleme=onizleme,
+            on_secim=on_secim,
             bugun=_bugun(),
             sure_siniri=zamanlama.DUYURU_SURE_DK,
         )
@@ -250,17 +254,45 @@ def kaydet(uygulama, y) -> None:  # noqa: C901 (uç tanımları)
         if not k:
             return y.yonlendir("/giris")
         form = bos_form()
+        on_secim = None
         kopya, yayin_id = istek.query_params.get("kopya", ""), istek.query_params.get("yayin", "")
         with vt.islem() as b:
+            kaynak = None  # kopyalanan plan ya da yayın; bulunamazsa ön seçime (?tahta=) bakılır
             if kopya.isdigit() and hedef.kimlik_mi(kopya):
-                plan = b.execute("SELECT * FROM duyuru_plani WHERE id = ? AND durum != 'silindi'", (int(kopya),)).fetchone()
-                if plan:
-                    form = plandan_form(plan)
+                kaynak = b.execute("SELECT * FROM duyuru_plani WHERE id = ? AND durum != 'silindi'", (int(kopya),)).fetchone()
+                if kaynak:
+                    form = plandan_form(kaynak)
             elif yayin_id.isdigit() and hedef.kimlik_mi(yayin_id):
-                yayin = b.execute("SELECT * FROM duyuru WHERE id = ?", (int(yayin_id),)).fetchone()
-                if yayin:
-                    form = yayindan_form(yayin)
-        return form_sayfasi(istek, k, form)
+                kaynak = b.execute("SELECT * FROM duyuru WHERE id = ?", (int(yayin_id),)).fetchone()
+                if kaynak:
+                    form = yayindan_form(kaynak)
+            if not kaynak:
+                on_secim = _on_secim(b, istek.query_params)
+                if on_secim is not None:
+                    form.update(_hedef_formu({"tahtalar": on_secim["idler"]}))
+        return form_sayfasi(istek, k, form, on_secim=on_secim)
+
+    def _on_secim(b, sorgu) -> dict | None:
+        """Tahtalar sayfasından gelen ön seçim (0.17.0): `?tahta=1&tahta=2` ya da `secimden=1`.
+
+        Yalnız onaylı tahtalar kalır; geçerli tahta kalmasa da `kime` "secim" olur (boş hedef): form "Tüm tahtalar"a
+        DÜŞMEZ, gönderilirse var olan doğrulama boş hedefi reddeder. Sorguda yalnız tahta kimliği vardır.
+        {"idler": [...], "istenen": n, "atlanan": n, "sinavda": n} ya da ön seçim yoksa None. `sinavda`: seçilenlerden
+        sınav penceresinde olanların sayısı (form bandında uyarı; satır içi duyuru formunun eski ek onayının yerine).
+        """
+        hamlar = sorgu.getlist("tahta")[:ON_SECIM_EN_COK]
+        if not hamlar and "secimden" not in sorgu:
+            return None
+        adaylar = list(dict.fromkeys(int(d) for d in hamlar if str(d).isdigit() and hedef.kimlik_mi(d)))
+        idler: list[int] = []
+        if adaylar:
+            isaret = ",".join("?" * len(adaylar))
+            gecerli = {
+                s["id"] for s in b.execute(f"SELECT id FROM tahta WHERE durum = 'onayli' AND id IN ({isaret})", adaylar)
+            }
+            idler = [d for d in adaylar if d in gecerli]
+        sinavda = len(set(idler) & set(sinav.pencere_haritasi(b, vt.simdi()))) if idler else 0
+        return {"idler": idler, "istenen": len(hamlar), "atlanan": len(set(hamlar)) - len(idler), "sinavda": sinavda}
 
     @uygulama.get("/duyurular/plan/{plan_id}", response_class=HTMLResponse)
     async def plan_sayfasi(istek: Request, plan_id: int):

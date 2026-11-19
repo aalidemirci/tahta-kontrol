@@ -73,7 +73,7 @@ ANAHTARLAR = [b["anahtar"] for b in BOLUMLER]
 BASKA_YERDE: list[dict] = [
     {"ad": "Program kilidi (teneffüste ve boş derste kilit)", "yer": "Program › Kurallar", "yol": "/program?bolum=kurallar",
      "sozcukler": "program kilidi teneffüs boş ders kilitle durdur"},
-    {"ad": "Program kilidini durdur (1 saat, bugün)", "yer": "Tahtalar (pano şeridi)", "yol": "/",
+    {"ad": "Program kilidini durdur (1 saat, bugün)", "yer": "Tahtalar (program şeridi)", "yol": "/",
      "sozcukler": "program kilidi durdur tören etkinlik"},
     {"ad": "Boş ders uyarısı", "yer": "Program › Kurallar · raporu Uyarılar'da", "yol": "/program/uyarilar",
      "sozcukler": "boş ders uyarısı rapor"},

@@ -136,10 +136,11 @@ def test_temizlik_acil_surerken_ve_sinavdaki_tahtada_verilmez(uygulama, panel, o
 
 def test_temizlik_elle_onayli_uctan_ve_yetki(panel, tahta, okul, saat):
     yeni, eski = kimlik(okul["yeni"]), kimlik(okul["eski"])
-    sayfa = panel.get(f"/tahta/{yeni}").text
-    assert 'data-onay="temizlik"' in sayfa and "Henüz yapılmadı." in sayfa
-    assert "Oturum temizliği için ajan güncellenmeli" in panel.get(f"/tahta/{eski}").text
-    assert 'data-onay="temizlik"' not in panel.get(f"/tahta/{eski}").text
+    sayfa = panel.get(f"/tahta/{yeni}?sekme=bakim").text  # 0.17.0: Bakım sekmesi (+ sayfa başındaki "Diğer" menüsü)
+    assert sayfa.count('data-onay="temizlik"') == 2 and "Henüz yapılmadı." in sayfa
+    assert 'data-onay="temizlik"' in panel.get(f"/tahta/{yeni}").text  # "Diğer" menüsü her sekmede
+    assert "Oturum temizliği için ajan güncellenmeli" in panel.get(f"/tahta/{eski}?sekme=bakim").text
+    assert 'data-onay="temizlik"' not in panel.get(f"/tahta/{eski}?sekme=bakim").text
     assert ileti(panel.post(f"/tahta/{eski}/temizlik", data={"eylem": "temizle"})).startswith("Bu tahtanın ajanı oturum temizliğini bilmiyor")
     assert ileti(panel.post(f"/tahta/{yeni}/temizlik", data={})) == "Bilinmeyen işlem."
     assert ileti(panel.post(f"/tahta/{yeni}/temizlik", data={"eylem": "temizle"})).startswith("Oturum temizliği tahtaya gönderildi.")
@@ -171,12 +172,12 @@ def test_temizlik_sonucu_kayda_ve_tahta_sayfasina_duser(panel, tahta, okul, saat
     yanit = bekle(tahta, okul["yeni"], YETENEKLI)
     (komut,) = [k for k in yanit["komutlar"] if k["tur"] == "temizlik"]
     assert temizlikler()[0]["durum"] == "gonderildi"
-    assert "Temizlik sürüyor ya da tahtada uyarı gösteriliyor" in panel.get(f"/tahta/{yeni}").text
+    assert "Temizlik sürüyor ya da tahtada uyarı gösteriliyor" in panel.get(f"/tahta/{yeni}?sekme=bakim").text
     cikti = "Tamamlandı · Pencereler: 2 pencereye kapatma istendi · Tarayıcı: Firefox 1 profil, 4 çerez/oturum dosyası silindi"
     bekle(tahta, okul["yeni"], YETENEKLI, sonuclar=[{"komut_id": komut["id"], "basarili": True, "cikti": cikti}])
     assert temizlikler()[0]["durum"] == "tamam"
     assert sorgu("SELECT * FROM kayit WHERE islem = 'Oturum temizliği sonucu'")[-1]["ayrinti"] == cikti
-    sayfa = panel.get(f"/tahta/{yeni}").text
+    sayfa = panel.get(f"/tahta/{yeni}?sekme=bakim").text
     assert "Firefox 1 profil, 4 çerez/oturum dosyası silindi" in sayfa and "(elle: yonetici)" in sayfa
     assert "Temizlik sürüyor" not in sayfa
 

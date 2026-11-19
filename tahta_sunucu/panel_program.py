@@ -604,7 +604,7 @@ def kaydet(uygulama, y) -> None:
     @uygulama.post("/tahta/{tahta_id}/program")
     async def tahta_programi(istek: Request, tahta_id: int):
         k = y.kullanici(istek)
-        donus = f"/tahta/{tahta_id}#program"
+        donus = f"/tahta/{tahta_id}?sekme=program"
         engel = yetkisiz(istek, k, f"Tahta #{tahta_id} programı", donus)
         if engel:
             return engel
@@ -612,7 +612,7 @@ def kaydet(uygulama, y) -> None:
         with vt.islem() as b:
             tahta = b.execute("SELECT * FROM tahta WHERE id = ? AND durum != 'iptal'", (tahta_id,)).fetchone()
             if not tahta:
-                return y.yonlendir("/", "Tahta bulunamadı.", hata=True)
+                return y.yonlendir("/tahtalar", "Tahta bulunamadı.", hata=True)
             satirlar = []
             for gun, devre, _ad, no, _b, _s in program.ders_saatleri_oku(b):
                 anahtar = f"{gun}_{devre}_{no}"

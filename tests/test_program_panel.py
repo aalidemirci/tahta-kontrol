@@ -461,7 +461,7 @@ def test_derslik_csv_yukleme_onizleme_ve_onay(uygulama, panel, tahta, saat):
     assert len(sorgu("SELECT * FROM tahta_ders WHERE tahta_id = ?", t2)) == 3
     assert "Uydurma" not in json.dumps(sorgu("SELECT * FROM kayit"), ensure_ascii=False)
     # tahta sayfası ızgarası ve yetimler (K6)
-    sayfa = panel.get(f"/tahta/{t1}").text
+    sayfa = panel.get(f"/tahta/{t1}?sekme=program").text
     assert 'name="d_0_normal_1" value="1" checked' in sayfa and 'name="sube_0_normal_1" value="9/A"' in sayfa
     with vt.islem() as b:
         b.execute("DELETE FROM ders_saati WHERE ders_no = 8")

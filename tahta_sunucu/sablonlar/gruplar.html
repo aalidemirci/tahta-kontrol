@@ -6,9 +6,8 @@
     <h1 id="grup-baslik">Tahta grupları</h1>
     <p>Elle seçilen tahtalar (ör. "Fen laboratuvarları"). Duyurunun "Kime" bölümünde kullanılır; gruba sonradan eklenen tahta sonraki gösterimi alır.</p>
   </div>
-  <p class="dugme-satiri sag"><a class="dugme" href="/tahtalar.csv">Tahtaları dışa aktar (CSV)</a>
-    {% if yonetici %}<a class="dugme" href="/tahtalar/ice-aktar">CSV'den içe aktar</a>{% endif %}</p>
 </div>
+{% include "_tahtalar_bas.html" %}
 {% if gruplar %}
 <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="grup-baslik">
 <table class="gruplar-tablo">

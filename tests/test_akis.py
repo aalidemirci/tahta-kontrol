@@ -98,7 +98,7 @@ def test_onaysiz_tahta_komut_almaz_onayli_alir(ortam):
     assert yanit["komutlar"] == []
     durum = panel.get("/api/durum").json()["tahtalar"][0]
     assert durum["cevrimici"] and durum["kilitli"] and durum["ad"] == "11/A tahtası"
-    assert "Kilitlendi." in panel.get(f"/tahta/{kimlik}").text
+    assert "Kilitlendi." in panel.get(f"/tahta/{kimlik}?sekme=bakim").text
 
 
 def test_yanlis_anahtar_reddedilir_ve_kaldirilan_tahta_baglanamaz(ortam):
@@ -129,7 +129,7 @@ def test_duyuru_kalan_sureyle_iletilir_ve_tani_raporu_saklanir(ortam):
         headers=basliklar,
         json={"sonuclar": [{"komut_id": tani["id"], "basarili": True, "cikti": json.dumps(rapor)}], "bekle": 0},
     )
-    assert "Python 3.11" in panel.get(f"/tahta/{kimlik}").text
+    assert "Python 3.11" in panel.get(f"/tahta/{kimlik}?sekme=bakim").text
     assert "Tören 10.00" in panel.get("/duyurular").text
 
 

@@ -381,7 +381,7 @@ def kaydet(uygulama, y) -> None:
         k = y.kullanici(istek)
         if not yonetici_mi(k):
             return y.yetkisiz_reddet(istek, k, f"Tahta #{tahta_id} demirbaş bilgisi")
-        adres = f"/tahta/{tahta_id}#envanter"
+        adres = f"/tahta/{tahta_id}?sekme=bakim#envanter"
         form = await istek.form()
         demirbas = ariza.temizle(form.get("demirbas_no", ""))
         notu = ariza.temizle(form.get("envanter_notu", ""))
@@ -395,7 +395,7 @@ def kaydet(uygulama, y) -> None:
                 return y.yonlendir(adres, guvenlik.TC_KIMLIK_ILETISI, hata=True)
             satir = b.execute("SELECT ad FROM tahta WHERE id = ? AND durum != 'iptal'", (tahta_id,)).fetchone()
             if not satir:
-                return y.yonlendir("/", "Tahta bulunamadı.", hata=True)
+                return y.yonlendir("/tahtalar", "Tahta bulunamadı.", hata=True)
             b.execute("UPDATE tahta SET demirbas_no = ?, envanter_notu = ? WHERE id = ?",
                       (demirbas[: envanter.DEMIRBAS_EN_UZUN], notu, tahta_id))  # fmt: skip
             vt.kayit_dus(b, k["ad"], "Tahta demirbaş bilgisi kaydedildi", f"{satir['ad']} · {demirbas or 'demirbaş no yok'}", ip(istek))
@@ -410,7 +410,7 @@ def kaydet(uygulama, y) -> None:
             satir = b.execute("SELECT ad FROM tahta WHERE id = ?", (tahta_id,)).fetchone()
             if satir and envanter.donanim_uyarisi_kaldir(b, tahta_id):
                 vt.kayit_dus(b, k["ad"], "Donanım değişikliği görüldü", satir["ad"], ip(istek))
-        return y.yonlendir(f"/tahta/{tahta_id}#envanter", "Donanım uyarısı kapatıldı.")
+        return y.yonlendir(f"/tahta/{tahta_id}?sekme=bakim#envanter", "Donanım uyarısı kapatıldı.")
 
     # ---- arızalar -------------------------------------------------------------------
     def tahta_secenekleri(b) -> list[dict]:

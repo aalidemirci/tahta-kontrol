@@ -744,11 +744,11 @@ def test_usb_ogretmenler_sutunu(panel, tahta, usb_hazir):
 
 def test_usb_tahta_sayfasi_eski_ajan_rozeti(panel, tahta, hazir):  # noqa: F811
     tahta_id = kimlik(hazir["basliklar"])
-    assert "USB anahtar: ajan güncellenmeli" not in panel.get(f"/tahta/{tahta_id}").text  # özellik kapalı
+    assert "USB anahtar: ajan güncellenmeli" not in panel.get(f"/tahta/{tahta_id}?sekme=bakim").text  # özellik kapalı
     usb_ayar(panel)
-    assert "USB anahtar: ajan güncellenmeli" in panel.get(f"/tahta/{tahta_id}").text
+    assert "USB anahtar: ajan güncellenmeli" in panel.get(f"/tahta/{tahta_id}?sekme=bakim").text
     bekle(tahta, hazir["basliklar"], USB_DURUMU)
-    sayfa = panel.get(f"/tahta/{tahta_id}").text
+    sayfa = panel.get(f"/tahta/{tahta_id}?sekme=bakim").text
     assert "USB anahtar: ajan güncellenmeli" not in sayfa and "USB anahtar: destekleniyor" in sayfa
 
 

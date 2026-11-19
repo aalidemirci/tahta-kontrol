@@ -12,7 +12,8 @@
   </div>
   <p class="dugme-satiri sag"><a class="dugme" href="/envanter.csv" download>CSV indir</a></p>
 </div>
-{% if guncellenmeli_sayisi %}<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg><span>{{ guncellenmeli_sayisi }} tahtada envanter için ajan güncellenmeli (panoda “Ajanı güncelle”).</span></p>{% endif %}
+{% include "_tahtalar_bas.html" %}
+{% if guncellenmeli_sayisi %}<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg><span>{{ guncellenmeli_sayisi }} tahtada envanter için ajan güncellenmeli (Tahtalar sayfasında “⋯” › “Ajanı güncelle”).</span></p>{% endif %}
 {% if satirlar %}
 <p class="not">{{ satirlar | length }} tahta{% if eksik_sayisi %} · {{ eksik_sayisi }} tahtanın envanteri yok{% endif %}. Sıralamak için sütun başlığına dokunun.</p>
 <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="envanter-baslik">
@@ -28,7 +29,7 @@
   <tbody>
   {% for s in satirlar %}
   <tr>
-    <th scope="row" data-etiket="Tahta"><a href="/tahta/{{ s.id }}#envanter">{{ s.ad }}</a>{% if s.durum == 'bekliyor' %}<div class="not">onay bekliyor</div>{% endif %}</th>
+    <th scope="row" data-etiket="Tahta"><a href="/tahta/{{ s.id }}?sekme=bakim#envanter">{{ s.ad }}</a>{% if s.durum == 'bekliyor' %}<div class="not">onay bekliyor</div>{% endif %}</th>
     <td data-etiket="Derslik">{{ s.derslik or '—' }}</td>
     <td data-etiket="Demirbaş no">{{ s.demirbas_no or '—' }}</td>
     {% if s.env %}

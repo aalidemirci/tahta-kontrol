@@ -25,8 +25,10 @@ def test_tahta_alanlari_yalniz_yonetici_degistirir(iki_tahta, panel):
     assert (satir["bina"], satir["kat"], satir["duzeyler"], satir["devre"], satir["subeler"]) == (
         "A Blok", 2, "9,11", "sabah", "9/A,11/C"
     )  # fmt: skip
-    sayfa = panel.get(f"/tahta/{t}").text
+    assert panel.post(f"/tahta/{t}/kaydet", data=form).headers["location"].startswith(f"/tahta/{t}?sekme=bilgiler&m=")
+    sayfa = panel.get(f"/tahta/{t}?sekme=bilgiler").text  # 0.17.0: düzenleme formu Bilgiler sekmesinde
     assert 'value="A Blok"' in sayfa and 'name="duzey" value="11" checked' in sayfa
+    assert 'id="tahta-bilgi"' not in panel.get(f"/tahta/{t}").text
     for alan, deger, parca in (("kat", "çatı", "Kat"), ("subeler", "13/Z", "Şube"), ("devre", "gece", "Devre")):
         yanit = panel.post(f"/tahta/{t}/kaydet", data={**form, alan: deger})
         assert "t=hata" in yanit.headers["location"] and parca in ileti(yanit)
