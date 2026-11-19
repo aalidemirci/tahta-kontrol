@@ -1,5 +1,20 @@
 # CLAUDE.md — Tahta Kontrol
 
+Yerel geliştirme 0.20.0 (kullanıcı onayı 19.11.2026, "Aramaya geç"): panel arayüzünün yeniden düzeninde 6. ve SON
+aşama, genel arama. Yan menüde Acil'in altında arama kutusu (yazarken öneri; `/` kısayolu), çekmece kipinde üst
+çubukta büyüteç, JS'siz tam sayfa sonuç. Yeni adres yalnız iki: `GET /ara?q=` ve `GET /api/ara?q=` (oturum, `no-store`).
+Dizinin TEK yeri `arama.py`'dir ve var olan tanımlardan TÜRER (MENU, `bolum_serit.SERITLER`, `tahta_liste.SUZGECLER`,
+`ayar_bolumleri.BOLUMLER`/`BASKA_YERDE`; elle yazılan tek liste `arama.SIK_ISLER`); rol hedef sayfadan türer ve süzme
+dizinin içindedir; devingen kısım onaylı tahta, etkin şube ve (yöneticide) grup adıdır. Dizine kişi adı, serbest
+metin, ağ/cihaz bilgisi GİRMEZ; sorgu hiçbir yere yazılmaz (kural 36). Arama menü öğesi değildir: menü yine tam on
+öğe. Şema, ajan, komut ömürleri, var olan adresler/uçlar/alan adları ve `/api/durum` aynı (sürüm statik dosya önbelleği
+için yükseldi); Ayarlar içi arama (`/ayarlar?ara=`) değişmedi. On bir karar VARSAYILDI, kullanıcı ayrıca yanıtlamadı
+(§17 soru 91–101, açık). Soru 75 ONAYLANMADI: dizine de ders başlığı/öğretmen bilgisi eklenmez. `docs/surum-0.20.0.md`
+("neler aranır / neler bilerek aranmaz" çizelgeleri), tasarım §11.1 (ALTI AŞAMANIN HEPSİ UYGULANDI; planda başka aşama
+yok). Testlerle ve deneme sunucusunda başsız Edge ile (uydurma veri, benzetilmiş ajanlar; klavye/öneri etkileşimi, iki
+rolde sızıntı denemesi; 1366 ve 390 px) denendi; dağıtılmadı, okul bilgisayarında, gerçek telefonda, gerçek klavyeyle ve
+ekran okuyucuyla denenmedi.
+
 Yerel geliştirme 0.19.0 (kullanıcı onayı 19.11.2026, "Sekmelere geç"): panel arayüzünün yeniden düzeninde 5. aşama,
 bölüm sekmeleri ve tek sayfalık duyuru formu. Sekme şeritlerinin TEK tanımı `bolum_serit.py`'dir (çizim
 `_serit.html`): Yoklama (Günlük · Şube defteri · Mazeret ve izin · Panelden gir · Devamsızlık icmali | Yoklama
@@ -11,8 +26,8 @@ ayarları* ↗), Kişiler ve anahtarlar (Öğrenciler · Öğretmenler ve PIN ·
 gönderim uçları, alan adları ve doğrulama aynı (sunucuya yalnız görünüm bilgisi eklendi: `panel_duyuru.hata_yeri`;
 sürüm statik dosya önbelleği için yükseldi). Menü yine tam on öğe. Dokuz karar VARSAYILDI, kullanıcı ayrıca
 yanıtlamadı (§17 soru 82–90, açık). Soru 75 ONAYLANMADI: hiçbir sayfaya ders başlığı/öğretmen bilgisi eklenmez.
-`docs/surum-0.19.0.md` ("hangi sayfa ve sekme nereye gitti" çizelgesi), tasarım §11.1 (6. aşama, genel arama, AYRI
-onay ister). Testlerle ve deneme sunucusunda başsız Edge ile (uydurma veri, benzetilmiş ajanlar; JS açık/kapalı duyuru
+`docs/surum-0.19.0.md` ("hangi sayfa ve sekme nereye gitti" çizelgesi), tasarım §11.1 (6. aşama, genel arama,
+0.20.0'da uygulandı). Testlerle ve deneme sunucusunda başsız Edge ile (uydurma veri, benzetilmiş ajanlar; JS açık/kapalı duyuru
 gönderimi veritabanından doğrulanarak; 1366 ve 390 px) denendi; dağıtılmadı, okul bilgisayarında, gerçek telefonda ve
 gerçek tahtalarla denenmedi.
 
@@ -98,7 +113,12 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.19.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.19.0: panel
+- Durum: **0.20.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.20.0: panel
+  arayüzü 6. ve son aşama — genel arama (`/ara`, `/api/ara`; dizin tek yerde `arama.py`, var olan tanımlardan türer,
+  rolle süzülür, kişi adı ve serbest metin yok, sorgu hiçbir yere yazılmaz; kural 36); yalnız sunucu, ajan değişmedi;
+  testlerle ve deneme sunucusunda başsız tarayıcıyla (klavye ve öneri etkileşimi, iki rolde sızıntı denemesi, 1366
+  ve 390 px, uydurma veri) denendi, gerçek telefonda, gerçek klavyeyle ve ekran okuyucuyla denenmedi; tasarım §11.1;
+  0.19.0: panel
   arayüzü 5. aşama — bölüm sekme şeritleri (tek tanım `bolum_serit.py`; Yoklama, Kişiler ve anahtarlar, Program,
   Duyurular, Acil durum) ve tek sayfalık duyuru formu; adresler, uçlar, alan adları ve doğrulama aynı; yalnız
   sunucu, ajan değişmedi; testlerle ve deneme sunucusunda başsız tarayıcıyla (JS açık/kapalı duyuru gönderimi, 1366
@@ -179,6 +199,11 @@ Ajan: `TAHTA_AJAN_DIZIN`, `TAHTA_AJAN_DURUM`, `TAHTA_AJAN_BENZETIM=1` (kapatma k
 ```
 tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   web.py        uygulama_olustur: oturum, Bugün (`/`), tahta listesi ve sayfası, ayarlar, /marka/*, /ajan/* (uzun bekleme);
+                0.20.0: `ARAMA = arama.kur(MENU, MENU_ACIL, _secili)` MENU'den hemen sonra, modül düzeyinde (sahipsiz
+                arama hedefi içe aktarmada ValueError verir: program AÇILMAZ); `ara_sayfasi` (GET /ara) ve `api_ara`
+                (GET /api/ara; < 2 karakterde veritabanına gitmez) ortak `arama_sonucu`'ndan; ikisi de kayıt/günlük
+                ÇAĞIRMAZ; şablon evrenseli `ara_en_uzun` (= ayar_bolumleri.SORGU_EN_UZUN); `sayfa()` ve /api/durum'a
+                arama için sorgu EKLENMEDİ
                 MENU (0.15.0): üç küme (Her gün, Dönemlik, Yönetim), ≤ 10 üst öğe (0.18.0'da TAM 10: Bugün eklendi),
                 öğede `rol`/`simge`/`esler`/`alt`/`alt_cubuk`/`sayi`; MENU_ACIL kümelerin dışında; menu_gorunumu →
                 {kumeler, alt_cubuk} (rolle süzülür); alt çubuk Bugün · Tahtalar · Duyurular · Yoklama · Menü
@@ -190,6 +215,17 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   panel_duyuru.py   duyuru/plan uçları, /api/hedef-onizleme   (web.py'den `kaydet(uygulama, y)` ile);
                     0.19.0: hata_yeri (icerik | kime | zaman — iletinin tek sayfalık formda çizileceği bölüm; YALNIZ
                     görünüm, doğrulama yolu değişmedi)
+  arama.py          genel aramanın dizini, TEK yer (0.20.0, FastAPI'siz; web'i içe aktarmaz, `_secili` parametreyle gelir;
+                    kural 36): SIK_ISLER (elle yazılan tek liste: var olan GET sayfasına kısa yol + eş anlamlılar; `one` =
+                    sorgu boşken "Sık işler" sırası; açık `rol` yalnız daraltır), yer_coz(yol) → (kırıntı, rol) — rol
+                    hedef sayfadan türer, sahipsiz yol ValueError; sabit_dizin (sayfa ← MENU+MENU_ACIL, sekme ← SERITLER
+                    `dis` hariç, is ← BASKA_YERDE+SIK_ISLER, suzgec ← SUZGECLER, ayar ← BOLUMLER; kurulurken kendini
+                    denetler), kur (süreç başında bir kez), devingen_dizin (onaylı tahta: ad/derslik/bina/kat/şubeler;
+                    yoklama açıksa etkin şube → şube defteri; yöneticide grup adı → /gruplar#grup-<no>; ≤ 4 dar SELECT,
+                    önbellek YOK), sorgu_duzelt, ara (önce rol, sonra eşleşme: kesin → katlı → ekli `_ekli_uyar`; kademe;
+                    TUR_SIRASI; aynı yol bir kez; dönen sözlükte iç alan yok), gruplu (GRUP_SIRASI), sik_isler; sınırlar
+                    ONERI_EN_COK 8, SAYFA_EN_COK 50, SOZCUK_EN_COK 6, ONERI_EN_KISA 2, EK_KOK_EN_KISA 4, SIK_EN_COK 8;
+                    metin ilkelleri ayar_bolumleri'nden içe aktarılır (ikinci harf haritası yok)
   bolum_serit.py    bölüm sekme şeritlerinin TEK tanımı (0.19.0, FastAPI'siz, saf): SERITLER (yoklama, kisiler, program,
                     duyurular, acil, tahtalar; küme listeleri; sekmede `rol`/`sayi`/`dis`), gorunum(ad, rol, etkin,
                     sayilar) (rolle süzer, boş küme düşer, tam bir etkin sekme), sayfa_onekleri (menü `esler` testi);
@@ -241,6 +277,10 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                     /tahta/{id}/envanter, /tahta/{id}/donanim-goruldu, /arizalar, /ariza/{id}, /yerel/durum
   ayar_bolumleri.py  Ayarlar'ın tek listesi (0.16.0, FastAPI'siz): BOLUMLER, BASKA_YERDE, ESKI_YER, ESKI_PARCA,
                 ara (Türkçe küçültme + harf katlama; panel.js ile aynı harita), ozetler (sır taşımaz), kurulum, menu;
+                0.20.0: `uyar` (eski `_uyar`), `kucult`, `katla`, `sozcukler`, `samanlik`, `SORGU_EN_UZUN` genel aramanın
+                da TEK metin ilkelleridir (arama.py içe aktarır); BASKA_YERDE öğeleri genel dizine `is` olarak AYNEN
+                girer — öğenin `yol`'u hedef sekmenin yoluyla birebir yazılır (ör. `/program?bolum=zil`), yoksa sonuçta
+                aynı sayfa iki satır çıkar; `tahta_liste._grup_adi` → `grup_adi` (arama da kullanır)
                 uçlar web.py'de: GET /ayarlar (giriş, `?ara=`), GET /ayarlar/{bölüm}, POST /ayarlar `bolum=…`;
                 şablonlar ayarlar.html (giriş), ayar_bolum.html, _ayar.html (makrolar), _ayar_<bölüm>.html;
                 /yedekler/parola ve /yedekler/ayar isteğe bağlı `donus=ayarlar` alır (yalnız dönüş adresi)
@@ -256,6 +296,11 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   ariza.py      arıza kayıtları: kategoriler, durum geçişleri, hareketler, tahtadan alma (yerel_id tekrarsız)
   sablonlar/    taban.html (0.15.0 kabuk: üst çubuk, yan menü `#menu`, perde, `main#icerik`, alt çubuk; `m-*`
                 simgeleri; kabuk yalnız oturumlu ve `giris-sayfasi` olmayan sayfada — gövde sınıfı `kabuklu`);
+                0.20.0: yan menüde Acil'den sonra, gezinmeden önce `form.genel-ara` (düz GET /ara, `name="q"`,
+                `data-genel-ara`, gönder düğmesi yok; combobox öznitelikleri ŞABLONDA YOK, panel.js ekler), üst çubukta
+                kimlik ile Acil arasında `a.ust-ara` (/ara); ara.html (sonuç sayfası: `#ara-q` kutusu `data-ara-oneri`,
+                gruplar Sayfalar ve işler · Ayarlar · Şubeler · Tahtalar · Gruplar, sabit sonuçsuz notu `#ara-bos`,
+                sorgu boşken "Sık işler"; başlıkta sorgu yok); gruplar.html satırı `id="grup-<no>"`;
                 0.18.0: bugun.html (Bugün; kancalar `data-alan`, `data-sayi`, çip `data-id`; `bugun-veri` JSON),
                 _bugun.html (makrolar: is_satiri, cip, durum_kutulari); _pano_bantlar.html SİLİNDİ; tahtalar.html
                 yalnız /tahtalar'ı çizer (kalan bantlar: onay bekleyen, kilit kodu yok, yenile; grup `id="grup-<no>"`);
@@ -338,7 +383,11 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 0/10/11/20/21); belirsizlik/hatada TASIMA-BEKLIYOR.txt → hizmet açılmaz
   statik/       stil.css (tek dosya; katmanlar `sifirla, temel, bilesen, kabuk, yardimci`; ölçek belirteçleri
                 `--yazi-*`, `--b1..7`, `--kose-*`, `--golge-*`, `--dokunma`; kabuk kipi `--kb-*`), panel.js (tek dosya,
-                kütüphanesiz; `kabukKur` = çekmece; `bugunKur` = Bugün'ün canlı tazelemesi ve `ONAY.hepsini_kilitle`),
+                kütüphanesiz; `kabukKur` = çekmece; `bugunKur` = Bugün'ün canlı tazelemesi ve `ONAY.hepsini_kilitle`;
+                0.20.0: `aramaKur` = `/` kısayolu + iki kutu için ortak `aramaOneriKur` (combobox/listbox, /api/ara,
+                150 ms bekleme, AbortController, yalnız textContent; eşleştirme ve dizin JS'te YOK), `kabukCekmeceAc`
+                (kısayolun çekmeceyi açması için kabukKur'un dışarı verdiği tek işlev); stil.css kabuk katmanında
+                `.genel-ara`, `.ara-oneri`, `.ust-ara`, `--kb-kisayol`; yan menü ızgarası BEŞ satır),
                 isaret.svg (nötr ürün işareti)
   ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh, tahta-yoklama.desktop,
                 tahta-ariza.desktop
@@ -375,7 +424,8 @@ tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
                 adı/saat/ileti; başka alan ekrana geçmez; yalnız servis belleğinde, gecerli_sn dolunca kalkar
 scripts/panel_olcum.mjs  panel sayfalarını başsız Edge/Chrome ile ölçer (0.15.0; Node 22+, bağımlılık yok): yatay
                 taşma, kontrast, küçük yazı, dokunma hedefi, isteğe bağlı görüntü. YALNIZ deneme sunucusuna karşı;
-                adres/hesap/çıktı ortam değişkeniyle (PANEL_ADRES, PANEL_KULLANICI, PANEL_PAROLA, PANEL_CIKTI), çıktı depo DIŞINA
+                adres/hesap/çıktı ortam değişkeniyle (PANEL_ADRES, PANEL_KULLANICI, PANEL_PAROLA, PANEL_CIKTI), çıktı depo DIŞINA;
+                0.20.0: SAYFALAR'da `ara`, `ara-sube`, `ara-ayar`, `ara-sonucsuz`
 scripts/ekran_olcum.py  Docker/Xvfb'de her tahta sayfasının ekrana sığıp sığmadığını ölçer (uydurma veri); 0.14.0:
                 yoklama senaryoları (yk-secim-*, yk-liste-*), kaydırmasızlık ve dokunma ölçüsü denetimi, `--yalniz`
   __main__.py   komut satırı; `tahta-ajan yoklama` ("Yoklama Al" kısayolu) servise yoklama_ac yollar;
@@ -597,8 +647,78 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    K5). Şube defteri, son günler, öğrenci görünümü ve mazeret listesi `no-store` döner, yönetici ve idareciye
    açıktır, dışa aktarılmaz (yalnız yazdırılır). Ajan yanıtlarına mazeret ve geçmiş gün girmez.
 
+36. **Arama dizini kişi verisi taşımaz; aranan sözcük hiçbir yere yazılmaz** (0.20.0; `docs/tasarim.md` §11.1,
+   `arama.py`). Dizine ve sonuçlara öğrenci adı/okul no, öğretmen adı/kodu, panel kullanıcı adı, USB anahtar etiketi,
+   mazeret ve yoklama kaydı, duyuru başlığı/metni, acil şablonu, arıza açıklaması, sınav adı/listesi, ders başlığı ve
+   öğretmen programı (soru 75), tahtanın ağ adresi, makine adı, demirbaş no, envanter notu, onay bekleyen tahta, grup
+   açıklaması ve ayar DEĞERLERİ girmez; bu tablolara arama yolundan sorgu gitmez (öğrenci tablosundan yalnız
+   `DISTINCT sube`). Girenler: sayfa/sekme/iş/süzgeç/ayar bölümü adları, onaylı tahtanın adı, dersliği, binası, katı,
+   şubeleri, etkin şube adları, (yöneticiye) grup adı. Sorgu işlem kaydına, günlüğe, tabloya, çereze, tarayıcı
+   deposuna, sayfa başlığına yazılmaz; "son aramalar" eklenmez; sunucunun erişim günlüğü (`access_log`) açılmaz.
+   Sonuçsuz notu SABİTTİR: sorguya ya da kişi tablolarına bakılarak değişmez ("var ama gösterilmez" ipucu yok);
+   yalnız role göre sayfa adı/adresi taşımayan bir satır eklenir. Rol süzmesi dizinin içindedir, eşleştirmeden ÖNCE
+   yapılır ve girdinin rolü hedef sayfadan türer (`yer_coz`; elle "herkese açık" yazılmaz, sahipsiz hedef program
+   açılışında patlar); idareci sonucunda yönetici sayfasının adı, adresi ve sayısı yoktur. Sonuç yalnız var olan bir
+   GET sayfasına bağlantıdır: arama sonucundan komut, POST ya da indirme tetiklenmez. Sayfa, sekme ve ayar adları
+   dizine elle yazılmaz (MENU, `bolum_serit.SERITLER`, `ayar_bolumleri`'nden türer). Testler uydurma kişi imleriyle
+   (`tests/test_arama_sayfasi.py`) iki rolde tarar; yeni bir tablo ya da sütun dizine alınacaksa önce bu kural ve
+   o test güncellenir, kullanıcıya sorulur.
+
 ## Bilinen tuzaklar
 
+- **Arama girdisi eklemek = `arama.SIK_ISLER`'e bir öğe (0.20.0):** yalnız var olan bir GET sayfasına giden kısa yol
+  ve eş anlamlıları. Sayfa, sekme, süzgeç ya da ayar adı `arama.py`'ye yazılmaz (tanımından türer; testi kaynakta düz
+  metin arar). Rol yazılmaz, hedeften türer; açık `rol` yalnız daraltır. POST isteyen iş, indirme adresi, kişi/kurum
+  adı, ağ adresi girmez. Eş anlamlı en az dört harfliyse ekli biçimleri de bulur; daha kısa kök ek almaz (aşağıda).
+- **Menü öğesi ya da sekme silinir/taşınırsa program açılmayabilir (0.20.0):** dizin `web.py` içe aktarılırken kurulur
+  ve hedefi hiçbir menü öğesine/şeride bağlanamayan `SIK_ISLER`/`BASKA_YERDE` girdisi `ValueError` verir (bilerek:
+  sahipsiz girdi sessizce "herkese açık" olmasın). Sekme yolu değişince o yola giden kısa yolları da güncelle;
+  `try/except` ile yutma, varsayılan rol verme.
+- **Arama yolundan kişi tablosuna sorgu atılmaz; sonuçsuz notu sorguya göre değiştirilmez (0.20.0, kural 36):**
+  "öğrenci bulundu ama gösterilemiyor" türü yardımsever not var/yok kâhinidir. Sonuçsuz sayfaya sonuç satırı (ör. sık
+  işler listesi) de çizilmez; gizlilik testi sonuçsuz sayfada hiç satır olmamasına bağlıdır, not yalnız `/ara`'ya
+  bağlantı verir.
+- **Aranan sözcük hiçbir yere yazılmaz (0.20.0, kural 36):** `ara_sayfasi`/`api_ara`'ya `vt.kayit…` ya da `gunluk`
+  çağrısı, `sunucu.py`'ye `access_log`, `ara.html` başlığına sorgu, `panel.js`'e `localStorage`/çerez eklenmez (testi
+  hepsini arar). Sorgudan yazdırılamayan karakterler `sorgu_duzelt`'te atılır; sayfaya yankılanan yalnız odur.
+- **Eşleştirme yalnız sunucudadır (0.20.0):** `aramaOneriKur` yalnız `/api/ara` yanıtını çizer; dizin, kural ya da
+  harf haritası `panel.js`'e kopyalanmaz, tahta/şube adları sayfa HTML'ine gömülmez. (Ayarlar içi aramanın
+  `ayarKatla`'sı 0.16.0'dan kalan AYRI ve değişmeyen koddur; genel arama onu kullanmaz.) Öneri metni `textContent`
+  ile yazılır; `yol` "/" ile başlamıyorsa ya da ikinci karakteri "/" veya "\" ise bağlanmaz.
+- **Ekli sözcük eşleşmesi en alt kademedir ve kök en az dört harftir (0.20.0):** `_ekli_uyar` "pusulası" → "pusula"yı
+  bulur; eşiği (`EK_KOK_EN_KISA`) düşürmek "kod" → "kodu…" gürültüsü üretir, kademeyi yükseltmek doğru başlık
+  eşleşmesinin önüne geçer. Artan kısım yalnız harf olmalıdır ("idareci1", "tahta-12" ek sayılmaz: kullanıcı adı
+  ve numara kalıpları eşleşmesin).
+- **Şube girdisinin samanlığı YALNIZ şube adıdır (0.20.0):** başlık "9/A şube defteri"dir ama `_girdi(…, yalniz=şube)`
+  ile kurulur; başlıktan kurulursa "10/d" sorgusu "defteri" sözcüğü yüzünden bütün şubeleri getirir. Süzgeç girdisinde
+  başlık öneki etiketten sayılır (`bas=`): ad "Tahtalar: Çevrimdışı" kalıbıdır, "cev" yine ilk sırada çıkar.
+- **`/` kısayolu çekmece kipinde sayfadan AYIRMAZ (0.20.0):** ilk yazımda dar ekranda `location.assign("/ara")`
+  yapıyordu; yarım doldurulmuş duyuru formu gidiyordu (inceleme bulgusu). Şimdi `kabukCekmeceAc` ile çekmeceyi açıp
+  kutuya odaklar. Kısayol metin alanında, `select`'te, `contenteditable`'da, açık `dialog`'da ve değiştirici tuşla
+  tetiklenmez; yeni bir sayfa kısayolu (ör. şube defteri fırçası) `/` kullanmaz.
+- **Öneri listesi açıkken Esc yalnız listeyi kapatır (0.20.0):** `stopPropagation` olmazsa aynı tuş çekmeceyi de
+  kapatır. Yazınca etkin seçenek sıfırlanır: Enter yalnız kutuda o an yazılı olanın önerisine gider (eski yanıtın
+  seçeneğine değil); seçim yoksa form `/ara`'ya gider.
+- **Combobox öznitelikleri şablona yazılmaz (0.20.0):** `role="combobox"`, `aria-expanded`, `aria-controls` JS'sizken
+  olmayan bir listeyi duyurur; `aramaOneriKur` ekler. İki arama alanı (yan menü, `/ara` sayfası) ayrı erişilebilir ad
+  ve ayrı liste kimliği taşır (`genel-oneri`, `sayfa-oneri`), kod TEKTİR.
+- **Yan menü ızgarası beş satırdır; arama satırı sayılır (0.20.0):** `.yan-menu { grid-template-rows: auto auto auto
+  minmax(0, 1fr) auto }`. Menüye yeni sabit satır eklenirse şablon satırı da eklenir, yoksa gezinme esnemez ve Çıkış
+  ekran dışına düşer. Arama satırı gezinmenin dikey payını bitirdi: kısa pencerede (≤ 40rem, fare) menü satırı 2rem'e
+  iner ki yöneticinin on öğesi 1366x625 ve 1280x585'te kaydırmasız kalsın; ölçmeden büyütme.
+- **Öneri listesi menünün İÇİNDE mutlak konumludur ve yüksekliği sınırlıdır (0.20.0):** `.yan-menu` taşmayı kırpar;
+  `max-block-size` kaldırılırsa liste alt kenarda kesilir. "Tüm sonuçlar" satırı kayan listede yapışkandır
+  (dokunmatikte sekiz öneri + o satır sığmaz). Listeyi `body`'ye taşıyan açılır katman yazma (çekmece `inert`
+  kapsamı ve odak tuzağı bozulur).
+- **Üst çubukta yer kalmadı (0.20.0):** Menü · kimlik · Ara · Acil; ≤ 26rem'de okul adı görsel olarak gizlidir (logo
+  ve erişilebilir ad durur). Üst çubuğa yeni düğme 390 px'te taşma demektir (alt çubuk da genişler, 0.15.0 tuzağı).
+- **`/ara` sayfasında hiçbir menü öğesi etkin değildir (0.20.0):** arama menü öğesi değildir;
+  `test_her_sayfada_tek_etkin_oge` bu yol için TAM 0 bekler. `/ara`'yı bir öğenin `esler`'ine ekleme, üst çubuk
+  düğmesine `aria-current` verme.
+- **Arama girdisinde dokunmatikte yazı 16 px'tir (0.20.0):** daha küçük yazılı girdiye odaklanınca telefon tarayıcısı
+  sayfayı yakınlaştırır; `(pointer: coarse)` kuralını kaldırma.
+- **Sunum/deneme görüntüsünde `/tahtalar` onay bekleyen bandı ağ adresi gösterir (0.20.0, deneme betikleri):** deneme
+  sunucusunda bu 127.0.0.1'dir, yine de paylaşılacak görüntü için bandı olmayan bir sayfa seç.
 - **Sekme eklemek/taşımak = `bolum_serit.SERITLER`'de bir satır (0.19.0):** şablona ya da `web.py`'ye ikinci sekme
   listesi yazılmaz; çizim tek makrodur (`_serit.html::ciz`). Makronun çıktı biçimi testlerle bağlıdır: `href`'ten
   HEMEN sonra `aria-current` gelir, araya öznitelik girmez. Şerit yalnız görünümdür; yetki uçtadır. Yeni adres
