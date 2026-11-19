@@ -1,5 +1,18 @@
 # CLAUDE.md — Tahta Kontrol
 
+Yerel geliştirme 0.17.0 (kullanıcı onayı 19.11.2026, "Önce Tahtalar'a geç"): panel arayüzünün yeniden düzeninde
+3. aşama, Tahtalar. `/tahtalar` konuma göre gruplu tahta listesidir (satırda duruma göre TEK birincil düğme + "⋯"
+menüsü, seçince görünen seçim çubuğu, JS'siz `?durum=` süzgeci); `/` aynı işleyiciyle aynı listeyi çizer (4. aşamada
+"Bugün" olacak). `/islem`'e iki alan eklendi: `tek=<tür>:<kimlik>` (yalnız o tahta; işaretli liste okunmaz) ve
+`kapsam=hepsi` (yalnız kilitle; onaylı + çevrimiçi; arayüzü yok). `GET /duyurular/yeni?tahta=…` ön seçimi; tahta
+sayfası `?sekme=` genel · program · bakim · bilgiler; Tahtalar bölümünün sekme şeridi (yan menüde alt liste kalktı).
+Şema, ajan, komut ömürleri, var olan uçların alan adları ve `/api/durum`'un var olan anahtarları aynı (tek ek:
+`tahtalar[].liste`; sürüm statik dosya önbelleği için yükseldi). Soru 75 (panelde ders başlığı) ONAYLANMADI:
+listeye ve tahta sayfasına ders başlığı/öğretmen bilgisi eklenmez. `docs/surum-0.17.0.md`, tasarım §11.1 (4–6.
+aşamalar AYRI onay ister). Testlerle ve deneme sunucusunda başsız Edge ile (uydurma veri, benzetilmiş ajanlar; JS
+açık/kapalı komut denemesi) denendi; dağıtılmadı, okul bilgisayarında, gerçek telefonda ve gerçek tahtalarla
+denenmedi.
+
 Yerel geliştirme 0.16.0 (kullanıcı onayı 19.11.2026): panel arayüzünün yeniden düzeninde 2. aşama, Ayarlar.
 `/ayarlar` giriş sayfasıdır (11 bölüm kartı ve o anki değer özetleri, kurulum kontrol listesi, Ayarlar içi arama;
 `?ara=` JS'siz), `/ayarlar/{bölüm}` bölüm sayfalarıdır; her kart kendi Kaydet'iyle yalnız kendi anahtarını yazar.
@@ -56,7 +69,10 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.16.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.16.0: panel
+- Durum: **0.17.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.17.0: panel
+  arayüzü 3. aşama — tahta listesi, `/islem`'e `tek` ve `kapsam=hepsi`, tahta sayfası sekmeleri; yalnız sunucu,
+  ajan değişmedi; testlerle ve deneme sunucusunda başsız tarayıcıyla (JS açık/kapalı komut denemesi, 1366 ve
+  390 px, uydurma veri) denendi, gerçek tahtayla denenmedi; tasarım §11.1; 0.16.0: panel
   arayüzü 2. aşama — Ayarlar giriş sayfası ve 11 bölüm; yalnız sunucu; yalnız deneme sunucusunda başsız
   tarayıcıyla denendi; 0.15.0: panel
   arayüzü 1. aşama — sol menü, çekmece, alt çubuk, ölçek belirteçleri; yalnız sunucu, ajan değişmedi;
@@ -129,6 +145,14 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 `alt`/`alt_cubuk`; MENU_ACIL kümelerin dışında; menu_gorunumu → {kumeler, alt_cubuk} (rolle süzülür)
   panel_duyuru.py   duyuru/plan uçları, /api/hedef-onizleme   (web.py'den `kaydet(uygulama, y)` ile)
   panel_tahtalar.py gruplar, /tahtalar.csv ve CSV içe aktarma
+  tahta_liste.py    tahta listesi (0.17.0, FastAPI'siz, saf): SUZGECLER, durum_ozeti (satırın durumu, rozetleri,
+                    birincil düğmesi, menü pasiflikleri — durum kuralının TEK yeri), menu_ogeleri, gruplar (bina ·
+                    kat), sayilar, suzgec_coz, tek_coz, islem_hedefi, TEK_TURLERI, KAPSAM_HEPSI_TURLERI,
+                    guvenli_donus, liste_yolu_mu, sekme_coz
+                    web.py 0.17.0: `tahtalar_sayfasi` hem `/` hem `/tahtalar` (tek liste uygulaması; `/` yönlendirmez);
+                `tahta_gorunumu` her tahtaya `liste` ekler (şablon ve /api/durum aynı sözlük); POST /islem hedefi
+                `tahta_liste.islem_hedefi`'nden (nöbetçi → tek → kapsam → liste; dallar arası düşme yok);
+                /tahta/{id} `?sekme=` (`tahta_liste.sekme_coz`); MENU'de Tahtalar `/tahtalar`, `alt` listesi yok
   panel_acil.py     /acil: başlatma, bitirme, rapor
   panel_program.py  /program (sekmeler: zil, derslik, kurallar, istisnalar), /program/uyarilar, /tahta/{id}/program;
                     zil_baglami (zil sekmesinin çizelge kısmı), Okul Zili'nden al → cizelge.okulzili_yaz
@@ -502,6 +526,48 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
 
 ## Bilinen tuzaklar
 
+- **Liste formunun ilk gönder düğmesi nöbetçidir; kaldırma, devre dışı yapma, önüne gönder düğmesi koyma
+  (0.17.0):** seçim kutusu odaktayken Enter örtük gönderim yapar ve tarayıcı formun ağaç sırasındaki ilk ETKİN
+  gönder düğmesini tıklar; nöbetçi olmasa bu ilk satırın `tek=` düğmesidir (seçilmemiş tahtaya komut). Devre dışı
+  nöbetçi işe yaramaz: Chromium onu atlayıp sıradaki etkin düğmeyi tıklar (başsız Edge'de ölçüldü, JS kapalıyken
+  ilk satıra `kilit_ac` gitti). `nobetci` alanını gören `/islem` hiçbir komut yazmaz (`tahta_liste.islem_hedefi`,
+  ilk dal). `panel.js`'in Enter'ı yutması ikinci kattır, tek başına yetmez (JS'siz). Liste formuna metin alanı
+  da eklenmez.
+- **`/islem` dalları arasında düşme yoktur (0.17.0):** sıra nöbetçi → `tek` → `kapsam` → işaretli liste. `tek`
+  bozuksa "bari işaretlilere gönder" diye listeye düşülmez; hiçbir komut gitmez. `tek` dalında formdaki `tur` ve
+  `tahta` okunmaz. `tek` biçimi tam eşleşme ister (`fullmatch`; "kilitle:1\n", "kilitle:01", "kilitle:0" reddedilir).
+  `kapsam=hepsi` yalnız `kilitle`'ye açıktır ve başka hedefle birlikte reddedilir; yıkıcı komuta açma.
+- **`data-tek` taşıyan onay tetiği `tur` ile gönderilmez (0.17.0):** satır menüsündeki "Kapat…" yalnız kendi
+  tahtasınındır; `onayKur` bu dalda seçili satırlara bakmaz ve onay düğmesi `name="tek"` olur. Tetikte `data-tek`
+  varken herhangi bir hata yolunda `tur` + işaretli listeye dönmek, onaylanan tek tahta yerine seçili bütün
+  tahtaları kapatır.
+- **Durum kuralı yalnız `tahta_liste.durum_ozeti`'ndedir (0.17.0):** şablon ve `/api/durum` aynı `liste`
+  sözlüğünü kullanır; `panel.js`'e rozet, düğme ya da pasiflik hesabı YAZILMAZ (0.16.0'daki `durumHesapla`
+  silindi; kuralın iki kopyası yanlış düğme demektir, `?durum=` süzgeci de JS'siz çalışmak zorunda). Rozet
+  metinleri testlerle ve `/api/durum` sözleşmesiyle bağlıdır.
+- **Canlı tazeleme birincil düğmeyi yalnız düğmenin HÜCRESİ boştayken yazar (0.17.0):** koruma satırın
+  bütününe yayılırsa seçim kutusundaki odak düğmeyi dondurur (satır bayat düğmeyle kalır); hiç olmazsa düğme
+  parmağın altında "Kilitle"den "Kilidi aç"a döner. Değişen düğme 700 ms tıklama almaz; açık menü yeniden çizilmez.
+- **Tahta listesinin kabı kaydırma kabı değildir (0.17.0):** `.tablo-kap` (`overflow`, `max-block-size`) listede
+  kullanılmaz; satır menüsü kırpılır ve çift dikey kaydırma olur. Menünün yönü görüntü alanına göre seçilir (üst
+  çubuk, telefonda alt çubuk ve seçim çubuğu düşülerek); sığmazsa sayfa kayar, o da olmazsa menü kendi içinde kayar.
+- **Satır komutunun iletisi satırda da çizilir (0.17.0):** `tek` dalı liste adresine `s=<kimlik>` + `#t-<kimlik>`
+  ile döner; ileti yalnız sayfa başında kalsaydı uzun listede ekran dışında kalırdı. `#t-…` çapası yalnız liste
+  adresinde eklenir (`tahta_liste.liste_yolu_mu`); `yonlendir` iletiyi parçadan ÖNCE koyar.
+- **Seçim çubuğu sarmaz ve taşmaz; telefonda alt çubuğun üstündedir (0.17.0):** çubuk sararsa ya da taşarsa
+  sayfa 390 px'ten genişler ve alt çubuk da taşar (0.15.0 tuzağı). Dar ekranda "Duyuru gönder" "Diğer"in ilk
+  öğesine iner. Çubuktaki GET düğmesi (`formaction="/duyurular/yeni"`) formun `donus` ve `secimden` alanlarını da
+  sorguya koyar; `secimden=1` olmasa seçimsiz gönderim "Tüm tahtalar"lı forma düşerdi.
+- **`/` ve `/tahtalar` aynı işleyicidir; ikinci liste yazma (0.17.0):** `/` yönlendirme yapmaz (öbür bölümlerin
+  iletili `yonlendir("/", …)` dönüşleri ve testleri ona bağlı). Tahta işlerinin dönüşleri `/tahtalar`'a gider.
+  4. aşamada `/` "Bugün" olunca `_pano_bantlar.html` oraya taşınır.
+- **Tahta sayfasına form eklerken dönüş adresi sekmeyi taşır (0.17.0):** `donus=/tahta/{id}?sekme=<sekme>#<bölüm>`;
+  sekmesiz dönüş Genel'e düşer ve ileti başka sekmede kalır. Bölüm kimlikleri (`#program`, `#temizlik`,
+  `#envanter`, `#arizalar`, `#baglanti`) eski yer imleri için korunur; `panel.js::tahtaEskiParcaKur` onları sekmeye
+  taşır. Yeni alan ya da uç eklenince `tests/test_tahta_sekmeleri.py`'deki alan listesi de güncellenir.
+- **Tahtalar şeridini çizen sayfa menüde Tahtalar'ın `esler`'indedir (0.17.0):** rolle gizlenen sekmenin sayfası
+  da (idareci `/gruplar`'ı adresle açarsa) "Tahtalar"ı etkin göstermelidir. Yönetici sekmeleri idareci HTML'inde
+  çizilmez (CSS ile gizlenmez); `test_idareci_htmlinde_yonetici_ogesi_yok` adları ve adresleri arar.
 - **İşaretsiz onay kutusu gönderilmez; "formda yok" ile "kapalı" ayırt edilemez (0.16.0):** bir bölümün POST'u
   eksik gövdeyle gelirse kutular kapalı sayılıp ayar ezilir. Yeni bölümler (`okul`, `kapatma`, `kilit_kodu`) formun
   o form olduğunu gösteren nöbetçi alanı ister, yoksa hiçbir şey yazmaz; `bolum=genel` otomatik kapatmayı yalnız
@@ -602,8 +668,8 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
 - **Statik dosya adresleri sürüm taşır** (`/statik/stil.css?v=<sürüm>`, `panel.js?v=<sürüm>`)
   ve uzun önbellekle sunulur: `stil.css` ya da `panel.js` değişip sürüm yükseltilmezse
   tarayıcı eskisini tutmaya devam eder. Statik dosya değiştiyse sürüm yükseltilir (16.11.2026).
-- **Panel menüsünde açılır grup yoktur (0.15.0'dan beri; eskiden JS'siz `<details>` idi).** Yan menünün alt
-  listeleri HTML'de hep çizilir; sabit kipte yalnız etkin bölümünki, çekmecede hepsi görünür. JS'siz açılır
+- **Panel menüsünde açılır grup yoktur (0.15.0'dan beri; eskiden JS'siz `<details>` idi).** Yan menüde alt
+  liste de yoktur (0.17.0; bölüm içi gezinme sekme şeritleriyle). JS'siz açılır
   `<details>` yalnız Program şeridindeki "Program kilidini durdur"da kaldı. `<form>` `<p>` içine konmaz (tarayıcı
   `<p>`yi kapatır, düğme satırı dağılır); düğme satırında `<div class="dugme-satiri">` kullanılır.
 - **Acil sayfası da `yigin.show_all()`'dan önce eklenir** ve rengi pencereye eklenen stil
