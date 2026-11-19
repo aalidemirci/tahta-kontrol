@@ -1,15 +1,28 @@
 # CLAUDE.md — Tahta Kontrol
 
+Yerel geliştirme 0.18.0 (kullanıcı onayı 19.11.2026, "Bugün'e geç"): panel arayüzünün yeniden düzeninde 4. aşama,
+Bugün. `/` artık Bugün sayfasıdır (şu an + "Program kilidini durdur", "Sizi bekleyenler", tahtaların durum sayıları
+ve konum çipleri, onaylı "Hepsini kilitle…", bugünün yoklama özeti, duyurular); `/tahtalar` yalnız listedir ve
+ayrı işleyicidir. Bekleyen işler TEK işlevden çıkar (`bugun.bekleyenler(b, kullanici)`; rol süzmesi içinde; menü
+rozeti ve `/api/durum`'un yeni `bekleyen_is` alanı aynı listeden). İki karar VARSAYILDI, kullanıcı ayrıca
+yanıtlamadı (§17 soru 80–81, açık): V1 "Güncelleme var" rozeti liste satırında çizilmez; V2 `kapsam=hepsi` sınav
+penceresindeki tahtaları atlar. Şema, ajan, komut ömürleri, var olan uçların alan adları ve `/api/durum`'un var
+olan anahtarları aynı (sürüm statik dosya önbelleği için yükseldi). Soru 75 ONAYLANMADI: Bugün'e de ders
+başlığı/öğretmen bilgisi eklenmez. `docs/surum-0.18.0.md` ("hangi uyarı nereye gitti" çizelgesi), tasarım §11.1
+(5–6. aşamalar AYRI onay ister). Testlerle ve deneme sunucusunda başsız Edge ile (uydurma veri, benzetilmiş
+ajanlar; JS açık/kapalı komut denemesi) denendi; dağıtılmadı, okul bilgisayarında, gerçek telefonda ve gerçek
+tahtalarla denenmedi.
+
 Yerel geliştirme 0.17.0 (kullanıcı onayı 19.11.2026, "Önce Tahtalar'a geç"): panel arayüzünün yeniden düzeninde
 3. aşama, Tahtalar. `/tahtalar` konuma göre gruplu tahta listesidir (satırda duruma göre TEK birincil düğme + "⋯"
-menüsü, seçince görünen seçim çubuğu, JS'siz `?durum=` süzgeci); `/` aynı işleyiciyle aynı listeyi çizer (4. aşamada
-"Bugün" olacak). `/islem`'e iki alan eklendi: `tek=<tür>:<kimlik>` (yalnız o tahta; işaretli liste okunmaz) ve
-`kapsam=hepsi` (yalnız kilitle; onaylı + çevrimiçi; arayüzü yok). `GET /duyurular/yeni?tahta=…` ön seçimi; tahta
+menüsü, seçince görünen seçim çubuğu, JS'siz `?durum=` süzgeci); 0.17.0'da `/` aynı listeyi çiziyordu (0.18.0'da
+Bugün oldu). `/islem`'e iki alan eklendi: `tek=<tür>:<kimlik>` (yalnız o tahta; işaretli liste okunmaz) ve
+`kapsam=hepsi` (yalnız kilitle; onaylı + çevrimiçi; düğmesi 0.18.0'da Bugün'de). `GET /duyurular/yeni?tahta=…` ön seçimi; tahta
 sayfası `?sekme=` genel · program · bakim · bilgiler; Tahtalar bölümünün sekme şeridi (yan menüde alt liste kalktı).
 Şema, ajan, komut ömürleri, var olan uçların alan adları ve `/api/durum`'un var olan anahtarları aynı (tek ek:
 `tahtalar[].liste`; sürüm statik dosya önbelleği için yükseldi). Soru 75 (panelde ders başlığı) ONAYLANMADI:
-listeye ve tahta sayfasına ders başlığı/öğretmen bilgisi eklenmez. `docs/surum-0.17.0.md`, tasarım §11.1 (4–6.
-aşamalar AYRI onay ister). Testlerle ve deneme sunucusunda başsız Edge ile (uydurma veri, benzetilmiş ajanlar; JS
+listeye ve tahta sayfasına ders başlığı/öğretmen bilgisi eklenmez. `docs/surum-0.17.0.md`, tasarım §11.1.
+Testlerle ve deneme sunucusunda başsız Edge ile (uydurma veri, benzetilmiş ajanlar; JS
 açık/kapalı komut denemesi) denendi; dağıtılmadı, okul bilgisayarında, gerçek telefonda ve gerçek tahtalarla
 denenmedi.
 
@@ -69,7 +82,12 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.17.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.17.0: panel
+- Durum: **0.18.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.18.0: panel
+  arayüzü 4. aşama — `/` Bugün sayfası (bekleyen işler tek listede, durum sayıları ve çipler, onaylı "Hepsini
+  kilitle…", yoklama özeti yalnız sayı, duyurular), `/tahtalar` yalnız liste; V1 ve V2 varsayıldı (§17 soru
+  80–81); yalnız sunucu, ajan değişmedi; testlerle ve deneme sunucusunda başsız tarayıcıyla (JS açık/kapalı
+  komut denemesi, 1366 ve 390 px, açık/koyu, uydurma veri) denendi, gerçek tahtayla ve gerçek telefonda
+  denenmedi; tasarım §11.1; 0.17.0: panel
   arayüzü 3. aşama — tahta listesi, `/islem`'e `tek` ve `kapsam=hepsi`, tahta sayfası sekmeleri; yalnız sunucu,
   ajan değişmedi; testlerle ve deneme sunucusunda başsız tarayıcıyla (JS açık/kapalı komut denemesi, 1366 ve
   390 px, uydurma veri) denendi, gerçek tahtayla denenmedi; tasarım §11.1; 0.16.0: panel
@@ -140,19 +158,35 @@ Ajan: `TAHTA_AJAN_DIZIN`, `TAHTA_AJAN_DURUM`, `TAHTA_AJAN_BENZETIM=1` (kapatma k
 
 ```
 tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
-  web.py        uygulama_olustur: oturum, pano, tahta, ayarlar, /marka/*, /ajan/* (uzun bekleme);
-                MENU (0.15.0): üç küme (Her gün, Dönemlik, Yönetim), ≤ 10 üst öğe, öğede `rol`/`simge`/`esler`/
-                `alt`/`alt_cubuk`; MENU_ACIL kümelerin dışında; menu_gorunumu → {kumeler, alt_cubuk} (rolle süzülür)
+  web.py        uygulama_olustur: oturum, Bugün (`/`), tahta listesi ve sayfası, ayarlar, /marka/*, /ajan/* (uzun bekleme);
+                MENU (0.15.0): üç küme (Her gün, Dönemlik, Yönetim), ≤ 10 üst öğe (0.18.0'da TAM 10: Bugün eklendi),
+                öğede `rol`/`simge`/`esler`/`alt`/`alt_cubuk`/`sayi`; MENU_ACIL kümelerin dışında; menu_gorunumu →
+                {kumeler, alt_cubuk} (rolle süzülür); alt çubuk Bugün · Tahtalar · Duyurular · Yoklama · Menü
+                0.18.0: `bugun_sayfasi` (`/`; `?durum=`/`?s=` taşıyan eski adres /tahtalar'a 303), `tahtalar_sayfasi`
+                (yalnız `/tahtalar`), ortak `tahta_baglami` (iki sayfa ve /api/durum aynı `tahta_gorunumu`);
+                `sayfa()` menü rozetlerini `bugun.bekleyenler(…, yalniz_rozet=True)` → `rozet_sayilari`'ndan alır;
+                /api/durum'a eklemeli `bekleyen_is {sayi, imza}`; `yerel_ipler` (60 sn) ve `kurulum_onbellegi`
+                (30 sn) süreç içi bellek; `islem` kapsam dalında sınav süzmesi (V2); `altyapi_uyarilari` SİLİNDİ
   panel_duyuru.py   duyuru/plan uçları, /api/hedef-onizleme   (web.py'den `kaydet(uygulama, y)` ile)
   panel_tahtalar.py gruplar, /tahtalar.csv ve CSV içe aktarma
   tahta_liste.py    tahta listesi (0.17.0, FastAPI'siz, saf): SUZGECLER, durum_ozeti (satırın durumu, rozetleri,
                     birincil düğmesi, menü pasiflikleri — durum kuralının TEK yeri), menu_ogeleri, gruplar (bina ·
                     kat), sayilar, suzgec_coz, tek_coz, islem_hedefi, TEK_TURLERI, KAPSAM_HEPSI_TURLERI,
-                    guvenli_donus, liste_yolu_mu, sekme_coz
-                    web.py 0.17.0: `tahtalar_sayfasi` hem `/` hem `/tahtalar` (tek liste uygulaması; `/` yönlendirmez);
+                    guvenli_donus, liste_yolu_mu (0.18.0: yalnız `/tahtalar`), sekme_coz; rozet sözlüğünde eklemeli
+                    `liste: False` (V1: düz "Güncelleme var" satırda çizilmez) ve `cip: False` (Bugün çipinin
+                    okunur metnine girmez)
+                    web.py 0.17.0: `tahtalar_sayfasi` listeyi çizer (0.18.0'dan beri yalnız `/tahtalar`; `/` Bugün'dür);
                 `tahta_gorunumu` her tahtaya `liste` ekler (şablon ve /api/durum aynı sözlük); POST /islem hedefi
                 `tahta_liste.islem_hedefi`'nden (nöbetçi → tek → kapsam → liste; dallar arası düşme yok);
                 /tahta/{id} `?sekme=` (`tahta_liste.sekme_coz`); MENU'de Tahtalar `/tahtalar`, `alt` listesi yok
+  bugun.py          Bugün sayfası (0.18.0, FastAPI'siz): bekleyenler(b, kullanici, …) — bekleyen işlerin TEK listesi
+                    (üretici başına bir koşul; rol süzmesi İÇİNDE; tehlike → uyarı → bilgi; üst sınır yok;
+                    `yalniz_rozet` menü için), rozet_sayilari, satir_sayisi, imza (anahtar:sayı; metin taşımaz),
+                    acik_satir_sayisi (uyarı katlanmaz), kurulum_satiri, guncel_olmayan_sayisi; akis (ders no +
+                    başlangıç saati), tahta_ozeti (durum kutuları, konum çipleri, `kilit_hedefi`; > CIP_EN_COK=60
+                    tahtada grup kipi), yoklama_ozeti (yalnız sayı + şube adı; `yoklama_defter.Veri`), duyuru_ozeti
+                    (başlık, tahta sayısı, saat; metin SELECT edilmez). Ürettiği sözlüklerde kişi adı, okul no,
+                    mazeret türü, ders başlığı, arıza açıklaması, duyuru metni, bekleyen tahtanın adı/adresi yok
   panel_acil.py     /acil: başlatma, bitirme, rapor
   panel_program.py  /program (sekmeler: zil, derslik, kurallar, istisnalar), /program/uyarilar, /tahta/{id}/program;
                     zil_baglami (zil sekmesinin çizelge kısmı), Okul Zili'nden al → cizelge.okulzili_yaz
@@ -195,6 +229,10 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   ariza.py      arıza kayıtları: kategoriler, durum geçişleri, hareketler, tahtadan alma (yerel_id tekrarsız)
   sablonlar/    taban.html (0.15.0 kabuk: üst çubuk, yan menü `#menu`, perde, `main#icerik`, alt çubuk; `m-*`
                 simgeleri; kabuk yalnız oturumlu ve `giris-sayfasi` olmayan sayfada — gövde sınıfı `kabuklu`);
+                0.18.0: bugun.html (Bugün; kancalar `data-alan`, `data-sayi`, çip `data-id`; `bugun-veri` JSON),
+                _bugun.html (makrolar: is_satiri, cip, durum_kutulari); _pano_bantlar.html SİLİNDİ; tahtalar.html
+                yalnız /tahtalar'ı çizer (kalan bantlar: onay bekleyen, kilit kodu yok, yenile; grup `id="grup-<no>"`);
+                yeni simgeler `m-bugun`, `s-ariza`;
                 program.html, uyarilar.html ve ortak başları _program_bas.html (şerit + sekmeler);
                 cizelge.html, program_gun.html, _zaman_cizgisi.html (SVG + liste makrosu), program_aktar.html,
                 program_gecmis.html (0.10.0);
@@ -266,7 +304,8 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 0/10/11/20/21); belirsizlik/hatada TASIMA-BEKLIYOR.txt → hizmet açılmaz
   statik/       stil.css (tek dosya; katmanlar `sifirla, temel, bilesen, kabuk, yardimci`; ölçek belirteçleri
                 `--yazi-*`, `--b1..7`, `--kose-*`, `--golge-*`, `--dokunma`; kabuk kipi `--kb-*`), panel.js (tek dosya,
-                kütüphanesiz; `kabukKur` = çekmece), isaret.svg (nötr ürün işareti)
+                kütüphanesiz; `kabukKur` = çekmece; `bugunKur` = Bugün'ün canlı tazelemesi ve `ONAY.hepsini_kilitle`),
+                isaret.svg (nötr ürün işareti)
   ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh, tahta-yoklama.desktop,
                 tahta-ariza.desktop
 tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
@@ -401,7 +440,7 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    (servis ilk satırı 3 sn bekler; gelmezse eski davranışla ekran sayar).
 
 21. **Yedek parolası sunucuda saklanmaz;** yalnız X25519 açık anahtarı (`ayar.yedek`) durur. Parola
-   belirlenmeden otomatik yedek alınmaz (pano uyarır). Geri yükleme yalnız 127.0.0.1'den ve yöneticiyle
+   belirlenmeden otomatik yedek alınmaz (Bugün › Sizi bekleyenler uyarır). Geri yükleme yalnız 127.0.0.1'den ve yöneticiyle
    (ilk kurulumda oturumsuz, yine yalnız yerelden); önce denetlenir, onaylanınca program yeniden
    açılırken uygulanır, eski dosyalar `geri-yukleme-oncesi/`'ne taşınır. KVKK: elle yedekler de saklama
    gününden eskiyince, onaysız bekleyen geri yükleme 24 saatte, geri yükleme öncesi kopya (yalnız en
@@ -486,9 +525,9 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    kapatılmaz, yönlendirme izlenmez, ≤ 256 KiB, toplam ≤ 5 sn; yalnız `tag_name`/`draft`/`prerelease` okunur,
    etiket yalnız `^v?\d+(\.\d+){1,3}$` ise kabul edilir. Bağlantı yanıttaki `html_url`'den değil, doğrulanmış
    sürümden SABİT kalıpla kurulur; sürüm notu sayfaya basılmaz. Kendiliğinden indirme/kurma eklenmez. Not
-   panoda yalnız yöneticiye çıkar. Ayar (`guncelleme_denetimi`, varsayılan açık) kapalıyken HİÇ istek çıkmaz
+   Bugün'de (`bugun.bekleyenler`, `yeni_surum` satırı) yalnız yöneticiye çıkar. Ayar (`guncelleme_denetimi`, varsayılan açık) kapalıyken HİÇ istek çıkmaz
    ("Şimdi denetle" dahil). Günde en çok bir kez; başarısız deneme de günlük hakkı tüketir; başarısızlık
-   sessizdir (panoda hata yok, yalnız Ayarlar'da "ulaşılamadı"). Ağ çağrısı olay döngüsünde, `vt.KILIT`
+   sessizdir (Bugün'de satır ve hata yok, yalnız Ayarlar'da "ulaşılamadı"). Ağ çağrısı olay döngüsünde, `vt.KILIT`
    altında ya da veritabanı bağlantısı açıkken yapılmaz; kapanış onu beklemez. İşlem kaydına yalnız elle
    denetim ve ayar değişikliği yazılır. Yeni bağımlılık (requests, certifi…) eklenmez.
 
@@ -526,6 +565,44 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
 
 ## Bilinen tuzaklar
 
+- **Bekleyen iş eklemek = `bugun.py`'de bir üretici + iki rol için test (0.18.0):** uyarıyı şablona ya da başka
+  sayfaya bant olarak yazma; `bekleyenler` tek listedir ve menü rozeti, satır sayısı, `/api/durum.bekleyen_is`
+  ondan çıkar. Rol süzmesi üreticinin İÇİNDEDİR: idareci satırının `yol`'u `/ayarlar…`, `/yedekler…`, `/ekle`,
+  `?sekme=bilgiler` olamaz (şablonda rol koşulu yoktur; `test_bekleyenler_idarecide_yonetici_satiri_ve_adresi_yok`).
+  Koşul var olan işlevden okunur (kopya koşul yazılmaz). Menüde rozet isteyen satır `rozet` taşır ve üreticisi
+  `yalniz_rozet` dalına da eklenir (her sayfada çalışır: az sorgu). Kurulum listesinde kendi satırı olan madde
+  `KURULUMDA_AYRI_SATIR`'a girer (çift sayım).
+- **Bugün'e ham hata metni, ad ve yol yazılmaz (0.18.0):** yedek hatasının istisna metni sunucu klasörünü ve
+  ikinci kopya yolunu taşır (inceleme bulgusu; 0.17.0 bandı basıyordu). Satır yalnız "alınamadı" der, ayrıntı
+  /yedekler'dedir. Aynı kural her yeni satır için: arıza açıklaması/kategorisi, duyuru metni, bekleyen tahtanın
+  adı/adresi, öğrenci/öğretmen adı, mazeret türü, ders başlığı Bugün'e ve `/api/durum.bekleyen_is`'e girmez;
+  `imza` yalnız `anahtar:sayı`'dır. Yoklama kutusu yalnız sayıdır; "yoklama alınmadı" uyarısı ya da alınmayan
+  ders listesi eklenmez (K5, kural 13, 24, 35).
+- **"Hepsini kilitle…" formunda gönder düğmesi, metin alanı ve `tur` alanı yoktur (0.18.0):** `tur=kilitle`
+  yalnız onay penceresinin "evet" düğmesiyle eklenir; biri eklenirse form JS'siz ya da Enter'la bütün okula
+  kilit yollar. Formun sayıları (`data-hedef`, `data-sinavda`, `data-cevrimdisi`) yalnız onay metni içindir;
+  sunucu hedefi kendi sayar. `KAPSAM_HEPSI_TURLERI` yalnız `kilitle` kalır ("hepsinin kilidini aç" yapılmadı).
+  V2 yalnız `kapsam` dalındadır: `tek` ve işaretli liste sınavdaki tahtaya eskisi gibi gider. Acil sürerken düğme
+  çizilmez ve `bugunKur` sayfa açıkken de kapatır; sunucu ucu acilde REDDETMEZ (ayrı karar, §17 soru 81).
+- **Bugün'ün yükleme anındaki imzası ile ilk `/api/durum` yanıtı aynı olmalı (0.18.0):** farklıysa "Bekleyen
+  işler değişti. Sayfayı yenile" bandı sayfa açılır açılmaz çıkar. Bu yüzden Bugün `kurulum` satırını her
+  yüklemede taze hesaplar ve belleği yeniler (`kurulum_onbellegi(…, taze=…)`), güncel olmayan tahta sayısı da
+  iki yoldan (`tahta_sayilari` ve tek COUNT) aynı çıkmalıdır (testi var). Bekleyen iş metni JS ile yazılmaz
+  (metin sunucudadır); canlı tazeleme yalnız `data-alan`/`data-sayi`/çip kancalarına yazar ve kuralı yeniden
+  hesaplamaz (0.17.0 tuzağının devamı).
+- **Durum kutuları sayfada İKİ kez çizilir (0.18.0):** telefonda ilk ekranda kalsın diye "Şu an"ın altında
+  (`#bugun-ozet-kisa`, yalnız ≤ 640 px görünür) ve karttaki (`#bugun-ozet`); ikisi aynı makrodur ve `bugunKur`
+  ikisine de yazar. Kutuya öznitelik ya da kanca eklenince makro değişir, tek kopya değil; testte kutu sayarken
+  ikisini hesaba kat.
+- **`/api/durum` 4 sn'de bir, açık sekme başına çalışır; içine pahalı üretici koyma (0.18.0):** bu bilgisayarın
+  adres listesi 60 sn, `kurulum` satırı 30 sn süreç belleğindedir. Adres belleği işlev kimliğine bağlıdır
+  (testler `guvenlik.yerel_ipler`'i değiştirir; kimlik değişince bellek geçersizdir). Yoklama ve duyuru özeti
+  `/api/durum`'a girmez (yalnız sayfa yüklenirken); Bugün'ün sorgu sayısı tahta ve öğrenci sayısından
+  bağımsızdır (`test_bugun_sorgu_sayisi_tahta_ve_ogrenci_sayisindan_bagimsiz`): `yoklama.gunluk_gorunum`
+  (şube başına sorgu) Bugün'den çağrılmaz.
+- **Başsız Edge ekran görüntüsünden sonra sayfayı "gizli" bildirebilir (0.18.0, deneme betikleri):** canlı
+  yoklama sekme gizliyken durur; tarayıcı denemesinde canlı tazeleme "çalışmıyor" görünür. CDP'de
+  `Emulation.setFocusEmulationEnabled` açık tutulur.
 - **Liste formunun ilk gönder düğmesi nöbetçidir; kaldırma, devre dışı yapma, önüne gönder düğmesi koyma
   (0.17.0):** seçim kutusu odaktayken Enter örtük gönderim yapar ve tarayıcı formun ağaç sırasındaki ilk ETKİN
   gönder düğmesini tıklar; nöbetçi olmasa bu ilk satırın `tek=` düğmesidir (seçilmemiş tahtaya komut). Devre dışı
@@ -558,9 +635,13 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
   sayfa 390 px'ten genişler ve alt çubuk da taşar (0.15.0 tuzağı). Dar ekranda "Duyuru gönder" "Diğer"in ilk
   öğesine iner. Çubuktaki GET düğmesi (`formaction="/duyurular/yeni"`) formun `donus` ve `secimden` alanlarını da
   sorguya koyar; `secimden=1` olmasa seçimsiz gönderim "Tüm tahtalar"lı forma düşerdi.
-- **`/` ve `/tahtalar` aynı işleyicidir; ikinci liste yazma (0.17.0):** `/` yönlendirme yapmaz (öbür bölümlerin
-  iletili `yonlendir("/", …)` dönüşleri ve testleri ona bağlı). Tahta işlerinin dönüşleri `/tahtalar`'a gider.
-  4. aşamada `/` "Bugün" olunca `_pano_bantlar.html` oraya taşınır.
+- **`/` Bugün'dür, liste yalnız `/tahtalar`'dadır; ikinci liste yazma (0.18.0):** iki sayfa ve `/api/durum`
+  tahtaları aynı yardımcıdan yükler (`web.py::tahta_baglami` → `tahta_gorunumu`); Bugün'e tahta satırı, satır
+  düğmesi ya da seçim eklenmez (çip tahta sayfasına, kutu `?durum=`'a gider). `/` iletisiz yönlendirme yapmaz:
+  öbür bölümlerin "yetkiniz yok" dönüşleri (`yonlendir("/", …)`) Bugün'ün başında çizilir ve odaklanır; yalnız
+  0.17.0'ın `/?durum=`/`/?s=` adresleri `/tahtalar`'a 303 olur. `tahta_liste.liste_yolu_mu` yalnız `/tahtalar`'ı
+  tanır: `donus="/"` ile gelen `tek` komutu `s=`/`#t-` almaz. `/`'yi açan test liste mi, ileti mi, bant mı
+  sınıyor — ona göre adres seçilir.
 - **Tahta sayfasına form eklerken dönüş adresi sekmeyi taşır (0.17.0):** `donus=/tahta/{id}?sekme=<sekme>#<bölüm>`;
   sekmesiz dönüş Genel'e düşer ve ileti başka sekmede kalır. Bölüm kimlikleri (`#program`, `#temizlik`,
   `#envanter`, `#arizalar`, `#baglanti`) eski yer imleri için korunur; `panel.js::tahtaEskiParcaKur` onları sekmeye
@@ -670,7 +751,8 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
   tarayıcı eskisini tutmaya devam eder. Statik dosya değiştiyse sürüm yükseltilir (16.11.2026).
 - **Panel menüsünde açılır grup yoktur (0.15.0'dan beri; eskiden JS'siz `<details>` idi).** Yan menüde alt
   liste de yoktur (0.17.0; bölüm içi gezinme sekme şeritleriyle). JS'siz açılır
-  `<details>` yalnız Program şeridindeki "Program kilidini durdur"da kaldı. `<form>` `<p>` içine konmaz (tarayıcı
+  `<details>` "Program kilidini durdur"da (Program şeridi ve 0.18.0'dan beri Bugün › Şu an) ve Bugün'ün "Diğer N iş"
+  katlamasında kaldı. `<form>` `<p>` içine konmaz (tarayıcı
   `<p>`yi kapatır, düğme satırı dağılır); düğme satırında `<div class="dugme-satiri">` kullanılır.
 - **Acil sayfası da `yigin.show_all()`'dan önce eklenir** ve rengi pencereye eklenen stil
   sınıfından (`acil`/`tatbikat`) gelir; başka sayfaya geçince sınıf kaldırılır. Acil renkleri
