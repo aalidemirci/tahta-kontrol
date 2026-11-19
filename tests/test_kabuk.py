@@ -101,21 +101,29 @@ def test_her_sayfada_tek_etkin_oge(uygulama):
 
 
 def test_menu_gorunumu_rol_sayi_ve_esler():
-    yonetici = web.menu_gorunumu(YONETICI, "/arizalar", {"ariza": 3})
-    idareci = web.menu_gorunumu(IDARECI, "/gruplar", {"ariza": 3})
-    assert len(ust_ogeler(yonetici)) == 9 and len(ust_ogeler(idareci)) == 7  # 0.16.0: Kullanıcılar Ayarlar'ın bölümü
-    # 0.17.0: alt liste yok; bölümün sekme şeridindeki sayfalar üst öğeyi seçer, arıza rozeti üst öğededir.
-    tahtalar = ust_ogeler(yonetici)[0]
+    yonetici = web.menu_gorunumu(YONETICI, "/arizalar", {"tahtalar": 3, "yedekler": 1})
+    idareci = web.menu_gorunumu(IDARECI, "/gruplar", {"tahtalar": 3})
+    assert len(ust_ogeler(yonetici)) == 10 and len(ust_ogeler(idareci)) == 8  # 0.18.0: Bugün eklendi (üst sınır 10)
+    # 0.17.0: alt liste yok; bölümün sekme şeridindeki sayfalar üst öğeyi seçer. 0.18.0: rozet "tahtalar" sayısıdır
+    # (süren arıza + yöneticide onay bekleyen tahta); Bugün rozet taşımaz; Yedekler yedek uyarısı sayısını taşır.
+    bugun, tahtalar = ust_ogeler(yonetici)[:2]
+    assert (bugun["ad"], bugun["yol"], bugun["secili"], bugun["sayi"]) == ("Bugün", "/", False, 0)
     assert (tahtalar["ad"], tahtalar["yol"], tahtalar["secili"], tahtalar["sayi"]) == ("Tahtalar", "/tahtalar", True, 3)
+    assert next(o for o in ust_ogeler(yonetici) if o["ad"] == "Yedekler")["sayi"] == 1
     assert "alt" not in tahtalar and all("alt" not in o for k in web.MENU for o in k["ogeler"])
     # İdareci: rolle gizlenen sekmenin (Gruplar) sayfasında da üst öğe vurgulu.
-    assert ust_ogeler(idareci)[0]["secili"]
-    for yol in ("/", "/tahtalar", "/tahtalar/ice-aktar", "/tahta/3", "/ariza/2", "/envanter", "/ekle"):
-        assert ust_ogeler(web.menu_gorunumu(IDARECI, yol))[0]["secili"], yol
-    assert not ust_ogeler(web.menu_gorunumu(YONETICI, "/tahtalar.csv"))[0]["secili"]  # sayfa değil
+    assert ust_ogeler(idareci)[1]["secili"] and not ust_ogeler(idareci)[0]["secili"]
+    for yol in ("/tahtalar", "/tahtalar/ice-aktar", "/tahta/3", "/ariza/2", "/envanter", "/ekle"):
+        ogeler = ust_ogeler(web.menu_gorunumu(IDARECI, yol))
+        assert ogeler[1]["secili"] and not ogeler[0]["secili"], yol
+    # "/" yalnız Bugün'ü seçer (0.17.0'da Tahtalar'ı seçerdi); "/" eşi önek olarak eşleşmez.
+    kok = ust_ogeler(web.menu_gorunumu(IDARECI, "/"))
+    assert kok[0]["secili"] and sum(o["secili"] for o in kok) == 1
+    assert "/" not in next(o for k in web.MENU for o in k["ogeler"] if o["ad"] == "Tahtalar")["esler"]
+    assert not ust_ogeler(web.menu_gorunumu(YONETICI, "/tahtalar.csv"))[1]["secili"]  # sayfa değil
     assert [k["ad"] for k in idareci["kumeler"]] == ["Her gün", "Dönemlik", "Yönetim"]
     assert [o["ad"] for o in idareci["kumeler"][2]["ogeler"]] == ["İşlem kaydı"]
-    assert [o["ad"] for o in yonetici["alt_cubuk"]] == ["Tahtalar", "Duyurular", "Yoklama"]
+    assert [o["ad"] for o in yonetici["alt_cubuk"]] == ["Bugün", "Tahtalar", "Duyurular", "Yoklama"]
 
 
 # ---- HTML iskeleti -------------------------------------------------------------------
@@ -132,9 +140,9 @@ def test_idareci_menusunde_yonetici_ogesi_yok(uygulama, panel):
         assert f'href="{yol}"' in menu, yol
     # 0.17.0: Arızalar ve Envanter yan menüde değil, Tahtalar bölümünün sekme şeridindedir.
     assert 'href="/arizalar"' not in menu and 'class="yan-alt"' not in sayfa
-    serit = sayfa.split('aria-label="Tahtalar bölümü"')[1].split("</nav>")[0]
+    serit = panel.get("/tahtalar").text.split('aria-label="Tahtalar bölümü"')[1].split("</nav>")[0]
     assert 'href="/arizalar"' in serit and 'href="/envanter"' in serit and "/gruplar" not in serit and "/ekle" not in serit
-    assert menu.count('<use href="#m-') - menu.count("#m-kapat") - menu.count("#m-cikis") == 7
+    assert menu.count('<use href="#m-') - menu.count("#m-kapat") - menu.count("#m-cikis") == 8  # 0.18.0: + Bugün
     assert ">Yönetim<" in menu and ">İdareci<" in menu
 
 
@@ -168,10 +176,12 @@ def test_etkin_oge_isaretleri(uygulama, panel, tahta):
         assert yanit.status_code == 200, yol
         return yan_menu(yanit.text)
 
-    for yol in ("/arizalar", f"/tahta/{kimlik}", "/tahtalar", "/", "/envanter", "/gruplar", "/tahtalar/ice-aktar", "/ekle"):
+    for yol in ("/arizalar", f"/tahta/{kimlik}", "/tahtalar", "/envanter", "/gruplar", "/tahtalar/ice-aktar", "/ekle"):
         m = menu(yol)
         assert '<a href="/tahtalar" aria-current="page">' in m and m.count('aria-current="page"') == 1, yol
         assert "<li data-secili>" in m and "data-icinde" not in m, yol
+    m = menu("/")  # 0.18.0: "/" Bugün'dür
+    assert '<a href="/" aria-current="page">' in m and m.count('aria-current="page"') == 1 and '<a href="/tahtalar">' in m
     yanit = panel.get("/acil").text
     assert yanit.count('class="acil-dugme" href="/acil" aria-current="page"') == 2
     assert yan_menu(yanit).count('aria-current="page"') == 1  # yalnız Acil; kümelerde etkin öğe yok
@@ -194,16 +204,21 @@ def test_her_menu_adresinde_html_de_tek_etkin_oge(uygulama, panel, tahta):
     kimlik = tahta_ekle(panel, tahta, "T-1")["X-Tahta-Id"]
     assert panel.post("/arizalar", data={"tahta_id": kimlik, "kategori": "acilis", "aciklama": ""}).status_code == 303
     yollar = [o["yol"] for k in web.MENU for o in k["ogeler"]] + [web.MENU_ACIL["yol"]]
-    assert len(yollar) == 10
+    assert len(yollar) == 11
     for yol in yollar:
         sayfa = panel.get(yol)
         assert sayfa.status_code == 200, yol
         menu = yan_menu(sayfa.text)
         assert menu.count('aria-current="page"') == 1, yol
         assert re.search(rf'href="{re.escape(yol)}"[^>]* aria-current="page"', menu), yol
-        # Rozet: sayı + ekran okuyucu metni; yalnız yan menüde (Tahtalar), alt çubukta yok.
-        assert menu.count('<span class="sayi-rozet">1</span><span class="gizli"> açık arıza</span>') == 1, yol
-        assert "sayi-rozet" not in alt_cubuk(sayfa.text), yol
+        # Rozet: sayı + ekran okuyucu metni; yan menüde ve (0.18.0) telefon alt çubuğundaki Tahtalar'da aynı sayı.
+        # 0.18.0: Tahtalar rozeti süren arıza (1) + onay bekleyen tahta (0); Yedekler rozeti "yedek parolası yok" satırı.
+        for oge in ("Tahtalar", "Yedekler"):
+            assert f'<span>{oge}</span><span class="sayi-rozet">1</span><span class="gizli"> bekleyen iş</span></a>' in menu, (yol, oge)
+        assert menu.count('class="sayi-rozet"') == 2, yol
+        cubuk = alt_cubuk(sayfa.text)
+        assert '<span>Tahtalar</span><span class="sayi-rozet">1</span><span class="gizli"> bekleyen iş</span></a>' in cubuk, yol
+        assert cubuk.count('class="sayi-rozet"') == 1, yol  # Yedekler alt çubukta yok
     # İki açıcı da aynı adı taşır.
     assert sayfa.text.count('<use href="#m-menu"/></svg><span>Menü</span></a>') == 2 and "Tümü" not in sayfa.text
 
@@ -224,7 +239,7 @@ def test_idareci_gizli_sekmenin_sayfasinda_ust_oge_vurgulu(uygulama, panel):
 def test_alt_cubuk_ogeleri(uygulama, panel):
     kur_ve_gir(panel)
     cubuk = alt_cubuk(panel.get("/duyurular").text)
-    assert re.findall(r'<a (?:class="menu-ac" )?href="([^"]+)"', cubuk) == ["/tahtalar", "/duyurular", "/yoklama", "#menu"]
+    assert re.findall(r'<a (?:class="menu-ac" )?href="([^"]+)"', cubuk) == ["/", "/tahtalar", "/duyurular", "/yoklama", "#menu"]
     assert '<a href="/duyurular" aria-current="page">' in cubuk and cubuk.count("aria-current") == 1
     cubuk = alt_cubuk(panel.get("/yoklama/sube").text)
     assert '<a href="/yoklama" aria-current="page">' in cubuk
@@ -437,7 +452,8 @@ def test_eski_kabuk_artigi_metin_yok(uygulama, panel, tahta):
     kur_ve_gir(panel)
     kimlik = tahta_ekle(panel, tahta, "T-1")["X-Tahta-Id"]
     assert 'class="kirinti" aria-label="Konum"><a href="/tahtalar">Tahtalar</a>' in panel.get(f"/tahta/{kimlik}").text
-    assert "<title>Tahtalar · Tahta Kontrol</title>" in panel.get("/").text
+    assert "<title>Bugün · Tahta Kontrol</title>" in panel.get("/").text
+    assert "<title>Tahtalar · Tahta Kontrol</title>" in panel.get("/tahtalar").text
     ayarlar = panel.get("/ayarlar/okul").text
     assert "üst şeritte" not in ayarlar and "Ana renk panelin menüsünde" in ayarlar
     assert sorgu("SELECT count(*) AS n FROM tahta")[0]["n"] == 1

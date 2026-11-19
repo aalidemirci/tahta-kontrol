@@ -622,6 +622,8 @@ def test_pano_ve_api_durum_sinav_penceresini_gosterir(ortam):
     assert tahtalar["10/B Tahtası"]["sinav"]["evre"] == "giris" and tahtalar["10/B Tahtası"]["sinav_ekran"] == "giris"
     assert tahtalar["9/A Tahtası"]["sinav"] is None and tahtalar["9/A Tahtası"]["sinav_yetenegi"] is True
     assert panel.get("/").status_code == 200 and panel.get(f"/tahta/{kimlik(ortam['10b'])}").status_code == 200
+    liste = panel.get("/tahtalar")  # 0.18.0: liste ayrı sayfadır; sınav penceresi orada da çizilir
+    assert liste.status_code == 200 and "10/B Tahtası" in liste.text
     # Evre geçişinde zamanlayıcı eşli tahtaları uyandırır.
     assert set(panel.app.state.sinav_zamanlayici()) == {kimlik(ortam["10b"]), kimlik(ortam["11a"])}
     assert panel.app.state.sinav_zamanlayici() == []

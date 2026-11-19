@@ -99,12 +99,18 @@ def test_gercek_ajan_durdurulan_yayini_kimligiyle_kaldirir(ajan, panel):
     assert sonuc == "Ekrandaki duyuru başka; dokunulmadı."
 
 
+def veri_blogu(sayfa: str, kimlik: str) -> str:
+    return sayfa.split(f'<script id="{kimlik}" type="application/json">', 1)[1].split("</script>", 1)[0]
+
+
 def test_panel_kancalari_ve_salt_okunur_plan(panel, tahta):
     kur_ve_gir(panel)
     tahta_ekle(panel, tahta, "Z-01", durum=yeni_ajan_durumu())
     sayfa = panel.get("/").text
     assert '<aside class="yan-menu" id="menu"' in sayfa and 'class="acil-dugme" href="/acil"' in sayfa
-    assert '"acil": false' in sayfa  # pano-veri: acil rozetleri için
+    assert '"acil": false' in veri_blogu(sayfa, "bugun-veri")  # Bugün: toplu kilit ve "Sayfayı yenile" bandı için
+    liste = panel.get("/tahtalar").text
+    assert '"acil": false' in veri_blogu(liste, "pano-veri")  # liste: acil rozetleri için
     form = panel.get("/duyurular/yeni").text
     for kanca in ('id="duyuru-formu"', 'data-kosul="zaman" data-deger="bir_kez"', 'id="hedef-onizleme"',
                   'data-sayac="metin"', 'data-hemen="Şimdi yayımla"'):  # fmt: skip

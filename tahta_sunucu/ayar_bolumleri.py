@@ -73,7 +73,7 @@ ANAHTARLAR = [b["anahtar"] for b in BOLUMLER]
 BASKA_YERDE: list[dict] = [
     {"ad": "Program kilidi (teneffüste ve boş derste kilit)", "yer": "Program › Kurallar", "yol": "/program?bolum=kurallar",
      "sozcukler": "program kilidi teneffüs boş ders kilitle durdur"},
-    {"ad": "Program kilidini durdur (1 saat, bugün)", "yer": "Tahtalar (program şeridi)", "yol": "/",
+    {"ad": "Program kilidini durdur (1 saat, bugün)", "yer": "Bugün › Şu an", "yol": "/",
      "sozcukler": "program kilidi durdur tören etkinlik"},
     {"ad": "Boş ders uyarısı", "yer": "Program › Kurallar · raporu Uyarılar'da", "yol": "/program/uyarilar",
      "sozcukler": "boş ders uyarısı rapor"},
@@ -193,7 +193,7 @@ def ara(sorgu: str) -> dict:
 
 
 def _adres_listede_yok(b, ipler: list[str] | None) -> bool:
-    """Pano uyarısının koşulu (web.altyapi_uyarilari ile aynı işlevler)."""
+    """Adres uyarısının koşulu (bugun.bekleyenler `adres` satırıyla aynı işlevler)."""
     ipler = guvenlik.yerel_ipler() if ipler is None else ipler
     return bool(ipler) and not adresler.bu_bilgisayar_listede_mi(adresler.al(b), ipler)
 

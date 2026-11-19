@@ -200,7 +200,7 @@ def test_acil_rapor_sayfasi_ve_panel_bandi(okul, panel, tahta, saat):
     acil_id = sorgu("SELECT id FROM acil_yayin")[0]["id"]
     saat.ilerlet(4)
     bekle(tahta, yeni, yeni_ajan_durumu(acil_id=acil_id))
-    for yol in ("/", "/duyurular", "/kayit", "/gruplar"):
+    for yol in ("/", "/tahtalar", "/duyurular", "/kayit", "/gruplar"):
         sayfa = panel.get(yol).text
         assert 'class="acil-bant" data-tur="tatbikat" role="alert"' in sayfa and "TATBİKAT YAYINI SÜRÜYOR" in sayfa, yol
         assert f'action="/acil/{acil_id}/bitir"' in sayfa

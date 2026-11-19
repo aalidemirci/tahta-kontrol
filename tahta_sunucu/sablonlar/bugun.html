@@ -1,0 +1,193 @@
+{% extends "taban.html" %}
+{% from "_bugun.html" import is_satiri, cip, durum_kutulari %}
+{% block baslik %}Bugün · Tahta Kontrol{% endblock %}
+{# 0.18.0 (arayüz 4. aşama) — "Bugün": şu an (ders/teneffüs + program kilidi ve "Durdur"), sizi bekleyenler, tahtalar
+   özeti (durum sayıları + konum çipleri + "Hepsini kilitle…"), bugünün yoklama özeti ve duyurular. Tahta listesi
+   /tahtalar'dadır. Bağlam: program (program_is.program_ozeti), akis, bekleyenler (bugun.bekleyenler; role göre
+   SÜZÜLMÜŞ gelir), tahta_ozeti, yoklama_ozeti, duyuru_ozeti, bekleyen_imza, bekleyen_tahta.
+   GİZLİLİK: bu sayfa omuz üstünden görülür. Öğrenci/öğretmen adı, okul no, mazeret türü, ders başlığı, arıza
+   açıklaması, duyuru metni ve onay bekleyen tahtanın adı/adresi buraya YAZILMAZ; yoklama kutusu yalnız sayıdır.
+   KOMUT: "Hepsini kilitle…" formunda gönder düğmesi, metin alanı ve `tur` alanı YOKTUR (JS'siz ve Enter'la hiçbir şey
+   gitmez); `tur=kilitle` yalnız onay penceresinin "evet" düğmesiyle eklenir. "Program kilidini durdur" 0.17.0
+   şeridindeki formun aynısıdır (onaysız; geri alınır: Program › İstisnalar).
+   Canlı: panel.js::bugunKur 4 sn'de bir /api/durum ile data-alan / data-sayi / çip kancalarını yazar; yoklama ve
+   duyuru kutuları yüklemede hesaplanır. #}
+{% block icerik %}
+{% set yonetici = kullanici.rol == 'yonetici' %}
+<div class="sayfa-bas" id="bugun-bas">
+  <div class="bas-yazi">
+    <h1>Bugün</h1>
+    <p><span>{{ program.bugun }}</span> · <span id="tahta-ozet"><span data-alan="hepsi">{{ tahta_ozeti.hepsi }}</span> tahta{% if tahta_ozeti.hepsi %}, <span data-alan="cevrimici">{{ tahta_ozeti.cevrimici }}</span> çevrimiçi{% endif %}</span></p>
+    <span class="canli" id="canli" data-durum="cevrimici" hidden><svg class="simge" aria-hidden="true"><use href="#s-acik"/></svg><span>Canlı</span></span>
+  </div>
+  <p class="dugme-satiri sayfa-eylem bugun-eylem"><a class="dugme ana" href="/duyurular/yeni"><svg class="simge" aria-hidden="true"><use href="#s-duyuru"/></svg>Duyuru gönder</a></p>
+</div>
+
+<section class="kutu an" id="bugun-simdi" aria-label="Şu an: ders saati ve program kilidi">
+  {% if not program.ders_saati_var %}
+  <p class="an-simdi"><span class="an-etiket">Şu an</span> <strong>Ders saatleri tanımlı değil.</strong>{% if yonetici %} <span><a href="/program">Program</a> sayfasından zil saatlerini girebilirsiniz.</span>{% else %} <span>Zil saatlerini yönetici girer.</span>{% endif %}</p>
+  {% else %}
+  <div class="an-ust">
+    <p class="an-simdi"><span class="an-etiket">Şu an</span> <strong data-alan="simdi">{{ program.simdi }}</strong> <span class="not">Sunucu saati <span data-alan="saat">{{ program.sunucu_saat }}</span></span></p>
+    {% if akis %}
+    <div class="an-akis">
+      {% for sira in akis %}
+      <div class="akis-sira">
+        {% if sira.devre %}<span class="akis-devre">{{ sira.devre }}</span>{% endif %}
+        <ol class="akis" aria-label="Bugünün dersleri{% if sira.devre %}, {{ sira.devre }}{% endif %}">
+          {% for d in sira.dersler %}<li class="{{ d.durum }}"{% if d.durum == 'simdi' %} aria-current="time"{% endif %}><span class="akis-no">{{ d.no }}</span><span class="akis-saat">{{ d.bas }}</span></li>{% endfor %}
+        </ol>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <a class="an-gun" href="/program/gun">Günün programı</a>
+  </div>
+  <div class="an-kilit">
+    <span data-alan="kilit">{% if program.kilit == 'acik' %}<span class="rozet" data-durum="acik"><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>Program kilidi etkin</span>
+    {% elif program.kilit == 'durduruldu' %}<span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Program kilidi durduruldu · bitiş {{ program.durduruldu_bitis }}</span>
+    {% else %}<span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-kapali"/></svg>Program kilidi kapalı</span>{% endif %}</span>
+    <a class="an-bag" data-alan="istisnalar" href="/program?bolum=istisnalar"{% if program.kilit != 'durduruldu' %} hidden{% endif %}>Geri al (İstisnalar)</a>
+    <a class="an-bag" data-alan="kurallar" href="/program?bolum=kurallar"{% if program.kilit != 'kapali' %} hidden{% endif %}>Kurallar</a>
+    <a class="rozet" data-durum="sorun" data-alan="uyari" href="/program/uyarilar"{% if not program.uyari_sayisi %} hidden{% endif %}><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>{{ program.uyari_sayisi }} boş ders uyarısı</span></a>
+    <span class="not" data-alan="uyari-notu"{% if not program.uyari_sayisi %} hidden{% endif %}>Dersin işlenmediği anlamına gelmez.</span>
+    <details class="acilir durdur-menu" data-alan="durdur"{% if program.kilit != 'acik' %} hidden{% endif %}>
+      <summary class="dugme">Program kilidini durdur<svg class="simge" aria-hidden="true"><use href="#s-asagi"/></svg></summary>
+      <form method="post" action="/program/istisna" class="acilir-ic">
+        <input type="hidden" name="donus" value="/">
+        <p class="not">Bütün tahtalarda; program kaynaklı kilitli tahtalar hemen açılır.</p>
+        <p class="dugme-satiri"><button name="sure" value="1sa">1 saat durdur</button><button name="sure" value="bugun">Gün sonuna kadar durdur</button></p>
+      </form>
+    </details>
+  </div>
+  {% endif %}
+</section>
+
+{% if tahta_ozeti.hepsi %}
+{# Telefon: tahta durumu ilk ekranda kalsın diye sayı kutuları "Şu an"ın hemen altında da çizilir (yalnız dar ekranda
+   görünür; geniş ekranda karttaki görünür). İkisi aynı makrodur ve panel.js ikisine de yazar. #}
+<nav class="durum-ozet kisa" id="bugun-ozet-kisa" aria-label="Tahta durumları">{{ durum_kutulari(tahta_ozeti.kutular) }}</nav>
+{% endif %}
+
+<div class="bugun-izgara">
+  <section class="kutu" id="bekleyenler" aria-labelledby="bekleyenler-b">
+    <div class="kutu-bas"><h2 id="bekleyenler-b">Sizi bekleyenler{% if bekleyenler %} <span class="not">· {{ bekleyenler | length }} iş</span>{% endif %}</h2></div>
+    <div class="bant uyari" id="bugun-yenile" hidden><span data-alan="yenile-metni">Bekleyen işler değişti.</span> <a href="/">Sayfayı yenile</a></div>
+    {% if not bekleyenler %}
+    <p class="not" id="bekleyen-yok">Bekleyen iş yok.</p>
+    {% else %}
+    <ul class="is-listesi">
+      {% for s in bekleyenler[:acik_satir] %}{{ is_satiri(s) }}
+      {% endfor %}
+    </ul>
+    {% if bekleyenler | length > acik_satir %}
+    <details class="acilir is-diger">
+      <summary class="dugme">Diğer {{ bekleyenler | length - acik_satir }} iş<svg class="simge" aria-hidden="true"><use href="#s-asagi"/></svg></summary>
+      <ul class="is-listesi">
+        {% for s in bekleyenler[acik_satir:] %}{{ is_satiri(s) }}
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+    {% endif %}
+  </section>
+
+  <section class="kutu" id="bugun-tahtalar" aria-labelledby="tahtalar-b">
+    <div class="kutu-bas"><h2 id="tahtalar-b">Tahtalar şu an</h2>{% if tahta_ozeti.hepsi %}<a class="sag" href="/tahtalar">Liste</a>{% endif %}</div>
+    {% if not tahta_ozeti.hepsi %}
+    <div class="bos-durum">
+      {% if yonetici %}
+      <p>Henüz onaylı tahta yok. Tahtalara ajanı kurmak için eşleştirme kodunu ve kurulum paketini alın.</p>
+      <p class="dugme-satiri"><a class="dugme" href="/ekle">Tahta ekle</a></p>
+      {% else %}
+      <p>Henüz onaylı tahta yok. Yönetici tahta ekleyince burada görünür.</p>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="durum-ozet" id="bugun-ozet">{{ durum_kutulari(tahta_ozeti.kutular) }}</div>
+    <div class="harita" role="group" aria-label="Konuma göre tahtalar">
+      {% for g in tahta_ozeti.gruplar %}
+      <div class="harita-kat" data-grup="{{ g.no }}">
+        {% if g.baslik %}<a class="harita-ad" href="/tahtalar#grup-{{ g.no }}">{{ g.ad }}</a>{% endif %}
+        {% if tahta_ozeti.kip == 'cip' %}
+        <ul>{% for t in g.tahtalar %}<li>{{ cip(t) }}</li>{% endfor %}</ul>
+        {% else %}
+        <span class="not">{{ g.sayi }} tahta: <span data-alan="grup-ozet">{{ g.ozet }}</span></span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% if tahta_ozeti.kip == 'cip' %}
+    <p class="not cip-lejant" id="cip-lejant"><span class="gizli">Çiplerdeki ek işaretler: </span><span><svg class="simge" aria-hidden="true"><use href="#s-ariza"/></svg>açık arıza kaydı</span><span><svg class="simge" aria-hidden="true"><use href="#m-sinav"/></svg>sınav kipinde</span></p>
+    {% endif %}
+    <p class="not" data-alan="sinavda"{% if not tahta_ozeti.sinavda %} hidden{% endif %}><span data-alan="sinav-sayi">{{ tahta_ozeti.sinavda }}</span> tahta sınav kipinde. <a href="/sinavlar">Sınavlar</a></p>
+    {% if aktif_acil %}
+    <p class="not" id="kilit-kapali">Acil yayın sürüyor; toplu kilit kapalı.</p>
+    {% else %}
+    <form method="post" action="/islem" id="hepsini-kilitle" class="kutu-ayak" data-hedef="{{ tahta_ozeti.kilit_hedefi }}" data-sinavda="{{ tahta_ozeti.kilit_sinavda }}" data-cevrimdisi="{{ tahta_ozeti.kilit_cevrimdisi }}">
+      <input type="hidden" name="donus" value="/">
+      <input type="hidden" name="kapsam" value="hepsi">
+      <button type="button" class="dugme" data-onay="hepsini_kilitle" aria-haspopup="dialog"><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>Hepsini kilitle…</button>
+      <span class="not" id="kilit-notu" role="status"></span>
+    </form>
+    <noscript><p class="not">Toplu kilit onay penceresi ister; JavaScript kapalıyken kullanılamaz.</p></noscript>
+    {% endif %}
+    {% endif %}
+  </section>
+</div>
+
+<div class="bugun-izgara esit">
+  <section class="kutu" id="bugun-yoklama" aria-labelledby="yoklama-b">
+    <div class="kutu-bas"><h2 id="yoklama-b">Yoklama · bugün</h2><a class="sag" href="/yoklama">Günlük görünüm</a></div>
+    {% set y = yoklama_ozeti %}
+    {% if not y.etkin %}
+    <p class="not">Ders yoklaması kapalı.{% if yonetici %} <a href="/ayarlar/yoklama">Ayarlar › Yoklama</a> bölümünden açabilirsiniz.{% endif %}</p>
+    {% else %}
+    {% if y.tatil %}
+    <p>Bugün tatil: {{ y.tatil }}</p>
+    {% elif y.beklenen %}
+    <p class="ilerleme-satir"><label for="yk-ilerleme">Bugün biten {{ y.beklenen }} dersin <b>{{ y.alinan }}</b> tanesinde yoklama alındı <span class="not">(her şubenin her dersi ayrı sayılır)</span></label></p>
+    <progress class="ilerleme" id="yk-ilerleme" max="{{ y.beklenen }}" value="{{ y.alinan }}">{{ y.beklenen }} dersin {{ y.alinan }} tanesi</progress>
+    {% elif y.program_var %}
+    <p>Bugün biten ders yok.</p>
+    {% else %}
+    <p>{{ y.kayit }} yoklama kaydı var.</p>
+    {% endif %}
+    {% if y.kayit %}<p class="yk-sayilar"><b>{{ y.yok }}</b> öğrenci en az bir derste yok · <b>{{ y.gec }}</b> geç</p>{% endif %}
+    {% if not y.liste_var %}
+    <p class="not">Öğrenci listesi yüklenmedi.{% if yonetici %} <a href="/ogrenciler">Öğrenci listesi</a>{% endif %}</p>
+    {% endif %}
+    {% if y.subeler %}
+    <p class="not">Şube defteri:</p>
+    <div class="haplar sube-haplari">
+      {% for s in y.subeler %}<a class="hap" href="/yoklama/sube?sube={{ s.ad | urlencode }}">{{ s.ad }}{% if s.beklenen %} <span class="hap-sayi" aria-hidden="true">{{ s.alinan }}/{{ s.beklenen }}</span>{% endif %}<span class="gizli">: {% if s.beklenen %}{{ s.beklenen }} dersin {{ s.alinan }} tanesi alındı{% else %}biten ders yok{% endif %}</span></a>{% endfor %}
+      {% if y.sube_fazla %}<a class="hap" href="/yoklama/sube">+{{ y.sube_fazla }} şube</a>{% endif %}
+    </div>
+    {% endif %}
+    <p class="not">{{ y.nota }}</p>
+    {% endif %}
+  </section>
+
+  <section class="kutu" id="bugun-duyuru" aria-labelledby="duyuru-b">
+    <div class="kutu-bas"><h2 id="duyuru-b">Duyurular</h2><a class="sag" href="/duyurular">Tümü</a></div>
+    {% set dy = duyuru_ozeti %}
+    {% if not dy.ekranda and not dy.planli %}
+    <p class="not">Ekranda duyuru yok; bugün için planlı duyuru yok.</p>
+    {% else %}
+    <ul class="olay-listesi">
+      {% for d in dy.ekranda %}
+      <li data-durum="duyuru"><span class="olay-saat">Şimdi</span><span class="olay-metin"><strong>{{ d.baslik }}</strong><span>{{ d.tahta_sayisi }} tahtaya gönderildi · {{ d.bitis }} biter</span></span><a class="olay-bag" href="/duyurular#yayinda-baslik">Yönet<span class="gizli">: {{ d.baslik }}</span></a></li>
+      {% endfor %}
+      {% for d in dy.planli %}
+      <li><span class="olay-saat">{{ d.saat }}</span><span class="olay-metin"><strong>{{ d.baslik }}</strong></span><span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-takvim"/></svg>Planlı</span></li>
+      {% endfor %}
+    </ul>
+    {% if dy.ekranda_fazla + dy.planli_fazla %}<p class="not"><a href="/duyurular">+{{ dy.ekranda_fazla + dy.planli_fazla }} duyuru daha</a></p>{% endif %}
+    {% endif %}
+    <p class="dugme-satiri"><a class="dugme" href="/duyurular/yeni">Duyuru gönder</a></p>
+  </section>
+</div>
+
+<p id="canli-bolge" class="gizli" aria-live="polite"></p>
+<script id="bugun-veri" type="application/json">{{ {"imza": bekleyen_imza, "bekleyen": bekleyen_tahta, "acil": aktif_acil is not none, "cip_kipi": tahta_ozeti.kip, "gruplar": tahta_ozeti.grup_haritasi if tahta_ozeti.kip == 'grup' else {}, "tahtalar": tahta_ozeti.grup_haritasi | list} | tojson }}</script>
+{% endblock %}

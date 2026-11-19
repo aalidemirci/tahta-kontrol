@@ -322,7 +322,8 @@ def test_simdi_denetle_yeni_surum(tmp_path, monkeypatch, saat):
     adres = "https://github.com/aalidemirci/tahta-kontrol/releases/tag/v99.0.1"
     for yol in ("/", "/ayarlar/guncelleme"):
         sayfa = panel.get(yol).text
-        assert f'<a href="{adres}" rel="noopener noreferrer">Sürüm sayfası</a>' in sayfa, yol
+        sinif = 'class="dugme" ' if yol == "/" else ""  # Bugün'de bekleyen iş satırının düğmesi
+        assert f'<a {sinif}href="{adres}" rel="noopener noreferrer">Sürüm sayfası</a>' in sayfa, yol
         assert "kotu.example" not in sayfa and "alert(1)" not in sayfa and "sürüm notu" not in sayfa
         dis = set(re.findall(r'(?:href|src|action)="(https?://[^"]+)"', sayfa))
         assert dis == {adres}, yol

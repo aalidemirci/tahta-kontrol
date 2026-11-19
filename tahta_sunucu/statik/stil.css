@@ -1293,6 +1293,10 @@
   .alt-cubuk a span { max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .alt-cubuk .simge { inline-size: 1.375rem; block-size: 1.375rem; }
   .alt-cubuk a:focus-visible { outline-offset: -3px; }
+  /* Bekleyen iş rozeti (0.18.0): yan menüdekiyle aynı sayı; simgenin sağ üst köşesinde. */
+  .alt-cubuk a { position: relative; }
+  .alt-cubuk a > .sayi-rozet { position: absolute; inset-block-start: 3px; inset-inline-start: calc(50% + .35rem); min-inline-size: 1.15rem;
+    padding: 0 .3rem; overflow: visible; }
   /* Etkin: renk tek başına değil; kalın yazı + üstte çizgi */
   .alt-cubuk a[aria-current="page"] { color: var(--ana-yazi); font-weight: 700; box-shadow: inset 0 3px 0 var(--ana-yazi); }
 
@@ -1779,3 +1783,147 @@
   }
 }
 /* ---- 0.17.0 sonu ---- */
+
+/* ---- 0.18.0: Bugün (arayüz 4. aşama) — şu an kartı (ders akışı, program kilidi), sizi bekleyenler listesi, tahta
+        özeti (durum sayıları, konum çipleri), yoklama ve duyuru kutuları. Yalnız var olan belirteçler; yeni renk yok.
+        İki sütun eşiği GÖRÜNTÜ ALANINA göre 85rem'dir (sabit menü 15rem yer kaplar; içerik ≈ 67rem). Sayfada yapışkan
+        öğe yoktur. Durum her yerde renk + şekil + sözcükle gider (çipte sözcük ekran okuyucu metnindedir). ---- */
+@layer bilesen {
+  .bugun-izgara { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--b4); align-items: start; margin-block-end: var(--b4); }
+  .bugun-izgara > .kutu { margin-block-end: 0; min-inline-size: 0; }
+  @media (min-width: 85rem) {
+    .bugun-izgara { grid-template-columns: minmax(0, 11fr) minmax(0, 9fr); }
+    .bugun-izgara.esit { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  .kutu-bas > h2 > .not { font-weight: 400; }
+  .kutu-ayak { display: flex; flex-wrap: wrap; align-items: center; gap: var(--b2); margin-block-start: var(--b3); padding-block-start: var(--b3);
+    border-block-start: 1px solid var(--cizgi); }
+
+  /* Şu an */
+  .an { display: grid; gap: var(--b3); border-inline-start: 4px solid var(--ana-yazi); }
+  .an-ust { display: flex; flex-wrap: wrap; align-items: center; gap: var(--b2) var(--b5); }
+  .an-simdi { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--b1) var(--b3); margin: 0; }
+  .an-etiket { color: var(--soluk); font-size: var(--yazi-xs); font-weight: 650; }
+  .an-simdi strong { font-size: var(--yazi-l); font-weight: 700; }
+  /* Dar ekranda akış şeridi yalnız ders numaralarıyla (saatsiz) çizilir ve satırın tamamını kaplar. */
+  .an-akis { display: grid; flex: 1 1 100%; gap: var(--b1); min-inline-size: 0; }
+  .akis-saat { display: none; }
+  @media (min-width: 48rem) { .an-akis { flex-basis: 22rem; } .akis-saat { display: block; } }
+  .akis-sira { display: flex; align-items: center; gap: var(--b2); min-inline-size: 0; }
+  .akis-devre { flex: none; color: var(--soluk); font-size: var(--yazi-xs); }
+  .akis { display: flex; flex: 1; gap: var(--b1); min-inline-size: 0; margin: 0; padding: 0; list-style: none; }
+  .akis li { display: grid; flex: 1 1 0; justify-items: center; min-inline-size: 0; padding-block-start: var(--b1);
+    border-block-start: 4px solid var(--cizgi); color: var(--soluk); font-size: .75rem; line-height: 1.25; }
+  .akis li.gecti { border-block-start-color: color-mix(in oklab, var(--ana-yazi) 40%, var(--cizgi)); }
+  .akis li.simdi { border-block-start-color: var(--ana-yazi); color: var(--metin); font-weight: 700; }
+  .akis-no { font-size: var(--yazi-xs); font-weight: 650; }
+  .akis li.simdi .akis-no { font-weight: 800; }
+  .an-gun, .an-bag { font-size: var(--yazi-s); }
+  .an-gun { margin-inline-start: auto; }
+  .an-kilit { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: var(--b2) var(--b3); padding-block-start: var(--b3);
+    border-block-start: 1px solid var(--cizgi); }
+  .an-kilit [hidden] { display: none; }
+  .an-kilit .durdur-menu { margin-inline-start: auto; }
+
+  /* Sizi bekleyenler */
+  .is-listesi { margin: 0; padding: 0; list-style: none; }
+  .is-listesi li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--b1) var(--b3);
+    padding-block: var(--b2); border-block-start: 1px solid var(--cizgi); }
+  .is-listesi li:first-child { border-block-start: 0; padding-block-start: 0; }
+  .is-simge { display: grid; place-items: center; inline-size: 2rem; block-size: 2rem; border-radius: var(--kose-s);
+    background: var(--dz); color: var(--d); }
+  .is-simge .simge { inline-size: 1.125rem; block-size: 1.125rem; }
+  .is-metin { display: grid; gap: 2px; min-inline-size: 0; overflow-wrap: anywhere; }
+  .is-metin strong { font-size: var(--yazi-s); font-weight: 600; }
+  .is-metin span { color: var(--soluk); font-size: var(--yazi-xs); }
+  .is-eylem { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--b1) var(--b3); }
+  .is-eylem > .dugme { white-space: nowrap; }
+  .is-ek { font-size: var(--yazi-s); }
+  details.is-diger { margin-block-start: var(--b2); }
+  details.is-diger > summary { inline-size: max-content; }
+  details.is-diger[open] > summary .simge { transform: rotate(180deg); }
+  details.is-diger > .is-listesi { margin-block-start: var(--b2); padding-block-start: var(--b2); border-block-start: 1px solid var(--cizgi); }
+  #bugun-yenile { margin-block-end: var(--b3); }
+  @media (max-width: 35.99rem) {
+    .is-listesi li { grid-template-columns: auto minmax(0, 1fr); }
+    .is-listesi li > .is-eylem { grid-column: 2; justify-content: flex-start; }
+  }
+
+  /* Tahtalar şu an: altı sayı kutusu (3 × 2) ve konuma göre çipler */
+  .durum-ozet { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--b2); margin-block-end: var(--b3); }
+  .durum-ozet a { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0 var(--b2); min-block-size: var(--dokunma);
+    padding: var(--b1) var(--b3); border: 1px solid var(--cizgi); border-radius: var(--kose-m); background: var(--yuzey); color: var(--metin);
+    text-decoration: none; }
+  .durum-ozet a:hover { background: var(--yuzey2); }
+  .durum-ozet .simge { color: var(--d); }
+  .durum-ozet b { font-size: var(--yazi-l); font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .durum-ozet span { grid-column: 1 / -1; color: var(--soluk); font-size: var(--yazi-xs); line-height: 1.25; overflow-wrap: anywhere; }
+  /* "Güncelleme" öbür beş durum gibi toplama girmez (ayrı bir niteliktir): kesikli çerçeveyle ayrılır. */
+  .durum-ozet a[data-sayi="guncelleme"] { border-style: dashed; }
+  /* Sayı kutularının telefon kopyası ("Şu an"ın altında): yalnız dar ekranda; o genişlikte karttaki gizlenir. */
+  .durum-ozet.kisa { display: none; margin-block-end: var(--b4); }
+  .cip-lejant { display: flex; flex-wrap: wrap; gap: var(--b1) var(--b4); margin-block: 0 var(--b3); }
+  .cip-lejant > span:not(.gizli) { display: inline-flex; align-items: center; gap: var(--b1); }
+  .hap-sayi { font-weight: 400; font-variant-numeric: tabular-nums; }
+  .durum-ozet a.bos b { color: var(--soluk); font-weight: 500; }
+  .durum-ozet a.bos .simge { color: var(--soluk); }
+  .harita { display: grid; gap: var(--b2); margin-block-end: var(--b3); }
+  .harita-kat { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); align-items: start; gap: var(--b1) var(--b3); }
+  .harita-kat:not(:has(> .harita-ad)) { grid-template-columns: minmax(0, 1fr); }
+  .harita-ad { display: flex; align-items: center; min-block-size: var(--dokunma-kucuk); font-size: var(--yazi-xs); font-weight: 650; line-height: 1.25; }
+  .harita-kat > .not { align-self: center; }
+  .harita ul { display: flex; flex-wrap: wrap; gap: var(--b2); margin: 0; padding: 0; list-style: none; }
+  .cip { display: inline-flex; align-items: center; gap: var(--b1); min-block-size: var(--dokunma-kucuk); padding: var(--b1) var(--b3);
+    border: 1px solid color-mix(in oklab, var(--d) 30%, transparent); border-radius: var(--kose-hap); background: var(--dz); color: var(--d);
+    font-size: var(--yazi-s); font-weight: 600; text-decoration: none; white-space: nowrap; }
+  .cip:hover { text-decoration: underline; }
+  .cip-ad { max-inline-size: 11rem; overflow: hidden; text-overflow: ellipsis; }
+  .cip-ekler { display: contents; }
+  .cip-ek { display: inline-flex; color: var(--d); }
+
+  /* Tahta listesi (0.18.0): Bugün'deki grup adı /tahtalar#grup-N'ye gelir (yapışkan tablo başlığının altında kalmasın);
+     güncel olmayan sürüm rozetle değil Sürüm sütununda belirtilir (V1; sözcüğü ekran okuyucu metnindedir). */
+  .tahta-liste tbody[id] { scroll-margin-block-start: calc(var(--yapiskan-ust) + var(--dokunma) + var(--b2)); }
+  .tahta-liste .c-surum.eski { color: var(--d-guncel); font-weight: 600; }
+
+  /* Yoklama ve duyurular */
+  #bugun-yoklama p + p, #bugun-duyuru p + p { margin-block-start: var(--b2); }
+  .ilerleme-satir label { margin: 0; font-size: var(--yazi-m); font-weight: 400; }
+  #bugun-yoklama progress.ilerleme { margin-block: var(--b2) var(--b3); }
+  .haplar.sube-haplari { flex-wrap: wrap; overflow-x: visible; margin-block: var(--b2) var(--b3); padding-block-end: 0; }
+  .olay-listesi { margin: 0 0 var(--b2); padding: 0; list-style: none; }
+  .olay-listesi li { display: grid; grid-template-columns: 3.25rem minmax(0, 1fr) auto; align-items: center; gap: var(--b3);
+    min-block-size: var(--dokunma); padding-block: var(--b1); border-block-start: 1px solid var(--cizgi); }
+  .olay-listesi li:first-child { border-block-start: 0; }
+  .olay-saat { font-size: var(--yazi-s); font-weight: 650; font-variant-numeric: tabular-nums; }
+  .olay-listesi li[data-durum] .olay-saat { color: var(--d); }
+  .olay-metin { display: grid; gap: 2px; min-inline-size: 0; overflow-wrap: anywhere; }
+  .olay-metin strong { font-size: var(--yazi-s); font-weight: 600; }
+  .olay-metin span { color: var(--soluk); font-size: var(--yazi-xs); }
+  .olay-bag { font-size: var(--yazi-s); }
+
+  /* Telefon: tahta durum sayıları "Şu an"ın altındadır (ilk ekran); "Durdur" açılırı kart enine yayılır. */
+  @media (max-width: 39.99rem) {
+    .durum-ozet.kisa { display: grid; }
+    #bugun-ozet { display: none; }
+    /* "Duyuru gönder" başlığın yanında durur (ayrı satır açıp ilk ekranı aşağı itmesin). */
+    #bugun-bas { position: relative; }
+    #bugun-bas .bugun-eylem { position: absolute; inset-block-start: -.5rem; inset-inline-end: 0; margin: 0; }
+    .an-kilit .durdur-menu { position: static; }
+    .an-kilit .durdur-menu .acilir-ic { inset-inline: 0; inline-size: auto; max-inline-size: none; }
+    .harita-kat { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  }
+  /* Dokunma hedefi (dar ekran ya da kaba işaretçi): çip, bağlantı ve şube hapı en az 44 px */
+  @media screen and (max-width: 63.99rem), screen and (pointer: coarse) {
+    .cip, .harita-ad { min-block-size: var(--dokunma); }
+    .an-gun { min-block-size: var(--dokunma); align-content: center; }
+    .kutu-bas > a.sag, .an-bag, .olay-bag, .is-ek, #bugun-yoklama p > a, #bugun-duyuru p.not > a, .an-simdi a, [data-alan="sinavda"] > a {
+      display: inline-flex; align-items: center; min-block-size: var(--dokunma); }
+    .an-kilit a.rozet { min-block-size: var(--dokunma); padding-inline: var(--b3); }
+  }
+  @media (forced-colors: active) {
+    .cip, .durum-ozet a, .is-simge { border: 1px solid CanvasText; }
+    .akis li.simdi { border-block-start-color: Highlight; }
+  }
+}
+/* ---- 0.18.0 sonu ---- */

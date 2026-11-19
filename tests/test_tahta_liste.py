@@ -82,6 +82,14 @@ def test_rozet_metinleri_0160_panosuyla_ayni():
     assert metinler(ozet(False, True, program=eski)) == ["Açık", "Ajan güncellenmeli"]  # sürümü güncel ama yeteneksiz
     assert metinler(ozet(False, True, program=eski, guncel=False)) == ["Açık", "Ajan güncellenmeli"]  # güncelleme rozeti bu metne döner
     assert metinler(ozet(False, False, program=eski, guncel=False)) == ["Açık", "Güncelleme var"]
+    # V1 (0.18.0): düz güncelleme rozeti `liste: False` taşır (liste satırında çizilmez); "Ajan güncellenmeli" taşımaz.
+    duz = ozet(False, False, program=eski, guncel=False)
+    assert [r.get("liste") for r in duz["rozetler"]] == [None, False] and "guncelleme" in duz["durumlar"]
+    eskimis = ozet(False, True, program=eski, guncel=False)
+    assert [(r["m"], r.get("liste")) for r in eskimis["rozetler"] if r["s"] == "s-guncel"] == [("Ajan güncellenmeli", None)]
+    # Bugün'deki çipin okunur metnine girmeyen rozetler (`cip: False`): boş ders ve programdan muaf.
+    bos = ozet(cevrimici=False, program={**eski, "bos_ders": "3. ders (kapalı)", "muaf": True})
+    assert [r["m"] for r in bos["rozetler"] if r.get("cip") is False] == ["Boş ders: 3. ders (kapalı)", "Programdan muaf"]
     assert metinler(ozet(kilitli=True, program=dict(PROGRAM_KILIDI, neden="", acilis=None))) == ["Program kilidi"]
     # Arıza rozeti arıza listesine bağlanır; başka rozet bağlantı taşımaz.
     rozetler = ozet(ariza_sayisi=1, donanim_degisti=True)["rozetler"]
@@ -207,9 +215,10 @@ def test_guvenli_donus_ve_liste_yolu():
     for kotu in ("//ornek.invalid", "/\\ornek.invalid", "https://ornek.invalid/", "tahtalar", "", None, "/a\nb", "/a\x7f", "/" + "a" * 200, 5):
         assert tahta_liste.guvenli_donus(kotu) == "/tahtalar", kotu
     assert tahta_liste.guvenli_donus("//x", "/program") == "/program"
-    for yol in ("/", "/tahtalar", "/tahtalar?durum=acik", "/?durum=acik", "/tahtalar#t-2"):
+    for yol in ("/tahtalar", "/tahtalar?durum=acik", "/tahtalar#t-2"):
         assert tahta_liste.liste_yolu_mu(yol), yol
-    for yol in ("/tahta/3", "/tahtalar/ice-aktar", "/duyurular"):
+    # 0.18.0: "/" Bugün'dür; liste değildir (satır çapası eklenmez).
+    for yol in ("/", "/?durum=acik", "/tahta/3", "/tahtalar/ice-aktar", "/duyurular"):
         assert not tahta_liste.liste_yolu_mu(yol), yol
 
 

@@ -51,7 +51,7 @@ def test_program_sekmeleri_yonetici(uygulama, panel, tahta, bolum, beklenen):
     assert f'href="/program?bolum={bolum}" aria-current="page"' in metin
     for parca in beklenen:
         assert parca in metin, (bolum, parca)
-    assert 'id="program-serit"' in metin and "Program kilidi açık" in metin
+    assert 'id="program-serit"' in metin and "Program kilidi etkin" in metin and "Program kilidi açık" not in metin
     # Sekme yalnız kendi bölümünü çizer.
     if bolum != "kurallar":
         assert 'name="pk_etkin"' not in metin
@@ -70,20 +70,26 @@ def test_program_sayfasi_idareciye_salt_okunur(uygulama, panel, tahta):
     assert 'href="/program/uyarilar" aria-current="page"' in uyarilar and "Bu tarihte boş ders uyarısı yok." in uyarilar
 
 
-def test_pano_program_seridi_ve_durdur_menusu(uygulama, panel, tahta):
+def test_bugun_su_an_karti_ve_durdur_menusu(uygulama, panel, tahta):
+    """0.18.0: program şeridi (P1–P4) Bugün › Şu an kartındadır; listede (/tahtalar) şerit yoktur."""
     kur_ve_gir(panel)
     tahta_ekle(panel, tahta, "T-1", durum())
-    assert 'id="pano-program"' not in panel.get("/").text  # zil saati yokken şerit yok
+    kart = panel.get("/").text.split('id="bugun-simdi"')[1].split("</section>")[0]
+    assert "Ders saatleri tanımlı değil." in kart  # zil saati yokken kilit satırı ve "Durdur" yok
+    assert 'data-alan="kilit"' not in kart and 'action="/program/istisna"' not in kart
     hazirla(panel)
-    sayfa = panel.get("/").text
-    serit = sayfa.split('id="pano-program"')[1].split("</section>")[0]
-    assert "Program kilidi açık" in serit and 'data-alan="simdi"' in serit
-    assert 'action="/program/istisna"' in serit and 'name="donus" value="/"' in serit
-    assert '"program_kilidi": true' in sayfa
+    kart = panel.get("/").text.split('id="bugun-simdi"')[1].split("</section>")[0]
+    # "Kilit açık" kilitli değil diye okunur; özelliğin durumu "etkin / kapalı / durduruldu" sözleriyle gider.
+    assert "Program kilidi etkin" in kart and "Program kilidi açık" not in kart and 'data-alan="simdi"' in kart and 'data-alan="saat"' in kart
+    assert 'action="/program/istisna"' in kart and 'name="donus" value="/"' in kart
+    assert re.search(r'data-alan="durdur">', kart)  # kilit açıkken "Durdur" görünür
+    liste = panel.get("/tahtalar").text
+    assert '"program_kilidi": true' in liste and 'id="pano-program"' not in liste and 'action="/program/istisna"' not in liste
     # Kural kapalıyken durdur menüsü gizli gelir.
     panel.post("/program/kurallar", data={"pk_gecikme_dk": "2", "bd_esik_dk": "10"})
-    serit = panel.get("/").text.split('id="pano-program"')[1].split("</section>")[0]
-    assert "Program kilidi kapalı" in serit and re.search(r'data-alan="durdur"\s+hidden', serit)
+    kart = panel.get("/").text.split('id="bugun-simdi"')[1].split("</section>")[0]
+    assert "Program kilidi kapalı" in kart and re.search(r'data-alan="durdur"\s*hidden', kart)
+    assert re.search(r'data-alan="kurallar" href="/program\?bolum=kurallar">', kart)
 
 
 def test_tahta_sayfasi_program_izgarasi(uygulama, panel, tahta):

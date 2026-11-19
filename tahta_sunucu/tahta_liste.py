@@ -69,7 +69,8 @@ def _kilit_metni(t: dict) -> str:
 
 
 def _ek_rozetler(t: dict, program_kilidi_acik: bool) -> list[dict]:
-    """Altyapı (arıza, donanım) ve program/sınav/yoklama rozetleri; sırası 0.16.0 panosundakiyle aynıdır."""
+    """Altyapı (arıza, donanım) ve program/sınav/yoklama rozetleri; sırası 0.16.0 panosundakiyle aynıdır.
+    `"cip": False` (0.18.0, eklemeli): rozet Bugün'deki tahta çipinin okunur metnine girmez (boş ders, programdan muaf)."""
     ek: list[dict] = []
     ariza = int(t.get("ariza_sayisi") or 0)
     if ariza > 0:
@@ -89,9 +90,9 @@ def _ek_rozetler(t: dict, program_kilidi_acik: bool) -> list[dict]:
         ek.append({"d": "duyuru", "m": "Yoklama alınıyor", "s": "s-onay"})
     program = t.get("program") or {}
     if program.get("bos_ders"):  # kapalı tahta boş dersin en sık nedenidir; çevrimdışında da çizilir
-        ek.append({"d": "sorun", "m": f"Boş ders: {program['bos_ders']}", "s": "s-sorun"})
+        ek.append({"d": "sorun", "m": f"Boş ders: {program['bos_ders']}", "s": "s-sorun", "cip": False})
     if program.get("muaf"):
-        ek.append({"d": "bilgi", "m": "Programdan muaf", "s": "s-bilgi"})
+        ek.append({"d": "bilgi", "m": "Programdan muaf", "s": "s-bilgi", "cip": False})
     if _program_ajani_eski(t, program_kilidi_acik) and t.get("guncel"):
         ek.append({"d": "bilgi", "m": "Ajan güncellenmeli", "s": "s-guncel"})
     return ek
@@ -148,7 +149,13 @@ def durum_ozeti(t: dict, acil_suruyor: bool = False, program_kilidi_acik: bool =
     rozetler = []
     for a in anahtarlar[:EN_COK_DURUM_ROZETI]:
         m = _kilit_metni(t) if a == "kilitli" else guncel_metni if a == "guncelleme" else _METIN[a]
-        rozetler.append({"d": _RENK.get(a, a), "m": m, "s": _SIMGE[a]})
+        rozet = {"d": _RENK.get(a, a), "m": m, "s": _SIMGE[a]}
+        if a == "guncelleme" and m == _METIN["guncelleme"]:
+            # V1 (0.18.0, varsayıldı; geri almak için bu alanı kaldırmak yeter): düz "Güncelleme var" rozeti tahta
+            # LİSTESİNİN satırında çizilmez (hap sayısında, tahta sayfasında ve Bugün'de kalır). Alan eklemelidir:
+            # `durumlar`, süzgeç ve /api/durum rozet listesi değişmez. "Ajan güncellenmeli" metni satırda kalır.
+            rozet["liste"] = False
+        rozetler.append(rozet)
     rozetler += _ek_rozetler(t, program_kilidi_acik)[:EN_COK_EK_ROZET]
 
     durumlar = [a for a in anahtarlar if a in SUZGECLER]
@@ -358,8 +365,8 @@ def guvenli_donus(deger, varsayilan: str = "/tahtalar") -> str:
 
 
 def liste_yolu_mu(donus: str) -> bool:
-    """Dönüş adresi tahta listesi mi (satır çapası `#t-<id>` yalnız orada anlamlıdır)."""
-    return donus.partition("#")[0].partition("?")[0] in ("/", "/tahtalar")
+    """Dönüş adresi tahta listesi mi (satır çapası `#t-<id>` yalnız orada anlamlıdır). 0.18.0: "/" Bugün'dür."""
+    return donus.partition("#")[0].partition("?")[0] == "/tahtalar"
 
 
 def sekme_coz(deger, rol: str | None, durum: str, yer: str = "") -> str:

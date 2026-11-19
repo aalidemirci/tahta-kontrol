@@ -290,11 +290,11 @@ def test_sablonlarda_satir_ici_betik_ve_stil_yok():
             assert "src=" in etiket or 'type="application/json"' in etiket, (yol.name, etiket)
 
 
-def test_pano_kancalari_yerinde(ortam):
+def test_liste_kancalari_yerinde(ortam):
     panel, tahta = ortam
     kur_ve_gir(panel)
     onayli_tahta(panel, tahta, {"kilitli": False, "oturum": {"sinif": "ogretmen"}, "ekranlar": [{"arayuz": "gtk3"}]})
-    sayfa = panel.get("/").text
+    sayfa = panel.get("/tahtalar").text  # 0.18.0: liste yalnız /tahtalar'da
     for kanca in (
         'id="islem"',
         'id="secim-sayisi"',

@@ -38,9 +38,11 @@ mkdirSync(CIKTI, { recursive: true });
 // Şube defterinin gün görünümü (fırça şeridi) bugünün tarihiyle açılır.
 const BUGUN = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 export const SAYFALAR = [
-  ["pano", "/"], ["tahta-ayrinti", "/tahta/1"], ["tahta-onay-bekleyen", "/tahta/13"], ["tahta-ekle", "/ekle"],
+  // 0.18.0: "/" Bugün'dür (şu an, bekleyen işler, tahta özeti, yoklama ve duyuru kutuları); liste /tahtalar'da.
+  ["bugun", "/"], ["tahta-ayrinti", "/tahta/1"], ["tahta-onay-bekleyen", "/tahta/13"], ["tahta-ekle", "/ekle"],
   // 0.17.0: tahta listesi (süzgeçli de) ve tahta sayfasının sekmeleri ("tahta-" / "tahtalar" önekiyle süzülür).
-  ["tahtalar", "/tahtalar"], ["tahtalar-kilitli", "/tahtalar?durum=kilitli"], ["tahta-program", "/tahta/1?sekme=program"],
+  ["tahtalar", "/tahtalar"], ["tahtalar-kilitli", "/tahtalar?durum=kilitli"], ["tahtalar-guncelleme", "/tahtalar?durum=guncelleme"],
+  ["tahta-program", "/tahta/1?sekme=program"],
   ["tahta-bakim", "/tahta/1?sekme=bakim"], ["tahta-bilgiler", "/tahta/1?sekme=bilgiler"],
   ["duyuru-on-secim", "/duyurular/yeni?tahta=1&tahta=2&secimden=1"],
   ["gruplar", "/gruplar"], ["tahtalar-ice-aktar", "/tahtalar/ice-aktar"], ["duyurular", "/duyurular"],
@@ -102,7 +104,9 @@ const OLCUM = `(() => {
   const kucuk = metinli.filter((e) => parseFloat(getComputedStyle(e).fontSize) < 12);
   const esik = innerWidth < 1024 ? 44 : 36;
   const hedefler = g("button, a.dugme, summary.dugme, .sekmeler a, .yan-menu a, .ust-cubuk a, .alt-cubuk a, .hap, label.sec-kap, "
-    + ".ayar-liste a, .ayar-menu li a, .ayar-menu summary, details.nedir > summary, details.ozet-satir > summary").filter(gorunur)
+    + ".ayar-liste a, .ayar-menu li a, .ayar-menu summary, details.nedir > summary, details.ozet-satir > summary, "
+    // 0.18.0 Bugün: çip, sayı kutusu ve grup adı her genişlikte; dar ekranda (dokunma) sayfadaki bütün bağlantılar.
+    + ".cip, .durum-ozet a, .harita-ad" + (innerWidth < 1024 ? ", .bugun-izgara a, .an a" : "")).filter(gorunur)
     .filter((e) => !e.closest(".firca-sec, .defter, dialog:not([open])"));
   const kucukHedef = hedefler.filter((e) => kutu(e).height < esik - .5);
   const ilk = [...(document.querySelector("main") || document.body).children].find(gorunur);

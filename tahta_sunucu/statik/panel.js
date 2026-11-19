@@ -1,11 +1,12 @@
 /* Tahta Kontrol paneli — kütüphane yok, derleme yok.
    Sayfa kancalarına göre bölümler: onay (tehlikeli işlem dialogu), tahtalar (0.17.0: tahta listesinin canlı durumu,
    seçim çubuğu, süzgeç hapları, duyurucu; durum kuralı SUNUCUDADIR, burada yalnız /api/durum'un `liste` alanı yazılır),
+   bugun (0.18.0: Bugün sayfasının canlı sayıları, çipleri, program satırı; "Hepsini kilitle…" onayı; kural yine sunucuda),
    menu (açılır menülerin kapanışı ve yönü), sayac,
    duyuru formu (koşullu alanlar, hedef önizlemesi), acil (tür, şablon, teslim sayacı),
    yazdir, acil şablonları, ayarlar (renk önizlemesi, logo; 0.16.0: kaydedilmemiş değişiklik çubuğu, Ayarlar içi
    arama, eski parça adresleri), kopyala, dogrulama,
-   program (program şeridi tahtalar bölümünde; tahta ızgarasında "Tümünü işaretle"),
+   program (program satırı Bugün'de; tahta ızgarasında "Tümünü işaretle"),
    sinav (sınav sayfasının canlı salon durumu, sınavdaki tahtaya duyuru/kilit açma ek onayı,
    salon yoklamasında gelmeyen sayısı), yoklama (Aşama 5: "e-Okul'a işlendi" kutusunun kendiliğinden
    gönderimi, yok sayacı, icmal metnini kopyalama ve yazdırma, yoklama silme onayı, panoda "Yoklama alınıyor"),
@@ -148,6 +149,13 @@
       ad: "eylem", deger: "sil", evet: "Logoyu kaldır",
       metin: "Panelde okul adının baş harfleri, tahtada yalnız okul adı görünür.",
       baslik: function () { return "Okul logosu kaldırılsın mı?"; }
+    },
+    /* Bugün (0.18.0): formda `tur` alanı yoktur; `tur=kilitle` yalnız bu pencerenin "evet" düğmesiyle eklenir.
+       Sayılar formun data-hedef / data-sinavda / data-cevrimdisi özniteliklerinden okunur (onayKur'da ayrı dal). */
+    hepsini_kilitle: {
+      ad: "tur", deger: "kilitle", evet: "Hepsini kilitle",
+      metin: "Kilit kodu ya da panelden açılana kadar tahtalar kilitli kalır. Derste kullanılan tahtalar da kilitlenir.",
+      baslik: function (n) { return "Çevrimiçi " + n + " tahta kilitlensin mi?"; }
     }
   };
   // Sınavdaki tahtaya duyuru / kilit açma: düz gönderim düğmeleridir; sınav sürüyorsa araya ek onay girer.
@@ -247,6 +255,31 @@
         // Açık komut menüsü dialogun arkasında açık kalmasın.
         var acikMenu = tetik.closest("details");
         if (acikMenu) acikMenu.open = false;
+        // Bugün › "Hepsini kilitle…": ayrı dal. Tahta adı listelenmez; sayılar sunucunun forma yazdığı (canlı tazelenen)
+        // özniteliklerdendir. Kilitlenecek tahta yoksa pencere açılmaz. Sunucu yine kendi sayar ve iletide söyler.
+        if (tetik.getAttribute("data-onay") === "hepsini_kilitle") {
+          var kilitHedef = parseInt(form.getAttribute("data-hedef") || "0", 10) || 0;
+          var kilitSinav = parseInt(form.getAttribute("data-sinavda") || "0", 10) || 0;
+          var kilitDisi = parseInt(form.getAttribute("data-cevrimdisi") || "0", 10) || 0;
+          var kilitNotu = $("kilit-notu");
+          if (kilitNotu) kilitNotu.textContent = "";
+          if (!kilitHedef) {
+            if (kilitNotu) {
+              kilitNotu.textContent = kilitSinav
+                ? "Çevrimiçi tahtaların hepsi sınav kipinde; kilitlenecek tahta yok." : "Kilitlenecek çevrimiçi tahta yok.";
+            }
+            return;
+          }
+          var kilitCumleleri = [];
+          if (kilitSinav) kilitCumleleri.push(kilitSinav + " tahta sınav kipinde; atlanacak.");
+          if (kilitDisi) kilitCumleleri.push(kilitDisi + " tahta çevrimdışı; onlara gönderilmez.");
+          if (kilitCumleleri.length) {
+            uyari.textContent = kilitCumleleri.join(" ");
+            uyari.hidden = false;
+          }
+          ac(form, tanim.baslik(kilitHedef), tanim.metin, tanim.ad, tanim.deger, tanim.evet);
+          return;
+        }
         // data-tek (satır menüsü): işaretli başka tahtalar olsa da onay YALNIZ o tahta içindir ve yalnız `tek` gönderilir.
         // KAPALI HATA: data-tek taşıyan tetik hiçbir koşulda `tur` ile (işaretli bütün tahtalara) gönderilmez;
         // liste kurulamadıysa (pano yok) hiçbir şey yapılmaz.
@@ -327,6 +360,105 @@
     return typeof yol === "string" && yol.charAt(0) === "/" && yol.charAt(1) !== "/";
   }
 
+  /* Canlı yoklama (Tahtalar ve Bugün ortak): /api/durum 4 sn'de bir; sekme gizliyken durur, 401'de girişe gider.
+     geriCagri(v) hata fırlatırsa ya da istek düşerse hataCagri() çağrılır. */
+  function durumYoklayici(geriCagri, hataCagri) {
+    var zamanlayici = null;
+    var yoklaniyor = false;
+    function yokla() {
+      clearTimeout(zamanlayici);
+      zamanlayici = null;
+      if (document.visibilityState === "hidden" || yoklaniyor) return;
+      yoklaniyor = true;
+      fetch("/api/durum", { credentials: "same-origin", cache: "no-store" }).then(function (y) {
+        if (y.status === 401) { location.href = "/giris"; return null; }
+        if (!y.ok) throw new Error(String(y.status));
+        return y.json();
+      }).then(function (v) {
+        if (v) geriCagri(v);
+      }).catch(function () {
+        hataCagri();
+      }).then(function () {
+        yoklaniyor = false;
+        if (document.visibilityState !== "hidden") zamanlayici = setTimeout(yokla, 4000);
+      });
+    }
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "hidden") {
+        clearTimeout(zamanlayici);
+        zamanlayici = null;
+      } else {
+        yokla();
+      }
+    });
+    zamanlayici = setTimeout(yokla, 4000);
+  }
+
+  /* "Canlı · son güncelleme SS:DD:SS" / "Bağlantı kesildi · son veri N sn önce" göstergesi. */
+  function canliGostergesi(canli) {
+    var sonBasari = Date.now();
+    function iki(n) { return (n < 10 ? "0" : "") + n; }
+    return function (basarili) {
+      if (basarili) sonBasari = Date.now();
+      if (!canli) return;
+      canli.textContent = "";
+      if (basarili) {
+        var s = new Date();
+        canli.setAttribute("data-durum", "cevrimici");
+        canli.appendChild(simge("s-acik"));
+        canli.appendChild(document.createTextNode(
+          "Canlı · son güncelleme " + iki(s.getHours()) + ":" + iki(s.getMinutes()) + ":" + iki(s.getSeconds())));
+      } else {
+        canli.setAttribute("data-durum", "sorun");
+        canli.appendChild(simge("s-sorun"));
+        canli.appendChild(document.createTextNode(
+          "Bağlantı kesildi · son veri " + Math.round((Date.now() - sonBasari) / 1000) + " sn önce"));
+      }
+    };
+  }
+
+  /* Program satırı (Bugün › Şu an): şu anki ders, sunucu saati, program kilidi rozeti, boş ders uyarısı sayısı,
+     "Durdur" açılırı. /api/durum.program'ı `kap` içindeki data-alan kancalarına yazar; metinler sunucudakiyle aynıdır. */
+  var KILIT_ROZETI = {
+    acik: ["acik", "s-kilit", function () { return "Program kilidi etkin"; }],
+    durduruldu: ["uyari", "s-onay", function (p) { return "Program kilidi durduruldu · bitiş " + (p.durduruldu_bitis || ""); }],
+    kapali: ["bilgi", "s-kapali", function () { return "Program kilidi kapalı"; }]
+  };
+  function programYazici(kap) {
+    var son = "";
+    function alan(ad) { return kap.querySelector('[data-alan="' + ad + '"]'); }
+    return function (p) {
+      if (!kap || !p) return;
+      var imza = JSON.stringify([p.simdi, p.sunucu_saat, p.kilit, p.durduruldu_bitis, p.uyari_sayisi]);
+      if (imza === son) return;
+      son = imza;
+      var simdi = alan("simdi");
+      if (simdi) simdi.textContent = p.simdi || "";
+      var saat = alan("saat");
+      if (saat) saat.textContent = p.sunucu_saat || "";
+      var kilit = alan("kilit");
+      var k = KILIT_ROZETI[p.kilit] || KILIT_ROZETI.kapali;
+      if (kilit) {
+        kilit.textContent = "";
+        kilit.appendChild(rozet(k[0], k[2](p), k[1]));
+      }
+      var istisnalar = alan("istisnalar");
+      if (istisnalar) istisnalar.hidden = p.kilit !== "durduruldu";
+      var kurallar = alan("kurallar");
+      if (kurallar) kurallar.hidden = p.kilit !== "kapali";
+      var uyari = alan("uyari");
+      if (uyari) {
+        uyari.hidden = !p.uyari_sayisi;
+        uyari.querySelector("span").textContent = p.uyari_sayisi + " boş ders uyarısı";
+      }
+      var uyariNotu = alan("uyari-notu");
+      if (uyariNotu) uyariNotu.hidden = !p.uyari_sayisi;
+      var durdur = alan("durdur");
+      // Açık menü kullanıcı seçim yaparken kapanmasın: yalnız kapalıyken gizlenir.
+      if (durdur && !durdur.open) durdur.hidden = p.kilit !== "acik";
+    };
+  }
+
   function tahtalarKur() {
     var form = $("islem");
     var ilk = $("ilk-veri");
@@ -360,8 +492,7 @@
     var suzgec = etkinHap ? (etkinHap.getAttribute("data-suzgec") || "") : "";
     // Telefonda haplar tek satırda yatay kayar: etkin hap görünür alana getirilir (sayfa kaymaz).
     if (etkinHap && haplar.scrollWidth > haplar.clientWidth) haplar.scrollLeft = Math.max(0, etkinHap.offsetLeft - haplar.offsetLeft - 8);
-    var sonBasari = Date.now();
-    var programSeridi = $("pano-program");
+    var canliYaz = canliGostergesi(canli);
     var fareVar = !!(window.matchMedia && window.matchMedia("(hover: hover)").matches);
 
     /* Duyurucu: yalnız değişimi, en çok 5 sn'de bir, birikenleri tek cümlede söyler. */
@@ -413,6 +544,7 @@
       if (!kap) return;
       kap.textContent = "";
       (liste.rozetler || []).forEach(function (r) {
+        if (r.liste === false) return; // sunucu "liste satırında çizilmez" dedi (düz güncelleme rozeti; hap sayısında kalır)
         var e = rozet(r.d, r.m, r.s);
         if (siteIciYol(r.yol)) { // arıza rozeti arıza listesine bağlanır
           var a = document.createElement("a");
@@ -514,7 +646,18 @@
       var g = alan(tr, "gorulme");
       if (g) g.textContent = t.son_gorulme || "";
       var s = alan(tr, "surum");
-      if (s) s.textContent = t.surum || "—";
+      if (s) {
+        // Güncel olmayan sürüm rozetle değil hücrede söylenir (ekran okuyucuya sözcükle); `guncel` sunucunun alanıdır.
+        var eski = !!t.surum && !t.guncel;
+        s.textContent = t.surum || "—";
+        s.classList.toggle("eski", eski);
+        if (eski) {
+          var ek = document.createElement("span");
+          ek.className = "gizli";
+          ek.textContent = " · güncelleme var";
+          s.appendChild(ek);
+        }
+      }
     }
 
     function ciz(liste, ilkCizim) {
@@ -543,36 +686,6 @@
         sayilariGuncelle();
         suzgecUygula();
       }
-    }
-
-    /* Program şeridi: şu anki ders, program kilidi rozeti, boş ders uyarısı sayısı. */
-    var KILIT_ROZETI = {
-      acik: ["acik", "s-kilit", function () { return "Program kilidi açık"; }],
-      durduruldu: ["uyari", "s-onay", function (p) { return "Program kilidi durduruldu · bitiş " + (p.durduruldu_bitis || ""); }],
-      kapali: ["bilgi", "s-kapali", function () { return "Program kilidi kapalı"; }]
-    };
-    var sonSerit = "";
-    function seritYaz(p) {
-      if (!programSeridi || !p) return;
-      var imza = JSON.stringify([p.simdi, p.kilit, p.durduruldu_bitis, p.uyari_sayisi]);
-      if (imza === sonSerit) return;
-      sonSerit = imza;
-      var simdi = programSeridi.querySelector('[data-alan="simdi"]');
-      if (simdi) simdi.textContent = p.simdi || "";
-      var kilit = programSeridi.querySelector('[data-alan="kilit"]');
-      var k = KILIT_ROZETI[p.kilit] || KILIT_ROZETI.kapali;
-      if (kilit) {
-        kilit.textContent = "";
-        kilit.appendChild(rozet(k[0], k[2](p), k[1]));
-      }
-      var uyari = programSeridi.querySelector('[data-alan="uyari"]');
-      if (uyari) {
-        uyari.hidden = !p.uyari_sayisi;
-        uyari.querySelector("span").textContent = p.uyari_sayisi + " boş ders uyarısı";
-      }
-      var durdur = programSeridi.querySelector('[data-alan="durdur"]');
-      // Açık menü kullanıcı seçim yaparken kapanmasın: yalnız kapalıyken gizlenir.
-      if (durdur && !durdur.open) durdur.hidden = p.kilit !== "acik";
     }
 
     function durumlari(tr) { return (tr.getAttribute("data-durumlar") || "").split(" "); }
@@ -697,9 +810,6 @@
       }
       var adres = listeYolu + (suzgec ? "?durum=" + encodeURIComponent(suzgec) : "");
       if (donusAlani) donusAlani.value = adres;
-      // "Program kilidini durdur" formu da süzgeçli listeye döner.
-      var seritDonus = programSeridi && programSeridi.querySelector('input[name="donus"]');
-      if (seritDonus) seritDonus.value = adres;
       var yenile = yenileBandi && yenileBandi.querySelector("a");
       if (yenile) yenile.setAttribute("href", adres);
       try { history.replaceState(null, "", adres); } catch (e) { /* adres değişmese de süzgeç çalışır */ }
@@ -778,59 +888,6 @@
       }
     }, true);
 
-    /* Canlı gösterge ve yoklama */
-    function iki(n) { return (n < 10 ? "0" : "") + n; }
-    function canliYaz(basarili) {
-      if (!canli) return;
-      canli.textContent = "";
-      if (basarili) {
-        var s = new Date();
-        canli.setAttribute("data-durum", "cevrimici");
-        canli.appendChild(simge("s-acik"));
-        canli.appendChild(document.createTextNode(
-          "Canlı · son güncelleme " + iki(s.getHours()) + ":" + iki(s.getMinutes()) + ":" + iki(s.getSeconds())));
-      } else {
-        canli.setAttribute("data-durum", "sorun");
-        canli.appendChild(simge("s-sorun"));
-        canli.appendChild(document.createTextNode(
-          "Bağlantı kesildi · son veri " + Math.round((Date.now() - sonBasari) / 1000) + " sn önce"));
-      }
-    }
-
-    var zamanlayici = null;
-    var yoklaniyor = false;
-    function yokla() {
-      clearTimeout(zamanlayici);
-      zamanlayici = null;
-      if (document.visibilityState === "hidden" || yoklaniyor) return;
-      yoklaniyor = true;
-      fetch("/api/durum", { credentials: "same-origin", cache: "no-store" }).then(function (y) {
-        if (y.status === 401) { location.href = "/giris"; return null; }
-        if (!y.ok) throw new Error(String(y.status));
-        return y.json();
-      }).then(function (v) {
-        if (!v) return;
-        sonBasari = Date.now();
-        if (v.program) seritYaz(v.program);
-        ciz(v.tahtalar || [], false);
-        if (typeof v.bekleyen === "number" && v.bekleyen !== (panoVeri.bekleyen || 0)) yenileGoster();
-        canliYaz(true);
-      }).catch(function () {
-        canliYaz(false);
-      }).then(function () {
-        yoklaniyor = false;
-        if (document.visibilityState !== "hidden") zamanlayici = setTimeout(yokla, 4000);
-      });
-    }
-    document.addEventListener("visibilitychange", function () {
-      if (document.visibilityState === "hidden") {
-        clearTimeout(zamanlayici);
-        zamanlayici = null;
-      } else {
-        yokla();
-      }
-    });
-
     function veri(tr) { return sonVeri.get(String(tr.getAttribute("data-id"))); }
     pano = {
       form: form,
@@ -872,7 +929,182 @@
     // Sunucunun çizdiği süzgeç (hidden + disabled) geçerlidir; geri/ileri önbelleğinden dönen sayfada kutular
     // tarayıcının hatırladığı durumda olabilir, bu yüzden bir kez de burada uygulanır.
     suzgecUygula();
-    zamanlayici = setTimeout(yokla, 4000);
+    durumYoklayici(function (v) {
+      ciz(v.tahtalar || [], false);
+      if (typeof v.bekleyen === "number" && v.bekleyen !== (panoVeri.bekleyen || 0)) yenileGoster();
+      canliYaz(true);
+    }, function () { canliYaz(false); });
+  }
+
+  /* ---- bugun: Bugün sayfasının canlı sayıları, çipleri ve program satırı (0.18.0) ------------------
+     Kural hesaplanmaz: /api/durum'un tahta başına verdiği `liste` (birincil, durumlar, rozetler), `cevrimici` ve
+     `sinav` alanları yazılır ve sayılır. Bekleyen işlerin METNİ sunucudadır: liste değişince (imza) satırlar yeniden
+     yazılmaz, "Sayfayı yenile" bandı açılır. Yoklama ve duyuru kutuları canlı değildir. */
+  var CIP_SIMGESI = { acik: "s-acik", kilitli: "s-kilit", duyuru: "s-duyuru", sorun: "s-sorun", cevrimdisi: "s-kapali" };
+  var GRUP_OZETI = [["acik", "açık"], ["kilitli", "kilitli"], ["duyuru", "duyuruda"], ["sorun", "ekran sorunu"], ["cevrimdisi", "çevrimdışı"]];
+
+  function bugunKur() {
+    var kart = $("bugun-tahtalar");
+    if (!kart) return;
+    // 0.17.0'da "/" listeydi: /#t-3 biçimindeki eski dönüş adresi listedeki satıra gider (parça sunucuya ulaşmaz).
+    var eskiParca = /^#t-([1-9][0-9]*)$/.exec(location.hash || "");
+    if (eskiParca) { location.replace("/tahtalar#t-" + eskiParca[1]); return; }
+    var veri = {};
+    try { veri = JSON.parse(($("bugun-veri") || {}).textContent || "{}"); } catch (e) { veri = {}; }
+    var bilinen = {};
+    (veri.tahtalar || []).forEach(function (id) { bilinen[String(id)] = true; });
+    var bilinenSayisi = (veri.tahtalar || []).length;
+    var grupOf = veri.gruplar || {};
+    var cipler = new Map();
+    Array.prototype.forEach.call(kart.querySelectorAll("a.cip[data-id]"), function (a) {
+      cipler.set(String(a.getAttribute("data-id")), a);
+    });
+    // Sayı kutuları iki yerde çizilir (kartta ve telefonda "Şu an"ın altında); ikisine de yazılır.
+    var kutular = Array.prototype.slice.call(document.querySelectorAll("#bugun-ozet a[data-sayi], #bugun-ozet-kisa a[data-sayi]"));
+    var form = $("hepsini-kilitle");
+    var yenile = $("bugun-yenile");
+    var canliBolge = $("canli-bolge");
+    var ozet = $("tahta-ozet");
+    var sinavNotu = kart.querySelector('[data-alan="sinavda"]');
+    var canliEl = $("canli");
+    if (canliEl) canliEl.hidden = false; // JS'siz sayfada "Canlı" yazmaz (sayılar tazelenmez)
+    var canliYaz = canliGostergesi(canliEl);
+    var programYaz = programYazici($("bugun-simdi"));
+    var cipImzalari = new Map();
+
+    var genelYenile = false; // bekleyen işler / tahta listesi değişti (acil dışı neden)
+    var genelMetin = "";
+    function yenileGoster(metin) {
+      if (!yenile) return;
+      var yazi = yenile.querySelector('[data-alan="yenile-metni"]');
+      if (yazi && !genelMetin) genelMetin = yazi.textContent;
+      if (!metin) {
+        genelYenile = true;
+        if (!yenile.hidden) return; // acil sözü yazılıysa o kalır; acil bitince genel söze dönülür (acilYaz)
+        if (yazi) yazi.textContent = genelMetin;
+      } else if (yazi && yazi.textContent !== metin) {
+        yazi.textContent = metin; // acil başladı/bitti: genel "bekleyen işler değişti" sözünün yerine geçer
+      } else if (!yenile.hidden) {
+        return;
+      }
+      yenile.hidden = false;
+      if (canliBolge) canliBolge.textContent = yenile.textContent.trim();
+    }
+
+    /* Sayfa açıkken acil yayın başlarsa "Hepsini kilitle…" hemen kapanır (yeniden yüklenen sayfa formu hiç çizmez).
+       Kural değil, sunucunun `acil` bayrağıdır; yayın sayfa yenilenmeden biterse düğme geri açılır. */
+    var acilGorulen = !!veri.acil;
+    function acilYaz(suruyor) {
+      if (suruyor === acilGorulen) return;
+      acilGorulen = suruyor;
+      var dugme = form && form.querySelector("button[data-onay]");
+      var notu = $("kilit-notu");
+      if (dugme) dugme.disabled = suruyor;
+      if (notu) notu.textContent = suruyor ? "Acil yayın sürüyor; toplu kilit kapalı." : "";
+      if (suruyor !== !!veri.acil) {
+        yenileGoster(suruyor ? "Acil yayın başladı." : "Acil yayın bitti.");
+      } else if (yenile && !yenile.hidden) {
+        // Sayfa yüklendiği andaki duruma dönüldü: acil sözü kalkar; başka neden varsa genel söz, yoksa bant kapanır.
+        var yazi = yenile.querySelector('[data-alan="yenile-metni"]');
+        if (genelYenile && yazi) yazi.textContent = genelMetin; else yenile.hidden = true;
+      }
+    }
+
+    function cipYaz(a, t) {
+      var l = t.liste;
+      var ekler = [];
+      if ((l.durumlar || []).indexOf("ariza") >= 0) ekler.push("ariza");
+      if (t.sinav) ekler.push("sinav");
+      var okunur = (l.rozetler || []).filter(function (r) { return r.cip !== false; }).map(function (r) { return r.m; }).join(", ");
+      var imza = l.birincil + "|" + ekler.join(",") + "|" + okunur;
+      if (cipImzalari.get(a) === imza) return;
+      var ilk = !cipImzalari.has(a);
+      cipImzalari.set(a, imza);
+      if (ilk && a.getAttribute("data-durum") === l.birincil && (a.querySelector('[data-alan="okunur"]') || {}).textContent === okunur) return;
+      a.setAttribute("data-durum", l.birincil);
+      var use = a.querySelector("svg.simge use");
+      if (use && CIP_SIMGESI[l.birincil]) use.setAttribute("href", "#" + CIP_SIMGESI[l.birincil]);
+      var ekKap = a.querySelector('[data-alan="ek"]');
+      if (ekKap) {
+        ekKap.textContent = "";
+        ekler.forEach(function (e) {
+          var sp = document.createElement("span");
+          sp.className = "cip-ek";
+          sp.setAttribute("data-durum", e === "ariza" ? "sorun" : "uyari");
+          sp.appendChild(simge(e === "ariza" ? "s-ariza" : "m-sinav")); // durum simgelerinden ayrı şekiller (_bugun.html::cip)
+          ekKap.appendChild(sp);
+        });
+      }
+      var ok = a.querySelector('[data-alan="okunur"]');
+      if (ok) ok.textContent = okunur;
+    }
+
+    function ciz(v) {
+      var liste = v.tahtalar || [];
+      var sayi = {};
+      var grupSayisi = {};
+      var cevrimici = 0;
+      var hedef = 0;
+      var sinavCevrimici = 0;
+      var sinavToplam = 0;
+      var bilinmeyen = liste.length !== bilinenSayisi;
+      liste.forEach(function (t) {
+        var id = String(t.id);
+        if (!bilinen[id]) bilinmeyen = true;
+        if (!t.liste) return;
+        (t.liste.durumlar || []).forEach(function (d) { sayi[d] = (sayi[d] || 0) + 1; });
+        if (t.sinav) sinavToplam++;
+        if (t.cevrimici) {
+          cevrimici++;
+          if (t.sinav) sinavCevrimici++; else hedef++;
+        }
+        var a = cipler.get(id);
+        if (a) cipYaz(a, t);
+        var g = grupOf[id];
+        if (g) {
+          if (!grupSayisi[g]) grupSayisi[g] = {};
+          grupSayisi[g][t.liste.birincil] = (grupSayisi[g][t.liste.birincil] || 0) + 1;
+        }
+      });
+      kutular.forEach(function (a) {
+        var n = sayi[a.getAttribute("data-sayi")] || 0;
+        var b = a.querySelector("b");
+        if (b) b.textContent = String(n);
+        a.classList.toggle("bos", n === 0);
+      });
+      if (ozet) {
+        var hepsi = ozet.querySelector('[data-alan="hepsi"]');
+        if (hepsi) hepsi.textContent = String(liste.length);
+        var c = ozet.querySelector('[data-alan="cevrimici"]');
+        if (c) c.textContent = String(cevrimici);
+      }
+      if (sinavNotu) {
+        sinavNotu.hidden = !sinavToplam;
+        var ss = sinavNotu.querySelector('[data-alan="sinav-sayi"]');
+        if (ss) ss.textContent = String(sinavToplam);
+      }
+      if (form) {
+        form.setAttribute("data-hedef", String(hedef));
+        form.setAttribute("data-sinavda", String(sinavCevrimici));
+        form.setAttribute("data-cevrimdisi", String(liste.length - cevrimici));
+      }
+      Array.prototype.forEach.call(kart.querySelectorAll(".harita-kat[data-grup]"), function (kat) {
+        var hucre = kat.querySelector('[data-alan="grup-ozet"]');
+        if (!hucre) return;
+        var gs = grupSayisi[kat.getAttribute("data-grup")] || {};
+        hucre.textContent = GRUP_OZETI.filter(function (o) { return gs[o[0]]; }).map(function (o) { return gs[o[0]] + " " + o[1]; }).join(" · ");
+      });
+      if (bilinmeyen) yenileGoster();
+    }
+
+    durumYoklayici(function (v) {
+      if (v.program) programYaz(v.program);
+      ciz(v);
+      if (typeof v.bekleyen === "number" && v.bekleyen !== (veri.bekleyen || 0)) yenileGoster();
+      if (v.bekleyen_is && typeof v.bekleyen_is.imza === "string" && v.bekleyen_is.imza !== (veri.imza || "")) yenileGoster();
+      acilYaz(!!v.acil); // acil başladı/bitti: toplu kilit kapanır/açılır, bant "Sayfayı yenile" der
+      canliYaz(true);
+    }, function () { canliYaz(false); });
   }
 
   // Tahta sayfasının eski parça adresleri (/tahta/3#program …) sunucuya gitmez: sekme yoksa ilgili sekmeye taşınır.
@@ -2096,6 +2328,7 @@
   }
 
   tahtalarKur();
+  bugunKur();
   tahtaEskiParcaKur();
   defterKur();
   cizelgeKur();

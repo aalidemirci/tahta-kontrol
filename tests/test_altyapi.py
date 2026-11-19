@@ -803,13 +803,17 @@ def test_kaldirilan_tahtanin_arizasi_kalir(kurulu, tahta):
 
 # ---- menü ve uyum ----------------------------------------------------------------------
 def test_menu_altyapi_ogeleri(kurulu):
-    sayfa = kurulu.get("/").text
+    # 0.18.0: "/" Bugün'dür. Yedekler yan menüde (her sayfa); Envanter ve Arızalar Tahtalar bölümünün sekme şeridinde.
+    assert 'href="/yedekler"' in kurulu.get("/").text
+    sayfa = kurulu.get("/tahtalar").text
     for yol in ('href="/envanter"', 'href="/arizalar"', 'href="/yedekler"'):
         assert yol in sayfa
     kullanici_ekle(kurulu, "idareci")
     gir(kurulu, "idareci")
-    sayfa = kurulu.get("/").text
+    sayfa = kurulu.get("/tahtalar").text
     assert 'href="/yedekler"' not in sayfa and 'href="/arizalar"' in sayfa
+    sayfa = kurulu.get("/").text
+    assert 'href="/yedekler"' not in sayfa
     assert "Yedek alınmıyor; yöneticiye bildirin." in sayfa
 
 

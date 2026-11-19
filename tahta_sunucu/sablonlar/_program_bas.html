@@ -15,7 +15,7 @@
     <span class="not">Sunucu saati {{ serit.sunucu_saat }}</span>
   </p>
   <div class="serit-rozetler">
-    {% if serit.kilit == 'acik' %}<span class="rozet" data-durum="acik"><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>Program kilidi açık</span>
+    {% if serit.kilit == 'acik' %}<span class="rozet" data-durum="acik"><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>Program kilidi etkin</span>
     {% elif serit.kilit == 'durduruldu' %}<span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Program kilidi durduruldu · bitiş {{ serit.durduruldu_bitis }}</span>
     {% else %}<span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-kapali"/></svg>Program kilidi kapalı</span>{% endif %}
     {% if serit.uyari_sayisi %}<a class="rozet" data-durum="sorun" href="/program/uyarilar"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ serit.uyari_sayisi }} boş ders uyarısı</a>{% endif %}

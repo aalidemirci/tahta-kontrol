@@ -216,7 +216,7 @@ def test_otomatik_kapatma_hafta_ici_saatinde_bir_kez_verilir(ortam):
     yanit = panel.post("/ayarlar", data={"okul_adi": "x", "ok_etkin": "1", "ok_saatler": "25:00"})
     assert "bi%C3%A7iminde" in yanit.headers["location"]
     panel.post("/ayarlar", data={"okul_adi": "x", "ok_etkin": "1", "ok_saatler": "19.15, 13:30"})
-    assert "hafta içi 13:30, 19:15" in panel.get("/").text
+    assert "hafta içi 13:30, 19:15" in panel.get("/tahtalar").text  # 0.18.0: özet listenin başlığındadır
 
     assert zamanlayici(pazartesi(19, 10)) == 0  # saat gelmedi
     assert zamanlayici(pazartesi(19, 16)) == 1

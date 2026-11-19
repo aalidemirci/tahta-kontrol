@@ -2,9 +2,12 @@
 {% from "_tahta_komut.html" import rozetler, birincil_dugme, komut_menusu %}
 {% block baslik %}Tahtalar · Tahta Kontrol{% endblock %}
 {# 0.17.0 (arayüz 3. aşama) — tahta listesi: konuma göre gruplu satırlar, satırda duruma göre TEK birincil düğme +
-   "⋯" menüsü, seçim çubuğu, ?durum= süzgeci (JS'siz çalışır). "/" ve "/tahtalar" bu şablonu çizer.
+   "⋯" menüsü, seçim çubuğu, ?durum= süzgeci (JS'siz çalışır). 0.18.0: yalnız "/tahtalar" bu şablonu çizer ("/" Bugün'dür);
+   program şeridi, yedek/adres/yeni sürüm/kaçırılan duyuru bantları Bugün'e taşındı. Burada KALAN bantlar: onay bekleyen
+   tahtalar (Bugün'deki satırın hedefi; adlar yalnız burada), kilit kodu yok (komutun verildiği yerde durur), yenile bandı.
    Bağlam: gruplar [{ad, baslik, tahtalar}], onayli (ilk-veri; /api/durum ile aynı biçim), sayilar, suzgecler, suzgec,
-   bekleyen (yalnız yöneticide dolu), bekleyen_sayisi, liste_yolu, donus + _pano_bantlar.html bağlamı.
+   bekleyen (yalnız yöneticide dolu), bekleyen_sayisi, liste_yolu, donus, kilit_kodu_var, kapatma, program_kilidi.
+   V1 (0.18.0): düz "Güncelleme var" rozeti (`liste: false`) satırda çizilmez; hap sayısında ve Sürüm sütununda kalır.
    Durum kuralı sunucudadır (t.liste); panel.js yalnız /api/durum'daki aynı sözlüğü satıra yazar.
    Komut güvenliği: satır düğmeleri `tek=<tur>:<id>` gönderir (sunucu yalnız o tahtayı işler); süzgeç dışı satırın
    kutusu disabled'dır (forma girmez); onay isteyen düğmeler type="button"dır (JS yoksa hiçbir şey göndermez).
@@ -28,7 +31,11 @@
 </div>
 
 {% include "_tahtalar_bas.html" %}
-{% include "_pano_bantlar.html" %}
+
+{% if not kilit_kodu_var %}
+<div class="bant" role="status">Kilit kodu tanımlı değil: kilitlenen tahta yalnız panelden açılır.
+  {% if yonetici %}<a href="/ayarlar/kilit">Ayarlar › Kilit ve güvenlik</a> bölümünden kod belirleyebilirsiniz.{% endif %}</div>
+{% endif %}
 
 {% if bekleyen_sayisi %}
 {% if yonetici %}
@@ -84,7 +91,7 @@
     </thead>
     {% for g in gruplar %}
     {% set grup_no = loop.index %}
-    <tbody data-grup="{{ grup_no }}">
+    <tbody data-grup="{{ grup_no }}" id="grup-{{ grup_no }}">
       {% if g.baslik %}
       <tr class="grup"{% if not g.gorunen %} hidden{% endif %}><th colspan="7" scope="colgroup"><div class="grup-ic"><span class="grup-ad">{{ g.ad }}</span> <span class="not" data-alan="grup-sayi" data-toplam="{{ g.tahtalar | length }}">({% if suzgec and g.gorunen != g.tahtalar | length %}{{ g.gorunen }} / {% endif %}{{ g.tahtalar | length }} tahta)</span>
         <label class="grup-sec" hidden><input type="checkbox" data-grup-sec="{{ grup_no }}"> <span>grubu seç</span><span class="gizli">: {{ g.ad }}</span></label></div></th></tr>
@@ -95,11 +102,11 @@
         <td class="c-sec"><label class="sec-kap"><input type="checkbox" name="tahta" value="{{ t.id }}"{% if gizli %} disabled{% endif %}><span class="gizli">{{ t.ad }} seç</span></label></td>
         <th scope="row" class="c-ad"><a href="/tahta/{{ t.id }}">{{ t.ad }}</a>
           <span class="alt-satir">{{ t.alt_satir }}</span></th>
-        <td class="c-durum" data-etiket="Durum"><div class="rozetler" data-alan="rozetler">{{ rozetler(t.liste.rozetler) }}</div>
+        <td class="c-durum" data-etiket="Durum"><div class="rozetler" data-alan="rozetler">{{ rozetler(t.liste.rozetler | rejectattr('liste', 'false') | list) }}</div>
           {% if mesaj and not mesaj_hata and ileti_satiri == t.id %}<p class="satir-ileti" role="status" tabindex="-1" data-odakla><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>{{ mesaj }}</p>{% endif %}</td>
         <td class="c-oturum" data-etiket="Oturum" data-alan="oturum">{{ t.liste.oturum or '—' }}</td>
         <td class="c-gorulme" data-etiket="Son görülme" data-alan="gorulme">{{ t.son_gorulme }}</td>
-        <td class="c-surum" data-etiket="Sürüm" data-alan="surum">{{ t.surum or '—' }}</td>
+        <td class="c-surum{% if t.surum and not t.guncel %} eski{% endif %}" data-etiket="Sürüm" data-alan="surum">{{ t.surum or '—' }}{% if t.surum and not t.guncel %}<span class="gizli"> · güncelleme var</span>{% endif %}</td>
         <td class="c-eylem"><div class="satir-eylem"><span class="birincil" data-alan="dugme">{{ birincil_dugme(t, 'tek') }}</span>{{ komut_menusu(t, t.menu, 'tek') }}</div></td>
       </tr>
       {% endfor %}
@@ -135,6 +142,6 @@
 
 <p id="canli-bolge" class="gizli" aria-live="polite"></p>
 <script id="ilk-veri" type="application/json">{{ onayli | tojson }}</script>
-<script id="pano-veri" type="application/json">{{ {"bekleyen": bekleyen_sayisi, "acil": aktif_acil is not none, "program_kilidi": program.kilit != 'kapali'} | tojson }}</script>
+<script id="pano-veri" type="application/json">{{ {"bekleyen": bekleyen_sayisi, "acil": aktif_acil is not none, "program_kilidi": program_kilidi} | tojson }}</script>
 {% endif %}
 {% endblock %}

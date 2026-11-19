@@ -176,8 +176,9 @@ def test_islem_donus_adresi_suzgeci_ve_satir_capasini_korur(panel, okul):
     yanit = panel.post("/islem", data={"tek": "kilitle:2", "donus": "/tahtalar?durum=kilitli"})
     adres = yanit.headers["location"]
     assert adres.startswith("/tahtalar?durum=kilitli&s=2&m=Kilitle") and adres.endswith("#t-2") and "t=hata" not in adres
-    assert panel.post("/islem", data={"tek": "kilitle:2", "donus": "/"}).headers["location"].startswith("/?s=2&m=")
-    assert panel.post("/islem", data={"tek": "kilitle:2", "donus": "/"}).headers["location"].endswith("#t-2")
+    # 0.18.0: "/" Bugün'dür; oraya dönen tek komuta satır çapası ve s= EKLENMEZ (ileti Bugün'ün başında çıkar).
+    kok = panel.post("/islem", data={"tek": "kilitle:2", "donus": "/"}).headers["location"]
+    assert kok.startswith("/?m=Kilitle") and "#" not in kok and "s=2" not in kok
     # Liste dışı dönüşe ve zaten parça taşıyan adrese çapa eklenmez; liste dalında da eklenmez.
     assert "#" not in panel.post("/islem", data={"tek": "kilitle:2", "donus": "/tahta/2?sekme=bakim"}).headers["location"]
     assert panel.post("/islem", data={"tek": "kilitle:2", "donus": "/tahtalar#ust"}).headers["location"].endswith("#ust")
@@ -322,7 +323,9 @@ def test_acil_surerken_birincil_dugme_yok_menu_durur(panel, okul, saat):
 
 def test_data_onay_tasiyan_dugme_submit_degildir(panel, tahta, okul):
     bekleyen = bekleyen_ekle(panel, tahta)
-    yollar = [*SERIT_SAYFALARI, "/", "/tahtalar?durum=kilitli", *(f"/tahta/1{s}" for s in ("", "?sekme=program", "?sekme=bakim", "?sekme=bilgiler")),
+    # "/" (Bugün): "Hepsini kilitle…" da kapsanır.
+    yollar = [*SERIT_SAYFALARI, "/", "/tahtalar?durum=kilitli",
+              *(f"/tahta/1{s}" for s in ("", "?sekme=program", "?sekme=bakim", "?sekme=bilgiler")),
               f"/tahta/{bekleyen}", f"/tahta/{bekleyen}?sekme=bakim", f"/tahta/{bekleyen}?sekme=bilgiler"]  # fmt: skip
     for rol in ("yonetici", "idareci1"):
         gir(panel, rol)
@@ -417,16 +420,18 @@ def test_bos_durumlar_role_gore(panel, tahta):
     assert "hidden" not in bos and "Bu durumda tahta yok." in bos and 'href="/tahtalar"' in bos
 
 
-def test_kok_ve_tahtalar_ayni_gorunum(panel, okul):
+def test_kok_bugun_tahtalar_liste(panel, okul):
+    """0.18.0: "/" Bugün'dür (liste, seçim formu yok); "/tahtalar" listedir. Eski süzgeçli "/" adresi listeye yönlenir."""
     kok, liste = panel.get("/"), panel.get("/tahtalar")
     assert kok.status_code == liste.status_code == 200
-    for sayfa in (kok.text, liste.text):
-        assert sayfa.count('<tr class="tahta-satir"') == 3 and 'id="islem"' in sayfa and "<title>Tahtalar · Tahta Kontrol</title>" in sayfa
-    assert 'name="donus" value="/"' in kok.text and 'name="donus" value="/tahtalar"' in liste.text
-    assert 'href="/?durum=kilitli"' in kok.text and 'href="/tahtalar?durum=kilitli"' in liste.text
-    assert 'name="donus" value="/?durum=kilitli"' in panel.get("/?durum=kilitli").text
-    ayni = lambda s: re.sub(r'(href|value|data-liste-yolu)="/(tahtalar)?(\?durum=[a-z]+)?"', "", s)  # noqa: E731
-    assert ayni(kok.text) == ayni(liste.text)
+    assert "<title>Bugün · Tahta Kontrol</title>" in kok.text and "<h1>Bugün</h1>" in kok.text
+    assert 'id="islem"' not in kok.text and '<tr class="tahta-satir"' not in kok.text and 'name="tahta"' not in kok.text
+    assert liste.text.count('<tr class="tahta-satir"') == 3 and 'id="islem"' in liste.text
+    assert "<title>Tahtalar · Tahta Kontrol</title>" in liste.text and 'name="donus" value="/tahtalar"' in liste.text
+    assert 'href="/tahtalar?durum=kilitli"' in liste.text and 'data-liste-yolu="/tahtalar"' in liste.text
+    assert 'href="/?durum=' not in liste.text and 'href="/?durum=' not in kok.text
+    yanit = panel.get("/?durum=kilitli")
+    assert yanit.status_code == 303 and yanit.headers["location"] == "/tahtalar?durum=kilitli"
     # Oturumsuz: giriş sayfasına.
     panel.cookies.clear()
     assert panel.get("/tahtalar").headers["location"] == "/giris" and panel.get("/").headers["location"] == "/giris"
@@ -442,7 +447,10 @@ ESKI_ANAHTARLAR = {
 
 def test_api_durum_sozlesmesi_eski_anahtarlar_ve_liste(panel, okul):
     veri = panel.get("/api/durum").json()
-    assert set(veri) == {"tahtalar", "bekleyen", "acil", "program"} and len(veri["tahtalar"]) == 3
+    # 0.18.0: sözleşme yalnız eklemeli değişti (`bekleyen_is`); eski dört anahtar aynı adla ve türle duruyor.
+    assert set(veri) == {"tahtalar", "bekleyen", "acil", "program", "bekleyen_is"} and len(veri["tahtalar"]) == 3
+    assert isinstance(veri["bekleyen"], int) and veri["acil"] is None and isinstance(veri["program"], dict)
+    assert set(veri["bekleyen_is"]) == {"sayi", "imza"}
     t = veri["tahtalar"][0]
     assert set(t) == ESKI_ANAHTARLAR | {"liste"}  # tek ek: liste
     assert set(t["liste"]) == {"birincil", "durumlar", "rozetler", "dugme", "pasif", "ipucu", "oturum"}
@@ -454,7 +462,8 @@ def test_api_durum_sozlesmesi_eski_anahtarlar_ve_liste(panel, okul):
         assert f'data-birincil="{t["liste"]["birincil"]}"' in oz and f'data-durumlar="{" ".join(t["liste"]["durumlar"])}"' in oz
         assert f'name="tek" value="{t["liste"]["dugme"]["tur"]}:{t["id"]}"' in satir(sayfa, t["id"])
         for r in t["liste"]["rozetler"]:
-            assert html.escape(r["m"]) in satir(sayfa, t["id"])
+            # V1: `liste: False` taşıyan (düz "Güncelleme var") rozet API'de durur, satırda çizilmez.
+            assert (html.escape(r["m"]) in satir(sayfa, t["id"])) == (r.get("liste") is not False), r
     assert veri["tahtalar"][0]["liste"] == tahta_liste.durum_ozeti({a: d for a, d in veri["tahtalar"][0].items() if a != "liste"})
     # ilk-veri /api/durum ile aynı biçimdedir (menü yükü taşımaz).
     ilk = sayfa.split('id="ilk-veri" type="application/json">')[1].split("</script>")[0]
@@ -500,7 +509,7 @@ def test_tahtalar_seridi_sayfalar_ve_etkin_sekme(panel, okul):
     panel.post("/arizalar", data={"tahta_id": "1", "kategori": "acilis", "aciklama": ""})
     ariza = sorgu("SELECT id FROM ariza")[0]["id"]
     beklenen = {
-        "/": "/tahtalar", "/tahtalar": "/tahtalar", "/arizalar": "/arizalar", f"/ariza/{ariza}": "/arizalar", "/envanter": "/envanter",
+        "/tahtalar": "/tahtalar", "/arizalar": "/arizalar", f"/ariza/{ariza}": "/arizalar", "/envanter": "/envanter",
         "/gruplar": "/gruplar", "/tahtalar/ice-aktar": "/tahtalar/ice-aktar", "/ekle": "/ekle",
     }  # fmt: skip
     for yol, etkin in beklenen.items():
@@ -568,12 +577,19 @@ def test_secim_cubugu_ve_liste_stili():
 
 def test_panel_js_durum_kurali_sunucuda():
     for olu in ("durumHesapla", "kilitMetni", "programRozetleri", "altyapiRozetleri", "programAjaniEski", "sinavRozeti", "panoKur",
-                "PROGRAM_KILIT_ADI", "article.tahta", "form.id"):  # fmt: skip
+                "PROGRAM_KILIT_ADI", "article.tahta", "form.id", "seritDonus", "seritYaz", "pano-program"):  # fmt: skip
         assert olu not in BETIK, olu
     for metin in ("Teneffüs kilidi", "Ekran yardımcısı yok", "Güncelleme var", "Boş ders:", "kilitli değil", "bağlanınca çalışır"):
         assert metin not in BETIK, metin  # rozet ve gerekçe metinleri yalnız sunucuda (tahta_liste.py)
     tahtalar = BETIK.split("function tahtalarKur")[1].split("function tahtaEskiParcaKur")[0]
-    assert "t.liste" in tahtalar and 'fetch("/api/durum"' in tahtalar and ".innerHTML" not in BETIK
+    # 0.18.0: yoklama döngüsü Tahtalar ve Bugün için ortaktır (durumYoklayici); istek tek yerde atılır.
+    assert "t.liste" in tahtalar and "durumYoklayici(" in tahtalar and BETIK.count('fetch("/api/durum"') == 2  # öbürü acil sayfasının teslim sayacı
+    assert ".innerHTML" not in BETIK
+    bugun = BETIK.split("function bugunKur")[1].split("// Tahta sayfasının eski parça adresleri")[0]
+    assert "t.liste" in bugun and "durumYoklayici(" in bugun and "programYazici(" in bugun
+    for yasak in ("innerWidth", "max-width", "matchMedia", "ekran_bagli", "duyuru_var", "t.kilitli"):
+        assert yasak not in bugun, yasak  # durum kuralı ve genişlik eşiği Bugün'de de JS'e kopyalanmaz
+    assert "if (r.liste === false) return;" in tahtalar  # V1: sunucunun bayrağı uygulanır, kural hesaplanmaz
     # data-tek dalı: satır menüsündeki onay yalnız o tahtayı gönderir; seçili satırlar dalına girilmez.
     onay = BETIK.split("function onayKur")[1].split("/* ---- tahtalar:")[0]
     tek = onay.split('tetik.getAttribute("data-tek")')[1]
@@ -602,7 +618,8 @@ def test_liste_formunun_ilk_gonder_dugmesi_devre_disi_nobetcidir(panel, okul):
     ilk satırın `tek=` düğmesi olursa seçilmemiş tahtaya komut gider. İlk düğme zararsız nöbetçidir (`nobetci=1`);
     devre dışı OLMAZ (Chromium seçim kutusundaki Enter'da devre dışı düğmeyi atlar, sıradaki etkin düğmeyi tıklar)."""
     cevrimdisi_yap(3)  # ilk gönder düğmesi satır menüsünde de olabilir
-    for yol in ("/", "/tahtalar", "/tahtalar?durum=acik", "/tahtalar?durum=cevrimdisi", "/tahtalar?durum=kilitli"):
+    assert 'id="islem"' not in panel.get("/").text  # 0.18.0: "/" Bugün'dür; liste formu yalnız /tahtalar'da
+    for yol in ("/tahtalar", "/tahtalar?durum=acik", "/tahtalar?durum=cevrimdisi", "/tahtalar?durum=kilitli"):
         form = islem_formu(panel.get(yol).text)
         dugmeler = re.findall(r"<button\b[^>]*>", form)
         gonderenler = [d for d in dugmeler if 'type="button"' not in d]  # type yoksa da gönder düğmesidir
@@ -687,20 +704,30 @@ def test_onay_ve_menu_betigi_kapali_hata_verir():
     assert ".haplar { flex-wrap: nowrap;" in dar and "overflow-x: auto" in dar.split(".haplar {")[1].split("}")[0]
 
 
-def test_program_kilidini_durdur_suzgecli_listeye_doner(panel, tahta):
+def test_program_kilidini_durdur_bugune_doner(panel, tahta):
+    """0.18.0: "Program kilidini durdur" Bugün › Şu an kartındadır ve Bugün'e döner; listede form yoktur."""
     from test_program_panel import durum, hazirla
 
     hazirla(panel)
     tahta_ekle(panel, tahta, "T-1", durum())
-    serit = panel.get("/tahtalar?durum=acik").text.split('id="pano-program"')[1].split("</section>")[0]
-    assert 'action="/program/istisna"' in serit and 'name="donus" value="/tahtalar?durum=acik"' in serit
-    assert 'name="donus" value="/tahtalar"' in panel.get("/tahtalar?durum=bilinmeyen").text.split('id="pano-program"')[1].split("</section>")[0]
-    assert "seritDonus.value = adres" in BETIK
+    kart = panel.get("/").text.split('id="bugun-simdi"')[1].split("</section>")[0]
+    assert 'action="/program/istisna"' in kart and 'name="donus" value="/"' in kart
+    for yol in ("/tahtalar", "/tahtalar?durum=acik"):
+        liste = panel.get(yol).text
+        assert 'action="/program/istisna"' not in liste and 'id="pano-program"' not in liste, yol
+    assert "seritDonus" not in BETIK
+    yanit = panel.post("/program/istisna", data={"donus": "/", "sure": "1sa"})
+    assert yanit.headers["location"].startswith("/?m=Program%20kilidi%20durduruldu")
+    sayfa = panel.get(yanit.headers["location"]).text
+    assert "Program kilidi durduruldu (tüm tahtalar)" in sayfa.split('id="bugun-bas"')[0]  # ileti sayfa başında
+    kart = sayfa.split('id="bugun-simdi"')[1].split("</section>")[0]
+    assert "Program kilidi durduruldu · bitiş" in kart and re.search(r'data-alan="durdur"\s*hidden', kart)
+    assert re.search(r'data-alan="istisnalar" href="/program\?bolum=istisnalar">', kart)
 
 
 def test_pano_sozu_kullaniciya_gorunen_metinde_kalmadi(panel, okul):
     yanit = panel.post("/islem", data={"tek": "uyandir:1", "donus": "/tahta/1"})
     assert "Tahtalar sayfasından izleyin" in ileti(yanit)
-    for yol in ("/ekle", "/envanter", "/acil", "/ayarlar/guncelleme", "/program?bolum=derslik", "/ayarlar"):
+    for yol in ("/", "/tahtalar", "/ekle", "/envanter", "/acil", "/ayarlar/guncelleme", "/program?bolum=derslik", "/ayarlar"):
         metin = re.sub(r"<script.*?</script>|<[^>]+>", " ", panel.get(yol).text, flags=re.S).lower()
         assert not re.search(r"\bpano(da|dan|ya|su|nun)?\b", metin), yol

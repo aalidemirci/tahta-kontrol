@@ -1226,14 +1226,15 @@ def test_bolum_sayfasi_iskeleti(okul):
 def test_baska_sayfalardaki_ayar_baglantilari(okul, tahta):
     basliklar = tahta_ekle(okul, tahta, "T-1", durum={"kilitli": False, "yetenekler": ["dugme", "temizlik"]})
     kimlik = basliklar["X-Tahta-Id"]
-    assert 'href="/ayarlar/kilit"' in okul.get("/").text  # "Kilit kodu tanımlı değil" bandı
+    for yol in ("/", "/tahtalar"):  # "Kilit kodu tanımlı değil": Bugün'de bekleyen iş satırı, listede bant
+        assert 'href="/ayarlar/kilit"' in okul.get(yol).text, yol
     sayfa = okul.get(f"/tahta/{kimlik}?sekme=bakim").text  # 0.17.0: yetenek satırları Bakım sekmesinde
     assert 'href="/ayarlar/yuzer"' in sayfa
     assert 'href="/ayarlar/yoklama"' in okul.get("/yoklama").text
     assert 'href="/ayarlar/usb"' in okul.get("/usb-anahtarlar").text
     assert 'href="/acil?sekme=sablonlar"' in okul.get("/acil").text
     gonder(okul, bolum="kapatma", ok_etkin="1", ok_saatler="18:30", ok_hafta_sonu_dk="60")
-    assert 'href="/ayarlar/gunsonu"' in okul.get("/").text
+    assert 'href="/ayarlar/gunsonu"' in okul.get("/tahtalar").text  # otomatik kapatma özeti listenin başlığında
 
 
 # ---- inceleme düzeltmeleri (0.16.0) ------------------------------------------------------------------------

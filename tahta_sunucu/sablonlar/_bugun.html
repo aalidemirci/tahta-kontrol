@@ -1,0 +1,23 @@
+{# 0.18.0 — Bugün sayfasının makroları.
+   is_satiri(s): bugun.bekleyenler satırı. Role göre süzme SUNUCUDADIR; burada rol koşulu yazılmaz. Satır yalnız
+   bağlantıdır (komut düğmesi yoktur). Yeni sürüm satırı kural 32 ile: bağlantı sunucunun sabit kalıptan kurduğu adrestir.
+   cip(t): bugun.tahta_ozeti çipi. Durum renk + şekil + (gizli) sözcükle gider; panel.js aynı kancalara
+   /api/durum'un `liste` sözlüğünü yazar (kural sunucudadır). Ek işaretler durum simgelerinden AYRI şekillerdir
+   (arıza: anahtar `s-ariza`, sınav: kâğıt `m-sinav`); "ekran sorunu" üçgeniyle karışmasın. Açıklaması kartın lejantındadır.
+   durum_kutulari(kutular): altı sayı kutusu; kartta ve (telefon için) "Şu an"ın altında aynı makroyla çizilir. #}
+
+{% macro is_satiri(s) -%}
+<li data-is="{{ s.anahtar }}" data-durum="{{ 'sorun' if s.onem == 'tehlike' else s.onem }}"{% if s.surum %} data-yeni-surum="{{ s.surum }}"{% endif %}>
+  <span class="is-simge"><svg class="simge" aria-hidden="true"><use href="#{{ s.simge }}"/></svg></span>
+  <span class="is-metin"><strong>{{ s.baslik }}</strong>{% if s.alt %}<span>{{ s.alt }}</span>{% endif %}</span>
+  {% if s.yol %}<span class="is-eylem"><a class="dugme" href="{{ s.yol }}"{% if s.dis %} rel="noopener noreferrer"{% endif %}>{{ s.eylem }}</a>{% if s.ek_yol %}<a class="is-ek" href="{{ s.ek_yol }}">{{ s.ek_eylem }}</a>{% endif %}</span>{% endif %}
+</li>
+{%- endmacro %}
+
+{% macro cip(t) -%}
+<a class="cip" href="/tahta/{{ t.id }}" data-id="{{ t.id }}" data-durum="{{ t.birincil }}"><svg class="simge" aria-hidden="true"><use href="#{{ t.simge }}"/></svg><span class="cip-ad">{{ t.ad }}</span><span class="cip-ekler" data-alan="ek">{% for e in t.ek %}<span class="cip-ek" data-durum="{{ 'sorun' if e == 'ariza' else 'uyari' }}"><svg class="simge" aria-hidden="true"><use href="#{{ 's-ariza' if e == 'ariza' else 'm-sinav' }}"/></svg></span>{% endfor %}</span><span class="gizli">: <span data-alan="okunur">{{ t.okunur }}</span></span></a>
+{%- endmacro %}
+
+{% macro durum_kutulari(kutular) -%}
+{% for k in kutular %}<a href="/tahtalar?durum={{ k.anahtar }}" data-sayi="{{ k.anahtar }}" data-durum="{{ k.anahtar }}"{% if not k.sayi %} class="bos"{% endif %}><svg class="simge" aria-hidden="true"><use href="#{{ k.simge }}"/></svg><b>{{ k.sayi }}</b><span>{{ k.ad }}</span></a>{% endfor %}
+{%- endmacro %}
