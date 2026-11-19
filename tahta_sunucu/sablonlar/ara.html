@@ -1,0 +1,66 @@
+{% extends "taban.html" %}
+{# Genel arama (0.20.0). Dizin, eşleştirme ve rol süzmesi arama.py'dedir; burada yalnız çizim.
+   SORGU SAYFA BAŞLIĞINA YAZILMAZ (tarayıcı geçmişinin başlık sütununa düşmesin). Sonuçsuz notu sabittir: sorguya
+   göre değişmez (kişi adı aranınca "var ama gösteremem" ipucu verilmez). "Sık işler" bütün kısa yolların dökümü değildir
+   (arama.sik_isler: en çok 8, günlük iş sırasıyla). Vurgulama yok; bütün metin kaçışlıdır.
+   Bağlam: ara {sorgu, etkin, sonuclar, toplam, fazla}, ara_gruplari [{anahtar, sonuclar}], sik_isler, yonetici. #}
+{% block baslik %}Arama · Tahta Kontrol{% endblock %}
+{% set grup_adi = {"sayfa": "Sayfalar ve işler", "ayar": "Ayarlar", "sube": "Şubeler", "tahta": "Tahtalar", "grup": "Gruplar"} %}
+{# Sayfa ve iş satırında baş simgesi yoktur (satır sonundaki okla aynı ok iki kez çizilmesin). #}
+{% set grup_simgesi = {"sayfa": "", "ayar": "m-ayar", "sube": "m-yoklama", "tahta": "m-tahta", "grup": "m-tahta"} %}
+{% set kapsam = "Sayfa, iş, ayar, tahta ve şube adı aranır." if yonetici else "Sayfa, iş, tahta ve şube adı aranır." %}
+{% macro satir(s, simge) -%}
+<li><a href="{{ s.yol }}">{% if simge %}<svg class="simge" aria-hidden="true"><use href="#{{ simge }}"/></svg>{% endif %}<span class="ad"><b>{{ s.ad }}</b>{% if s.yer or s.alt %}<small>{{ s.yer }}{% if s.yer and s.alt %} · {% endif %}{{ s.alt }}</small>{% endif %}</span><svg class="simge ok" aria-hidden="true"><use href="#s-ok"/></svg></a></li>
+{%- endmacro %}
+{% block icerik %}
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>Arama</h1>
+    <p>{{ kapsam }} Öğrenci ve öğretmen adı aranmaz. Sonuçlar rolünüze göre süzülür.</p>
+  </div>
+</div>
+
+{# İki arama alanı (yan menü + bu sayfa) ekran okuyucuda ayrı adla duyulur. Öneri listesini panel.js ekler
+   (data-ara-oneri; yan menüdeki kutuyla AYNI kod). #}
+<form class="ayar-ara" method="get" action="/ara" role="search" aria-label="Arama sayfası">
+  <svg class="simge" aria-hidden="true"><use href="#s-ara"/></svg>
+  <label class="gizli" for="ara-q">Aranacak sözcük</label>
+  <input type="search" id="ara-q" name="q" value="{{ ara.sorgu }}" maxlength="{{ ara_en_uzun }}" placeholder="Tahta, şube, sayfa ara" autocomplete="off" enterkeyhint="search" data-ara-oneri{% if not ara.sorgu %} autofocus{% endif %}>
+  <button>Ara</button>
+</form>
+
+{% if ara.etkin %}
+<p class="ayar-ara-sonuc" id="ara-sonuc" role="status">“{{ ara.sorgu }}” için {{ ara.toplam }} sonuç</p>
+{% if ara.fazla %}<p class="not ara-fazla">İlk {{ ara.sonuclar | length }} sonuç gösteriliyor. Daha az sonuç için bir sözcük daha yazın.</p>{% endif %}
+{% for grup in ara_gruplari %}
+<section class="kutu ayar-kume ara-grup" data-grup="{{ grup.anahtar }}" aria-labelledby="ara-grup-{{ grup.anahtar }}">
+  <h2 id="ara-grup-{{ grup.anahtar }}">{{ grup_adi[grup.anahtar] }} <span class="not">· {{ grup.sonuclar | length }}</span></h2>
+  <ul class="ayar-liste">
+    {% for s in grup.sonuclar %}{{ satir(s, grup_simgesi[grup.anahtar]) }}
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+{% if not ara.toplam %}
+{# Not SABİTTİR (sorguya göre değişmez); yalnız role göre bir satır eklenir, o satır sayfa adı ve adres taşımaz. #}
+<div class="bos-not ara-bos" id="ara-bos">
+  <p><strong>Sonuç bulunamadı.</strong> {{ kapsam }}</p>
+  <ul>
+    <li>Yazımı denetleyin ya da sözcüğün yalnız başını yazın (ör. “yokl”, “duy”).</li>
+    <li>Öğrenci ve öğretmen adları aranmaz; bir öğrencinin yoklaması için Yoklama › <a href="/yoklama/sube">Şube defteri</a>'nden şubesini açın.</li>
+    {% if not yonetici %}<li>Yalnız yöneticinin açabildiği sayfalar sonuçlarda görünmez.</li>{% endif %}
+    <li>Sık yapılan işler için <a href="/ara">aramayı temizleyin</a>.</li>
+  </ul>
+</div>
+{% endif %}
+{% else %}
+{% if ara.sorgu %}<p class="ayar-ara-sonuc" role="status">Aranacak bir sözcük yazın.</p>{% endif %}
+<section class="kutu ayar-kume ara-grup" aria-labelledby="ara-sik">
+  <h2 id="ara-sik">Sık işler</h2>
+  <ul class="ayar-liste">
+    {% for s in sik_isler %}{{ satir(s, "") }}
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

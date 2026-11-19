@@ -29,6 +29,7 @@ from . import (
     acil,
     acilis_kilidi,
     adresler,
+    arama,
     ayar,
     ayar_bolumleri,
     bolum_serit,
@@ -114,6 +115,12 @@ def _secili(oge: dict, yol: str) -> bool:
         if yol == es or (es.endswith("/") and es != "/" and yol.startswith(es)) or (es != "/" and yol.startswith(es + "/")):
             return True
     return False
+
+
+# Genel aramanın dizini (0.20.0): sayfa, sekme, iş, süzgeç ve ayar girdileri yukarıdaki MENU'den, bolum_serit ve
+# ayar_bolumleri tanımlarından TÜRER; süreç başında bir kez kurulur (sahipsiz hedef varsa içe aktarmada patlar).
+ARAMA = arama.kur(MENU, MENU_ACIL, _secili)
+ARAMA_SABIT = ARAMA["sabit"]
 
 
 def menu_gorunumu(k, yol: str, sayilar: dict | None = None) -> dict:
@@ -209,6 +216,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
     sablonlar.env.filters["kat_adi"] = hedef.kat_adi
     sablonlar.env.globals.update(
         surum=__version__,
+        ara_en_uzun=ayar_bolumleri.SORGU_EN_UZUN,
         bolum_seridi=bolum_serit.gorunum,
         komut_adi=KOMUT_ADI,
         komut_durumu=KOMUT_DURUMU,
@@ -723,6 +731,50 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             "acil": ozet,
             "program": ortak["program"],
             "bekleyen_is": {"sayi": len(isler), "imza": bugun.imza(isler)},
+        }
+
+    # ---- genel arama (0.20.0) ---------------------------------------------------------------------------------
+    # Sorgu HİÇBİR YERE yazılmaz: işlem kaydı, günlük, tablo, çerez yok. Kişi tablolarına sorgu gitmez; dizin ve
+    # rol süzmesi arama.py'dedir. Sayfa başlığına sorgu konmaz (tarayıcı geçmişinin başlık sütununa düşmesin).
+    def arama_sonucu(k, ham, en_cok: int) -> dict:
+        q = arama.sorgu_duzelt(ham)
+        devingen = []
+        if ayar_bolumleri.sozcukler(q):
+            with vt.islem() as b:
+                devingen = arama.devingen_dizin(b, k["rol"], ARAMA)
+        return arama.ara(q, ARAMA_SABIT, devingen, k["rol"], en_cok)
+
+    @uygulama.get("/ara", response_class=HTMLResponse)
+    async def ara_sayfasi(istek: Request):
+        k = kullanici(istek)
+        if not k:
+            return yonlendir("/kurulum" if kurulum_gerekli() else "/giris")
+        sonuc = arama_sonucu(k, istek.query_params.get("q", ""), arama.SAYFA_EN_COK)
+        return sayfa(
+            istek,
+            "ara.html",
+            k,
+            ara=sonuc,
+            ara_gruplari=arama.gruplu(sonuc["sonuclar"]),
+            sik_isler=[] if sonuc["etkin"] else arama.sik_isler(ARAMA_SABIT, k["rol"]),
+            yonetici=k["rol"] == "yonetici",
+        )
+
+    @uygulama.get("/api/ara")
+    async def api_ara(istek: Request):
+        """Yan menüdeki kutunun önerileri: {"sorgu", "sonuclar": [{"tur","ad","yer","yol"}], "toplam", "fazla"}."""
+        k = kullanici(istek)
+        if not k:
+            return JSONResponse({"hata": "Oturum gerekli."}, status_code=401)
+        ham = istek.query_params.get("q", "")
+        if len(arama.sorgu_duzelt(ham)) < arama.ONERI_EN_KISA:  # veritabanına gidilmez
+            return {"sorgu": arama.sorgu_duzelt(ham), "sonuclar": [], "toplam": 0, "fazla": False}
+        sonuc = arama_sonucu(k, ham, arama.ONERI_EN_COK)
+        return {
+            "sorgu": sonuc["sorgu"],
+            "sonuclar": [{a: s[a] for a in ("tur", "ad", "yer", "yol")} for s in sonuc["sonuclar"]],
+            "toplam": sonuc["toplam"],
+            "fazla": sonuc["fazla"],
         }
 
     @uygulama.post("/islem")

@@ -363,7 +363,9 @@ def test_idareci_htmlinde_yonetici_ogesi_yok(panel, tahta, okul):
     yasaklar = ("Tahta ekle", "Bilgiler ve düzenle", "Gruplar", "CSV ile", "Ajan kurulum paketi", 'href="/ekle"', 'href="/gruplar"',
                 "/tahtalar/ice-aktar", "sekme=bilgiler", "/ayarlar", "Bekleyen-Gizli", "10.9.8.7", "etap-gizli-makine", "sekme-ayrac")  # fmt: skip
     yollar = ["/", "/tahtalar", "/tahtalar?durum=acik", "/arizalar", "/envanter", "/tahta/1", "/tahta/1?sekme=program", "/tahta/1?sekme=bakim",
-              "/tahta/1?sekme=bilgiler"]  # fmt: skip
+              "/tahta/1?sekme=bilgiler",
+              # 0.20.0: genel arama da aynı süzgeçten geçer (sonuç sayfası ve boş sorgudaki kısa yollar).
+              "/ara", "/ara?q=ayar", "/ara?q=grup", "/ara?q=yedek", "/ara?q=tahta", "/ara?q=bekleyen", "/ara?q=csv"]  # fmt: skip
     yonetici = panel.get("/tahtalar").text
     for parca in ("Tahta ekle", "Gruplar", "CSV ile içe/dışa aktar", "Ajan kurulum paketi", "sekme=bilgiler", "Bekleyen-Gizli", "10.9.8.7"):
         assert parca in yonetici, parca

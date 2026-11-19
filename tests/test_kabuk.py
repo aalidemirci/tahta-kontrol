@@ -92,6 +92,9 @@ def test_her_sayfada_tek_etkin_oge(uygulama):
         acil = web._secili(web.MENU_ACIL, yol)
         ogeler = ust_ogeler(web.menu_gorunumu(YONETICI, yol))
         secili = sum(o["secili"] for o in ogeler) + acil
+        if yol == "/ara":  # 0.20.0: genel arama menü öğesi DEĞİLDİR; sonuç sayfasında hiçbir öğe vurgulanmaz
+            assert secili == 0 and not any(o["secili"] for o in ust_ogeler(web.menu_gorunumu(IDARECI, yol)))
+            continue
         assert secili == 1, yol
         # İdareci: yöneticiye özel sayfalar (ona zaten açılmaz) dışında her sayfada bir üst öğe vurguludur.
         if any(web._secili(o, yol) for o in yalniz_yonetici):
@@ -158,13 +161,17 @@ def test_kabuk_iskeleti(uygulama, panel):
     assert '<main id="icerik" tabindex="-1">' in sayfa
     menu = yan_menu(sayfa)
     assert 'action="/cikis"' in menu and sayfa.count('action="/cikis"') == 1
-    assert menu.index('class="acil-dugme" href="/acil"') < menu.index("<nav")
+    assert menu.index('class="acil-dugme" href="/acil"') < menu.index('<form class="genel-ara"') < menu.index("<nav")
     assert sayfa.count('aria-label="Ana menü"') == 1 and '<nav class="yan-gezinme" aria-label="Ana menü">' in sayfa
     assert [k for k in re.findall(r'<p class="yan-kume" id="kume-\d">([^<]+)</p>', menu)] == ["Her gün", "Dönemlik", "Yönetim"]
     assert "Deneme Yönetici" in menu and ">Yönetici<" in menu
-    # Üst çubukta okul adı; arama kutusu yok (sonraki aşama).
+    # Üst çubukta okul adı ve (0.20.0) aramaya giden simge: Menü · kimlik · Ara · Acil. Arama KUTUSU yalnız yan
+    # menüdedir (sayfada tek arama girdisi); üst çubukta kutu yoktur.
     ust = sayfa.split('class="ust-cubuk"')[1].split("</header>")[0]
-    assert "Örnek Anadolu Lisesi" in ust and 'type="search"' not in sayfa
+    assert "Örnek Anadolu Lisesi" in ust and 'type="search"' not in ust
+    sira = [ust.index(p) for p in ('class="menu-ac"', 'class="kimlik"', '<a class="ust-ara" href="/ara">', 'class="acil-dugme"')]
+    assert sira == sorted(sira)
+    assert sayfa.count('type="search"') == 1 and 'type="search" id="genel-ara" name="q"' in menu
 
 
 def test_etkin_oge_isaretleri(uygulama, panel, tahta):

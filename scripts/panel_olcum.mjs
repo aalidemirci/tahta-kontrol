@@ -63,6 +63,8 @@ export const SAYFALAR = [
   ["ayar-sinav", "/ayarlar/sinav"], ["ayar-veri", "/ayarlar/veri"], ["ayar-sunucu", "/ayarlar/sunucu"],
   ["ayar-guncelleme", "/ayarlar/guncelleme"], ["ayar-kullanicilar", "/ayarlar/kullanicilar"],
   ["acil-sablonlar", "/acil?sekme=sablonlar"],
+  // 0.20.0: genel arama ("ara" önekiyle süzülür): boş sorgu (sık kullanılanlar), şube, ayar (çok sonuç), sonuçsuz.
+  ["ara", "/ara"], ["ara-sube", "/ara?q=9/a"], ["ara-ayar", "/ara?q=ayar"], ["ara-sonucsuz", "/ara?q=zzzz"],
   ["giris", "/giris"], // EN SONDA: oturum çerezi burada silinir
 ];
 

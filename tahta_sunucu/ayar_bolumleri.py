@@ -75,14 +75,14 @@ BASKA_YERDE: list[dict] = [
      "sozcukler": "program kilidi teneffüs boş ders kilitle durdur"},
     {"ad": "Program kilidini durdur (1 saat, bugün)", "yer": "Bugün › Şu an", "yol": "/",
      "sozcukler": "program kilidi durdur tören etkinlik"},
-    {"ad": "Boş ders uyarısı", "yer": "Program › Kurallar · raporu Uyarılar'da", "yol": "/program/uyarilar",
+    {"ad": "Boş ders uyarısı", "yer": "Program › Uyarılar · kuralı Kurallar'da", "yol": "/program/uyarilar",
      "sozcukler": "boş ders uyarısı rapor"},
-    {"ad": "Zil saatleri ve çizelgeler", "yer": "Program › Zil saatleri", "yol": "/program",
+    {"ad": "Zil saatleri ve çizelgeler", "yer": "Program › Zil saatleri", "yol": "/program?bolum=zil",
      "sozcukler": "zil ders saati teneffüs çizelge okul zili ikili eğitim devre sabah öğle"},
     {"ad": "Acil durum şablonları", "yer": "Acil durum › Şablonlar", "yol": "/acil?sekme=sablonlar",
      "sozcukler": "acil şablon yangın deprem tahliye tatbikat"},
     {"ad": "Öğrenci listesi (e-Okul)", "yer": "Kişiler ve anahtarlar › Öğrenciler", "yol": "/ogrenciler",
-     "sozcukler": "öğrenci listesi eokul e-okul yükle"},
+     "sozcukler": "öğrenci listesi sınıf eokul e-okul yükle ekle"},
     {"ad": "Öğretmenler ve PIN", "yer": "Kişiler ve anahtarlar", "yol": "/ogretmenler",
      "sozcukler": "öğretmen pin kod pusula"},
     {"ad": "USB anahtarlar (üret, iptal)", "yer": "Kişiler ve anahtarlar", "yol": "/usb-anahtarlar",
@@ -167,7 +167,7 @@ def _dizin() -> tuple[list[tuple[str, str]], list[tuple[int, str]]]:
     return bolumler, baska
 
 
-def _uyar(sorgu_sozcukleri: list[str], saman: str) -> bool:
+def uyar(sorgu_sozcukleri: list[str], saman: str) -> bool:
     saman_sozcukleri = saman.split()
     return all(any(s.startswith(q) for s in saman_sozcukleri) for q in sorgu_sozcukleri)
 
@@ -183,12 +183,12 @@ def ara(sorgu: str) -> dict:
     bolumler, baska = _dizin()
     if not q:
         return {"sorgu": "", "etkin": False, "bolumler": [a for a, _ in bolumler], "baska": [], "sayi": 0}
-    b_es = [a for a, s in bolumler if _uyar(q, s)]
-    o_es = [i for i, s in baska if _uyar(q, s)]
+    b_es = [a for a, s in bolumler if uyar(q, s)]
+    o_es = [i for i, s in baska if uyar(q, s)]
     if not b_es and not o_es:
         qk = [katla(s) for s in q]
-        b_es = [a for a, s in bolumler if _uyar(qk, katla(s))]
-        o_es = [i for i, s in baska if _uyar(qk, katla(s))]
+        b_es = [a for a, s in bolumler if uyar(qk, katla(s))]
+        o_es = [i for i, s in baska if uyar(qk, katla(s))]
     return {"sorgu": sorgu, "etkin": True, "bolumler": b_es, "baska": o_es, "sayi": len(b_es) + len(o_es)}
 
 

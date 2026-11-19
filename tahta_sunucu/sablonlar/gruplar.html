@@ -14,7 +14,7 @@
   <thead><tr><th scope="col">Grup adı</th><th scope="col">Açıklama</th><th scope="col">Üye</th>{% if yonetici %}<th scope="col"><span class="gizli">İşlem</span></th>{% endif %}</tr></thead>
   <tbody>
   {% for g in gruplar %}
-  <tr>
+  <tr id="grup-{{ g.id }}">
     <td data-etiket="Grup adı"><strong>{{ g.ad }}</strong>{% if g.olusturan %}<div class="not">{{ g.olusturan }}</div>{% endif %}</td>
     <td data-etiket="Açıklama">{{ g.aciklama or '—' }}</td>
     <td data-etiket="Üye">{{ g.uye_sayisi }} tahta{% if g.planlar %}<div class="not">{{ g.planlar | length }} duyuru planında kullanılıyor</div>{% endif %}</td>

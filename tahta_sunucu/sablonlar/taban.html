@@ -67,6 +67,7 @@
     {% include "_logo.html" %}
     <span class="kimlik-okul">{{ okul_adi or 'Tahta Kontrol' }}</span>
   </a>
+  <a class="ust-ara" href="/ara"><svg class="simge" aria-hidden="true"><use href="#s-ara"/></svg><span class="gizli">Ara</span></a>
   <a class="acil-dugme" href="{{ menu_acil.yol }}"{% if menu_acil.secili %} aria-current="page"{% endif %}><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>Acil</span><span class="gizli"> durum</span></a>
 </header>
 <aside class="yan-menu" id="menu" tabindex="-1" aria-label="Menü">
@@ -79,6 +80,14 @@
     </span>
   </a>
   <a class="acil-dugme" href="{{ menu_acil.yol }}"{% if menu_acil.secili %} aria-current="page"{% endif %}><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>{{ menu_acil.ad }}</span></a>
+  {# Genel arama (0.20.0): menü öğesi DEĞİLDİR. JS'siz düz GET /ara; öneri listesini ve combobox özniteliklerini
+     panel.js (aramaKur) ekler. Gönder düğmesi yok: Enter gönderir. Sorgu hiçbir yere yazılmaz. #}
+  <form class="genel-ara" method="get" action="/ara" role="search">
+    <svg class="simge" aria-hidden="true"><use href="#s-ara"/></svg>
+    <label class="gizli" for="genel-ara">Ara</label>
+    <input type="search" id="genel-ara" name="q" maxlength="{{ ara_en_uzun }}" placeholder="Tahta, şube, sayfa ara" autocomplete="off" enterkeyhint="search" data-genel-ara>
+    <kbd aria-hidden="true">/</kbd>
+  </form>
   <nav class="yan-gezinme" aria-label="Ana menü">
     {% for kume in menu.kumeler %}
     <p class="yan-kume" id="kume-{{ loop.index }}">{{ kume.ad }}</p>

@@ -242,7 +242,7 @@ def menu_ogeleri(t: dict, rol: str | None) -> list[dict]:
     return ogeler
 
 
-def _grup_adi(bina: str, kat) -> str:
+def grup_adi(bina: str, kat) -> str:
     if bina and kat is not None:
         return f"{bina} · {hedef.kat_adi(kat)}"
     if bina:
@@ -278,7 +278,7 @@ def gruplar(tahtalar: list[dict]) -> list[dict]:
     sonuc = []
     for kova in sorted(kovalar.values(), key=sira):
         kova["tahtalar"].sort(key=lambda t: (metin.tr_sirala_anahtari(t.get("derslik") or ""), metin.tr_sirala_anahtari(t.get("ad") or "")))
-        sonuc.append({"ad": _grup_adi(kova["bina"], kova["kat"]), "baslik": True, "tahtalar": kova["tahtalar"]})
+        sonuc.append({"ad": grup_adi(kova["bina"], kova["kat"]), "baslik": True, "tahtalar": kova["tahtalar"]})
     if len(sonuc) == 1 and sonuc[0]["ad"] == "Konumu belirtilmemiş":
         sonuc[0]["baslik"] = False
     for grup in sonuc:

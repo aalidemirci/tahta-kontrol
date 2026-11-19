@@ -199,6 +199,12 @@ def test_idareci_htmlinde_yonetici_sekmesi_yok(panel, dolu):
         assert s.count("sekme-ayrac") == (1 if ad == "program" else 0), yol
         assert re.findall(r'<a href="([^"]+)" aria-current="page">', s) == [etkin], yol
     assert gezilen == len(sayfalar(dolu)) - 4  # üç yönetici sayfası + şablonlar sekmesi
+    # 0.20.0: genel arama yönetici sekmesinin adını da adresini de idareciye göstermez.
+    for yol in ("/ara", "/ara?q=program", "/ara?q=ayar", "/ara?q=grup", "/ara?q=yedek", "/ara?q=tahta", "/ara?q=aktar", "/ara?q=şablon"):
+        yanit = panel.get(yol)
+        assert yanit.status_code == 200, yol
+        for parca in (*YONETICI_YOLLARI, "Önceki programlar", "Yoklama ayarları", "/ayarlar", "/yedekler", "/gruplar", "Şablonlar"):
+            assert parca not in yanit.text, (yol, parca)
 
 
 def test_kisiler_sayfalari_yoklama_seridini_cizmez_kvkk_bandi_durur(panel, dolu):

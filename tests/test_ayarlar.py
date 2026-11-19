@@ -326,7 +326,8 @@ class FormOkuyucu(HTMLParser):
 def formlar(html: str) -> list[dict]:
     okuyucu = FormOkuyucu()
     okuyucu.feed(html)
-    return [f for f in okuyucu.formlar if f["action"] not in ("/cikis", "") and f["ozellik"].get("method") != "dialog"]
+    # Kabuğun formları (çıkış; 0.20.0: yan menüdeki genel arama, GET /ara) sayfanın ayar formu değildir.
+    return [f for f in okuyucu.formlar if f["action"] not in ("/cikis", "/ara", "") and f["ozellik"].get("method") != "dialog"]
 
 
 def bolum_degeri(form: dict) -> str:
@@ -979,7 +980,7 @@ def test_ara_sunucuda_suzer(okul):
     assert bolumler == ["kilit", "yuzer", "usb"] and baska == ["/program?bolum=kurallar"]
     assert gorunen_satirlar(okul.get("/ayarlar?ara=kilidi durdur").text) == ([], ["/program?bolum=kurallar", "/"])
     sayfa = okul.get("/ayarlar?ara=zil").text
-    assert gorunen_satirlar(sayfa) == ([], ["/program"])
+    assert gorunen_satirlar(sayfa) == ([], ["/program?bolum=zil"])  # 0.20.0: sekmenin yoluyla aynı
     assert '<section class="kutu baska-yerde" id="baska-yerde" aria-labelledby="baska-baslik">' in sayfa  # hidden değil
     assert '<p class="ayar-ara-sonuc" id="ayar-ara-sonuc" role="status">1 sonuç</p>' in sayfa
     assert sayfa.count('class="kutu ayar-kume"') == 4 and sayfa.count('aria-labelledby="ayar-kume-') == 4
@@ -1330,7 +1331,7 @@ def test_ara_es_anlamlilar_ve_sonucsuz_durum(okul):
                           ("şifre", "veri"), ("idareci ekle", "kullanicilar"), ("hesap ekle", "kullanicilar"),
                           ("müdür yardımcısı", "kullanicilar")):  # fmt: skip
         assert bolum in ara(sorgu_)["bolumler"], sorgu_
-    assert ara("ikili")["baska"] == [3] and ayar_bolumleri.BASKA_YERDE[3]["yol"] == "/program"
+    assert ara("ikili")["baska"] == [3] and ayar_bolumleri.BASKA_YERDE[3]["yol"] == "/program?bolum=zil"
     bos = okul.get("/ayarlar?ara=qqq").text
     assert '<a href="/ayarlar">aramayı temizleyip bütün bölümleri görün</a>' in bos
     # Telefonda kesilmeyen kısa örnek metin.

@@ -1432,6 +1432,7 @@
      JS'siz de çalışır: <a href="#menu"> çekmeceyi :target ile açar, #icerik kapatır. Burada sınıfla açılır
      (adrese parça yazılmaz), arkadaki sayfa inert olur, Esc kapatır ve odak açan düğmeye döner.
      Kip (çekmece / sabit) yalnız stil.css'tedir: --kb-kip okunur, genişlik eşiği burada yinelenmez. */
+  var kabukCekmeceAc = null; // kabukKur kurar: çekmece kipindeyse çekmeceyi açar (genel aramanın "/" kısayolu kullanır)
   function kabukKur() {
     var menu = $("menu");
     if (!menu || !menu.classList.contains("yan-menu")) return; // kabuksuz sayfa (giriş, ilk kurulum)
@@ -1490,6 +1491,7 @@
       if (olay.key === "Escape" && acikMi()) kapat(true); // onay diyaloğu açıkken tarayıcı Esc'yi diyaloğa verir
     });
     window.addEventListener("resize", function () { if (!cekmeceMi()) kapat(false); });
+    kabukCekmeceAc = function (tetik) { ac(tetik); return acikMi(); };
     // Çekmeceden bir sayfaya gidilip Geri'ye basılınca sayfa geri/ileri önbelleğinden çekmece açık ve içerik
     // inert olarak dönmesin: ayrılırken (ve önbellekten dönerken) çekmece kapatılır.
     window.addEventListener("pagehide", function () { kapat(false); });
@@ -1580,6 +1582,187 @@
       acik.open = false;
       acik.querySelector("summary").focus();
     });
+  }
+
+  /* ---- genel arama (0.20.0): yan menüdeki kutu ------------------------------------------------
+     JS'siz de çalışır: form düz GET /ara'dır. Burada yazarken öneri (combobox + listbox) ve "/" kısayolu eklenir.
+     Eşleştirme YALNIZ sunucudadır (/api/ara): dizin, kural ve harf haritası buraya kopyalanmaz. Sorgu tarayıcıda
+     hiçbir yere yazılmaz (kalıcı depo, çerez yok). Bütün metin textContent ile basılır; hedef yalnız site içi yoldur.
+     Kip (çekmece / sabit) burada yinelenmez: kutunun görünürlüğüne bakılır. Sonuç sayfasının kendi kutusu
+     (data-ara-oneri) AYNI kodla öneri verir. Kısayol sayfadan AYIRMAZ: kutu görünmüyorsa çekmece açılır. */
+  var ARAMA_BEKLEME_MS = 150;
+  var ARAMA_EN_KISA = 2;
+  // "/" bu tür girdilerde yazı değildir; öbür bütün girdilerde (metin, arama, sayı, tarih, parola…) kısayol çalışmaz.
+  var ARAMA_YAZISIZ = ["checkbox", "radio", "button", "submit", "reset", "range", "file", "color"];
+  function aramaKur() {
+    var kutu = document.querySelector("input[data-genel-ara]");
+    if (!kutu || !kutu.form) return; // kabuksuz sayfa (giriş, ilk kurulum)
+    aramaOneriKur(kutu, "genel-oneri");
+    var sayfaKutusu = document.querySelector("input[data-ara-oneri]"); // yalnız /ara sayfasında
+    if (sayfaKutusu && sayfaKutusu.form) aramaOneriKur(sayfaKutusu, "sayfa-oneri");
+
+    // Kısayol "/": yazı yazılan yerde, değiştirici tuşla ve onay diyaloğu açıkken TETİKLENMEZ.
+    function gorunur(o) {
+      return !!o && o.getClientRects().length > 0 && getComputedStyle(o).visibility !== "hidden";
+    }
+    document.addEventListener("keydown", function (olay) {
+      if (olay.key !== "/" || olay.ctrlKey || olay.altKey || olay.metaKey || olay.defaultPrevented) return;
+      if (document.querySelector("dialog[open]")) return;
+      var h = olay.target;
+      if (h && h.closest && (h.isContentEditable || h.closest("textarea, select, [contenteditable]"))) return;
+      if (h && h.tagName === "INPUT" && ARAMA_YAZISIZ.indexOf((h.getAttribute("type") || "text").toLowerCase()) < 0) return;
+      // Sıra: görünen yan menü kutusu → sonuç sayfasının kutusu → çekmece açılır. Sayfadan HİÇ ayrılmaz (yarım
+      // kalmış form, fırçayla çalışılan şube defteri tek tuşla kaybolmasın); çekmece açılamıyorsa tuş olağan kalır.
+      var hedef = gorunur(kutu) ? kutu : (gorunur(sayfaKutusu) ? sayfaKutusu : null);
+      if (!hedef) {
+        var tetik = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+        if (!kabukCekmeceAc || !kabukCekmeceAc(tetik) || !gorunur(kutu)) return;
+        hedef = kutu;
+      }
+      olay.preventDefault();
+      hedef.focus();
+      hedef.select();
+    });
+  }
+  function aramaOneriKur(kutu, listeKimligi) {
+    var formu = kutu.form;
+    var liste = document.createElement("div");
+    liste.setAttribute("id", listeKimligi);
+    liste.className = "ara-oneri";
+    liste.setAttribute("role", "listbox");
+    liste.setAttribute("aria-label", "Öneriler");
+    liste.hidden = true;
+    var durum = document.createElement("p");
+    durum.className = "gizli";
+    durum.setAttribute("role", "status");
+    formu.appendChild(liste);
+    formu.appendChild(durum);
+    kutu.setAttribute("role", "combobox");
+    kutu.setAttribute("aria-autocomplete", "list");
+    kutu.setAttribute("aria-expanded", "false");
+    kutu.setAttribute("aria-controls", listeKimligi);
+
+    var secenekler = [];
+    var etkin = -1;
+    var sira = 0;
+    var denetci = null;
+    var zamanlayici = null;
+    var cizilen = null; // listedeki önerilerin sorgusu (aynı sorguya odak dönünce yeniden istenmez)
+
+    function sec(i) {
+      etkin = i;
+      secenekler.forEach(function (s, n) { s.setAttribute("aria-selected", n === i ? "true" : "false"); });
+      if (i < 0) { kutu.removeAttribute("aria-activedescendant"); return; }
+      kutu.setAttribute("aria-activedescendant", secenekler[i].getAttribute("id"));
+      if (secenekler[i].scrollIntoView) secenekler[i].scrollIntoView({ block: "nearest" });
+    }
+    function kapat() {
+      liste.hidden = true;
+      kutu.setAttribute("aria-expanded", "false");
+      sec(-1);
+    }
+    function ac() {
+      if (!secenekler.length) return;
+      liste.hidden = false;
+      kutu.setAttribute("aria-expanded", "true");
+    }
+    function bosalt() {
+      while (liste.firstChild) liste.removeChild(liste.firstChild);
+      secenekler = [];
+      cizilen = null;
+      sec(-1);
+    }
+    function secenek(ad, yer, yol, sinif) {
+      var a = document.createElement("a");
+      a.setAttribute("role", "option");
+      a.setAttribute("id", listeKimligi + "-" + secenekler.length);
+      a.setAttribute("href", yol);
+      a.setAttribute("tabindex", "-1");
+      a.setAttribute("aria-selected", "false");
+      if (sinif) a.className = sinif;
+      var ust = document.createElement("span");
+      ust.textContent = ad;
+      a.appendChild(ust);
+      if (yer) {
+        var alt = document.createElement("span");
+        alt.textContent = yer;
+        a.appendChild(alt);
+      }
+      liste.appendChild(a);
+      secenekler.push(a);
+    }
+    function sorguMetni() {
+      return kutu.value.replace(/\s+/g, " ").trim();
+    }
+    function ciz(veri, sorgu) {
+      var sonuclar = veri && Array.isArray(veri.sonuclar) ? veri.sonuclar : [];
+      bosalt();
+      sonuclar.forEach(function (s) {
+        // Hedef yalnız site içi yol ("/" ile başlar; ikinci karakter "/" ya da "\" değil). Sunucu da garanti eder.
+        if (!s || !siteIciYol(s.yol) || s.yol.charAt(1) === "\\") return;
+        secenek(String(s.ad || ""), String(s.yer || ""), s.yol, "");
+      });
+      var toplam = parseInt(veri && veri.toplam, 10) || 0;
+      var fazlasi = secenekler.length > 0 && toplam > secenekler.length;
+      if (fazlasi) secenek("Tüm sonuçlar (" + toplam + ")", "", "/ara?q=" + encodeURIComponent(sorgu), "hepsi");
+      cizilen = sorgu;
+      // Duyurulan sayı ok tuşuyla gezilebilen önerilerin sayısıdır ("Tüm sonuçlar" satırı öneri sayılmaz).
+      var oneri = fazlasi ? secenekler.length - 1 : secenekler.length;
+      durum.textContent = !oneri ? "Öneri yok" : (fazlasi ? "İlk " + oneri + " öneri, toplam " + toplam + " sonuç" : oneri + " öneri");
+      if (secenekler.length && document.activeElement === kutu) ac(); else kapat();
+    }
+    function iste() {
+      var sorgu = sorguMetni();
+      if (denetci) denetci.abort();
+      denetci = null;
+      var benim = ++sira; // geç gelen eski yanıt atılır
+      if (sorgu.length < ARAMA_EN_KISA) { bosalt(); durum.textContent = ""; kapat(); return; }
+      if (sorgu === cizilen) { ac(); return; }
+      denetci = window.AbortController ? new AbortController() : null;
+      fetch("/api/ara?q=" + encodeURIComponent(sorgu), {
+        credentials: "same-origin", headers: { Accept: "application/json" }, signal: denetci ? denetci.signal : undefined
+      }).then(function (yanit) {
+        if (!yanit.ok) throw new Error("ara");
+        return yanit.json();
+      }).then(function (veri) {
+        if (benim === sira) ciz(veri, sorgu);
+      }).catch(function () {
+        // 401 ya da ağ hatası: liste sessizce kapanır; Enter yine /ara'ya gider (oradan girişe yönlenir).
+        if (benim === sira) { bosalt(); kapat(); }
+      });
+    }
+    kutu.addEventListener("input", function () {
+      sec(-1); // yazı değişti: eski sorgunun seçili önerisi Enter'la açılmasın
+      clearTimeout(zamanlayici);
+      zamanlayici = setTimeout(iste, ARAMA_BEKLEME_MS);
+    });
+    kutu.addEventListener("focus", function () {
+      if (cizilen !== null && cizilen === sorguMetni()) ac();
+    });
+    kutu.addEventListener("keydown", function (olay) {
+      var acik = !liste.hidden;
+      if (olay.key === "ArrowDown" || olay.key === "ArrowUp") {
+        if (!secenekler.length) return;
+        olay.preventDefault();
+        if (!acik) { ac(); sec(olay.key === "ArrowDown" ? 0 : secenekler.length - 1); return; }
+        var n = secenekler.length;
+        sec(olay.key === "ArrowDown" ? (etkin + 1) % n : (etkin <= 0 ? n - 1 : etkin - 1));
+      } else if (olay.key === "Enter") {
+        // Etkin seçenek varsa VE liste kutudaki yazının önerisiyse oraya; yoksa form gönderilir (GET /ara?q=…).
+        if (acik && etkin >= 0 && cizilen === sorguMetni()) { olay.preventDefault(); location.assign(secenekler[etkin].getAttribute("href")); }
+      } else if (olay.key === "Escape") {
+        // Liste açıksa YALNIZ liste kapanır (çekmece ve açılır menüler kapanmasın; kutudaki yazı silinmesin).
+        if (acik) { olay.preventDefault(); olay.stopPropagation(); kapat(); }
+      } else if (olay.key === "Tab") {
+        kapat();
+      }
+    });
+    formu.addEventListener("focusout", function (olay) {
+      if (!olay.relatedTarget || !formu.contains(olay.relatedTarget)) kapat();
+    });
+    // Seçeneğe basınca odak kutuda kalır: bağlantıya odak vermeyen tarayıcıda liste tıklamadan önce kapanmasın.
+    liste.addEventListener("mousedown", function (olay) { olay.preventDefault(); });
+    window.addEventListener("pagehide", kapat);
   }
 
   /* ---- sayac: metin alanının altında "123/4000" ---------------------------------- */
@@ -2466,6 +2649,7 @@
   yokSayaciKur();
   izgaraKur();
   kabukKur();
+  aramaKur();
   menuKur();
   sayacKur();
   duyuruFormuKur();

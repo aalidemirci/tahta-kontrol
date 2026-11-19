@@ -393,14 +393,16 @@ seçimde korunur.
 - **GTK'da iki stil sağlayıcısı:** ölçüler bir kez yüklenir, renkler tema
   değişince aynı sağlayıcıya yeniden yüklenir (pencere yeniden açılmaz).
 
-### 11.1 Panel kabuğu ve arayüzün yeniden düzeni (0.15.0, 0.16.0, 0.17.0, 0.18.0, 0.19.0)
+### 11.1 Panel kabuğu ve arayüzün yeniden düzeni (0.15.0, 0.16.0, 0.17.0, 0.18.0, 0.19.0, 0.20.0)
 
 Kullanıcı (18.11.2026) paneli "ilkel ve karışık" buldu. Bütün panel için bir arayüz taslağı hazırlandı
 (tıklanabilir prototip ve ölçümler; **taslak depo dışında tutulur**), kullanıcı taslağı gördü ve aynı gün
 "Evet, başla" diyerek 1. aşamaya, 0.15.0'ı gördükten sonra 19.11.2026'da "Ayarlar'a geç" diyerek 2. aşamaya,
 0.16.0'ı gördükten sonra aynı gün "Önce Tahtalar'a geç" diyerek 3. aşamaya, 0.17.0'ı gördükten sonra yine
 19.11.2026'da "Bugün'e geç" diyerek 4. aşamaya, 0.18.0'ı gördükten sonra aynı gün "Sekmelere geç" diyerek
-5. aşamaya onay verdi. Sonraki aşama ayrı sürüm ve ayrı onaydır.
+5. aşamaya, 0.19.0'ı gördükten sonra yine 19.11.2026'da "Aramaya geç" diyerek 6. aşamaya onay verdi. **Altı
+aşamanın hepsi yerelde uygulandı;** taslağın planında başka aşama yoktur. Dağıtım, saha denemesi ve açık
+sorular (§17 soru 69–101) ayrı kararlardır.
 
 | Aşama | Sürüm | İçerik | Durum |
 |---|---|---|---|
@@ -409,7 +411,7 @@ Kullanıcı (18.11.2026) paneli "ilkel ve karışık" buldu. Bütün panel için
 | 3. Tahtalar | 0.17.0 | `/tahtalar` listesi (konuma göre gruplu satırlar, satırda duruma göre tek düğme + "⋯" menüsü, seçim çubuğu, `?durum=` süzgeci), `/islem`'e `tek` ve `kapsam=hepsi`, duyuru formunda tahta ön seçimi, tahta sayfası dört sekme, Tahtalar bölümünün sekme şeridi | Uygulandı (yerel) |
 | 4. Bugün | 0.18.0 | `/` "Bugün" sayfası: şu an (ders/teneffüs, program kilidi ve "Durdur"), "Sizi bekleyenler" (tek işlev, role göre), tahtalar özeti (durum sayıları + konum çipleri), "Hepsini kilitle…", bugünün yoklama özeti ve duyurular; `/tahtalar` yalnız liste; menüde ve alt çubukta "Bugün" | Uygulandı (yerel) |
 | 5. Sekmeler | 0.19.0 | Bölüm sekme şeritlerinin tek tanımı (`bolum_serit.py`): Yoklama (beş sekme + yöneticiye ayarlar bağlantısı), Kişiler ve anahtarlar (kendi şeridi), Program (üç küme, dokuz sekme), Duyurular, Acil durum (Geçmiş ve raporlar ayrı sekme); tek sayfalık duyuru formu (Ne · Kime · Ne zaman, gönder çubuğu); adresler ve uçlar aynı | Uygulandı (yerel) |
-| 6. Arama | — | Genel arama (rolle süzülür; dizinde kişi adı yok) | Onay bekliyor |
+| 6. Arama | 0.20.0 | Genel arama: yan menüde kutu ve yazarken öneri, `/ara` sonuç sayfası (JS'siz), üst çubukta büyüteç, `/` kısayolu; dizin tek yerde ve var olan tanımlardan türer (`arama.py`), rolle süzülür, dizinde kişi adı yok, sorgu hiçbir yere yazılmaz | Uygulandı (yerel) |
 
 Birinci aşamanın kuralları:
 
@@ -635,6 +637,70 @@ denenmeyenler `docs/surum-0.19.0.md`'dedir):
   görünüm; doğrulama aynı). İkinci kopya `role="alert"` taşımaz. `/api/hedef-onizleme` ve 0.17.0'ın
   `?tahta=…&secimden=1` ön seçimi aynıdır.
 - Yeni varsayımlar §17 soru 82–90'dadır. Ders başlığı ve öğretmen bilgisi eklenmedi (soru 75 onaylanmadı).
+
+Altıncı aşamanın kuralları (0.20.0; neyin arandığı, neyin bilerek aranmadığı, varsayılan kararlar ve
+denenmeyenler `docs/surum-0.20.0.md`'dedir):
+
+- **Yeni adres yalnız ikidir:** `GET /ara?q=…` (tam sayfa sonuç; JS'siz çalışır) ve `GET /api/ara?q=…`
+  (öneriler; `{sorgu, sonuclar: [{tur, ad, yer, yol}], toplam, fazla}`, en çok 8 sonuç, 2 karakterden kısa
+  sorguda veritabanına gitmez). İkisi de oturum ister ve `no-store` döner. Var olan adresler, uçlar, alan
+  adları, `/api/durum`, şema ve ajan aynıdır. Arama menü öğesi değildir: menü üç küme ve tam on öğedir, `/ara`
+  sayfasında hiçbir menü öğesi etkin değildir.
+- **Dizinin TEK yeri `arama.py`'dir** (FastAPI'siz, saf) ve var olan tek tanımlardan TÜRER: sayfalar
+  `web.py::MENU` + `MENU_ACIL`'den, sekmeler `bolum_serit.SERITLER`'den (başka bölüme giden `dis` sekme
+  atlanır), süzgeçler `tahta_liste.SUZGECLER`'den, ayar bölümleri `ayar_bolumleri.BOLUMLER`'den, kısa yollar
+  `ayar_bolumleri.BASKA_YERDE` + `arama.SIK_ISLER`'den. `arama.py`'ye sayfa, sekme ya da ayar adı yazılmaz
+  (testi kaynakta arar). Elle yazılan tek liste `SIK_ISLER`'dir: var olan GET sayfasına giden kısa yol ve eş
+  anlamlıları. Sabit dizin süreç başında bir kez kurulur (`web.py::ARAMA`) ve kurulurken kendini denetler.
+- **Rol hedeften türer, elle yazılmaz:** `arama.yer_coz(yol)` hedef adresin hangi bölümde olduğunu (kırıntı)
+  ve kime açık olduğunu menüden ve şeritlerden bulur; hedef yöneticiye özelse girdi de öyledir. Bölümü
+  bulunamayan hedef `ValueError` verir (program açılmaz): sahipsiz girdi sessizce "herkese açık" olmaz.
+  `SIK_ISLER`'deki açık `rol` yalnız daraltır. Süzme eşleştirmeden ÖNCE yapılır; sayılar süzülmüş kümedendir.
+  Rolün göremeyeceği devingen girdi (gruplar) için sorgu da atılmaz. Arama yalnız görünümdür; yetki denetimi
+  uçlardadır.
+- **Devingen kısım dar ve önbelleksizdir:** onaylı tahtalar (ad, derslik, bina, kat, şubeler), yoklama açıksa
+  etkin şubeler (şube defterine gider), yöneticide grup adları. İstek başına en çok dört SELECT; sayısı tahta,
+  öğrenci ve grup sayısından bağımsızdır. Önbellek bilerek yoktur (tahta, grup ve öğrenci aktarımı gibi çok
+  sayıda geçersizleşme noktası; bayat ad göstermektense dört sorgu). `sayfa()`'ya ve `/api/durum`'a hiçbir
+  sorgu eklenmedi: kabuktaki kutu durağan HTML'dir.
+- **Dizine girmeyenler bağlayıcıdır:** öğrenci adı ve numarası, öğretmen adı ve kodu, panel kullanıcı adı,
+  USB anahtar etiketi, mazeret ve yoklama kaydı, duyuru başlığı/metni, acil şablonu, arıza açıklaması, sınav
+  adı ve listesi, ders başlığı ve öğretmen programı (soru 75), tahtanın ağ adresi, makine adı, demirbaş
+  numarası, envanter notu, onay bekleyen tahta, grup açıklaması, ayar değerleri. Bu tablolara arama yolundan
+  sorgu gitmez (öğrenci tablosundan yalnız `DISTINCT sube`). Tahta adı ve şube adı girer.
+- **Sorgu hiçbir yere yazılmaz:** işlem kaydı, günlük, tablo, çerez, tarayıcı deposu yok; "son aramalar"
+  yok; sunucunun erişim günlüğü kapalıdır (testi bağlar); sayfa başlığına sorgu konmaz. JS'siz `GET /ara?q=`
+  adresi tarayıcının kendi geçmişinde kalır (GET'in doğal sonucu; sürüm notunda yazılı).
+- **Sonuçsuz notu sabittir:** sorguya göre değişmez (kişi adı aranınca "var ama gösterilmez" ipucu
+  verilmez; testi karşılaştırır). Yalnız role göre bir satır eklenir ve o satır sayfa adı ya da adres
+  taşımaz. Sonuçsuz sayfada sonuç satırı çizilmez.
+- **Eşleştirme yalnız sunucudadır.** Metin ilkelleri `ayar_bolumleri`'ndekilerdir (`kucult`, `katla`,
+  `sozcukler`, `samanlik`, `uyar`, `SORGU_EN_UZUN` = 60); ikinci harf haritası yoktur ve `panel.js`'e dizin,
+  kural ya da harita kopyalanmaz. Kural: her sorgu sözcüğü dizindeki bir sözcüğün BAŞINDA geçer (sözcük
+  ortası yok, yazım toleransı yok). Sıra: Türkçe harfle eşleşen → harf katlanınca eşleşen → yalnız ekli
+  sözcükle eşleşen (`_ekli_uyar`: dizindeki en az dört harfli kök sorgu sözcüğünün başıysa ve artan kısım
+  yalnız harfse; "pusulası" → "pusula"); içinde başlık öneki → başlık sözcüğü → anahtar sözcük; sonra tür
+  sırası (sayfa, sekme, iş, süzgeç, ayar, şube, tahta, grup). Aynı hedef bir kez listelenir. "9/a", "9-a" ve
+  "9a" aynı şubeyi ve tahtayı bulur (dizin tarafı genişletilir, sorgu tarafı değişmez). Ayarlar içi arama
+  (`/ayarlar?ara=`) değişmedi; genel arama onun bulduğu her bölümü yöneticiye bulur (testi var).
+- **Sonuç yalnız GET bağlantısıdır:** arama sonucundan komut, gönderim ya da indirme tetiklenmez; iş girdisi
+  formun durduğu sayfaya götürür. Hedef site içi yoldur ("/" ile başlar, "//" ile başlamaz; sunucu dizini
+  kurarken, `panel.js` bağlarken denetler). Vurgulama yoktur; metin şablonda kaçışlı, betikte `textContent`
+  ile yazılır.
+- **Kabuk:** kutu yan menüde Acil'in altında, gezinmenin üstündedir (`form.genel-ara`, düz `GET /ara`; gönder
+  düğmesi yok, Enter gönderir). Çekmece kipinde aynı form çekmecenin içindedir ve üst çubukta `/ara`'ya giden
+  büyüteç (`a.ust-ara`) vardır; açılır arama katmanı yoktur, alt çubuk değişmedi. Öneri listesi menünün
+  İÇİNDE mutlak konumludur ve yüksekliği sınırlıdır (menü taşmayı kırpar). Combobox öznitelikleri şablonda
+  yoktur, `panel.js` ekler (JS yokken yanlış rol duyurulmasın). `/ara` sayfasındaki kutu aynı kodla öneri
+  verir (`aramaOneriKur`; iki arama alanı ayrı adlıdır).
+- **Klavye:** yalnız `/` (Ctrl+K yok). Metin alanında, seçim listesinde, düzenlenebilir alanda, açık
+  pencerede (`dialog`) ve değiştirici tuşla tetiklenmez. Sabit kipte kutuya odaklar; çekmece kipinde sayfadan
+  AYIRMAZ, çekmeceyi açıp kutuya odaklar; `/ara` sayfasında sayfa kutusuna odaklar. Ok tuşları seçenek
+  gezer (odak kutuda kalır), yazınca seçim sıfırlanır; Enter seçili öneriye, seçim yoksa sonuç sayfasına
+  gider; Esc önce listeyi, sonra çekmeceyi kapatır.
+- **Yer açan iki kabuk kuralı:** ≤ 26rem'de üst çubukta okul adı görsel olarak gizlidir (erişilebilir ad
+  durur); kısa pencerede (≤ 40rem yükseklik, fare) menü satırı 2rem'dir (dokunmatikte 44 px kalır).
+- Yeni varsayımlar §17 soru 91–101'dedir. Ders başlığı ve öğretmen bilgisi eklenmedi (soru 75 onaylanmadı).
 
 ## 12. Ders programı ve program kilidi
 
@@ -1699,7 +1765,8 @@ izlenir. Kurulu (PyInstaller) programda sistem sertifika deposunun bulunduğu he
 | P2 | Panel arayüzü 2. aşama (Ayarlar): giriş sayfası (bölüm kartları, değer özetleri, kurulum listesi, arama), 11 bölüm sayfası, yeni `bolum=okul`/`kapatma`/`kilit_kodu` (her biri yalnız kendi anahtarını yazar), Kullanıcılar Ayarlar'da, acil şablonları Acil'de (§11.1) | 0.16.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri; JS açık ve kapalı kayıt denemesi, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek ayarlarla ve kurulu hizmette denenecek |
 | P3 | Panel arayüzü 3. aşama (Tahtalar): `/tahtalar` listesi (konuma göre gruplu satırlar, duruma göre tek düğme, "⋯" menüsü, seçim çubuğu, JS'siz `?durum=` süzgeci), `/islem`'e `tek=<tür>:<kimlik>` (yalnız o tahta) ve `kapsam=hepsi` (yalnız kilitle; onaylı + çevrimiçi), duyuru formunda tahta ön seçimi, tahta sayfası dört sekme, Tahtalar bölümünün sekme şeridi (§11.1) | 0.17.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri, benzetilmiş ajanlar; JS açık ve kapalı komut denemesi, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek telefonda ve gerçek tahtalarla denenecek |
 | P4 | Panel arayüzü 4. aşama (Bugün): `/` Bugün sayfası (şu an + "Program kilidini durdur", "Sizi bekleyenler" — tek işlev `bugun.bekleyenler`, role göre; durum sayıları ve konum çipleri; onaylı "Hepsini kilitle…"; yoklama özeti ve duyurular), `/tahtalar` yalnız liste, menüde ve alt çubukta "Bugün", `/api/durum`'a `bekleyen_is`; varsayılan iki karar: V1 (satırda güncelleme rozeti yok) ve V2 (toplu kilit sınavdakileri atlar) (§11.1, §17 soru 80–81) | 0.18.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri, benzetilmiş ajanlar; JS açık ve kapalı komut denemesi, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek telefonda ve gerçek tahtalarla denenecek |
-| P5 | Panel arayüzü 5. aşama (Sekmeler): bölüm sekme şeritlerinin tek tanımı (`bolum_serit.py`, `_serit.html`) — Yoklama, Kişiler ve anahtarlar, Program (üç küme), Duyurular, Acil durum (Geçmiş ve raporlar ayrı sekme), Tahtalar; tek sayfalık duyuru formu (Ne · Kime · Ne zaman, gönder çubuğu, iletinin ilgili bölümde çizilmesi); adresler, uçlar, alan adları ve doğrulama aynı; varsayılan kararlar §17 soru 82–90 (§11.1) | 0.19.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri, benzetilmiş ajanlar; JS açık ve kapalı duyuru gönderimi veritabanından doğrulanarak, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek telefonda ve gerçek tahtalarla denenecek. 6. aşama onay bekliyor |
+| P5 | Panel arayüzü 5. aşama (Sekmeler): bölüm sekme şeritlerinin tek tanımı (`bolum_serit.py`, `_serit.html`) — Yoklama, Kişiler ve anahtarlar, Program (üç küme), Duyurular, Acil durum (Geçmiş ve raporlar ayrı sekme), Tahtalar; tek sayfalık duyuru formu (Ne · Kime · Ne zaman, gönder çubuğu, iletinin ilgili bölümde çizilmesi); adresler, uçlar, alan adları ve doğrulama aynı; varsayılan kararlar §17 soru 82–90 (§11.1) | 0.19.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri, benzetilmiş ajanlar; JS açık ve kapalı duyuru gönderimi veritabanından doğrulanarak, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek telefonda ve gerçek tahtalarla denenecek |
+| P6 | Panel arayüzü 6. aşama (Arama): genel arama — yan menüde kutu ve yazarken öneri (`GET /api/ara`), sonuç sayfası (`GET /ara`, JS'siz), üst çubukta büyüteç, `/` kısayolu; dizin tek yerde ve var olan tanımlardan türer (`arama.py`), rol hedef sayfadan türer, dizinde kişi adı yok, sorgu hiçbir yere yazılmaz; varsayılan kararlar §17 soru 91–101 (§11.1) | 0.20.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri, benzetilmiş ajanlar; klavye ve öneri etkileşimi, iki rolde sızıntı denemesi, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek telefonda, gerçek klavyeyle ve ekran okuyucuyla denenecek. Altı aşamanın hepsi uygulandı |
 | 3C | Sihirbaza e-Okul "Haftalık Ders Programları" raporu (OOK11002_R01, .XLS): blok ayrıştırma, rapordan zil çizelgesi, zorunlu şube eşlemesi, şubenin tahtasına yazma (§12.4) | 0.12.0 — testlerle (uydurma matris) ve geliştirme bilgisayarında gerçek bir raporla (ayrı veri dizini, uydurma tahtalar) uçtan uca denendi; okulda denenecek |
 
 Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" ve "Seçili
@@ -1855,7 +1922,7 @@ Ders yoklaması (0.6.0):
 68. **Aydınlatma:** okulun aydınlatma metni tahtada okul numarası ile adın birlikte görünmesini ve mazeret
     türünün (raporlu dahil) okul sunucusunda tutulmasını kapsıyor mu? (Soru 33'ün devamı.)
 
-Panel arayüzü (0.15.0–0.19.0; taslağın soruları — yanıt gelene kadar **önerilen** seçenek geçerlidir, §11.1):
+Panel arayüzü (0.15.0–0.20.0; taslağın soruları — yanıt gelene kadar **önerilen** seçenek geçerlidir, §11.1):
 
 69. **Panel kullanıcıları nerede dursun?** Öneri: Ayarlar içinde bir bölüm. (0.16.0'da öneri uygulandı:
     `/ayarlar/kullanicilar`; menüde ayrı öğe kalktı. Geri istenirse menü öğesi tek satırdır.)
@@ -1865,6 +1932,7 @@ Panel arayüzü (0.15.0–0.19.0; taslağın soruları — yanıt gelene kadar *
 71. **Bugün ekranında tahtalar:** öneri kat/blok çipleri ve durum sayıları, tam liste Tahtalar'da; öbür
     seçenek bugünkü kart ızgarası. (0.18.0'da öneri uygulandı; 60'tan çok tahtada çip yerine grup özeti.)
 72. **Genel arama ne zaman?** Öneri: son aşamada; önce yalnız Ayarlar içinde (0.16.0'da Ayarlar araması var).
+    (0.20.0'da öneri uygulandı: genel arama 6. aşamada geldi; Ayarlar içi arama ayrıca duruyor, soru 98.)
 73. **Sol menünün rengi:** öneri okulun şerit rengi (0.15.0'da böyle); öbür seçenek nötr koyu gri.
 74. **Yoklama'ya tıklayınca ilk sayfa:** öneri Günlük (bugünkü gibi); öbür seçenek şube defteri.
     (0.19.0'da öneri VARSAYILDI: şeridin ilk sekmesi Günlük'tür.)
@@ -1915,6 +1983,31 @@ Panel arayüzü (0.15.0–0.19.0; taslağın soruları — yanıt gelene kadar *
     değişmeli; yana kaydırma gizli sekme ve sayfa genişlemesi riski taşır.
 90. **Devamsızlık icmali her açılışta işlem kaydına satır düşsün mü?** Var olan davranıştır; icmal sekme
     olduğu için daha sık açılabilir ve kayıt kalabalıklaşabilir. **Varsayıldı: değişmedi.**
+91. **Arama kısayolu yalnız `/` mi, Ctrl+K da olsun mu?** Öneri: yalnız `/` (Ctrl+K tarayıcının kendi
+    kısayoluyla çakışır). **0.20.0'da öneri VARSAYILDI; soru açıktır.**
+92. **Şube aranınca ne açılsın?** Öneri: şube defteri; şube, aynı adlı tahtadan önce sıralansın.
+    **Varsayıldı.** Sıra `arama.TUR_SIRASI`/`GRUP_SIRASI`'ndadır.
+93. **Grup sonucu idareciye de çıksın mı?** Hedef sayfa (Gruplar) yöneticiye özeldir; idareci için anlamlı
+    hedef "bu gruba duyuru" olurdu ve yeni bir `GET /duyurular/yeni?grup=` ön seçimi gerektirir. Öneri:
+    yalnız yönetici, Gruplar'a gider. **Varsayıldı.**
+94. **Onay bekleyen tahtanın adı yöneticinin aramasında çıksın mı?** Öneri: hayır (ad henüz verilmemiştir,
+    makine adı kişisel olabilir; Tahtalar bandında durur). **Varsayıldı.**
+95. **Demirbaş numarasıyla tahta aransın mı?** Öneri: hayır. **Varsayıldı.**
+96. **Telefonda arama:** üst çubuk düğmesi `/ara` sayfasına mı gitsin, yerinde açılan kutu mu olsun? Öneri:
+    sayfaya gitsin (açılır katman yok). **Varsayıldı.**
+97. **Öneri seçilmeden Enter:** ilk öneriye mi, bütün sonuçların sayfasına mı? Öneri: sonuç sayfası.
+    **Varsayıldı.**
+98. **Ayarlar içi arama ayrı mı kalsın?** Öneri: ayrı kalsın (değer özetlerini gösterir), aynı tanımlardan
+    beslensin. **Varsayıldı.**
+99. **Sonuçsuz notunun metni uygun mu?** Not sabittir (sorguya göre değişmez), yol gösterir; idarecide
+    "Yalnız yöneticinin açabildiği sayfalar sonuçlarda görünmez." satırı vardır. **Varsayıldı.** Metin
+    değişebilir; sorguya göre değişen not yazılmaz.
+100. **Sorgu boşken gösterilen sekiz "sık iş" ve sırası** okulun günlük işine uyuyor mu? **Varsayıldı**
+    (`arama.SIK_ISLER`'deki `one`). Bağlı: eş anlamlı sözcükler tahmindir; kullanımda eksik çıkanlar eklenir.
+101. **Yazım hatası toleransı olsun mu ("yoklma")?** Öneri: hayır; yalnız ek almış sözcük eşleşir
+    ("pusulası"). **Varsayıldı.** Tolerans gürültü ve yanlış hedef riski taşır; ayrı iş. Bağlı küçükler:
+    yan menüdeki yer tutucu yöneticide de "ayar" demiyor; `/ara` sayfasında üst çubuktaki büyüteç işaretli
+    değil; "çıkış", "tahta sil" gibi sözcükler sonuç vermiyor.
 
 Altyapı (0.7.0 ve 6B):
 
