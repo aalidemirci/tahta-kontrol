@@ -17,7 +17,6 @@
 AppId={{6E0B7C1E-3B4D-4E7B-9E0A-7A1D5B0C2F41}
 AppName=Tahta Kontrol
 SetupIconFile=tahta-kontrol.ico
-UninstallDisplayIcon={app}\TahtaKontrol.exe
 AppVersion={#Surum}
 AppPublisher=okulapp.org
 DefaultDirName={autopf}\Tahta Kontrol
