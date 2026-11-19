@@ -34,6 +34,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="TahtaKontrol",
+    icon=str(Path(SPECPATH) / "tahta-kontrol.ico"),
     console=False,
     upx=False,
 )

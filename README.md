@@ -1,4 +1,6 @@
-# Tahta Kontrol
+# <img src="tahta_sunucu/statik/isaret.svg" width="36" height="36" alt=""> Tahta Kontrol
+
+Kilit, duyuru, yoklama, sınav: okulun tahtaları tek panelde.
 
 Yerel geliştirme **0.20.0**: panel arayüzünün yeniden düzeninde 6. ve son aşama — genel arama. Yan menüde
 (telefonda üst çubuktaki büyüteçte) bir arama kutusu: sayfa, sekme, sık iş, ayar bölümü, tahta ve şube adı

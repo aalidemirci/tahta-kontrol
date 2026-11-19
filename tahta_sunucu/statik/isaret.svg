@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Tahta Kontrol">
-  <rect width="64" height="64" rx="14" fill="#24507a"/>
-  <rect x="12" y="14" width="40" height="27" rx="3" fill="none" stroke="#ffffff" stroke-width="4"/>
-  <path d="M32 41v9M22 50h20" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
-  <path d="M24 27l5 5 11-11" fill="none" stroke="#f0a35e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect width="64" height="64" rx="14" fill="#164e57"/>
+  <rect x="8" y="12" width="48" height="28" rx="6" fill="#ffffff"/>
+  <path d="M22 26l7 7 14-14" fill="none" stroke="#164e57" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="20" y="44" width="24" height="8" rx="4" fill="#f6b23c"/>
 </svg>

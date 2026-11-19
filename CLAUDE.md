@@ -388,7 +388,8 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 150 ms bekleme, AbortController, yalnız textContent; eşleştirme ve dizin JS'te YOK), `kabukCekmeceAc`
                 (kısayolun çekmeceyi açması için kabukKur'un dışarı verdiği tek işlev); stil.css kabuk katmanında
                 `.genel-ara`, `.ara-oneri`, `.ust-ara`, `--kb-kisayol`; yan menü ızgarası BEŞ satır),
-                isaret.svg (nötr ürün işareti)
+                isaret.svg (ürün işareti; 19.11.2026 kararı: ad "Tahta Kontrol" kaldı, işaret "onaylı tahta";
+                Windows simgesi packaging/windows/tahta-kontrol.ico aynı çizimden, elle üretilir)
   ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh, tahta-yoklama.desktop,
                 tahta-ariza.desktop
 tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)

@@ -226,3 +226,12 @@ sekme şeritlerinden ve ayar bölümlerinden kendiliğinden türer (bir sekmenin
   (sorgu sayısının büyüklükten bağımsızlığı testle, 60 tahta ve 400 öğrenciyle görüldü).
 - Gerçek kullanıcıların hangi sözcükleri yazacağı bilinmiyor; eş anlamlı listesi tahmindir ve kullanımda
   görülen eksiklerle (`arama.SIK_ISLER`) genişletilmelidir.
+
+## Ürün işareti ve tanım satırı (19.11.2026, kullanıcı kararı)
+
+Ad "Tahta Kontrol" olarak kaldı. Ürün işareti yenilendi (`tahta_sunucu/statik/isaret.svg`: beyaz tahta, onay imi,
+altında vurgu çubuğu); eski işaret 16 pikselde dağılıyordu. İşaret yalnız okul logosu yüklenmemişken görünür
+(giriş sayfası, menü başlığı, tarayıcı sekmesi). Giriş ve ilk kurulum sayfalarındaki tanım satırı "kilit, duyuru,
+yoklama, sınav: okulun tahtaları tek panelde" oldu. Windows kurucusu ve program dosyası aynı işareti simge olarak
+taşır (`packaging/windows/tahta-kontrol.ico`). Tahtadaki ekranlar ve teknik adlar (klasör, paket, hizmet) değişmedi.
+Simge gerçek Windows görev çubuğunda ve başlat menüsünde denenmedi.
