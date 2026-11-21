@@ -7,13 +7,14 @@ durdurmaz. Kip, açılışta `/yerel/durum` yanıtına ve hizmetin durumuna gör
 - calisiyor          : sunucu yanıt veriyor (hizmet ya da geliştirme sunucusu) → bilgi.
 - hizmet_calismiyor  : hizmet kurulu ama yanıt yok → "Hizmeti başlat" (UAC sorar).
 - kurulu_degil       : paketli program ama hizmet yok → yeniden kurun (sunucu açılmaz;
-                       hizmetle çift çalışma olmasın).
+                       hizmetle çift çalışma olmasın). Yalnız sc "hizmet yok" (1060) deyince.
+- okunamadi          : (0.21.0, durum uygulaması) sc query bu kez okunamadı → yeniden denenir.
 - gelistirme         : `uv run … pencere` → sunucuyu pencere içinde çalıştırır (eski davranış).
 
 0.21.0: kurulu programda pencere bildirim alanında simgeyle durur (tepsi.py): X pencereyi gizler, süreç
 simgede kalır, gerçek çıkış simge menüsündeki "Çık"tır; durum 15 sn arayla ayrı iş parçacığında okunur ve
-pencere/simge değişince güncellenir. `pencere --gizli` pencere açmadan yalnız simgeyi getirir (kurucunun
-isteğe bağlı oturum açılışı kısayolu). Bu yolların HİÇBİRİ sunucu açmaz: Sunucu yalnız geliştirme kipinde
+pencere/simge değişince güncellenir. `pencere --gizli` pencere açmadan yalnız simgeyi getirir (kurucu
+başlangıç kısayolu KURMAZ, kural 28). Bu yolların HİÇBİRİ sunucu açmaz: Sunucu yalnız geliştirme kipinde
 (`_gelistirme_penceresi`) içe aktarılır. Geliştirmede bildirim alanı yoktur (TAHTA_TEPSI_DENE=1 ile elle
 denenebilir; o kip de sunucu açmaz).
 
@@ -221,7 +222,7 @@ def _adresler(cerceve, yerel: str, ag: list[str]) -> None:
 
 def calistir(gizli: bool = False) -> int:
     """Durum penceresi. Kurulu programda (ya da TAHTA_TEPSI_DENE=1 ile geliştirmede) bildirim alanı simgesiyle
-    çalışır ve SUNUCU AÇMAZ; `gizli` ile pencere açılmadan yalnız simge gelir (oturum açılışı kısayolu).
+    çalışır ve SUNUCU AÇMAZ; `gizli` ile pencere açılmadan yalnız simge gelir.
     Geliştirmede (hizmet yok) sunucu pencere içinde çalışır; orada bildirim alanı yoktur."""
     _gunluk_kur()
     if ayar.paketli_windows() or tepsi.deneme_kipi():
@@ -259,7 +260,20 @@ def pencere_kipi(anlik: tepsi.Anlik | None) -> str:
         return "okunuyor"
     if anlik.bekleniyor:
         return "bekleniyor"
+    if anlik.durum is None and anlik.hizmet is None:
+        # sc query bu kez okunamadı (zaman aşımı, anlaşılmayan çıktı): "kurulu değil" DEĞİLDİR; yeniden kurulum
+        # öğüdü yalnız sc "hizmet yok" (1060) deyince çizilir.
+        return "okunamadi"
     return kip_sec(anlik.durum, anlik.hizmet, True)
+
+
+def bekleniyor_metni(hizmet: str | None, baslatildi: bool) -> tuple[str, str]:
+    """"bekleniyor" kipinin (başlık, alt satır). "Hizmet yeni başladı" yalnız hizmet gerçekten başlarken
+    (START_PENDING / CONTINUE_PENDING) ya da kullanıcı bu pencereden "Hizmeti başlat" dedikten sonra yazılır;
+    açılışta zaten RUNNING olup yanıt vermeyen hizmet saatlerdir askıda olabilir: orada nötr metin."""
+    if baslatildi or hizmet in ("START_PENDING", "CONTINUE_PENDING"):
+        return "Sunucu başlatılıyor", "Hizmet yeni başladı; sunucu birkaç saniyede yanıt verir."
+    return "Sunucunun yanıtı bekleniyor", "Hizmet çalışıyor; sunucunun yanıtı bekleniyor."
 
 
 def _durum_uygulamasi(gizli: bool, tepsi_acik: bool) -> int:
@@ -269,8 +283,9 @@ def _durum_uygulamasi(gizli: bool, tepsi_acik: bool) -> int:
     if tepsi_acik:
         _mutex, ilk = tepsi.tek_ornek_al()
         if not ilk:  # bu oturumda zaten açık: onu göster (gizli açılışta hiçbir şey yapma)
-            if not gizli:
-                tepsi.var_olani_goster()
+            if not gizli and not tepsi.var_olani_goster():
+                logging.warning("Durum simgesi bu oturumda açık ama penceresine ulaşılamadı.")
+                tepsi.uyari_kutusu(tepsi.IKINCI_ORNEK_UYARISI)
             return 0
         simge = tepsi.Tepsi(olaylar)
         if not simge.baslat():
@@ -304,6 +319,7 @@ class DurumUygulamasi:
         self.kip = "okunuyor"
         self.kararli: str | None = None
         self.balon_gosterildi = False
+        self.baslatildi = False  # bu pencereden "Hizmeti başlat" dendi mi (bekleniyor_metni)
         self.kok = tk.Tk()
         if gizli:
             self.kok.withdraw()
@@ -340,6 +356,8 @@ class DurumUygulamasi:
         tur = olay[0]
         if tur == "durum":
             self._durum_degisti(olay[1])
+        elif tur == "simge_kapandi":
+            self._simge_kapandi()
         elif tur == "uyari":
             self.goster()
             messagebox.showwarning("Tahta Kontrol", olay[1], parent=self.kok)
@@ -365,6 +383,16 @@ class DurumUygulamasi:
                 self.simge.balon(metin, uyari=True)
         self.kararli = tepsi.kararli_tur(self.kararli, simge_turu)
         self._ciz()
+
+    def _simge_kapandi(self) -> None:
+        """Simgenin ileti döngüsü istenmeden bitti: pencere artık simgesizdir (X kapatır). Pencere gizliyse
+        kullanıcının ona ulaşacağı yol kalmadı: süreç görünmez yaşayıp tek örnek engelini tutmasın, çıkar."""
+        self.simge = None
+        self.kok.protocol("WM_DELETE_WINDOW", self.cik)
+        if self.kok.state() == "withdrawn":
+            self.cik()
+        else:
+            self._ciz()
 
     # -- eylemler
     def gizle(self) -> None:
@@ -392,6 +420,7 @@ class DurumUygulamasi:
             self.goster()
             messagebox.showerror("Tahta Kontrol", f"Hizmet başlatılamadı:\n\n{hata}", parent=self.kok)
             return
+        self.baslatildi = True
         self.izleyici.hizlandir()
         self.kok.after(6000, self._baslatma_denetimi)
 
@@ -416,7 +445,16 @@ class DurumUygulamasi:
         if self.kip == "okunuyor":
             _baslik(cerceve, "Tahta Kontrol", "Sunucunun durumu okunuyor…")
         elif self.kip == "bekleniyor":
-            _baslik(cerceve, "Sunucu başlatılıyor", "Hizmet yeni başladı; sunucu birkaç saniyede yanıt verir.")
+            _baslik(cerceve, *bekleniyor_metni(anlik.hizmet if anlik else None, self.baslatildi))
+        elif self.kip == "okunamadi":
+            _baslik(
+                cerceve,
+                "Sunucunun durumu okunamadı",
+                f"Hizmetin durumu bu kez okunamadı; kısa süre içinde yeniden denenir · pencere sürümü {__version__}",
+            )
+            tk.Button(dugmeler, text="Yeniden dene", width=14, command=self.izleyici.simdi).pack(
+                side="left", padx=(0, 8)
+            )
         elif self.kip == "calisiyor" and anlik is not None and anlik.durum is not None:
             durum = anlik.durum
             ek = " (Windows hizmeti)" if durum.get("hizmet") else ""

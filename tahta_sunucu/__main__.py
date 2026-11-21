@@ -5,8 +5,8 @@
                                     pencere içinde çalıştırır. Kurulu programda bildirim alanında simgeyle
                                     kalır (X gizler, "Çık" simge menüsündedir).
   python -m tahta_sunucu pencere --gizli
-                                    Pencere açmadan yalnız durum simgesi (oturum açılışı kısayolu; yalnız
-                                    kurulu programda ya da TAHTA_TEPSI_DENE=1 ile). Sunucu AÇMAZ.
+                                    Pencere açmadan yalnız durum simgesi (yalnız kurulu programda ya da
+                                    TAHTA_TEPSI_DENE=1 ile). Sunucu AÇMAZ.
   python -m tahta_sunucu paket YOL  Ajan paketini (.deb) dosyaya yazar.
   python -m tahta_sunucu hizmet     Windows hizmeti olarak çalışır (yalnız Hizmet Denetim Yöneticisi başlatır).
   python -m tahta_sunucu hizmet --konsol

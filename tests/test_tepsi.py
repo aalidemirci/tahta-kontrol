@@ -299,3 +299,278 @@ def test_spec_simgeleri_ve_pywin32_modullerini_tasir():
 def test_giris_noktasi_pencere_bagimsiz_degiskenlerini_gecirir():
     giris = (KOK / "packaging" / "windows" / "giris.py").read_text(encoding="utf-8")
     assert 'main(sys.argv[1:] or ["pencere"])' in giris and "pencere --gizli" in giris
+
+
+# ---- inceleme düzeltmeleri: simge kaydı, istenmeden kapanma, ikinci örnek, kip metinleri ----------------
+class SahteKabuk:
+    """Shell_NotifyIcon'un benzeri: `var` simgenin bildirim alanında olup olmadığıdır. `zaman_asimi` listesindeki
+    işlem bir kez UYGULANIR ama hata verir (Explorer meşgulken belgelenmiş durum); `hazir` False iken her işlem
+    düşer (görev çubuğu yok)."""
+
+    NIM_ADD, NIM_MODIFY, NIM_DELETE = 0, 1, 2
+    NIF_MESSAGE, NIF_ICON, NIF_TIP, NIF_INFO = 1, 2, 4, 16
+    NIIF_INFO, NIIF_WARNING = 1, 2
+
+    def __init__(self):
+        self.var = False
+        self.hazir = True
+        self.zaman_asimi: list[int] = []
+        self.islemler: list[int] = []
+        self.ipucu = None
+        self.balonlar: list[str] = []
+        self.iletiler: list[int] = []
+        self.pencere = 0
+        self.bulma = 0
+
+    def Shell_NotifyIcon(self, islem, kayit):  # noqa: N802 - pywin32 adı
+        self.islemler.append(islem)
+        if not self.hazir:
+            raise OSError("görev çubuğu yok")
+        uygula = {
+            self.NIM_ADD: not self.var,
+            self.NIM_MODIFY: self.var,
+            self.NIM_DELETE: self.var,
+        }[islem]
+        if uygula:
+            if islem == self.NIM_ADD:
+                self.var = True
+            elif islem == self.NIM_DELETE:
+                self.var = False
+            elif len(kayit) > 6:
+                self.balonlar.append(kayit[6])
+            if islem != self.NIM_DELETE:
+                self.ipucu = kayit[5]
+        if islem in self.zaman_asimi:
+            self.zaman_asimi.remove(islem)
+            raise OSError("zaman aşımı")
+        if not uygula:
+            raise OSError("geçersiz işlem")
+
+    def PostMessage(self, hwnd, ileti, wparam, lparam):  # noqa: N802
+        self.iletiler.append(ileti)
+
+    def PostQuitMessage(self, kod):  # noqa: N802
+        pass
+
+    def DestroyIcon(self, tutamac):  # noqa: N802
+        pass
+
+    def FindWindow(self, sinif, ad):  # noqa: N802
+        self.bulma += 1
+        return self.pencere if self.bulma >= 3 else 0
+
+
+@pytest.fixture()
+def kabuk(monkeypatch):
+    sahte = SahteKabuk()
+    monkeypatch.setitem(sys.modules, "win32gui", sahte)
+    return sahte
+
+
+def _tepsi(olaylar=None) -> tepsi.Tepsi:
+    t = tepsi.Tepsi(olaylar if olaylar is not None else queue.Queue())
+    t._hwnd = 4242
+    t._simge = lambda tur: 0  # LoadImage yok
+    return t
+
+
+def test_tek_modify_hatasi_simgeyi_kalici_eklenmedi_durumuna_kilitlemez(kabuk):
+    t = _tepsi()
+    t._ekle()
+    assert kabuk.var and t._eklendi
+    kabuk.zaman_asimi.append(kabuk.NIM_MODIFY)  # MODIFY uygulandı ama hata döndü
+    t.guncelle("calisiyor", "Tahta Kontrol: sunucu çalışıyor", tepsi.menu_ogeleri("calisiyor"))
+    t._guncelle_ileti(0, 0, 0, 0)
+    assert t._eklendi, "ADD 'zaten var' diye düşünce MODIFY ile varlık sınanmalı"
+    t.guncelle("durdu", "Tahta Kontrol: sunucu hizmeti durdu", tepsi.menu_ogeleri("hizmet_calismiyor", "STOPPED"))
+    t._guncelle_ileti(0, 0, 0, 0)
+    assert kabuk.ipucu == "Tahta Kontrol: sunucu hizmeti durdu"  # simge eski durumda donmadı
+    t.balon(tepsi.BALON_DURDU, uyari=True)
+    t._balon_ileti(0, 0, 0, 0)
+    assert kabuk.balonlar == [tepsi.BALON_DURDU]  # "durdu" balonu atılmadı
+
+
+def test_zaman_asimina_dusen_ilk_ekleme_simgeyi_eklenmis_sayar(kabuk):
+    t = _tepsi()
+    kabuk.zaman_asimi.append(kabuk.NIM_ADD)  # oturum açılışında: ADD uygulandı ama hata döndü
+    t._ekle()
+    assert kabuk.var and t._eklendi
+    assert kabuk.islemler == [kabuk.NIM_ADD, kabuk.NIM_MODIFY]
+
+
+def test_gorev_cubugu_hazir_degilse_sonraki_guncellemede_yeniden_eklenir(kabuk):
+    t = _tepsi()
+    kabuk.hazir = False
+    t._ekle()
+    assert not t._eklendi
+    t.balon("deneme")
+    t._balon_ileti(0, 0, 0, 0)  # alan yokken balon sessizce düşer, hata çıkmaz
+    assert kabuk.balonlar == []
+    kabuk.hazir = True
+    t._guncelle_ileti(0, 0, 0, 0)
+    assert kabuk.var and t._eklendi
+    t.balon("deneme")
+    t._balon_ileti(0, 0, 0, 0)
+    assert kabuk.balonlar == ["deneme"]
+
+
+def test_kapanista_simge_eklenmedi_sanilsa_da_kaldirilir(kabuk):
+    t = _tepsi()
+    kabuk.var = True  # alanda duruyor ama nesne bilmiyor (zaman aşımı)
+    t._eklendi = False
+    t._yok_edildi(4242, 0, 0, 0)
+    assert not kabuk.var and kabuk.islemler[-1] == kabuk.NIM_DELETE and t._hwnd == 0
+
+
+class SahteWin32Con:
+    WM_DESTROY = 0x0002
+    WM_CLOSE = 0x0010
+    WM_NULL = 0
+    WS_OVERLAPPED = 0
+    WS_SYSMENU = 0x80000
+    CW_USEDEFAULT = -1
+
+
+class SahteWin32Api:
+    @staticmethod
+    def GetModuleHandle(ad):  # noqa: N802
+        return 1
+
+
+def _sahte_ileti_dongusu(monkeypatch, kabuk, dongu):
+    """Tepsi._calis'i Windows'suz çalıştırır: pencere sınıfının ileti haritası yakalanır, `dongu(harita)`
+    PumpMessages'ın yerine geçer."""
+    kap = {}
+
+    class Sinif:
+        pass
+
+    def sinif_kaydet(sinif):
+        kap["harita"] = sinif.lpfnWndProc
+        return 77
+
+    kabuk.WNDCLASS = Sinif
+    kabuk.RegisterWindowMessage = lambda ad: 0xC123
+    kabuk.RegisterClass = sinif_kaydet
+    kabuk.CreateWindow = lambda *a: 4242
+    kabuk.UnregisterClass = lambda atom, h: None
+    kabuk.PumpMessages = lambda: dongu(kap["harita"])
+    monkeypatch.setitem(sys.modules, "win32con", SahteWin32Con)
+    monkeypatch.setitem(sys.modules, "win32api", SahteWin32Api)
+
+
+def test_wm_close_simge_penceresini_yok_etmez_duzgun_cikis_ister(monkeypatch, kabuk):
+    olaylar: queue.Queue = queue.Queue()
+    t = tepsi.Tepsi(olaylar)
+    t._simge = lambda tur: 0
+    goruldu = []
+
+    def dongu(harita):
+        assert SahteWin32Con.WM_CLOSE in harita  # DefWindowProc pencereyi yok etmesin
+        assert harita[SahteWin32Con.WM_CLOSE](4242, SahteWin32Con.WM_CLOSE, 0, 0) == 0
+        goruldu.append(olaylar.get_nowait())
+        t.kapat()  # Tk "Çık"ı işledi
+        harita[SahteWin32Con.WM_DESTROY](4242, SahteWin32Con.WM_DESTROY, 0, 0)
+
+    _sahte_ileti_dongusu(monkeypatch, kabuk, dongu)
+    t._calis()
+    assert goruldu == [("menu", "cik")]
+    assert olaylar.empty()  # istenen kapanışta "simge_kapandi" yok
+    assert not kabuk.var and t._hwnd == 0
+
+
+def test_istenmeden_biten_ileti_dongusu_tk_tarafina_haber_verir(monkeypatch, kabuk):
+    olaylar: queue.Queue = queue.Queue()
+    t = tepsi.Tepsi(olaylar)
+    t._simge = lambda tur: 0
+
+    def dongu(harita):  # pencere dışarıdan yok edildi (WM_DESTROY), kapat() çağrılmadı
+        harita[SahteWin32Con.WM_DESTROY](4242, SahteWin32Con.WM_DESTROY, 0, 0)
+
+    _sahte_ileti_dongusu(monkeypatch, kabuk, dongu)
+    t._calis()
+    assert olaylar.get_nowait() == ("simge_kapandi",) and t._hwnd == 0
+
+
+class SahteKok:
+    def __init__(self, durum):
+        self.durum = durum
+        self.kapanis = None
+        self.yok_edildi = False
+
+    def state(self):
+        return self.durum
+
+    def protocol(self, ad, islev):
+        self.kapanis = islev
+
+    def destroy(self):
+        self.yok_edildi = True
+
+
+class SahteIzleyici:
+    def durdur(self):
+        pass
+
+
+def _uygulama(kok_durumu: str):
+    uyg = object.__new__(pencere.DurumUygulamasi)
+    uyg.kok = SahteKok(kok_durumu)
+    uyg.simge = None
+    uyg.izleyici = SahteIzleyici()
+    uyg.cizimler = 0
+
+    def ciz():
+        uyg.cizimler += 1
+
+    uyg._ciz = ciz
+    return uyg
+
+
+def test_simge_kapaninca_gizli_pencere_sureci_kapatir_gorunur_pencere_simgesiz_kalir():
+    gizli = _uygulama("withdrawn")
+    gizli._olay(("simge_kapandi",))
+    assert gizli.simge is None and gizli.kok.yok_edildi  # görünmez süreç tek örnek engelini tutmaz
+
+    acik = _uygulama("normal")
+    acik._olay(("simge_kapandi",))
+    assert acik.simge is None and not acik.kok.yok_edildi and acik.cizimler == 1
+    assert acik.kok.kapanis == acik.cik  # X artık gizlemez, kapatır
+
+
+def test_ikinci_ornek_pencereyi_kisa_sure_arar_bulamazsa_uyarir(monkeypatch, kabuk):
+    kabuk.pencere = 99
+    uykular = []
+    assert tepsi.var_olani_goster(deneme=5, ara_sn=0.2, uyu=uykular.append) is True
+    assert kabuk.bulma == 3 and uykular == [0.2, 0.2] and kabuk.iletiler == [tepsi.WM_GOSTER]
+
+    kabuk.pencere, kabuk.bulma = 0, 0
+    assert tepsi.var_olani_goster(deneme=3, uyu=lambda s: None) is False
+
+    uyarilar = []
+    monkeypatch.setattr(pencere, "_gunluk_kur", lambda: None)
+    monkeypatch.setattr(tepsi, "tek_ornek_al", lambda: (None, False))
+    monkeypatch.setattr(tepsi, "uyari_kutusu", uyarilar.append)
+    for gizli, bulundu, beklenen in ((False, False, 1), (True, False, 0), (False, True, 0)):
+        uyarilar.clear()
+        monkeypatch.setattr(tepsi, "var_olani_goster", lambda b=bulundu: b)
+        assert pencere._durum_uygulamasi(gizli, tepsi_acik=True) == 0
+        assert len(uyarilar) == beklenen, (gizli, bulundu)
+    assert "sunucuyu durdurmaz" in tepsi.IKINCI_ORNEK_UYARISI
+
+
+def test_sc_okunamayinca_kurulu_degil_denmez():
+    assert pencere.pencere_kipi(tepsi.Anlik(None, None, False)) == "okunamadi"
+    assert pencere.pencere_kipi(tepsi.Anlik(None, "yok", False)) == "kurulu_degil"
+    assert pencere.pencere_kipi(tepsi.Anlik(None, "STOPPED", False)) == "hizmet_calismiyor"
+    assert "baslat" not in [a for a, _, _ in tepsi.menu_ogeleri("okunamadi")]
+    # geliştirmenin kip seçimi değişmedi (orada hizmet yok + okunamadı "gelistirme"dir)
+    assert pencere.kip_sec(None, None, False) == "gelistirme"
+
+
+def test_acilista_yanitsiz_running_hizmet_icin_yeni_basladi_denmez():
+    baslik, alt = pencere.bekleniyor_metni("RUNNING", baslatildi=False)
+    assert "yeni başladı" not in alt and "başlatılıyor" not in baslik
+    for hizmet in ("START_PENDING", "CONTINUE_PENDING"):
+        assert "yeni başladı" in pencere.bekleniyor_metni(hizmet, baslatildi=False)[1]
+    assert "yeni başladı" in pencere.bekleniyor_metni("RUNNING", baslatildi=True)[1]

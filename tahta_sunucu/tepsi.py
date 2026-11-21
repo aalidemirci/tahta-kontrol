@@ -229,22 +229,51 @@ def tek_ornek_al() -> tuple[object | None, bool]:
     return tutamac, win32api.GetLastError() != _ZATEN_VAR
 
 
-def var_olani_goster() -> bool:
-    """İkinci açılışta: var olan örneğin gizli penceresine "göster" iletisi yollar."""
+def var_olani_goster(deneme: int = 10, ara_sn: float = 0.2, uyu=time.sleep) -> bool:
+    """İkinci açılışta: var olan örneğin gizli penceresine "göster" iletisi yollar. Öbür örnek mutex'i alıp
+    penceresini henüz kurmamış olabilir: pencere kısa süre (≈ 2 sn) aranır. Bulunamazsa False."""
     try:
-        import ctypes
-
         import win32gui
-
-        hwnd = win32gui.FindWindow(PENCERE_SINIFI, None)
+    except ImportError:
+        return False
+    try:
+        hwnd = 0
+        for sira in range(max(1, deneme)):
+            hwnd = win32gui.FindWindow(PENCERE_SINIFI, None)
+            if hwnd:
+                break
+            if sira + 1 < deneme:
+                uyu(ara_sn)
         if not hwnd:
             return False
-        ctypes.windll.user32.AllowSetForegroundWindow(-1)  # ASFW_ANY: öbür süreç pencereyi öne alabilsin
+        try:
+            import ctypes
+
+            ctypes.windll.user32.AllowSetForegroundWindow(-1)  # ASFW_ANY: öbür süreç pencereyi öne alabilsin
+        except Exception:
+            pass
         win32gui.PostMessage(hwnd, WM_GOSTER, 0, 0)
         return True
     except Exception:
         logging.exception("Var olan durum penceresine ulaşılamadı")
         return False
+
+
+IKINCI_ORNEK_UYARISI = (
+    "Tahta Kontrol durum simgesi bu oturumda zaten açık ama yanıt vermiyor.\n\n"
+    "Görev Yöneticisi'nden TahtaKontrol.exe'yi (durum penceresi) kapatıp yeniden açın. "
+    "Bu, sunucuyu durdurmaz."
+)
+
+
+def uyari_kutusu(metin: str) -> None:
+    """Tk kurulmadan basit Windows uyarı kutusu (ikinci örnek var olana ulaşamazsa sessiz çıkmasın)."""
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, metin, BALON_BASLIK, 0x30)  # MB_ICONWARNING
+    except Exception:
+        logging.warning("Uyarı kutusu gösterilemedi.")
 
 
 # ---- bildirim alanı simgesi (Win32) -------------------------------------------------------
@@ -263,6 +292,7 @@ class Tepsi:
         self._taskbar = 0
         self._simgeler: dict[str, int] = {}
         self._hazir = threading.Event()
+        self._kapatiliyor = False  # kapat() istendi mi (istenmeden biten ileti döngüsü Tk'ye haber verilir)
         self._is: threading.Thread | None = None
 
     # -- öbür iş parçacıklarından
@@ -284,6 +314,7 @@ class Tepsi:
 
     def kapat(self, bekle_sn: float = 2.0) -> None:
         """Simgeyi kaldırır (NIM_DELETE) ve ileti döngüsünü bitirir; süreç simge kalkmadan çıkmasın diye bekler."""
+        self._kapatiliyor = True
         self._gonder(WM_KAPAT)
         if self._is is not None and self._is is not threading.current_thread():
             self._is.join(bekle_sn)
@@ -309,6 +340,9 @@ class Tepsi:
             harita = {
                 self._taskbar: self._yeniden_ekle,
                 win32con.WM_DESTROY: self._yok_edildi,
+                # Dışarıdan kapatma isteği (ör. zorlamasız taskkill): pencereyi DefWindowProc'a yok ettirme
+                # (simge iş parçacığı biter, süreç görünmez kalıp tek örnek engelini tutardı); düzgün çıkış iste.
+                win32con.WM_CLOSE: self._kapatma_istegi,
                 WM_TEPSI: self._bildirim,
                 WM_GUNCELLE: self._guncelle_ileti,
                 WM_BALON: self._balon_ileti,
@@ -341,11 +375,19 @@ class Tepsi:
             self._hazir.set()
             return
         self._hazir.set()
-        win32gui.PumpMessages()
-        try:  # sınıfın ileti haritası bu nesneye bağlı: aynı süreçte yeni bir Tepsi kurulabilsin
-            win32gui.UnregisterClass(atom, sinif.hInstance)
-        except Exception:
-            pass
+        try:
+            win32gui.PumpMessages()
+        finally:
+            self._hwnd = 0
+            try:  # sınıfın ileti haritası bu nesneye bağlı: aynı süreçte yeni bir Tepsi kurulabilsin
+                win32gui.UnregisterClass(atom, sinif.hInstance)
+            except Exception:
+                pass
+            if not self._kapatiliyor:
+                # İleti döngüsü istenmeden bitti: simge yok. Tk tarafı bunu bilmezse gizli pencere ve süreç
+                # görünmez kalır, tek örnek engeli de yeni açılışı engeller.
+                logging.warning("Bildirim alanı simgesi beklenmedik biçimde kapandı.")
+                self.olaylar.put(("simge_kapandi",))
 
     def _simge(self, tur: str) -> int:
         if tur in self._simgeler:
@@ -374,14 +416,22 @@ class Tepsi:
         return (self._hwnd, _SIMGE_KIMLIGI, bayraklar, WM_TEPSI, self._simge(tur), ipucu)
 
     def _ekle(self) -> None:
+        """NIM_ADD; düşerse simge belki zaten vardır (Shell_NotifyIcon zaman aşımına düşüp yine de eklemiş ya da
+        değiştirmiş olabilir): NIM_MODIFY tutarsa simge alandadır. İkisi de düşerse sonraki güncellemede,
+        balonda ya da TaskbarCreated'da yeniden denenir (hiçbir hata simgeyi kalıcı "eklenmedi"ye kilitlemez)."""
         import win32gui
 
+        kayit = self._kayit(win32gui.NIF_ICON | win32gui.NIF_MESSAGE | win32gui.NIF_TIP)
         try:
-            win32gui.Shell_NotifyIcon(
-                win32gui.NIM_ADD, self._kayit(win32gui.NIF_ICON | win32gui.NIF_MESSAGE | win32gui.NIF_TIP)
-            )
+            win32gui.Shell_NotifyIcon(win32gui.NIM_ADD, kayit)
             self._eklendi = True
-        except Exception:  # görev çubuğu henüz hazır değil: TaskbarCreated ya da sonraki güncellemede yeniden
+            return
+        except Exception:
+            pass
+        try:
+            win32gui.Shell_NotifyIcon(win32gui.NIM_MODIFY, kayit)
+            self._eklendi = True
+        except Exception:  # görev çubuğu henüz hazır değil
             self._eklendi = False
             logging.warning("Bildirim alanına simge eklenemedi; görev çubuğu hazır olunca yeniden denenecek.")
 
@@ -392,13 +442,13 @@ class Tepsi:
     def _guncelle_ileti(self, hwnd, ileti, wparam, lparam) -> int:
         import win32gui
 
-        if not self._eklendi:
-            self._ekle()
-            return 0
-        try:
-            win32gui.Shell_NotifyIcon(win32gui.NIM_MODIFY, self._kayit(win32gui.NIF_ICON | win32gui.NIF_TIP))
-        except Exception:
-            self._ekle()
+        if self._eklendi:
+            try:
+                win32gui.Shell_NotifyIcon(win32gui.NIM_MODIFY, self._kayit(win32gui.NIF_ICON | win32gui.NIF_TIP))
+                return 0
+            except Exception:  # tek hata "simge yok" demek değildir: _ekle önce ADD, sonra MODIFY dener
+                pass
+        self._ekle()
         return 0
 
     def _balon_ileti(self, hwnd, ileti, wparam, lparam) -> int:
@@ -406,7 +456,12 @@ class Tepsi:
 
         with self._kilit:
             balon, self._balon = self._balon, None
-        if not balon or not self._eklendi:
+        if not balon:
+            return 0
+        if not self._eklendi:
+            self._ekle()
+        if not self._eklendi:
+            logging.warning("Simge alanda değil; balon bildirimi gösterilemedi.")
             return 0
         metin, uyari = balon
         kayit = self._kayit(win32gui.NIF_INFO) + (
@@ -473,6 +528,10 @@ class Tepsi:
         self.olaylar.put(("menu", "goster"))
         return 0
 
+    def _kapatma_istegi(self, hwnd, ileti, wparam, lparam) -> int:
+        self.olaylar.put(("menu", "cik"))  # Tk "Çık" ile kapatır; o da kapat() → WM_KAPAT
+        return 0
+
     def _kapat_ileti(self, hwnd, ileti, wparam, lparam) -> int:
         import win32gui
 
@@ -482,12 +541,11 @@ class Tepsi:
     def _yok_edildi(self, hwnd, ileti, wparam, lparam) -> int:
         import win32gui
 
-        if self._eklendi:
-            try:
-                win32gui.Shell_NotifyIcon(win32gui.NIM_DELETE, (hwnd, _SIMGE_KIMLIGI))
-            except Exception:
-                pass
-            self._eklendi = False
+        try:  # _eklendi False olsa da simge alanda olabilir (zaman aşımı): her zaman kaldırmayı dene
+            win32gui.Shell_NotifyIcon(win32gui.NIM_DELETE, (hwnd, _SIMGE_KIMLIGI))
+        except Exception:
+            pass
+        self._eklendi = False
         for tutamac in self._simgeler.values():
             try:
                 win32gui.DestroyIcon(tutamac)
