@@ -57,6 +57,31 @@ Sunucu iki kapı açar: `127.0.0.1:8787` (şifresiz, yalnız sunucu bilgisayarı
 - **Sunucu adres listesi** (§15.2) bu modeli değiştirmez: tahta listedeki her adreste aynı
   parmak izini arar; parmak izi tutmayan adrese tek bayt veri gitmez.
 
+**Tahta numarası ve varsayılan ad (0.21.0).** Okulda 0.20.0 ile kurulan 24 tahtanın hepsi panelde aynı adla
+("etap") göründü. Bunun nedeni şuydu: kayıt, tahtanın adını makine adından alıyordu ve Pardus ETAP'ta bütün
+tahtaların makine adı aynıdır. Bu yüzden ders programı eşlemesi körlemesine yapıldı. 0.21.0'da şöyle değişti:
+
+- **Numara:** her tahtanın tek numarası veritabanı kimliğidir (`tahta.id`; ayrı bir sütun yoktur, sıfırla
+  doldurulmaz, yeniden sıralanmaz). Kaldırılan tahtanın numarası yeniden kullanılmaz.
+- **Kurulum betiği:** `kur.sh` kayıt başarılı olunca `ajan.json`'daki `tahta_id`'yi okur ve çerçeveli bir
+  "TAHTA NO: 7" satırı basar (ASCII; okunamazsa hiçbir şey basmaz). Kurulumu yapan kişiden numarayı dersliğin
+  adıyla not etmesi istenir; tahta ekleme sayfası da bunu söyler.
+- **Varsayılan ad:** yeni kaydın adı "Tahta <no>"dur (`tahta_liste.varsayilan_ad`). Makine adı ad olarak
+  kullanılmaz; kendi sütununda durur ve yalnız Bakım › Bağlantı ve ajan'da görünür.
+- **Numaranın göründüğü yerler:** "ad · No 7" biçiminde onay bekleyen bandında, tahta listesinde, tahta
+  sayfasının başlığında, Bakım sekmesinde, arıza sayfalarında, onay pencerelerinde ve ders programı eşleme
+  seçeneklerinde (§12.3) yazar. Bugün çipinde yalnız adı başka bir onaylı tahtayla aynı olan tahtada yazar.
+  Genel aramaya girmez (kural 36).
+- **Aynı ad:** engellenmez, kayıttan sonra çakışan numaralarla uyarılır. Karşılaştırma `metin.katla` iledir:
+  büyük/küçük harf, Türkçe harf ve boşluk farkı sayılmaz.
+- **Toplu adlandırma:** Tahtalar sayfasındaki bant (yalnız yönetici) onayla `POST /tahtalar/adlandir`'i
+  çağırır. Bu uç, adını kurulumdan almış (makine adı ya da "Yeni tahta") ve adı başka bir tahtayla aynı olan
+  her tahtaya "Tahta <no>" adını verir. Liste sunucuda yeniden hesaplanır; formdan kimlik okunmaz. Elle
+  verilmiş adlar, derslik ve öbür nitelikler değişmez. İşlem kaydına yalnız sayı yazılır.
+
+Kuralın tek yeri `tahta_liste.ayni_adlilar`/`adlandirilacaklar`'dır. Varsayılan kararlar §17 soru
+102–105'tedir.
+
 ## 5. Kilit
 
 - Kilit, oturumun üstünde duran tam ekran bir penceredir; X11'de klavye ve fare
@@ -898,10 +923,10 @@ Kontrol zil çalmaz, yalnız ders aralığını bilmesi gerekir.
 ### 12.3 Ders programını içe aktarma (0.10.0)
 
 Program › Derslik programları › "Ders programını içe aktar" sihirbazı (yalnız yönetici; önce zil
-saatleri tanımlı olmalı). Adımlar: kaynak → eşleme → önizleme ve onay. GOCLER 9. öğe (`user_version` 9): `program_eslesme`
+saatleri tanımlı olmalı; 0.21.0'dan beri aSc dosyası zilsiz de yüklenir). Adımlar: kaynak → eşleme → önizleme ve onay. GOCLER 9. öğe (`user_version` 9): `program_eslesme`
 (hatırlanan eşlemeler), `program_surum` (geri alma).
 
-- **Kaynaklar:** aSc Timetables XML ("deneme": gerçek bir dosyayla doğrulanmadı; yalnız sınıf, derslik,
+- **Kaynaklar:** aSc Timetables XML (0.10.0–0.20.0'da "deneme"di; 0.21.0'da gerçek dosyayla doğrulandı, aşağıda; yalnız sınıf, derslik,
   gün, ders saati öznitelikleri okunur, öğretmen ve ders adı bölümleri hiç okunmaz; DTD/varlık reddi,
   boyut/derinlik sınırları, `guvenli_xml.py`), Tahta Kontrol şablonu (CSV/XLSX/XLS, sürüm 2: derslik
   boşsa şubenin tahtası), **yapay zekâ ile dönüştür** (hazır istem + KVKK uyarısı; kullanıcı kendi
@@ -917,6 +942,56 @@ saatleri tanımlı olmalı). Adımlar: kaynak → eşleme → önizleme ve onay.
   yalnız tahta·gün·devre·ders·şube); "Önceki programlar"dan geri yüklenir. İşlem kaydına yalnız biçim
   ve sayılar yazılır. Eski `/program/derslik/yukle` ve `/onayla` uçları sihirbaza yönlendirir; bir
   sürüm sonra silinir.
+
+**aSc Timetables 2012 XML (0.21.0; talep 5, kullanıcının bildirdiği sorunlar).** Okulda 0.20.0 ile yapılan
+aktarımda üç sorun görüldü: ikili eğitimde öğle dersleri sabah devresine yazıldı, "9/I" ile "9/İ" tek şube
+sayıldı, tahtalar aynı adı taşıdığı için derslik eşlemesi körlemesine yapıldı. Yol bir okulun gerçek dosyasıyla
+doğrulandı (dosya depoya girmez) ve "deneme"/"Sınanıyor" etiketi kalktı. Doğrulanan dosya biçimi şudur: gün
+maskesi Pazartesi'den başlar; blok derste de her ders saati ayrı karttır; `class@classroomids` sınıfın ana
+dersliğidir. aSc dosyası artık zil saatleri tanımlanmadan da yüklenir (e-Okul ve şablon yolu yine zil ister).
+
+- **Devre eşlemesi** (`program_aktar.asc_devre_gruplari`; ders numarası devre başınadır, kural 25):
+  - Ders saatleri önce adlarındaki önekle gruplanır: "S1…S8" ve "Ö1…Ö8"de önek devre, sayı devre içindeki
+    ders numarasıdır.
+  - Önek yoksa iki parçalı bölme aranır. Bölmenin kabulü için sınıfların en az %90'ı tek parçada kalmalı ve
+    tek parçadaki sınıflar o parçanın saatlerinin ortalama en az %60'ını kullanmalıdır (`DEVRE_HAPSI_ORANI`,
+    `DEVRE_KAPSAMA`). `breaks` bölümünden yalnız saatler okunur ve yalnız eşitliği bozar.
+  - Hiçbiri tutmazsa tek grup kalır (eski davranış). Başlangıç saati olmayan ders saati gruplamayı kapatmaz,
+    ayrı tutulur.
+  - Her grup bir zil devresine eşlenir. Seçim önce gelir, sonra hatırlanan; devre sayıları eşitse başlangıç
+    sırası, değilse ilk dersin saati ±5 dk; o da yoksa eşleme ekranında soru sorulur.
+  - Otomatik bulunan saat ve devre eşlemeleri **hatırlanmaz**; yalnız elle seçilen hatırlanır, çünkü zil
+    değişince bayat kalıyorlardı. 0.20.0'ın hatırladığı aSc saat eşlemeleri göçte bir kez silinir.
+- **Şube anahtarı:** kanonik şubedir (`metin.sube_duzelt`). Harf katlama (`katla`) şube anahtarı olarak
+  kullanılmaz; kullanılırsa I/İ birleşir.
+- **Zil önerisi** (`asc_zil_hazirla`/`asc_zil_yaz`; `POST /program/aktar/asc/zil`, onaylı):
+  - Zil yoksa ya da dosyanın saatleri zile uymuyorsa dosyadaki saatlerden çizelge önerilir. Uymama durumu
+    yalnız ikili eğitimli dosyada ele alınır; tek gruplu dosyada öneri yalnız zil yokken ya da ders saati
+    eşlenemiyorsa çıkar.
+  - Öneri `cizelge` yoluyla yazılır, kaynağı "aSc Timetables" olur.
+  - Dosyadaki saatlerde teneffüs olmayabileceği için öneri onay kutusu ve uyarıyla çıkar.
+- **Tahta eşlemesi:**
+  - Seçenekler "No {id} · {ad} · {derslik}" biçimindedir (`tahta_etiketi`; numara §4'tekiyle aynıdır). Aynı
+    adlı tahta varsa uyarı çıkar.
+  - Derslik alanı ya da adı tutmazsa ikinci aday rakam kümesidir (`metin.rakam_anahtari`: "DERSLİK-101" ↔
+    "101"). Bu aday yalnız dosyada o rakamı taşıyan tek derslik ve sistemde tek tahta varsa kullanılır.
+    Tahtanın adı ancak baştan sona numaraysa aday sayılır. Rakam eşleşmesi "Numarasından öneri" diye
+    gösterilir ve hatırlanmaz.
+- **Hatırlanan eşleşmeleri unutma** (`POST /program/aktar/unut`, onaylı): o kaynağın (asc | eokul | tablo)
+  bütün hatırlanan eşleşmelerini siler. Derslik programı değişmez; işlem kaydına kaynak ve sayı yazılır.
+- **Tahtaların şube bilgisi** (onayda isteğe bağlı kutu, `subeleri_guncelle=1`, işaretsiz gelir; yalnız aSc):
+  - Tahtanın şubeleri, ana dersliği o tahtaya eşlenen sınıflardan **tamamen** yeniden yazılır.
+  - Hiç sınıfı düşmeyen tahtanın (ör. atölye) şubeleri silinmez.
+  - Derslik alanı yalnız boşsa ve tahtaya tek aSc dersliği eşlendiyse yazılır.
+  - Program aynıyken de tek başına onaylanabilir.
+  - Eski ve yeni değerler `program_surum.tahta_json`'da saklanır. "Önceki programlar"dan geri yükleme yalnız o
+    onaydan beri değişmemiş tahtalarda geri yazar; sonradan elle girilen değer korunur.
+- **Göç** (GOCLER'e tek öğe): `program_eslesme`'den aSc saat eşlemeleri silinir ve
+  `program_surum.tahta_json` eklenir.
+
+Gerçek dosyayla yapılan yerel denemede (uydurma tahtalar, çıktıda yalnız sayı) zil dosyayla aynıyken 1820
+satır çıktı (sabah 894, öğle 926); 9/I ve 9/İ ayrı kaldı. Zil yokken iki devreli öneri onaylandı, sonra yine
+1820 satır çıktı. Varsayılan kararlar §17 soru 106–112'dedir.
 
 ### 12.4 e-Okul "Haftalık Ders Programları" raporu (0.12.0)
 
@@ -1156,6 +1231,39 @@ bunun bedeli idarenin tek tıkla kilidi açmasıdır, kaba kuvvet ise imkânsız
 **kilidi açmaz**; kilitli tahtada yoklama sürerken klavye kilidi sürer, yoklama bitince kilit
 ekranı geri gelir.
 
+**Toplu öğretmen yükleme (0.21.0; talep 1, kullanıcı kararı 21.11.2026; soru 34 kapandı).**
+Yer: Kişiler ve anahtarlar › Öğretmenler ve PIN › "Toplu yükle"; yalnız yönetici; `ogretmen_aktar.py`,
+`/ogretmenler/onizle` ve `/ogretmenler/aktar`.
+
+- **Kaynaklar.** Kaynak dosyanın içeriğinden tanınır; dosya diske yazılmaz.
+  - **aSc Timetables 2012 XML:** yalnız `teachers/teacher` öğesinin `firstname` ve `lastname` öznitelikleri
+    okunur. Biri boşsa `name` son sözcükten bölünür. Bu, derslik sihirbazından AYRI bir expat okuyucudur;
+    `program_aktar.ASC_ATLA` değişmedi ve derslik sihirbazı öğretmen okumamaya devam eder.
+  - **e-Okul personel listesi OOK01001R1 (.XLS):** başlıktan "Adı Soyadı" ve "Görevi" bulunur. Sütun yeri
+    dosyadan dosyaya değişir. Görev yalnız önizlemede görünür ve saklanmaz. Görevi boş satır rapor altbilgisi
+    sayılır.
+  - **"Adı; Soyadı; Kod" şablonu:** .xlsx, .xls ya da .csv.
+- **Okunmayanlar:** T.C. kimlik no, kadro, branş, aSc kısa adı, e-posta ve telefon okunmaz. Adında T.C. kimlik
+  numarasına benzeyen değer bulunan satır atlanır.
+- **Önizleme** öğrenci aktarımının kalıbıdır: bellekte 15 dakika durur, tek kullanımlıktır, "Vazgeç" onu
+  siler.
+  - Satırlar katlanmış tam adla (`metin.katla`) eşlenir; her satır eklenecek, zaten var, pasif olarak var ya
+    da dosyada yinelenen olur.
+  - Eklenecekler satır satır seçilir. e-Okul'da görevi öğretmen ya da müdür olmayanlar ve şablonun örnek
+    satırı işaretsiz gelir.
+  - Pasif aynı ad yalnız satırdaki "Etkinleştir" işaretiyle etkinleşir.
+  - Onayda plan işlemin içinde yeniden hesaplanır.
+- **Ad biçimi (kullanıcı kararı):** tamamı büyük ya da tamamı küçük harfli ad `metin.tr_bas_buyuk` ile
+  Türkçe baş harf biçimine çevrilir ("IŞIK" → "Işık"). "Soyadı" boş ve "Adı" çok sözcüklüyse ya da ad tek
+  sütundaysa son sözcük soyad sayılır. Üç ya da daha çok sözcük "bölmesini denetleyin" diye işaretlenir.
+- **Kod:** dosyadaki geçerli ve boşta kod kullanılır, yoksa 101'den ilk boş kod verilir. Var olan öğretmenin
+  kodu değişmez.
+- **Dokunulmayanlar (kullanıcı kararı):** dosyada olmayan öğretmene dokunulmaz, kimse pasifleştirilmez. PIN
+  üretilmez; pusulalar var olan "PIN'i olmayanların hepsine PIN üret" düğmesiyle alınır (kural 19).
+- **İz:** işlem kaydına yalnız sayılar yazılır; ayrı aktarım geçmişi tablosu yoktur.
+
+Varsayılan kararlar §17 soru 113–119'dadır.
+
 **Tahtada akış:** "Yoklama Al" kısayolu (`/usr/share/applications/tahta-yoklama.desktop` →
 `tahta-ajan yoklama`) ya da kilit ekranındaki **Yoklama al** düğmesi (yoklama etkin, tahta
 çevrimiçi ve kayıtlıyken). Kısayol servise yerel soketle "yoklama aç" der ve kapanır; bu kısa
@@ -1239,7 +1347,7 @@ PIN yayına girmez; Unix soketine taşıma ayrı iş); PIN sınıf önünde giri
 önlem kısa oturum ve deneme sınırıdır.
 
 Sonraya bırakılanlar (göç gerektirmez): e-Okul personel listesi (OOK01001R1) aktarımı
-(öğretmenler elle eklenir); günlük ızgarada "programdaki öğretmenden farklı" işareti (Aşama 3
+(0.21.0'da geldi; yukarıda "Toplu öğretmen yükleme"); günlük ızgarada "programdaki öğretmenden farklı" işareti (Aşama 3
 öğretmen tutmaz).
 
 ### 14.1 USB anahtar (0.11.0)
@@ -1492,6 +1600,58 @@ tuşlarıyladır; sekme sırası kısaltılmadı. Taslaktaki rehberlik/idari gö
 kategorileri, hücre aralığı seçimi ve ders arası yokluk uyarısı uygulanmadı
 (`docs/yoklama-yonetimi-tasarimi.md`). Saha adımları: `docs/saha-denemesi.md` §3.14.
 
+### 14.3 Sınıf başkanı USB anahtarı (0.21.0, deneme)
+
+İstek (talep 2): okul, ders yoklamasını öğretmenlere yaygınlaştırmadan önce sınıf başkanlarıyla denemek
+istedi. Kullanıcının 21.11.2026 kararları:
+
+- anahtar **şubeye** bağlıdır, kişiye değil; sistemde başkanın adı tutulmaz;
+- **öğretmen önceliği** geçerlidir;
+- anahtar yalnız kendi şubesinde, o şubenin tahtasında ve o anki derste çalışır; PIN ister, kilit açmaz;
+- Ayarlar'da ayrıca kapatılır ve varsayılan kapalıdır.
+
+Bu bölüm iki hükmü daraltır. §14.2'deki "program yalnız ön seçimdir" hükmü (kural 33) başkan anahtarı için
+geçerli değildir. "123 Ayşe Y." liste istisnası (kural 18) başkan anahtarıyla açılan listeyi de kapsar. İkisi
+de kullanıcı onaylıdır.
+
+| Konu | Karar |
+|---|---|
+| Sahip | `usb_anahtar.sahip_turu = 'sube'` ve `sube` ('10/A'). Öğrenci kimliği ya da başkanın adı hiçbir tabloya yazılmaz; etiket alanında T.C. denetimi vardır. Kimin taşıdığını idare kendi tutar; bellek el değiştirince yeni anahtar gerekmez |
+| Dosya ve ajan | Değişmedi. Anahtar türü dosyada yoktur. Ajan bilinmeyen türü öğretmen sayar ve etiketi ("Sınıf başkanı · 10/A") olduğu gibi gösterir; kod boştur. Panel etiketi tahtaya inmez |
+| Ayar | `usb_anahtar.baskan` varsayılan kapalı, `pin_baskan` varsayılan açık (aynı formda nöbetçi `ua_baskan_formu`). USB anahtar ayarı ve ders yoklaması açık değilse çalışmaz. Kapatılınca açık başkan oturumları anında düşer: belirteçler silinir, `oturum_coz` ayarı da denetler |
+| Kilit | Hiçbir zaman: `izinler` şube anahtarına `kilit_ac` vermez; `/ajan/usb/kilit_ac` PIN sorulmadan 403 döner |
+| Yazma koşulları | Tek yer `yoklama.baskan_denetle`'dir; /liste ve /kaydet'te ikisinde de çalışır. Koşullar aşağıda |
+| Kayıt | `kaynak='baskan'`, `kaydeden='baskan:<şube>'`. Birleşim kuralı (kural 34) değişmez: öğretmen sonra alırsa öğretmeninki geçerlidir. İşlem kaydına yalnız şube, ders saati, sayılar ve anahtar kimliği yazılır |
+| Panel | Kayıt, günlük görünüm, icmal ve şube defteri kaydı "sınıf başkanı" diye ve sabit notla gösterir ("deneme amaçlı yardımcı kayıttır; öğretmenin yoklamasının yerine geçmez", K5). Şube defterinde ders saati başlığı "b" ile işaretlenir |
+| Üretim | Yalnız yönetici, Kişiler ve anahtarlar › USB anahtarlar › Sınıf başkanı anahtarları. Bir ya da birçok şube seçilir. Yanıt PIN pusulasıdır (`no-store`, yönlendirmesiz). Tek şubede düz dosya iner, çok şubede tek seferlik zip iner (5 dk; şube başına klasör + ASCII OKUBENI.txt). Şube başına en çok 2 etkin anahtar vardır (indirilmeyi bekleyen dahil); bir seferde en çok 80 şube |
+| Ömür | Şubede etkin öğrenci kalmazsa anahtar geçersizdir. Öğretim yılı sonunda bitiş tarihinden önce üretilmiş şube anahtarları silinir |
+
+Yazma koşulları (sırasıyla):
+
+1. Yalnız anahtarın şubesi yazılabilir; başka şube 400 alır ve tahta seçime döner.
+2. Yalnız o şubenin tahtası kullanılabilir: `tahta.subeler` şubeyi içermeli ya da derslik programı o ders
+   saatinde şubeyi bu tahtaya koymalı; değilse 409.
+3. Yalnız `ders_kurali` penceresindeki ders yazılabilir: süren, 5 dk içinde başlayacak ya da son 15 dk'da biten
+   ders; pencere dışı 400. Ders saati hiç bulunamazsa 409 döner ve nedeni ayrı iletiyle söylenir: zil yok, bugün
+   ders yok ya da şubenin devresi belirsiz.
+4. **Öğretmen önceliği:** o ders saatinde başka kaynaklı kayıt (öğretmen, idare, panel), şube defteri
+   düzeltmesi ya da başkan kaydının kayıt sayfasından düzeltilmesi (`yoklama_iz.islem='duzelt'`) varsa 409.
+
+**Oturum.** Başkan oturumunda öğretmen ve kullanıcı yoktur; `yoklama_belirtec` satırında yalnız `anahtar_id`
+doludur. Tahtanın önerisi anahtarın şubesidir; ders numarası öneriden gelir.
+
+**Göç** (GOCLER'e tek öğe): `yoklama_belirtec` düşer; `usb_anahtar` üç dallı CHECK ile ve `sube` sütunuyla
+yeniden kurulur (var olan idare ve öğretmen anahtarları korunur); `yoklama_belirtec` yeniden kurulur.
+Belirteç satırları en çok 15 dk yaşadığı için yükseltme anında açık yoklama ekranı kapanır.
+
+**Dürüst sınır.** §14.1'deki gibi anahtar kopyalanabilir bir dosyadır. Karşı önlemler PIN, dar yetki, öğretmen
+önceliği ve anlık iptaldir. Okulun aydınlatma metni öğrencinin arkadaşlarının devam verisini okul adına
+işlemesini kapsamalıdır; yönetmelik dayanağı doğrulanmadı (§18). Varsayılan kararlar §17 soru 125–135'tedir.
+
+Yerleşim: sunucu `usb_anahtar.py` (şube anahtarı, `BekleyenPaket`, `paket_zip`, `baskan_acik`), `panel_usb.py`
+(üretim, pusula, `/ajan/usb/*` başkan dalı), `yoklama.py` (`baskan_denetle`, `oturum_kaynagi`),
+`yoklama_defter.py` (defterde işaret), şablon `usb_baskan_pusula.html`.
+
 ## 15. Altyapı: şifreli yedek, sunucu adresleri, envanter, arıza (0.7.0)
 
 Aşama 6'nın çekirdeği (6A). Windows hizmeti 0.8.0'da geldi (K8, §15.6); ajan paketi imzası
@@ -1701,6 +1861,8 @@ Sertifika değişirse bütün tahtalar koptuğu (kural 4) için kurallar sıkıd
    — 0.8 öncesi oturum programı (her oturumda) ve durum pencereleri kapanır. SQLite işlenmiş
    kayıtları diske yazmıştır; son yazılar `-wal`'daysa o da taşınır.
 2. Dosyalar; eski `{commonstartup}\Tahta Kontrol.lnk` silinir (hizmetle ikinci sunucu açmasın).
+   0.21.0: "durumsimgesi" görevi seçiliyse `{commonstartup}\Tahta Kontrol durum simgesi.lnk` kurulur, seçili
+   değilse silinir (aşağıda "Bildirim alanı durum simgesi").
 3. Veri klasörü, izinler, taşıma, izinlerin devralınması, hizmet kaydı, güvenlik duvarı (8788,
    eskisiyle aynı kural adı), taşıma güvenle bittiyse `net start`.
 4. Bitiş sayfası taşımanın sonucunu ve uyku notunu yazar; taşınamadıysa ayrıca kırmızı ileti.
@@ -1721,13 +1883,60 @@ yeni başlıyorsa 20 sn yanıt bekler:
   (hizmetle çift çalışma olmasın).
 - **Geliştirme** (`uv run … pencere`, hizmet yok ve yanıt yok): eskisi gibi sunucuyu pencerede
   çalıştırır. Yanıt veren bir sunucu varsa ikincisini açmaz.
+- **Okunamadı** (0.21.0): `/yerel/durum` yanıt vermiyor ve `sc query` de okunamıyorsa pencere "Sunucunun
+  durumu okunamadı" der ve "Yeniden dene" düğmesini gösterir. "Kurulu değil" yalnız `sc` 1060 döndürdüğünde
+  denir. "Hizmet yeni başladı" yalnız START_PENDING/CONTINUE_PENDING durumunda ya da bu pencereden "Hizmeti
+  başlat" dendikten sonra yazar.
+
+**Bildirim alanı durum simgesi (0.21.0; talep 4).** Kurulu programda durum penceresi tek bir Tk köküyle
+çalışır (`pencere.DurumUygulamasi`). X ya da "Gizle" pencereyi gizler; süreç bildirim alanında simgeyle kalır
+ve ilk gizlemede bir balon çıkar. Çıkış, simge menüsündeki "Çık"tır.
+
+- **Durum:** simge yalnız durumu gösterir. Yeşil sunucunun yanıt verdiğini, gri başlatılıyor, yanıt yok ya
+  da okunamadı durumunu, kırmızı hizmetin durduğunu ya da kurulu olmadığını söyler.
+- **Okuma** (`tepsi.DurumIzleyici`): ayrı iş parçacığında 15 sn arayla `127.0.0.1:8787/yerel/durum` ve
+  `sc query` okunur. Açılışta ve "Hizmeti başlat"tan sonraki 20 sn boyunca aralık 1 sn'dir.
+- **İpucu ve balon:** ipucu en çok 127 karakterdir; ipucu ve balon ağ adresi, okul adı ya da kişi verisi
+  taşımaz. Hizmet "çalışıyor"dan "durdu"ya geçince bir kez balon çıkar.
+- **Menü:** Paneli aç (yalnız sunucu yanıt verirken etkin) · Durumu göster · Hizmeti başlat (yalnız hizmet
+  STOPPED iken; UAC) · Çık.
+- **Simge katmanı** (`tepsi.Tepsi`): pywin32 `Shell_NotifyIcon` kullanılır; yeni bağımlılık yoktur. pystray +
+  Pillow düşünüldü, iki yeni bağımlılık getirdiği için seçilmedi.
+  - Simge kendi iş parçacığında, görünmeyen üst düzey bir pencere ve ileti döngüsüyle çalışır. Explorer
+    yeniden başlayınca TaskbarCreated ile simge yeniden eklenir; ileti penceresi (`HWND_MESSAGE`) bu yayını
+    almadığı için kullanılmaz.
+  - Menü seçimi kuyruğa düşer; Tk onu `after` ile ana iş parçacığında okur.
+  - Simge penceresine gelen WM_CLOSE "Çık" sayılır.
+- **Tek örnek:** her oturumda tek örnek vardır (mutex `Local\TahtaKontrolDurum`). İkinci açılış var olan
+  pencereyi gösterir; gizli açılış ikinciyse sessizce çıkar.
+- **Simge dosyaları:** `scripts/durum_simgeleri.py` ile üretilir (saf Python ICO; 16/24/32 px):
+  `packaging/windows/durum-*.ico`; pakette `tahta_sunucu/simgeler/`.
+
+**Başlangıç kısayolu istisnası (kullanıcı kararı 21.11.2026).** Kurucuda "Oturum açılınca durum simgesini
+göster (bildirim alanı; sunucuyu açmaz)" görevi vardır ve işaretli gelir. Görev
+`{commonstartup}\Tahta Kontrol durum simgesi.lnk` → `TahtaKontrol.exe pencere --gizli` kısayolunu kurar.
+`pencere --gizli` pencere açmadan yalnız simgeyi getirir ve sunucu **açmaz**.
+
+Bu kısayol kural 28'in yasağına girmez. Kural 28'in yasakladığı, oturum açılınca SUNUCU başlatan kısayoldur;
+o kısayol çift sunucuya, kullanıcı başına veriye ve taşıma belirsizliğine yol açıyordu. Simge sunucu açmadığı
+için bu tehlikeyi geri getirmez.
+
+- Eski `Tahta Kontrol.lnk` yine silinir.
+- Görev seçilmezse önceki kurulumdan kalan simge kısayolu `[InstallDelete]` ile silinir.
+- `test_kurucu_betigi_hizmeti_kurar_ve_eski_baslangic_kisayolunu_siler` başlangıç klasöründe yalnız bu
+  satıra izin verir.
+
+Simge her oturumda o kullanıcının kendi sürecidir; hizmet oturum 0'da çalıştığı için simgeyi kullanıcı
+süreci çizer. Windows 11 yeni simgeyi taşma alanına koyar; program görev çubuğuna sabitlemeyi zorlamaz.
+Varsayılan kararlar §17 soru 120–124'tedir.
 
 **Geri yükleme** (§15.1): hizmet kipinde onaydan 2 sn sonra süreç 75 koduyla çıkar; hizmet
 yöneticisi 5 sn sonra yeniden başlatır, yedek açılışta yerleştirilir. `/yerel/durum`'un `hizmet`
 alanı hizmet kipinde `true` döner.
 
-**Çift çalışmayı önleme:** başlangıç kısayolu silinir; paketli pencere sunucu açmaz; iki sunucu
-aynı kapıyı tutamaz (ikincisi "kullanımda" ile açılmaz).
+**Çift çalışmayı önleme:** sunucu açan başlangıç kısayolu silinir (0.21.0'ın durum simgesi kısayolu
+sunucu açmaz); paketli pencere ve simge sunucu açmaz; iki sunucu aynı kapıyı tutamaz (ikincisi
+"kullanımda" ile açılmaz).
 
 **Bilinen sınırlar:** bilgisayar uyku/hazırda beklemeye geçerse hizmet durmuş sayılır (pencere ve
 kurucu uyarır, güç ayarı değiştirilmez). Gerçek hizmet kurulumu ve PyInstaller paketinde pywin32'nin
@@ -1768,6 +1977,7 @@ izlenir. Kurulu (PyInstaller) programda sistem sertifika deposunun bulunduğu he
 | P5 | Panel arayüzü 5. aşama (Sekmeler): bölüm sekme şeritlerinin tek tanımı (`bolum_serit.py`, `_serit.html`) — Yoklama, Kişiler ve anahtarlar, Program (üç küme), Duyurular, Acil durum (Geçmiş ve raporlar ayrı sekme), Tahtalar; tek sayfalık duyuru formu (Ne · Kime · Ne zaman, gönder çubuğu, iletinin ilgili bölümde çizilmesi); adresler, uçlar, alan adları ve doğrulama aynı; varsayılan kararlar §17 soru 82–90 (§11.1) | 0.19.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri, benzetilmiş ajanlar; JS açık ve kapalı duyuru gönderimi veritabanından doğrulanarak, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek telefonda ve gerçek tahtalarla denenecek |
 | P6 | Panel arayüzü 6. aşama (Arama): genel arama — yan menüde kutu ve yazarken öneri (`GET /api/ara`), sonuç sayfası (`GET /ara`, JS'siz), üst çubukta büyüteç, `/` kısayolu; dizin tek yerde ve var olan tanımlardan türer (`arama.py`), rol hedef sayfadan türer, dizinde kişi adı yok, sorgu hiçbir yere yazılmaz; varsayılan kararlar §17 soru 91–101 (§11.1) | 0.20.0 — testlerle ve deneme sunucusunda başsız tarayıcıyla (uydurma veri, benzetilmiş ajanlar; klavye ve öneri etkileşimi, iki rolde sızıntı denemesi, 1366 ve 390 px ölçümü) denendi; okulun bilgisayarlarında, gerçek telefonda, gerçek klavyeyle ve ekran okuyucuyla denenecek. Altı aşamanın hepsi uygulandı |
 | 3C | Sihirbaza e-Okul "Haftalık Ders Programları" raporu (OOK11002_R01, .XLS): blok ayrıştırma, rapordan zil çizelgesi, zorunlu şube eşlemesi, şubenin tahtasına yazma (§12.4) | 0.12.0 — testlerle (uydurma matris) ve geliştirme bilgisayarında gerçek bir raporla (ayrı veri dizini, uydurma tahtalar) uçtan uca denendi; okulda denenecek |
+| S1 | Sahadan beş talep (kullanıcı kararı 21.11.2026; okulda 24 ETAP tahtasında 0.20.0 kullanımından): toplu öğretmen yükleme (aSc XML, e-Okul OOK01001R1, şablon; §14), sınıf başkanı USB anahtarı (şubeye bağlı, öğretmen önceliği; §14.3), tahta numarası ve "Tahta <no>" varsayılan adı (§4), bildirim alanı durum simgesi (§15.6), aSc ikili eğitim, I/İ şubeleri, zil önerisi ve şube bilgisi (§12.3); varsayılan kararlar §17 soru 102–135 | 0.21.0 — yalnız sunucu, ajan değişmedi; testlerle, deneme sunucusunda başsız tarayıcıyla (uydurma veri, 1366 ve 390 px) ve gerçek aSc ve e-Okul dosyalarıyla yerelde denendi; gerçek ETAP'ta, gerçek USB bellekle, okul bilgisayarında ve kurulu hizmette denenecek |
 
 Aşama 2'den sonraya bırakılanlar (göç gerektirmez): panoda "Hızlı seç" ve "Seçili
 tahtalara alan ata", plan formunda "sonraki 3 gösterim" canlı önizlemesi, çakışan
@@ -1896,8 +2106,12 @@ Ders yoklaması (0.6.0):
     sırasıyla; eski iki biçim seçilebilir; tam soyad yine gösterilmez; §14.2.)
 33. **Aydınlatma:** okulun öğrenci/veli aydınlatma metni "ders yoklamasının etkileşimli tahtadan
     alınıp okul sunucusunda tutulmasını" kapsıyor mu?
-34. **Öğretmen listesi kaynağı:** öğretmenler elle ekleniyor; e-Okul personel listesi (OOK01001R1)
-    aktarımı istenir mi?
+34. ~~**Öğretmen listesi kaynağı:** öğretmenler elle ekleniyor; e-Okul personel listesi (OOK01001R1)
+    aktarımı istenir mi?~~ **Kapandı (kullanıcı kararı, 21.11.2026; 0.21.0):** evet. Toplu yükleme üç
+    kaynaktan yapılır: aSc XML (yalnız ad ve soyad), e-Okul OOK01001R1 .XLS ve Excel/CSV şablonu. Büyük harfli
+    ad Türkçe baş harf biçimine çevrilir. "Soyadı" boş ve "Adı" çok sözcüklüyse ad bölünür; üç ve daha çok
+    sözcükte işaretlenir. Dosyada olmayan öğretmene dokunulmaz. PIN var olan toplu PIN düğmesiyle üretilir.
+    Ayrıntı §14 "Toplu öğretmen yükleme". Yeniden tartışılmaz.
 35. **İcmal üstbilgisi:** yazdırılan icmalde okul adı istenir mi? (Şimdi yok; "Düzenleyen/İmza"
     satırı var.)
 36. **Kimler icmal görür:** bütün idareci hesapları mı, yalnız devamsızlıktan sorumlu müdür
@@ -2009,6 +2223,148 @@ Panel arayüzü (0.15.0–0.20.0; taslağın soruları — yanıt gelene kadar *
     yan menüdeki yer tutucu yöneticide de "ayar" demiyor; `/ara` sayfasında üst çubuktaki büyüteç işaretli
     değil; "çıkış", "tahta sil" gibi sözcükler sonuç vermiyor.
 
+Sahadan beş talep (0.21.0; kullanıcı kararı 21.11.2026'nın ayrıntıları; yanıt gelene kadar **önerilen**
+seçenek geçerlidir; ayrıntı `docs/surum-0.21.0.md`):
+
+Tahta numarası (§4):
+
+102. **Numara biçimi ve varsayılan ad:** öneri "No 7" (sıfır doldurma yok; kurulum çıktısındaki numarayla birebir)
+    ve yeni tahtanın adı "Tahta 7". Yeni kayıtta makine adı ad olarak hiç kullanılmaz. Varsayılan ad, okulun bir
+    tahtaya elle verdiği "Tahta N" adıyla çakışabilir; onay iletisi bunu uyarır. **Varsayıldı.** Başka biçim
+    istenirse (ör. "Yeni tahta (No 12)") `tahta_liste.varsayilan_ad` değişir.
+103. **Numara nerede görünsün?** Öneri: her yerde "ad · No 7" (ad "Tahta 7" olsa da; tutarlılık için). Bugün
+    çipinde yalnız adı başka bir onaylı tahtayla aynı olan tahtada yazar (çip dar). Duyuru formunun tek tek seçim
+    listesinde, gruplar, program ve sınav salonu seçimlerinde yazmaz. Genel aramaya girmez; girmesi kural 36'yı
+    değiştirir. **Varsayıldı.**
+104. **Aynı ad reddedilsin mi?** Öneri: hayır, kayıttan sonra çakışan numaralarla uyarılsın. Karşılaştırmada
+    büyük/küçük harf, Türkçe harf ve boşluk farkı sayılmaz ("ETAP" = "etap"). Sayıma onaylı ve onay bekleyen
+    tahtalar girer, kaldırılanlar girmez. **Varsayıldı.**
+105. **Toplu adlandırma neyi değiştirsin?** Öneri: yalnız adını kurulumdan almış (makine adı ya da "Yeni
+    tahta") ve başka bir tahtayla aynı adı taşıyan tahtalar değişsin; onay bekleyenler de dahil. Elle verilmiş
+    aynı adlar (iki "Konferans salonu") için bant çıkmaz. Düğme onay penceresiyle çalışır ve JavaScript
+    kapalıyken çalışmaz (`<noscript>` notu var). **Varsayıldı.** Elle verilmiş aynı adların bantta yalnız
+    bilgi olarak sayılması ya da JS'siz iki adımlı onay istenebilir.
+
+aSc ders programı aktarımı (§12.3):
+
+106. **Önek yoksa devre nasıl ayrılsın?** Öneri: yalnız sınıfların saat kullanımından ayrılsın (≥ %90 tek
+    parçada, ≥ %60 kapsama); `breaks` yalnız eşitliği bozsun, çünkü tek devreli okulda öğle arası da break
+    olabilir. Sınıflar birden çok önekin saatlerini birlikte kullanıyorsa önek yalnız etiket sayılsın (tek grup).
+    **Varsayıldı.**
+107. **Devre grubu zil devresine nasıl eşlensin?** Öneri: devre sayıları eşitse başlangıç sırasıyla eşlensin ve
+    soru sorulmasın (tablo kapalı açılırda durur, değiştirilebilir). Eşit değilse ilk dersin saati ±5 dk tutan
+    devreye, o da yoksa soruyla eşlensin. **Varsayıldı.**
+108. **Otomatik eşlemeler hatırlansın mı?** Öneri: otomatik saat ve devre eşlemeleri hatırlanmasın, yalnız elle
+    seçilenler hatırlansın. 0.20.0'ın hatırladığı aSc saat eşlemeleri göçte silinir; hangilerinin elle seçildiği
+    ayırt edilemediği için elle seçilenler de silinir. Tek devreli okulda saatler zile uymuyorsa "hangi devre?"
+    sorusu bir kez yeniden sorulur. **Varsayıldı.**
+109. **aSc zil önerisi ne zaman çıksın?** Öneri: zil farkı uyarısı ve "yalnız fark" önerisi yalnız ikili eğitimli
+    (çok gruplu) dosyada çıksın; tek gruplu dosyada görünüm değişmesin (kural 25). Zil hiç yoksa ya da ders saati
+    eşlenemiyorsa tek gruplu dosyada da çıksın ("Normal" devre adıyla). Öneri dosyadaki bütün günlere aynı
+    saatleri atar (Cuma farkı sonra elle girilir). Onay kutuludur ve "gerçek zil saatleri değilse oluşturmayın"
+    uyarısı taşır. **Varsayıldı.**
+110. **Tahtaların şube bilgisi nasıl güncellensin?** Öneri:
+    - şubeler tamamen değiştirilsin (birleştirilmesin);
+    - hiç sınıfı düşmeyen tahtanın şubeleri silinmesin;
+    - derslik alanı yalnız boşsa ve tahtaya tek aSc dersliği eşlendiyse yazılsın;
+    - kutu işaretsiz gelsin; program aynıyken de tek başına yapılabilsin;
+    - tahtalar uyandırılmasın (sonraki bekleme turunda alınır);
+    - geri yüklemede yalnız o onaydan beri değişmemiş tahtalar dönsün.
+    **Varsayıldı.**
+111. **"Hatırlanan eşleşmeleri unut" ne silsin?** Öneri: o kaynağın (asc | eokul | tablo) bütün hatırlanan
+    eşleşmelerini; tek tek silme yok; ekrandaki seçimler durur. **Varsayıldı.**
+112. **Rakamla derslik eşlemesi:** öneri olarak gösterilsin ("Numarasından öneri") ve hatırlanmasın. Tahtanın
+    adı yalnız baştan sona numaraysa ("101") aday olsun ("12/A", "Tahta 12" olmaz). İki tahta aynı rakamı
+    taşırsa eşlenmesin. **Varsayıldı.**
+
+Toplu öğretmen yükleme (§14; soru 34 kapandı):
+
+113. **Hangi satırlar işaretli gelsin?** Öneri: eklenecekler satır satır seçilsin. Öğretmenler, müdür ve müdür
+    yardımcıları işaretli gelsin. e-Okul'da görevi öğretmen ya da müdür içermeyenler (memur, hizmetli…) ve
+    şablonun örnek satırı işaretsiz gelsin. **Varsayıldı.**
+114. **"Zaten var" ölçütü:** öneri katlanmış tam ad (ad + soyad; Türkçe harf ve büyük/küçük harf farkı yok).
+    Benzer ad (ör. ikinci adı eksik) yeni kayıt olur, otomatik birleştirme yapılmaz. Dosyada aynı ad iki kez
+    geçerse ilki alınır, sonrakiler "dosyada yinelenen" olur. **Varsayıldı.**
+115. **Pasif aynı ad:** öneri satır başına "Etkinleştir" kutusu, varsayılan işaretsiz; işaretsizse yeni kayıt da
+    açılmasın. **Varsayıldı.**
+116. **Kod:** öneri dosyadaki geçerli ve boşta kod; geçersiz, başkasında olan ya da yinelenen kodda satır atlanmaz,
+    101'den ilk boş kod verilir ve işaretle bildirilir. Var ya da pasif öğretmenin kodu dosyadan değişmez.
+    **Varsayıldı.**
+117. **Ad düzeltme önizlemede yapılsın mı?** Öneri: hayır. Üç ve daha çok sözcüklü ad işaretlenir ve yüklemeden
+    sonra "Düzenle" ile düzeltilir. Karışık harfli ad ("Ayşe YILMAZ") olduğu gibi kalır; tamamı büyük ya da
+    tamamı küçük ad çevrilir (kullanıcı kararı). **Varsayıldı.**
+118. **Aktarım geçmişi ve geri alma:** öneri ayrı tablo yok (göç gerekmesin), iz yalnız işlem kaydında sayı olarak
+    durur. "Bu aktarımı geri al" ya da öğretmen silme yok; yanlış yükleme pasifleştirmeyle geri alınır.
+    **Varsayıldı.**
+119. **aSc'de ad ya da soyad boşsa:** öneri `name` son sözcükten bölünsün (o da boşsa dolu alan). aSc kısa adı
+    (`short`) kod olarak kullanılmasın. **Varsayıldı.**
+
+Bildirim alanı durum simgesi (§15.6; başlangıç kısayolu kullanıcı kararıdır):
+
+120. **Okuma aralığı:** öneri 15 sn; açılışta ve "Hizmeti başlat"tan sonraki 20 sn boyunca 1 sn. **Varsayıldı.**
+121. **Simge renkleri:** öneri:
+    - hizmet çalışıyor ama sunucu yanıt vermiyorsa gri; 20 sn sonra pencere "çalışmıyor" kipine geçer ve menüde
+      "Hizmeti başlat" çıkmaz (`sc start` çalışan hizmette hata verir);
+    - STOP_PENDING, STOPPED, PAUSED ve "kurulu değil" kırmızı;
+    - yedek uyarısı için sarı simge yok.
+    **Varsayıldı.** Yanıtsız hizmetin kırmızı gösterilmesi istenebilir.
+122. **Balon:** öneri yalnız "çalışıyor → durdu" geçişinde bir kez çıksın; aradaki "yanıt yok" atlanır, açılışta
+    zaten durmuşsa çıkmaz. Hizmet yeniden çalışınca balon çıkmaz. **Varsayıldı.**
+123. **Menü ve ikinci açılış:** öneri:
+    - "Paneli aç" sunucu yanıt vermezken gri kalsın;
+    - gizli açılış ikinci örnekse sessizce çıksın;
+    - elle ikinci açılış var olan pencereyi göstersin, ≈ 2 sn'de bulamazsa uyarı kutusu açsın;
+    - simge kurulamazsa gizli kip 1 koduyla çıksın, normal pencere simgesiz çalışsın.
+    **Varsayıldı.**
+124. **Geliştirme ve kurucu:** öneri geliştirmede `pencere --gizli` 2 koduyla çıksın (`TAHTA_TEPSI_DENE=1`
+    ile açılır, sunucu açmaz). Kurucuya Inno `AppMutex` eklenmesin; kurucu zaten `taskkill` yapar, AppMutex
+    kullanıcıya "kapatın" uyarısı çıkarırdı. **Varsayıldı.**
+
+Sınıf başkanı USB anahtarı (§14.3; şubeye bağlılık, öğretmen önceliği, dar yetki ve ayrı ayar kullanıcı
+kararıdır):
+
+125. **Ders saati bilinemezse:** öneri başkan yazamasın (kapalı hata, 409). Zil yoksa, bugün ders yoksa ve
+    ikili eğitimde şubenin devresi belirlenemezse ayrı iletiler verilir. Öğretmen ve idare yolunda zil yoksa
+    1–12 serbesttir; başkanda "şu anki ders" bilinemez. **Varsayıldı.**
+126. **İdare düzeltmesi varken:** öneri başkan yazamasın. Bu, o ders saatinde şube defteri düzeltmesi varsa ya da
+    başkan kaydı kayıt sayfasından ("Düzelt") düzeltildiyse (`yoklama_iz.islem='duzelt'`) geçerlidir; yoksa
+    başkanın yeniden kaydı kural 34 gereği idarenin düzeltmesini örterdi. Kayıt sayfasından düzeltilen başkan
+    kaydının kaynağı `baskan` kalır ("izden oku" yolu; kayıt modeli değişmesin diye kaynak 'panel'e
+    çevrilmez). **Varsayıldı.**
+127. **Tahta ve saat kısıtı:** öneri derslik programı yalnız AYNI ders saati (ve şubenin devresi) için tahtaya
+    izin versin. Teneffüste hem biten hem başlayacak ders yazılabilsin (`ders_kurali`'nın adaylarıyla aynı).
+    **Varsayıldı.**
+128. **Yıl sonu:** öneri şube anahtarları iptal edilmeden doğrudan silinsin. Yalnız bitiş tarihinden önce
+    üretilenler silinir; yeni yılda tarih güncellenmeden üretilenler korunur. Kayıt "N sınıf başkanı anahtarı
+    silindi". **Varsayıldı.**
+129. **Toplu üretim:** öneri:
+    - tek etiket bütün seçilen şubelere yazılsın;
+    - şube başına en çok 2 etkin anahtar olsun, indirilmeyi bekleyen dahil;
+    - bir şube sınıra takılırsa hiçbiri üretilmesin (yarım üretim yok);
+    - bir seferde en çok 80 şube;
+    - tek şubede düz `.anahtar`, çok şubede zip.
+    **Varsayıldı.**
+130. **Öğrencisi kalmayan şube:** öneri şubede etkin öğrenci kalmazsa anahtar geçersiz sayılsın. **Varsayıldı.**
+131. **Tahtadaki etiket:** öneri "Sınıf başkanı · 10/A"; paneldeki etiket tahtaya inmesin. **Varsayıldı.**
+132. **Başkan kaydı nerede sayılsın?** Öneri: e-Okul işaretine, icmale, şube defterine ve Bugün yoklama özetine
+    normal kayıt gibi girsin. Ayırt edici olan "sınıf başkanı" etiketi, sabit not ve defterdeki `b`
+    işaretidir. K5 açısından ayrıca onay ister. **Varsayıldı.**
+133. **Ayar:** öneri:
+    - başkan oturumu USB anahtar ayarı (`etkin`) kapatılınca da geçersiz olsun;
+    - başkan PIN'i (`pin_baskan`) varsayılan açık olsun ve Ayarlar'dan kapatılabilsin;
+    - nöbetçisiz eski form (`ua_baskan_formu` yok) başkan kutularını değiştirmesin.
+    **Varsayıldı.**
+134. **İptal edilmiş ya da silinmiş başkan anahtarı takılırsa ne olsun?** Öneri **yok, karar gerekir.** Bugün
+    sunucu, 0.11.0'dan beri öğretmen anahtarında olduğu gibi, "iptal edilmiş"/"Geçersiz USB anahtar" satırını
+    işlem kaydına yazar; silinmiş anahtar geçersiz sayacını da tüketir. Öğrencinin kişisel belleği her gün
+    takılırsa konum izi birikebilir. Seçenekler:
+    - yalnız dokunuşla başlayan uçlarda yazmak;
+    - yıl sonunda silmek yerine iptal edip iptal edilmiş şube anahtarını kayıtsız reddetmek.
+    **Değiştirilmedi; soru açıktır.**
+135. **Aydınlatma (başkan):** okulun aydınlatma metni, ders yoklamasının sınıf başkanınca tahtadan alınmasını ve
+    öğrencinin arkadaşlarının devam verisini okul adına işlemesini kapsıyor mu? Velilere bilgi verilecek mi?
+    (Soru 33 ve 68'in devamı; dayanak §18.)
+
 Altyapı (0.7.0 ve 6B):
 
 42. **Hizmet hesabı Yerel Hizmet (LocalService) olsun mu?** (Karar, 0.8.0: evet, en az yetki; §15.6.)
@@ -2075,6 +2431,11 @@ Arayüzde hiçbir mevzuat maddesine atıf yapılmaz. Belgeye dayanak olarak yaz�
   var; fıkra numarası yazılmadı (e-Okul'a ders saati bazında işlendiği K2 ile bilindi; yarım/tam güne
   çevirme yapılmaz). KVKK md. 12 (veri güvenliği) yoklama için de doğrulanacak. Aydınlatma metninin
   kapsamı (KVKK md. 10, soru 33) ve öğretim yılı sonuna kadar saklamanın imha politikasıyla uyumu (K3).
+- Sınıf başkanı USB anahtarı (0.21.0, §14.3): Ortaöğretim Kurumları Yönetmeliği'nde ders yoklamasının ders
+  öğretmenince alınmasına ilişkin hüküm. Madde numarası ve lafzı doğrulanmadı. Başkan kaydı bu yüzden yalnız
+  "deneme amaçlı yardımcı kayıt" diye sunulur ve öğretmen önceliği uygulanır (K5). Öğrencinin arkadaşlarının
+  devam verisini okul adına işlemesi için aydınlatma metninin kapsamı (KVKK md. 10; soru 135) de doğrulanmadı.
+  Arayüz atıf yapmaz.
 - Mazeret kaydı (0.14.0): "raporlu" türünün özel nitelikli kişisel veri sayılıp sayılmayacağı (KVKK md. 6) ve
   aydınlatma metninin kapsamı (md. 10; soru 68) — metinler yerelde doğrulanmadı; tedbir olarak serbest metin
   alınmadı ve tür mazeret sayfası dışında gösterilmedi. Arayüz atıf yapmaz.

@@ -1,5 +1,28 @@
 # CLAUDE.md — Tahta Kontrol
 
+Yerel geliştirme 0.21.0 (kullanıcı onayı 21.11.2026). Okulda 0.20.0 24 ETAP tahtasında sorunsuz çalıştı; kullanıcı
+beş saha talebinin tek sürümde çıkmasını istedi:
+(1) **Toplu öğretmen yükleme** (`ogretmen_aktar.py`; kural 38; soru 34 kapandı). Kaynaklar: aSc XML (yalnız ad ve
+soyad), e-Okul OOK01001R1, şablon. Tamamı büyük ya da tamamı küçük ad baş harf biçimine çevrilir; soyad boşsa tam ad
+bölünür. Dosyada olmayan öğretmene dokunulmaz; PIN var olan toplu düğmeyle üretilir.
+(2) **Sınıf başkanı USB anahtarı (deneme)** (kural 37). Şubeye bağlıdır, ad tutulmaz; öğretmen önceliği geçerlidir.
+Yalnız kendi şubesinde, o şubenin tahtasında ve şu anki derste çalışır. PIN ister, kilit açmaz. Ayrı ayarı vardır,
+varsayılan kapalıdır. Kural 33'e istisnadır; kural 18 ve 29 genişledi.
+(3) **Tahta numarası** (`tahta.id`, "No 7"). Yeni tahta "Tahta <no>" adıyla gelir; `kur.sh` "TAHTA NO" satırı
+basar; aynı adlılar `POST /tahtalar/adlandir` ile toplu adlandırılır.
+(4) **Bildirim alanı durum simgesi** (`tepsi.py`, `pencere --gizli`). Kurucuda işaretli görevle başlangıç kısayolu
+kurulur; kısayol yalnız simgeyi getirir, sunucu AÇMAZ (kural 28 istisnası).
+(5) **aSc** (kullanıcının bildirdiği sorunlar). Devre grupları (S/Ö öneki ya da saat kullanımı); 9/I ≠ 9/İ; zil
+önerisi; tahtaların şube bilgisini güncelleme (geri alınabilir); hatırlanan eşleşmeleri unutma; "deneme"
+etiketi kalktı.
+Ajan DEĞİŞMEDİ. Sürüm yükseldi: tahtalar "güncelleme var" görür, ajan güncellemesi isteğe bağlıdır. Göç:
+`GOCLER`'e iki öğe (aSc, başkan). Ayrıntıdaki kararlar VARSAYILDI, kullanıcı ayrıca yanıtlamadı (§17 soru 102–135,
+açık; 134 karar bekliyor, 135 okulun aydınlatma metnidir). Belgeler: `docs/surum-0.21.0.md`, tasarım §4, §12.3, §14, §14.3, §15.6.
+Testlerle denendi; ayrıca deneme sunucusunda başsız tarayıcıyla (uydurma veri; 1366 ve 390 px; toplu adlandırma,
+öğretmen ve aSc yüklemesi, başkan zip ve pusulası HTTP ile uçtan uca) ve gerçek aSc ve e-Okul dosyalarıyla yerelde
+denendi. Dağıtılmadı. Gerçek ETAP'ta, gerçek USB bellekle, okul bilgisayarında, kurulu hizmette ve kurulu Windows'ta
+simge görünümüyle denenmedi.
+
 Yerel geliştirme 0.20.0 (kullanıcı onayı 19.11.2026, "Aramaya geç"): panel arayüzünün yeniden düzeninde 6. ve SON
 aşama, genel arama. Yan menüde Acil'in altında arama kutusu (yazarken öneri; `/` kısayolu), çekmece kipinde üst
 çubukta büyüteç, JS'siz tam sayfa sonuç. Yeni adres yalnız iki: `GET /ara?q=` ve `GET /api/ara?q=` (oturum, `no-store`).
@@ -113,7 +136,11 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.20.0, yerel geliştirme; dağıtılmadı** — saha denemesindeki sürüm 0.12.0'dır (0.20.0: panel
+- Durum: **0.21.0, yerel geliştirme; dağıtılmadı.** Okulda kurulu sürüm 0.20.0'dır (24 ETAP tahtası; kullanıcı
+  bildirimi 21.11.2026). 0.21.0: sahadan beş talep — toplu öğretmen yükleme, sınıf başkanı USB anahtarı (kural 37),
+  tahta numarası ve toplu adlandırma, bildirim alanı durum simgesi, aSc ikili eğitim/I-İ/zil önerisi/şube bilgisi.
+  Yalnız sunucu değişti, ajan değişmedi. Testlerle, başsız tarayıcıyla ve gerçek dosyalarla yerelde denendi; gerçek
+  ETAP'ta, gerçek USB'de ve kurulu hizmette denenmedi; tasarım §4, §12.3, §14, §14.3, §15.6. (0.20.0: panel
   arayüzü 6. ve son aşama — genel arama (`/ara`, `/api/ara`; dizin tek yerde `arama.py`, var olan tanımlardan türer,
   rolle süzülür, kişi adı ve serbest metin yok, sorgu hiçbir yere yazılmaz; kural 36); yalnız sunucu, ajan değişmedi;
   testlerle ve deneme sunucusunda başsız tarayıcıyla (klavye ve öneri etkileşimi, iki rolde sızıntı denemesi, 1366
@@ -169,7 +196,7 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
   0.7.0'ın altyapı çekirdeği (şifreli yedek, sunucu adres listesi, envanter, arıza bildirimi)
   yalnız Debian 12 kabında ve tarayıcıda denendi; gerçek bir ETAP tahtasında, gerçek Kelebek
   çizelgesiyle ve gerçek e-Okul sınıf listesiyle henüz denenmedi. Ajan paketi imzası yapılmadı.
-- Ders programı ve program kilidi `docs/tasarim.md` §12 (öğretmen programı ve kilit ekranı gün programı §12.5); sınav kipi §13; ders yoklaması §14 (0.14.0 yeniden tasarımı §14.2);
+- Ders programı ve program kilidi `docs/tasarim.md` §12 (öğretmen programı ve kilit ekranı gün programı §12.5); sınav kipi §13; ders yoklaması §14 (0.14.0 yeniden tasarımı §14.2; sınıf başkanı anahtarı §14.3); tahta numarası §4;
   altyapı (yedek, adres listesi, envanter, arıza) §15, Windows hizmeti §15.6; yol haritası §16; okul idaresinin kesin
   kararları (K1–K8, 16.11.2026) ve kullanıcıya sorulacaklar §17; doğrulanacak dayanaklar §18.
   Kararlar yeniden tartışılmaz; bir kararla çelişen öneri yapılmaz.
@@ -180,6 +207,7 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 uv sync                                   # bağımlılıklar (.venv, Python 3.12)
 uv run python -m tahta_sunucu             # sunucu: http://127.0.0.1:8787 · https://<ip>:8788
 uv run python -m tahta_sunucu pencere     # durum penceresi (hizmet yoksa sunucuyu pencerede çalıştırır)
+uv run python -m tahta_sunucu pencere --gizli   # yalnız durum simgesi; geliştirmede TAHTA_TEPSI_DENE=1 ister, sunucu AÇMAZ
 uv run python -m tahta_sunucu paket x.deb # ajan paketini dosyaya yaz
 uv run python -m tahta_sunucu hizmet --konsol   # hizmet kipini uçbirimde dene (Ctrl+C); hizmet KURMAZ
 uv run python -m tahta_sunucu tasi --hedef D --kaynak K   # eski veriyi kopyala (kurucunun yaptığı)
@@ -191,7 +219,8 @@ powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1   # Windows
 Ortam değişkenleri: `TAHTA_VERI_DIZINI` (varsayılan: geliştirmede `%LOCALAPPDATA%\TahtaKontrol`,
 kurulu programda/hizmette `%PROGRAMDATA%\TahtaKontrol`; `ayar.veri_dizini_sec`), `TAHTA_HIZMET=1`
 (hizmet kipi; giriş noktası ayarlar),
-`TAHTA_HTTP_PORT` (8787, yalnız 127.0.0.1), `TAHTA_HTTPS_PORT` (8788, okul ağı).
+`TAHTA_HTTP_PORT` (8787, yalnız 127.0.0.1), `TAHTA_HTTPS_PORT` (8788, okul ağı), `TAHTA_TEPSI_DENE=1` (0.21.0:
+geliştirmede durum simgesini dener; sunucu açılmaz).
 Ajan: `TAHTA_AJAN_DIZIN`, `TAHTA_AJAN_DURUM`, `TAHTA_AJAN_BENZETIM=1` (kapatma komutu uygulanmaz).
 
 ## Yerleşim
@@ -212,6 +241,11 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 `sayfa()` menü rozetlerini `bugun.bekleyenler(…, yalniz_rozet=True)` → `rozet_sayilari`'ndan alır;
                 /api/durum'a eklemeli `bekleyen_is {sayi, imza}`; `yerel_ipler` (60 sn) ve `kurulum_onbellegi`
                 (30 sn) süreç içi bellek; `islem` kapsam dalında sınav süzmesi (V2); `altyapi_uyarilari` SİLİNDİ
+                0.21.0: `/ajan/kaydol` adı `tahta_liste.varsayilan_ad`'dan verir (INSERT + aynı işlemde UPDATE; makine
+                adı yalnız `makine_adi`'nda); `POST /tahtalar/adlandir` (yalnız yönetici, `eylem=adlandir`; liste
+                sunucuda `adlandirilacaklar`'dan, sabit noktaya kadar; yalnız `ad` yazılır, kayda yalnız sayı);
+                `/tahta/{id}/kaydet` aynı adı reddetmez, numaralarla uyarır; `tahtalar_sayfasi` → `ayni_ad_sayisi`
+                (yalnız yönetici); `usb_anahtar_kaydet` başkan kapanınca başkan belirteçlerini siler
   panel_duyuru.py   duyuru/plan uçları, /api/hedef-onizleme   (web.py'den `kaydet(uygulama, y)` ile);
                     0.19.0: hata_yeri (icerik | kime | zaman — iletinin tek sayfalık formda çizileceği bölüm; YALNIZ
                     görünüm, doğrulama yolu değişmedi)
@@ -236,7 +270,10 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                     kat), sayilar, suzgec_coz, tek_coz, islem_hedefi, TEK_TURLERI, KAPSAM_HEPSI_TURLERI,
                     guvenli_donus, liste_yolu_mu (0.18.0: yalnız `/tahtalar`), sekme_coz; rozet sözlüğünde eklemeli
                     `liste: False` (V1: düz "Güncelleme var" satırda çizilmez) ve `cip: False` (Bugün çipinin
-                    okunur metnine girmez)
+                    okunur metnine girmez); 0.21.0: varsayilan_ad ("Tahta <id>"), ad_anahtari (= metin.katla),
+                    ayni_adlilar, adlandirilabilir_mi (ad = makine adı ya da "Yeni tahta"), adlandirilacaklar — aynı ad
+                    kuralının TEK yeri (kayıt uyarısı, bant, toplu adlandırma, Bugün çipinin `no`'su); gruplar içinde
+                    doğal sıra (`metin.dogal_sirala_anahtari`)
                     web.py 0.17.0: `tahtalar_sayfasi` listeyi çizer (0.18.0'dan beri yalnız `/tahtalar`; `/` Bugün'dür);
                 `tahta_gorunumu` her tahtaya `liste` ekler (şablon ve /api/durum aynı sözlük); POST /islem hedefi
                 `tahta_liste.islem_hedefi`'nden (nöbetçi → tek → kapsam → liste; dallar arası düşme yok);
@@ -258,21 +295,34 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   panel_aktar.py    ders programı içe aktarma sihirbazı (0.10.0): /program/aktar[/asc|tablo|esle|onayla|sablon.csv|
                     mevcut.csv|istem.txt], /program/gecmis[/{id}/geri-yukle]; eski /program/derslik/yukle|onayla → 303;
                     0.12.0: /program/aktar/eokul (rapor yükleme), /program/aktar/eokul/zil (rapordan zil çizelgesi)
+                    0.21.0: aSc zilsiz de yüklenir; /program/aktar/asc/zil (onaylı zil önerisi), /program/aktar/unut
+                    (kaynağın hatırlananları, onaylı); eşleme formunda `g_<n>` (devre grubu; `devre_secimi` kalktı);
+                    onayda `subeleri_guncelle=1` (yalnız aSc; program aynıyken de onaylanabilir)
   panel_sinav.py    /sinavlar, /sinav/{id} (künye, eşleştirme, durum, uzatma, kip kaldırma, kodlar, şube
                     duyurusu, salon yoklaması, icmal), /api/sinav/{id}, /ajan/sinav/{kod,yoklama}
   panel_yoklama.py  /yoklama (günlük ızgara, kayıt/düzeltme, panelden gir, icmal + .csv, e-Okul işareti),
                     /ogretmenler (PIN pusulası), /ogrenciler (önizle/aktar/temizle), /ajan/yoklama/*;
-                    sonunda şablon bağlamlarının SÖZLEŞME bloğu
+                    sonunda şablon bağlamlarının SÖZLEŞME bloğu; 0.21.0: /ogretmenler/onizle, /ogretmenler/aktar (yalnız
+                    yönetici, yetki form okunmadan; önizleme ortak OnizlemeDeposu'nda {"tur": "ogretmen_aktar"}, tek
+                    kullanımlık, Vazgeç siler), GET /ogretmenler/sablon.csv; `liste_denetimi` başkan oturumunda
+                    `yoklama.baskan_denetle` (/liste ve /kaydet)
   panel_defter.py   şube defteri ve mazeret uçları (0.14.0; `kaydet` panel_yoklama.kaydet içinden çağrılır):
                     /yoklama/sube (beş gün / gün kipi), /yoklama/sube/hucre (fırça; JSON ya da 303),
                     /yoklama/sube/toplu (Alındı iki adım, Bütün gün yok, Temizle), /yoklama/son-gunler,
                     /yoklama/ogrenci/{id}, /yoklama/mazeret[/onizle|onayla|{id}/iptal]; hepsi no-store
   panel_usb.py      USB anahtar (0.11.0): /usb-anahtarlar (üret, iptal), /usb-anahtarlar/indir/{belirtec} (tek
-                    seferlik, 5 dk), /ajan/usb/{tani,yoklama,kilit_ac}; sonunda SÖZLEŞME bloğu
+                    seferlik, 5 dk), /ajan/usb/{tani,yoklama,kilit_ac}; sonunda SÖZLEŞME bloğu; 0.21.0: `sahip=baskan`
+                    üretimi (yalnız yönetici; yanıt PIN pusulası, tek şubede dosya, çokta tek seferlik zip),
+                    `sube_secenekleri`, `tanima` → `baskan_kapali` 409 (kayda düşmez), /ajan/usb/yoklama başkan dalı,
+                    /ajan/usb/kilit_ac şube anahtarına PIN sormadan 403
   panel_ogretmen_program.py  öğretmen programı (0.13.0): /ogretmen-programi[/onizle|vazgec|uygula]; yalnız yönetici;
                     dosya ayrıştırma iş parçacığı havuzunda; önizleme OnizlemeDeposu'nda (15 dk, Vazgeç'te silinir)
   usb_anahtar.py    USB anahtar iş mantığı (FastAPI'siz): ayar, dosya biçimi/ayrıştırıcı (ajandakiyle aynı),
-                    bekleyen indirmeler, tanıma, PIN (öğretmen PIN'i ya da anahtar PIN'i), kopya uyarısı, iptal, yıl sonu
+                    bekleyen indirmeler, tanıma, PIN (öğretmen PIN'i ya da anahtar PIN'i), kopya uyarısı, iptal, yıl sonu;
+                    0.21.0: şube anahtarı (`sahip_turu='sube'`, `sube`), ayar `baskan`/`pin_baskan` + nöbetçi
+                    `ua_baskan_formu` (`ayar_coz(form, onceki)`), `baskan_acik`, `izinler` (şubeye `kilit_ac` yok),
+                    SUBE_BASI_EN_COK 2, TOPLU_EN_COK 80, BekleyenPaket, paket_zip (stdlib zipfile, ASCII OKUBENI.txt),
+                    tani → `baskan_kapali`, yil_sonu şube anahtarlarını siler
   panel_altyapi.py  /yedekler (parola, ayar, al, indir, geri-yukle + onay/uygula), /envanter (+ .csv),
                     /tahta/{id}/envanter, /tahta/{id}/donanim-goruldu, /arizalar, /ariza/{id}, /yerel/durum
   ayar_bolumleri.py  Ayarlar'ın tek listesi (0.16.0, FastAPI'siz): BOLUMLER, BASKA_YERDE, ESKI_YER, ESKI_PARCA,
@@ -321,16 +371,31 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 0.14.0: yoklama_sube.html (şube defteri), yoklama_son_gunler.html, yoklama_mazeret.html,
                 yoklama_mazeret_onizleme.html, yoklama_ogrenci.html, _yoklama_hucre.html (hücre makrosu + lejant);
                 yedekler.html, yedek_onay.html, yedek_geri_yukle.html, envanter.html, arizalar.html,
-                ariza.html, _ariza.html (durum rozeti + açma formu makroları), _tahta_altyapi.html
+                ariza.html, _ariza.html (durum rozeti + açma formu makroları), _tahta_altyapi.html;
+                0.21.0: ogretmen_onizleme.html (toplu öğretmen önizlemesi), usb_baskan_pusula.html (başkan PIN pusulası);
+                tahtalar.html `#ayni-ad` bandı + `#ayni-ad-formu` (`data-onay="adlandir"`, JS'siz gönderilmez);
+                "ad · No <id>" tahta.html, _tahta_komut.html, _tahta_altyapi.html, arıza sayfaları, _bugun.html::cip;
+                program_aktar.html devre grubu tablosu, aSc zil önerisi, "Hatırlanan eşleşmeler", şube kutusu
   yoklama.py    ders yoklaması iş mantığı (FastAPI'siz): ayar, A3 uyarlama işlevleri, öneri (0.14.0: ders_kurali —
                 süren → 5 dk içinde başlayacak → son 15 dk'da biten; teneffüste ders_adaylari; pencere_devresi;
                 ogretmen_onerisi dar SELECT), gec_secilebilir, PIN kapısı (3 katman), belirteç, yoklama_yaz (upsert +
-                iz; yok + geç + devre), gecerli_durum, günlük görünüm, icmal/metin/CSV, aktarım, imha
+                iz; yok + geç + devre), gecerli_durum, günlük görünüm, icmal/metin/CSV, aktarım, imha;
+                0.21.0: `baskan_denetle` (başkanın dar yetkisinin TEK yeri), `oturum_coz` üçüncü dal (`tur='baskan'`),
+                `oturum_kaydedeni` ('baskan:10/A'), `oturum_kaynagi`, KAYNAK_BASKAN, BASKAN_NOTU
   yoklama_defter.py  şube defteri, son günler, mazeret (0.14.0, FastAPI'siz): Veri (aralığı toplu yükler; sorgu
                 sayısı öğrenci/şube sayısından bağımsız), TEK birleşim kuralı (gecerli_duzeltmeler, kumeler,
                 hucre_durumu; kural 34), hucre_yaz (düzeltme katmanı), sutun_alindi, ogretim_gunleri, ardisik_yok,
-                sube_defteri, sube_gunu, son_gunler, ogrenci_gorunumu, mazeret_coz/onizle/yaz/iptal, eokul_bayat
-  eokul.py      öğrenci listesi ayrıştırıcı: e-Okul OOG01001R020 .xls (xlrd), düz .xlsx/.csv
+                sube_defteri, sube_gunu, son_gunler, ogrenci_gorunumu, mazeret_coz/onizle/yaz/iptal, eokul_bayat;
+                0.21.0: `Veri.baskan_kaydi` (bellekten; defterde `b` işareti)
+  eokul.py      öğrenci listesi ayrıştırıcı: e-Okul OOG01001R020 .xls (xlrd), düz .xlsx/.csv; 0.21.0:
+                `baslik_esle(matris, alan_bul, kullanilir_mi)` (parametresizken öğrenci davranışı), `matris_oku(veri,
+                asiri_ileti)`, kod sayfasız BIFF5'te cp1254 yedeği
+  ogretmen_aktar.py  toplu öğretmen yükleme (0.21.0, FastAPI'siz; kural 38): dosya_oku (içerikten: `<` → aSc
+                `asc_ogretmenleri`, ayrı expat okuyucu, yalnız teacher@firstname|lastname, yarımsa `name`; değilse
+                `eokul.matris_oku`), matris_coz (eş anlamlılar SÖZCÜK SINIRIYLA; `_eokul_raporu_mu`: ADI SOYADI +
+                GÖREVİ + KADRO/BRANŞ ve Kod sütunu yok), ad_bicimle (tamamı büyük ya da küçükse `metin.tr_bas_buyuk`),
+                plan (ekle | var | pasif | yinelenen; katlanmış tam ad; kod dosyadan, yoksa 101'den; yazmaz), uygula
+                (planı işlem içinde yeniden hesaplar; pin_ozet NULL), sablon_csv
   sinav.py      sınav iş mantığı: R5 ayrıştırma, içe aktarma, eşleşme önerisi, süreler/evreler, ayar.sinav,
                 gözetmen kapısı (bellekte), yoklama, şube duyurusu, icmal, saklama temizliği
   xlsx.py       yalnız standart kitaplıkla .xlsx okuyucu (zip/DOCTYPE sınırları; A5 de kullanır)
@@ -339,7 +404,13 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 hizli_uret, araliklar, zaman_cizgisi (SVG ölçüleri + liste), gunlere_bol, haftalik_yaz (ders_saati
                 TÜRETİLMİŞ tablodur, elle yazılmaz), tarihli_kural, numara_kaymasi, okulzili_yaz, ilk_tasima, CSV
   program_aktar.py  ders programı içe aktarma (0.10.0): asc_oku (izinli öznitelikler; öğretmen/ders adı okunmaz),
-                tablo_oku (v2, v1 uyumlu), yz_metni_temizle, esle, fark, uygula, program_surum (10), geri_yukle
+                tablo_oku (v2, v1 uyumlu), yz_metni_temizle, esle, fark, uygula, program_surum (10), geri_yukle;
+                0.21.0: aSc şube anahtarı `sube_duzelt` (katla DEĞİL), `breaks` (yalnız saatler), asc_devre_gruplari
+                (önek → kullanım bölmesi DEVRE_HAPSI_ORANI/DEVRE_KAPSAMA → tek grup; `saatsiz`), grup → zil devresi
+                eşlemesi, ikinci derslik adayı `metin.rakam_anahtari` (durum "rakam", hatırlanmaz), tahta_etiketi
+                ("No {id} · ad · derslik"), sube_guncellemesi + `program_surum.tahta_json` (geri yüklemede yalnız
+                değişmemiş tahta), asc_zil_hazirla/asc_zil_yaz, hatirlananlari_unut; eslesmeleri_yaz otomatik saat/devre
+                eşlemesini YAZMAZ
   eokul_program.py  e-Okul "Haftalık Ders Programları" (0.12.0, saf): matris_oku, rapor_oku (bloklar; yalnız dolu/boş
                 + blok başına ≤3 ders adı ipucu), devre_gruplari/devre_esle (±5 dk), zil_onerisi/zil_yaz,
                 sube_listesi_coz, blok_subeleri (öneri sırası), hazirla (→ program_aktar.esle girdisi)
@@ -367,7 +438,9 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   zamanlama.py  plan takvimi (saf işlevler; Europe/Istanbul)
   hedef.py      hedef şeması ve çözümü; tahta nitelikleri (bina, kat, düzey, devre, şube)
   acil.py       acil/tatbikat yayını (durum tabanlı), yedek yol, teslim kaydı
-  metin.py      Türkçe metin, şube biçimi, CSV okuma/yazma (aşamalar arası ortak)
+  metin.py      Türkçe metin, şube biçimi, CSV okuma/yazma (aşamalar arası ortak); 0.21.0: tamami_buyuk_mu,
+                tr_bas_buyuk ("IŞIK" → "Işık", harf olmayan her karakterden sonra büyük; NFC), dogal_sirala_anahtari
+                (sinav.sirala_anahtari ona devreder), rakam_anahtari ("DERSLİK-101" → "101")
   tema.py       okul renklerinden bütün panel ve tahta tonları (OKLCH, kontrast eşikleri)
   marka.py      okul logosu: PNG/JPEG denetimi, ölçü okuma, saklama (veri_dizini/marka/logo)
   vt.py         şema ve göçler (GOCLER listesi, PRAGMA user_version; göç öncesi kopya veri_dizini/goc-oncesi)
@@ -376,7 +449,16 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
   paket.py      ajan .deb paketini ve kurulum betiğini dış araç olmadan üretir
   sunucu.py     iki dinleyici: yerel HTTP + ağ için HTTPS; zamanlayıcı (state.zamanlayicilar, 20 sn)
   pencere.py    durum penceresi (tkinter): /yerel/durum + `sc query` ile kip seçer; kurulu programda
-                sunucu AÇMAZ (hizmetin durumunu gösterir, "Hizmeti başlat" UAC ister); geliştirmede eskisi gibi
+                sunucu AÇMAZ (hizmetin durumunu gösterir, "Hizmeti başlat" UAC ister); geliştirmede eskisi gibi;
+                0.21.0: `calistir(gizli)`, `DurumUygulamasi` (tek Tk kökü, içerik Frame'de yeniden çizilir; olaylar
+                queue + after(200); X/"Gizle" → withdraw, ilk gizlemede balon; çıkış simge menüsünde), `pencere_kipi`
+                (kip_sec'e HER ZAMAN paketli=True; sc ve /yerel/durum okunamazsa `okunamadi`), `bekleniyor_metni`,
+                `_gelistirme_kipi_mi`; sunucu yalnız `_gelistirme_penceresi`'nde içe aktarılır
+  tepsi.py      bildirim alanı durum simgesi (0.21.0; pywin32 yalnız işlev içinde): saf tepsi_durumu (ipucu ≤ 127,
+                ağ adresi/okul adı yok), menu_ogeleri, kararli_tur + gecis_bildirimi, sonraki_bekleme, simge_adaylari;
+                DurumIzleyici (15 sn; açılışta/başlattan sonra 20 sn boyunca 1 sn); Tepsi (kendi iş parçacığında
+                görünmez ÜST DÜZEY pencere + PumpMessages; NIM_ADD/MODIFY/DELETE, TaskbarCreated, WM_CLOSE → "Çık";
+                seçim queue'ya); tek_ornek_al (`Local\TahtaKontrolDurum`), var_olani_goster, uyari_kutusu
   hizmet.py     Windows hizmeti kabuğu: saf `govde()` + pywin32 sınıfı (yalnız hizmet çalışırken içe aktarılır),
                 gunluk\sunucu.log (5 MB × 3), geri yüklemede 75 koduyla çıkış (`yeniden_baslat_planla`)
   tasima.py     0.8 öncesi veriyi (%LOCALAPPDATA%) %PROGRAMDATA%'ya KOPYALAR (kurucu çağırır; çıkış kodları
@@ -391,7 +473,8 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 isaret.svg (ürün işareti; 19.11.2026 kararı: ad "Tahta Kontrol" kaldı, işaret "onaylı tahta";
                 Windows simgesi packaging/windows/tahta-kontrol.ico aynı çizimden, elle üretilir)
   ajan_paket/   .deb'e giren dosyalar: control, postinst, prerm, servis, kur.sh, tahta-yoklama.desktop,
-                tahta-ariza.desktop
+                tahta-ariza.desktop; 0.21.0: kur.sh (`paket.kurulum_betigi` üretir) kayıttan sonra ajan.json'dan
+                `tahta_id` okuyup çerçeveli "TAHTA NO" satırı basar (ASCII; okunamazsa sessiz)
 tahta_ajan/     YALNIZ standart kitaplık (ekran.py ayrıca PyGObject/GTK3)
   servis.py     yönetici yetkili sistem servisi: sunucu döngüsü, komutlar, acil durumu, süreli program kilidi,
                 sınav durumu (ayar.sinav, monotonik sayaç) ve gözetmen oturumu (belirteç yalnız burada),
@@ -427,6 +510,8 @@ scripts/panel_olcum.mjs  panel sayfalarını başsız Edge/Chrome ile ölçer (0
                 taşma, kontrast, küçük yazı, dokunma hedefi, isteğe bağlı görüntü. YALNIZ deneme sunucusuna karşı;
                 adres/hesap/çıktı ortam değişkeniyle (PANEL_ADRES, PANEL_KULLANICI, PANEL_PAROLA, PANEL_CIKTI), çıktı depo DIŞINA;
                 0.20.0: SAYFALAR'da `ara`, `ara-sube`, `ara-ayar`, `ara-sonucsuz`
+scripts/durum_simgeleri.py  durum simgelerini üretir (0.21.0; saf Python ICO, Pillow yok, belirlenimci; 16/24/32 px
+                BGRA): packaging/windows/durum-{calisiyor,bekleniyor,durdu}.ico; pakette tahta_sunucu/simgeler/
 scripts/ekran_olcum.py  Docker/Xvfb'de her tahta sayfasının ekrana sığıp sığmadığını ölçer (uydurma veri); 0.14.0:
                 yoklama senaryoları (yk-secim-*, yk-liste-*), kaydırmasızlık ve dokunma ölçüsü denetimi, `--yalniz`
   __main__.py   komut satırı; `tahta-ajan yoklama` ("Yoklama Al" kısayolu) servise yoklama_ac yollar;
@@ -440,7 +525,9 @@ scripts/ekran_olcum.py  Docker/Xvfb'de her tahta sayfasının ekrana sığıp s�
                 `python3 -m tahta_ajan.temizlik tarayici|pencereler`): beyaz liste, yol/bağ koruması,
                 tarayıcı süreçleri, X11 _NET_CLOSE_WINDOW (ctypes libX11), ad içermeyen rapor
   tani.py       saha tanılaması (denetim listesi)
-packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, taşıma, icacls), build.ps1, giris.py
+packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, taşıma, icacls), build.ps1, giris.py;
+                0.21.0: .spec datas'ta durum-*.ico + tahta-kontrol.ico, hiddenimports'ta tepsi/win32gui/win32con;
+                .iss "durumsimgesi" görevi (işaretli) → `{commonstartup}\Tahta Kontrol durum simgesi` (`pencere --gizli`)
 ```
 
 ## Bağlayıcı kurallar
@@ -510,8 +597,8 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    raporu yok); kaydedilince ya da süre dolunca bellekten de atılır. Sunucuya giden durumda yalnız
    `yoklama_acik` bayrağı olur. Tahtada öğrenci maskeli etiketle (`maske.sinif_etiketi`) görünür; ders
    yoklaması listesinin varsayılan biçimi okul numarası + ad + soyadın baş harfidir ("123 Ayşe Y.";
-   kullanıcı kararı 18.11.2026). Bu istisna yalnız PIN ya da USB anahtarla açılan ders yoklaması listesi
-   içindir; sınav ekranları ve kalabalık listeleri (kural 17, `maske.kalabalik` + `no_son`) için "ad ve
+   kullanıcı kararı 18.11.2026). Bu istisna yalnız PIN ya da USB anahtarla (0.21.0'dan beri sınıf başkanı
+   anahtarı dahil; kullanıcı kararı 21.11.2026, kural 37) açılan ders yoklaması listesi içindir; sınav ekranları ve kalabalık listeleri (kural 17, `maske.kalabalik` + `no_son`) için "ad ve
    numara birlikte açık olmaz" hükmü sürer. **Tam soyad ve T.C. kimlik numarası tahtaya hiçbir biçimde
    gitmez** (`tam` maskesi yoktur). Mazeret/izin bilgisi, geçmiş günlerin yoklaması ve öğretmenin programı
    (PIN/USB doğrulanmadan) ajan yanıtına girmez.
@@ -564,11 +651,16 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    Ajan komutun sonucunu ertelenmiş verir (`komut_uygula` → None; sonuç `sonuclar`a sonra eklenir).
 
 28. **Sunucu Windows hizmetidir; veri ProgramData'dadır** (K8; `docs/tasarim.md` §15.6). Hesap Yerel
-   Hizmet (SYSTEM'e çevrilmez). Kurulu pencere sunucu açmaz; başlangıç kısayolu geri getirilmez. Eski
+   Hizmet (SYSTEM'e çevrilmez). Kurulu pencere sunucu açmaz; SUNUCU açan başlangıç kısayolu geri getirilmez.
+   İstisna (kullanıcı kararı 21.11.2026, 0.21.0; tasarım §15.6): kurucunun işaretli gelen "durumsimgesi" görevi
+   `{commonstartup}\Tahta Kontrol durum simgesi.lnk` → `TahtaKontrol.exe pencere --gizli` kurar (seçilmezse
+   `[InstallDelete]` siler). Bu kısayol YALNIZ bildirim alanı simgesini açar, sunucu AÇMAZ; eski `Tahta Kontrol.lnk`
+   silinmeye devam eder; kurucu testi başlangıçta yalnız bu satıra izin verir. Durum uygulaması `kip_sec`'e her
+   zaman `paketli=True` verir, sunucu yalnız `_gelistirme_penceresi`'nde içe aktarılır (`test_tepsi.py`). Eski
    veri yalnız KOPYALANIR (kaynak silinmez); hedefte veri varsa taşınmaz; seçim belirsizse ya da kopya
    bozuksa `TASIMA-BEKLIYOR.txt` yazılır ve hizmet açılmaz — bu korumayı "kolaylık" için kaldırma
    (yeni sertifika = bütün tahtalar kopar, kural 4). Taşıma kodları `.iss` ile `tasima.py`'de aynıdır
-   (`test_kurucu_tasima_kodlari_python_ile_ayni`). `hizmet.py` modül düzeyinde pywin32 içe aktarmaz.
+   (`test_kurucu_tasima_kodlari_python_ile_ayni`). `hizmet.py` ve `tepsi.py` modül düzeyinde pywin32 içe aktarmaz.
 
 29. **USB anahtar dar yetkidir ve belleği işgal etmez** (0.11.0; `docs/tasarim.md` §14.1). Servis belleği
    biçimlendirmez, BAĞLAMAZ (bağlamayı oturumdaki udisks2 yapar), yazmaz; yalnız bağlamanın kök dizinindeki
@@ -581,6 +673,10 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    kendiliğinden tanınması işlem kaydına YAZILMAZ (konum geçmişi birikmesin; yalnız `son_kullanim`); kilit açma
    iletileri yalnız ekrandaki oturumun yardımcısından kabul edilir (`_etkin_oturumdan`). İdare anahtarının
    tahtadaki etiketi panel kullanıcı adını taşımaz (görünen ad tek kelimeyse ya da kullanıcı adıysa "İdare").
+   0.21.0: üç anahtar türü vardır — idare (`kullanici`), öğretmen (`ogretmen`), şube (`sube`, sınıf başkanı; kural 37).
+   Bu kuralın hepsi şube anahtarı için de geçerlidir; dosya biçimi ve ajan aynıdır (tür dosyada yoktur, ajan
+   bilinmeyen türü öğretmen sayar). Şube anahtarının tahtadaki etiketi "Sınıf başkanı · <şube>"dir; panel etiketi
+   tahtaya inmez. Başkan ayarı kapalıyken tanıma da işlem kaydına yazılmaz ve geçersiz sayacını tüketmez.
 
 30. **e-Okul raporunda öğretmen adı hiçbir yere girmez** (0.12.0; `docs/tasarim.md` §12.4). Hücreden yalnız
    "dolu mu" alınır; eşleme ipucu yalnız iki satırlı hücrenin İLK satırıdır (ders adı), blok başına en çok 3,
@@ -590,7 +686,10 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    Bu kural derslik aktarımı (`eokul_program.py`, `/program/aktar/eokul`) içindir ve DEĞİŞMEDİ. İstisna
    (17.11.2026 kararı, 0.13.0): ayrı `/ogretmen-programi` yolu aynı raporun öğretmen satırını okur; ham ad
    yalnız önizleme belleğinde durur, kalıcı kayda mevcut öğretmen kimliği yazılır (kural 31). Ad işlem
-   kaydına, tahtaya, ajana girmez; öğretmen kaydı kendiliğinden oluşturulmaz.
+   kaydına, tahtaya, ajana girmez; öğretmen kaydı kendiliğinden oluşturulmaz. İkinci istisna (kullanıcı kararı
+   21.11.2026, 0.21.0): toplu öğretmen yüklemesi aSc XML'den ve e-Okul OOK01001R1'den yalnız ad ve soyad okur
+   (kural 38). Bu AYRI bir okuyucu ve ayrı sayfadır. Derslik sihirbazı (`program_aktar.ASC_ATLA`,
+   `eokul_program.py`) öğretmen ve ders adını yine OKUMAZ.
 
 31. **Öğretmen programı ayrıştırıcısı kapalı hata çalışır; önizleme kısa ömürlüdür** (0.13.1;
    `docs/tasarim.md` §12.5). Hücre `ogretmen_program.hucre_coz` ile çözülür: seçmeli gruplar `,` `;` sekme
@@ -625,7 +724,9 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    yoksa 400), bildirmeyen eski ajanın kaydı var olan geçi silmez ve ona geç öğrenci " (geç)" ekli etiketle
    gider. Sunucu–ajan yoklama sözleşmesinin örnekleri `tests/yoklama_sozlesme.json`'dadır; iki tarafın testi
    bu dosyadan beslenir, alan eklenirse dosya, sunucu ve ajan çözücüsü birlikte değişir. Öğretmen programı
-   ve saat yalnız ÖN SEÇİMDİR: hiçbir şube ya da ders düğmesi programa göre kapatılmaz.
+   ve saat yalnız ÖN SEÇİMDİR: hiçbir şube ya da ders düğmesi programa göre kapatılmaz. Tek istisna sınıf başkanı
+   anahtarıdır (kullanıcı kararı 21.11.2026, 0.21.0; kural 37): onda şube, tahta ve ders saati kısıtları sunucuda
+   uygulanır. Öğretmen, idare ve panel yolları değişmedi; istisnayı başka yola genişletme.
 34. **İdare düzeltmesi ayrı katmandır; ders saatinin geçerli durumu tek koddan çıkar** (0.14.0;
    `yoklama_defter.Veri.gecerli_duzeltmeler`/`kumeler`, `hucre_durumu`, `yoklama.gecerli_durum`). Şube
    defterindeki düzeltme öğretmenin/tahtanın kaydına DOKUNMAZ, `yoklama_duzeltme`'ye satır yazar (aynı
@@ -665,8 +766,133 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
    (`tests/test_arama_sayfasi.py`) iki rolde tarar; yeni bir tablo ya da sütun dizine alınacaksa önce bu kural ve
    o test güncellenir, kullanıcıya sorulur.
 
+37. **Sınıf başkanı anahtarı şubeye bağlıdır ve dar yetkidir** (0.21.0, kullanıcı kararı 21.11.2026;
+   `docs/tasarim.md` §14.3).
+   - **Kimlik:** anahtar `usb_anahtar.sahip_turu='sube'` + `sube` ile tanımlanır. Öğrenci kimliği ya da başkanın
+     adı hiçbir tabloya yazılmaz; etiket alanında T.C. denetimi vardır. Yalnız yönetici üretir.
+   - **Ayar:** `usb_anahtar.baskan` varsayılan KAPALIDIR. USB anahtar ve ders yoklaması kapalıyken başkan anahtarı
+     çalışmaz. Ayar kapatılınca açık başkan oturumları anında düşer: belirteçler silinir ve `oturum_coz` ayarı da
+     denetler.
+   - **Kilit:** başkan anahtarı HİÇBİR ZAMAN kilit açmaz. `izinler` ona `kilit_ac` vermez; `/ajan/usb/kilit_ac`
+     PIN sormadan 403 döner. PIN `pin_baskan` ile sorulur (varsayılan açık).
+   - **Yazma koşulları** TEK yerdedir (`yoklama.baskan_denetle`) ve hem /liste hem /kaydet'te çalışır:
+     - yalnız anahtarın şubesi (400);
+     - yalnız o şubenin tahtası: `tahta.subeler` ya da derslik programında aynı ders saati (409);
+     - yalnız `ders_kurali` penceresindeki ders; ders saati bulunamazsa 409, nedeni ayrı iletiyle (zil yok,
+       bugün ders yok, devre belirsiz); pencere dışı 400;
+     - **öğretmen önceliği:** o ders saatinde başka kaynaklı kayıt, şube defteri düzeltmesi ya da kayıt
+       sayfasından düzeltme (`yoklama_iz.islem='duzelt'`) varsa yazamaz (409).
+   - **Kural 33 istisnası:** bu, kural 33'ün bilinçli ve kullanıcı onaylı istisnasıdır. Öğretmen, idare ve panel
+     yolları değişmez.
+   - **Kayıt:** `kaynak='baskan'`, `kaydeden='baskan:<şube>'`. Birleşim kuralı (kural 34) değişmez; öğretmen
+     sonra alırsa öğretmeninki geçerlidir. İşlem kaydına yalnız şube, ders saati, sayılar ve anahtar kimliği
+     yazılır.
+   - **Panel:** kayıt "sınıf başkanı" olarak ve sabit notla görünür ("deneme amaçlı yardımcı kayıttır;
+     öğretmenin yoklamasının yerine geçmez"; K5).
+   - **Yıl sonu:** bitiş tarihinden önce üretilmiş şube anahtarları silinir.
+   - **Arama:** anahtar, etiket ve kimlik genel arama dizinine girmez (kural 36).
+   - Yetkiyi genişletmek (kilit, başka şube, geçmiş ders, öğretmen kaydının üstüne yazma) kullanıcı kararıdır.
+
+38. **Toplu öğretmen yüklemesi yalnız ad ve soyad okur; kimseyi pasifleştirmez, PIN üretmez** (0.21.0, kullanıcı
+   kararı 21.11.2026; `ogretmen_aktar.py`, tasarım §14).
+   - **aSc:** yalnız `teachers/teacher` öğesinin `firstname` ve `lastname` öznitelikleri okunur; biri boşsa
+     `name` okunur. Kısa ad, cinsiyet, renk, e-posta, telefon ve ortak kimlik okunmaz.
+   - **e-Okul OOK01001R1:** yalnız ADI SOYADI okunur. GÖREVİ yalnız önizlemede görünür ve saklanmaz. KADRO
+     DURUMU ve BRANŞI okunmaz.
+   - **T.C.:** T.C. sütunu hiçbir kaynakta okunmaz. Adında T.C. kimlik numarasına benzeyen değer bulunan satır
+     atlanır.
+   - **Dosya ve önizleme:** dosya diske yazılmaz. Önizleme bellekte 15 dk durur, tek kullanımlıktır, yalnız
+     yöneticiye açıktır.
+   - **Dokunulmayanlar:** dosyada olmayan öğretmene dokunulmaz. Pasif aynı ad yalnız satır başına açık onayla
+     etkinleşir. Eklenen öğretmenin PIN'i yoktur (kural 19: PIN yalnız toplu PIN pusulasında).
+   - **İz:** işlem kaydına yalnız sayılar yazılır.
+   - **Kural 30:** bu yol kural 30'daki "öğretmen kaydı kendiliğinden oluşturulmaz" hükmünü değiştirmez. Satır
+     başına onaylı önizlemeyle çalışır ve öğretmen programı aktarımından ayrıdır. Testler uydurma adla yazılır;
+     gerçek personel listesi depoya girmez.
+
 ## Bilinen tuzaklar
 
+- **Deneme sunucusu bu bilgisayarda 8797/8798'de açılmayabilir (0.21.0):** Windows 8789–9188 kapı aralığını
+  ayırmış. Bu yüzden 0.21.0 denemesi 18807'de yapıldı. Kapı "kullanımda" hatası verirse önce ayrılmış aralığa bak
+  (`netsh int ipv4 show excludedportrange protocol=tcp`); başka süreç arama.
+- **0.21.0'ın iki göçü ayrı öğedir ve sırası bağlayıcıdır:** önce aSc (`program_eslesme` aSc saat eşlemeleri
+  silinir, `program_surum.tahta_json` eklenir), sonra başkan. Başkan göçünde de iç sıra bağlayıcıdır: foreign_keys
+  açık olduğundan önce `usb_anahtar`'a başvuran `yoklama_belirtec` düşer, sonra `usb_anahtar` yeni CHECK ile
+  yeniden kurulur, en son `yoklama_belirtec` yeniden kurulur; açık oturumlar `yb_eski` TEMP tablosuyla korunur
+  (yükseltme anında tahtada süren yoklama kaybolmasın). İkisini tek öğede birleştirme, sırasını değiştirme.
+- **Yıl sonu "Tümünü sil" başkan anahtarlarını da siler (0.21.0):** `yoklama.hepsini_sil` `sahip_turu='sube'`
+  satırlarını aynı işlemde siler; şube anahtarının sahibi "şubede etkin öğrenci var mı" diye canlı hesaplandığı
+  için silinmezse geçen yılın başkanı yeni yılın aynı adlı şubesinde çalışırdı. Öğretmen/idare anahtarı kalır.
+- **aSc şube güncellemesi şubeyi eski tahtadan da kaldırır (0.21.0):** `program_aktar.sube_guncellemesi` önce
+  şube → yeni ana tahta haritasını kurar; bu aktarımda eşlenen başka tahtanın eski şubelerinden yeni tahtası
+  belli olanları çıkarır (aynı şube iki tahtada kalırsa başkanın oda kısıtı ve şube hedefli duyuru bozulur).
+- **Göç testleri göçü içerikten bulur, sondan değil (0.21.0):** `"tahta_json" in g`, `"CREATE TABLE
+  usb_anahtar_yeni"`, `"CREATE TABLE yoklama_gec"`. Yeni göç ekleyince `GOCLER[-1]`'in belli bir göç olduğunu
+  varsayan test yazma. `test_yoklama_sozlesme` 0.14.0 göçünün yoklama tablolarına dokunan tek göç olduğunu
+  denetler; başkan göçü `yoklama_belirtec`'e dokunur, `yoklama*` kayıt tablolarına dokunmaz.
+- **aSc şube anahtarında `metin.katla` kullanma (0.21.0):** I ile İ'yi birleştirir; 9/İ satırlarına 9/I
+  yazılıyordu. Anahtar `metin.sube_duzelt`'tir. Eski katlanmış hatırlanan anahtarlar ("9/i") eşleşmez ve yok
+  sayılır.
+- **aSc'de otomatik saat/devre eşlemesi hatırlanmaz, yalnız elle seçilen hatırlanır (0.21.0):** otomatik eşleme
+  zil değişince bayat kalıyor ve devre grubu eşlemesini eziyordu. `eslesmeleri_yaz`'a otomatik `saat`/`devre`
+  yazdırma. Hatırlanan saat değeri zilde karşılığı yoksa yok sayılır.
+- **aSc devre bölmesinin eşikleri bilerek vardır (0.21.0):** az kartlı dosyada her sınıf tek saatte görünür ve
+  "tek parçada" sayılır. Kapsama eşiği (`DEVRE_KAPSAMA`) bu yüzden vardır; düşürme. Başlangıç saati olmayan period
+  `saatsiz`'a ayrılır. Erken `return` ile bütün dosyayı gruplamasız bırakma; öyle yapılınca zil önerisi de
+  kalkıyordu.
+- **Şube güncellemesi sürümle saklanır (0.21.0):** eski ve yeni değerler `program_surum.tahta_json`'dadır.
+  Geri yükleme yalnız o onaydan beri değişmemiş tahtada geri yazar. Tahta tablosuna sürümsüz UPDATE yazan yeni
+  bir onay adımı ekleme. Onaylanabilir olmak programın değişeceği anlamına gelmez: yalnız şube güncellemesi için
+  de onay açılır; `program_degisir` yanlışsa ve kutu işaretsizse `aktar_onayla` reddeder.
+- **Rakamla derslik eşleşmesi öneridir (0.21.0):** durumu "rakam"dır ve hatırlanmaz. Addan yalnız tamamı
+  numara olan ad aday olur (`_RAKAMLI_AD`). "Tahta 12" adını aday sayma: varsayılan ad her tahtayı aday yapar.
+- **Tahta numarası = `tahta.id` (0.21.0):** ayrı bir numara sütunu açılmaz; numara sıfırla doldurulmaz,
+  yeniden sıralanmaz, kaldırılan tahtanın numarası yeniden kullanılmaz. Kurulum çıktısı ve panel aynı değeri
+  yazar. Tahta adı gösteren yeni bir yer aynı adlıları ayırmak için " · No <id>" ekini kullanır. Canlı tazeleme
+  (`panel.js`) adı yazmaz; numara taşıyan öğeye JS ile metin yazılırsa numara da yazılmalı.
+- **Yeni kayıtta ad makine adından alınmaz (0.21.0):** ETAP'ta bütün tahtaların makine adı aynıdır ("etap").
+  `ad = makine_adi` geri getirilmez. Aynı ad reddedilmez, yalnız uyarılır. Toplu adlandırma formu kimlik
+  taşımaz; liste sunucuda yeniden hesaplanır ki bayat sayfa başka tahtayı adlandırmasın. Toplu adlandırma
+  yalnız `adlandirilabilir_mi` olan, yani adını kurulumdan almış tahtaya dokunur; elle verilmiş "Tahta 12"
+  ezilmez.
+- **Başkan oturumunda öğretmen ve kullanıcı YOKTUR (0.21.0):** `yoklama_belirtec`te ikisi de boştur, yalnız
+  `anahtar_id` doludur; `oturum["tur"]=='baskan'`. Oturum türüne göre dallanan yeni kod üç dalı da ele alır
+  (`oturum_kaydedeni`, `oturum_kaynagi`). Kayıt `kaynak='baskan'` ile yazılır. 'tahta' yazılırsa idare USB
+  kaydıyla aynı satıra düşer (UNIQUE `IFNULL(ogretmen_id,0), kaynak`).
+- **`yoklama.kaynak` üç değerlidir (0.21.0):** `alan_etiketi`, `kayit_ayrintisi` ve şablonlardaki
+  `kaynak_turu == 'tahta'` koşulları 'baskan'ı da ele almalı. "Panel değilse tahta" varsayımı yanlıştır.
+- **Başkan kutuları USB anahtar formundadır ve nöbetçi ister (0.21.0):** `ua_baskan` ve `ua_pin_baskan` öbür
+  dört kutuyla aynı formdadır (0.16.0 onay kutusu tuzağı). `ua_baskan_formu` yoksa (eski sekmeden gelen form)
+  başkan kutuları önceki değerinde kalır. Forma kutu eklerken ya da çıkarırken nöbetçiyi ve
+  `test_her_bolum_tek_formda`'yı da güncelle.
+- **Başkan anahtarının yıl sonu silmesi `olusturma < sınır + 1 gün` koşuluna bağlıdır (0.21.0):** imha saatte bir
+  çalışır ve bitiş tarihi güncellenene kadar aynı sınırı kullanır. Koşul kaldırılırsa yeni yılda üretilen
+  anahtarlar her saat silinir.
+- **Öğretmen başlık eşlemesi sözcük sınırıyla yapılır (0.21.0):** öğrenci eşlemesi alt dize arar. Öğretmende de
+  alt dize aransaydı "ad" eş anlamlısı "KADRO DURUMU"nu ad sütunu sayardı. `eokul.baslik_esle` parametresizken
+  öğrenci davranışıdır; varsayılanını değiştirme. e-Okul personel raporunda sütun yeri dosyadan dosyaya değişir;
+  sütun yeri sabitlenmez, başlıktan bulunur. Altbilgi satırları görevi boş olduğu için atlanır.
+- **Önizleme deposu üç türle ortaktır (0.21.0):** öğretmen kaydı `{"tur": "ogretmen_aktar", "ayristirma"}`
+  taşır ve "satirlar" anahtarı TAŞIMAZ; öğrenci ucu `"satirlar" in` diye bakar. Anahtar adı değişirse öğretmen
+  belirteci öğrenci aktarımına geçebilir (`test_yonetici_belirteci_baska_onizleme_turunde_gecmez`).
+  Önizlemedeki kodlar "öngörülen"dir: uygulama planı işlem içinde yeniden hesaplar.
+- **Simge penceresi `HWND_MESSAGE` olmaz (0.21.0):** ileti penceresi TaskbarCreated yayınını almaz; Explorer
+  yeniden başlayınca simge geri gelmez. Görünmeyen üst düzey pencere kullanılır; `FindWindow` (ikinci açılış)
+  da buna bağlıdır.
+- **tkinter yalnız ana iş parçacığında çağrılır (0.21.0):** simge iş parçacığı ve izleyici yalnız `queue`'ya
+  yazar. `messagebox`'ı simge iş parçacığından açma. Simgeye başka iş parçacığından yalnız `Tepsi.guncelle`,
+  `balon` ve `kapat` (PostMessage) ile dokunulur.
+- **Simge katmanında üç Win32 tuzağı (0.21.0):**
+  - Aynı süreçte ikinci `Tepsi` sınıfı yeniden kaydeder. Kapanışta `UnregisterClass` gerekir; yoksa 1410 hatası
+    çıkar ve ileti haritası eski nesneye bağlı kalır.
+  - Simge penceresine gelen WM_CLOSE "Çık"tır. Kaldırılırsa DefWindowProc pencereyi yok eder; süreç görünmez
+    kalıp tek örnek mutex'ini tutar ve masaüstü kısayolu bir daha pencere açamaz.
+  - Tek bir `Shell_NotifyIcon` hatası simgenin yok olduğu anlamına gelmez (Explorer meşgulken zaman aşımı).
+    `_ekle` ADD düşerse MODIFY dener. `_eklendi`'yi tek hatada kalıcı False yapma.
+- **sc okunamadı ≠ hizmet kurulu değil (0.21.0):** `pencere_kipi` iki kaynak da okunamazsa `okunamadi` verir;
+  "kurucuyu yeniden çalıştırın" yalnız sc 1060'ta denir. Zorla öldürülen (`taskkill /F`) sürecin simgesi fare
+  üstüne gelene kadar kalır; bu beklenen davranıştır. Windows 11 yeni simgeyi taşma alanına koyar; program
+  sabitlemeyi zorlamaz.
 - **Arama girdisi eklemek = `arama.SIK_ISLER`'e bir öğe (0.20.0):** yalnız var olan bir GET sayfasına giden kısa yol
   ve eş anlamlıları. Sayfa, sekme, süzgeç ya da ayar adı `arama.py`'ye yazılmaz (tanımından türer; testi kaynakta düz
   metin arar). Rol yazılmaz, hedeften türer; açık `rol` yalnız daraltır. POST isteyen iş, indirme adresi, kişi/kurum
