@@ -1,0 +1,56 @@
+{% extends "taban.html" %}
+{% block baslik %}Sınıf başkanı anahtarları · Tahta Kontrol{% endblock %}
+{% block govde_sinifi %}rapor-sayfasi{% endblock %}
+{% block icerik %}
+{# Sınıf başkanı anahtarları hazır (0.21.0): yalnız POST yanıtı (Cache-Control: no-store; yönlendirme yok, adres
+   satırına girmez; kural 19 kalıbı). PIN'ler yalnız bu sayfada bir kez görünür; gizli değer sayfada YOKTUR, yalnız tek
+   seferlik indirilen dosyada (tek şube: tahta-kontrol.anahtar, birden çok şube: şube klasörlü zip). Pusulada öğrenci
+   adı YOKTUR: anahtar şubeye bağlıdır. Bağlam: panel_usb.py SÖZLEŞME. #}
+<div class="yazdirma">
+  <p class="geri"><a href="/usb-anahtarlar#baskan">← USB anahtarlar</a></p>
+  <div class="sayfa-bas">
+    <div class="bas-yazi">
+      <h1>Sınıf başkanı anahtarları hazır</h1>
+      <p>{{ pusulalar | length }} şube{% if etiket %} · {{ etiket }}{% endif %} · kesik çizgilerden kesip başkanlara verin</p>
+    </div>
+    <p class="dugme-satiri sag"><button type="button" class="ana" data-yazdir hidden>Pusulaları yazdır</button></p>
+  </div>
+  {% if not baskan_acik %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ baskan_kapali_iletisi }}</p>{% endif %}
+  <p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg><strong>PIN'ler yalnız bu sayfada bir kez görünür.</strong>
+    Yazdırmadan sayfayı kapatırsanız anahtarları iptal edip yeniden üretmeniz gerekir. Sayfayı ekranda açık bırakmayın.
+    {% if not pin_sorulur %}(PIN şu an sorulmuyor; Ayarlar'da açılırsa bu PIN'ler geçerli olur.){% endif %}</p>
+  <section class="kutu" aria-labelledby="baskan-indir-bas">
+    <h2 id="baskan-indir-bas">1. {{ 'Zip dosyasını' if toplu else 'Anahtar dosyasını' }} indirin</h2>
+    <p class="dugme-satiri"><a class="dugme ana" href="{{ indir_adresi }}" data-tek-indirme="baskan-indir-bilgi"><svg class="simge" aria-hidden="true"><use href="#s-guncel"/></svg>{{ 'Anahtarları indir (zip)' if toplu else 'Anahtar dosyasını indir' }}</a></p>
+    <p class="not" id="baskan-indir-bilgi" role="status" hidden>İndirme başladı. Dosya tarayıcının İndirilenler klasöründe; bağlantı yeniden kullanılamaz.</p>
+    <p class="not">Bağlantı {{ omur_dk }} dakika içinde ve yalnız bir kez çalışır; indirilmezse anahtarlar kaydedilmez.
+      Anahtarlar, dosya indirildiği anda geçerli olur.</p>
+    <h2>2. Belleklere kopyalayın</h2>
+    <ol class="adimlar">
+      {% if toplu %}
+      <li>Zip dosyasını açın (<span class="kod">{{ paket_adi }}</span>). Her şubenin bir klasörü vardır (ör. <span class="kod">10-A</span>).</li>
+      <li>Klasördeki <span class="kod">{{ dosya_adi }}</span> dosyasını o şubenin belleğinin en üst klasörüne, adını değiştirmeden kopyalayın. Bellek biçimlendirilmez; öteki dosyalar kalır.</li>
+      {% else %}
+      <li><span class="kod">{{ dosya_adi }}</span> dosyasını belleğin en üst klasörüne, adını değiştirmeden kopyalayın. Bellek biçimlendirilmez; öteki dosyalar kalır.</li>
+      {% endif %}
+      <li>Bilgisayardaki indirilen kopyaları silin (İndirilenler klasörü ve çöp kutusu).</li>
+    </ol>
+    <p class="not">{{ baskan_notu }}</p>
+  </section>
+</div>
+<div class="fisler pusulalar">
+{% for p in pusulalar %}
+<section class="fis pusula" aria-label="{{ p.sube }} sınıf başkanı anahtarı pusulası">
+  <p class="fis-okul">Tahta Kontrol · Sınıf başkanı USB anahtarı</p>
+  <p class="fis-salon">Şube: <strong>{{ p.sube }}</strong></p>
+  <p class="fis-etiket">Anahtar kimliği</p>
+  <p class="pusula-kod">{{ p.kimlik }}</p>
+  <p class="fis-etiket">PIN</p>
+  <p class="pusula-pin">{{ p.pin }}</p>
+  <p class="not">{% if p.klasor %}Zip'teki <strong>{{ p.klasor }}</strong> klasöründeki{% else %}İndirilen{% endif %} {{ dosya_adi }} dosyası belleğin en üst klasörüne kopyalanır.
+    Yalnız {{ p.sube }} şubesinin dersliğindeki tahtada, o anki dersin yoklamasında çalışır; kilit açmaz.
+    PIN'i kimseyle paylaşma. Bellek kaybolursa hemen idareye bildir.</p>
+</section>
+{% endfor %}
+</div>
+{% endblock %}

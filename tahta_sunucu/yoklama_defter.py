@@ -116,6 +116,11 @@ class Veri:
         self._dersler: dict[tuple[date, str], list[dict]] = {}
         self._kume: dict[tuple[str, str, int], tuple[frozenset, frozenset]] = {}
 
+    def baskan_kaydi(self, tarih: str, sube: str, ders_no: int) -> bool:
+        """0.21.0: ders saatinin en son kaydedilen (geçerli) kaydı sınıf başkanının mı (`kaynak='baskan'`)? Yalnız görünüm."""
+        son = self.son.get((tarih, sube, ders_no))
+        return son is not None and son["kaynak"] == yk.KAYNAK_BASKAN
+
     def _isaretler(self, tablo: str, aralik: list, kosul: str, arg: list) -> dict[int, set[int]]:
         sonuc: dict[int, set[int]] = {}
         for s in self.b.execute(
@@ -424,7 +429,8 @@ def sube_defteri(b, sube: str, bitis: date, an: int, gun_sayisi: int = DEFTER_GU
         gun_basliklari.append({
             "tarih": gun.isoformat(), "kisa": f"{GUN_KISA[gun.weekday()]} {gun:%d.%m}", "yazi": yk.tarih_yazi(gun),
             "bugun": gun == bugun,
-            "dersler": [{"ders_no": d["ders_no"], "plan": d["plan"], "gelecek": _gelecek(d, gun, an)} for d in veri.dersler(gun, sube)],
+            "dersler": [{"ders_no": d["ders_no"], "plan": d["plan"], "gelecek": _gelecek(d, gun, an),
+                         "baskan": veri.baskan_kaydi(gun.isoformat(), sube, d["ders_no"])} for d in veri.dersler(gun, sube)],
         })  # fmt: skip
     satirlar = []
     for o in ogrenciler:
@@ -454,6 +460,7 @@ def sube_defteri(b, sube: str, bitis: date, an: int, gun_sayisi: int = DEFTER_GU
         "ders_sayisi": sum(len(g["dersler"]) for g in gun_basliklari),
         "plan_disi_var": any(not d["plan"] for g in gun_basliklari for d in g["dersler"]),
         "devre_adi": yk.sube_devre_adi(b, veri.plan(bitis), sube),
+        "baskan_var": any(d["baskan"] for g in gun_basliklari for d in g["dersler"]), "baskan_notu": yk.BASKAN_NOTU,
     }  # fmt: skip
 
 
@@ -485,7 +492,7 @@ def sube_gunu(b, sube: str, gun: date, an: int) -> dict:
         sutunlar.append({
             "ders_no": no, "aralik": f"{d['baslangic']}–{d['bitis']}" if d["baslangic"] else "", "plan": d["plan"], "alindi": alindi,
             "gelecek": gelecek, "gec": no == gec_dersi, "yok_sayisi": len(yok), "gec_sayisi": len(gec),
-            "alinabilir": acik and not alindi and not gelecek,
+            "alinabilir": acik and not alindi and not gelecek, "baskan": veri.baskan_kaydi(tarih, sube, no),
         })  # fmt: skip
     satirlar = []
     for o in ogrenciler:
@@ -508,6 +515,7 @@ def sube_gunu(b, sube: str, gun: date, an: int) -> dict:
         "gec_var": any(s["gec"] and s["alindi"] for s in sutunlar), "alinan": sum(1 for s in sutunlar if s["alindi"]),
         "plan_disi_var": any(not s["plan"] for s in sutunlar), "devre_adi": yk.sube_devre_adi(b, veri.plan(gun), sube),
         "alinabilir_var": any(s["alinabilir"] for s in sutunlar),
+        "baskan_var": any(s["baskan"] for s in sutunlar), "baskan_notu": yk.BASKAN_NOTU,
         "gun_boyu_yok": len(gun_boyu_yoklar(veri, gun, sube, ogrenciler)),
         "islendi": bool(islenen), "bayat": bool(islenen) and sube in eokul_bayat(b, veri, tarih, {sube: islenen}),
         "islendi_metni": f"{islenen['kullanici']}, {yk.an_yazi(islenen['zaman'])}" if islenen else "",

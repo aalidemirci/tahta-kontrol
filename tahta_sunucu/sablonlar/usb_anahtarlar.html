@@ -2,7 +2,7 @@
 {% block baslik %}USB anahtarlar · Tahta Kontrol{% endblock %}
 {# Öğretmen bölümünün iletisi sayfa başında değil, #ogretmen kutusunda çizilir (yönlendirme oraya kayar; dar ekranda
    sayfa başındaki bant görünmezdi). #}
-{% block mesaj_yeri %}{% if mesaj and not (ileti_yeri == 'ogretmen' and yonetici) %}{% include "_ileti.html" %}{% endif %}{% endblock %}
+{% block mesaj_yeri %}{% if mesaj and not (ileti_yeri in ('ogretmen', 'baskan') and yonetici) %}{% include "_ileti.html" %}{% endif %}{% endblock %}
 {% block icerik %}
 {# USB anahtarlar (0.11.0; şartname §4.2). Bağlam: panel_usb.py SÖZLEŞME. Gizli değer ve PIN bu sayfada YOKTUR:
    gizli yalnız tek seferlik indirilen dosyada, PIN yalnız üretim yanıtında bir kez görünür.
@@ -60,6 +60,40 @@
   {% endif %}
 </div>
 
+{% if yonetici %}
+{# 0.21.0: sınıf başkanı (şube) anahtarları; yalnız yönetici (idareci HTML'inde bu bölüm ve şube anahtarları ÇİZİLMEZ).
+   Anahtar şubeye bağlıdır: sistemde başkanın adı tutulmaz. Yanıt PIN pusulasıdır (usb_baskan_pusula.html). #}
+<section class="kutu" id="baskan" aria-labelledby="baskan-bas">
+  <h2 id="baskan-bas">Sınıf başkanı anahtarları <span class="rozet" data-durum="bilgi">deneme</span></h2>
+  {% if mesaj and ileti_yeri == 'baskan' %}{% with odakla = true %}{% include "_ileti.html" %}{% endwith %}{% endif %}
+  {% if not baskan_acik %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ baskan_kapali_iletisi }} <a href="/ayarlar/usb">Ayarlar'da aç</a></p>{% endif %}
+  <p class="not">Anahtar kişiye değil şubeye bağlıdır; sistemde başkanın adı tutulmaz, belleği kimin taşıdığını idare kendi tutar.
+    Başkan yalnız kendi şubesinin, kendi dersliğindeki tahtada, o anki dersin yoklamasını alır; kilit açmaz.
+    O dersin yoklamasını öğretmen aldıysa başkan yazamaz; öğretmen sonra alırsa öğretmeninki geçerli olur.
+    {% if usb_ayari.pin_baskan %}Tahta anahtarla birlikte, üretimde verilen 6 haneli PIN'i de sorar.{% else %}PIN sorulmuyor (Ayarlar).{% endif %}</p>
+  <p class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ baskan_notu }}</p>
+  {% if sube_secenekleri %}
+  <form method="post" action="/usb-anahtarlar" class="form-dar">
+    <input type="hidden" name="eylem" value="uret"><input type="hidden" name="sahip" value="baskan">
+    <fieldset class="olcut" aria-describedby="ua-baskan-sinir">
+      <legend>Şubeler</legend>
+      <p class="not" id="ua-baskan-sinir">Bir şubede en çok {{ sube_basi }} etkin anahtar olur (başkan ve yardımcısı). Birden çok şube seçilirse anahtarlar şube klasörlü tek bir zip dosyasıyla iner.
+        İndirilmeyi bekleyen anahtar da sayılır; 5 dakika içinde indirilmezse yeri açılır.</p>
+      <div class="secenekler">
+        {% for s in sube_secenekleri %}<label><input type="checkbox" name="sube" value="{{ s.sube }}" {% if s.dolu %}disabled{% endif %}> {{ s.sube }}{% if s.sayi or s.bekleyen %} <span class="not">({{ s.sayi + s.bekleyen }}/{{ sube_basi }}{% if s.bekleyen %}, {{ s.bekleyen }} indirilmeyi bekliyor{% endif %})</span>{% endif %}</label>{% endfor %}
+      </div>
+    </fieldset>
+    <label for="ua-baskan-etiket">Etiket (isteğe bağlı)</label>
+    <p class="ipucu" id="ua-baskan-etiket-ipucu">Seçilen bütün şubelerin anahtarına yazılır, ör. Deneme 1. Öğrenci adı yazmayın; boş bırakılabilir. En çok {{ etiket_en_uzun }} karakter.</p>
+    <input type="text" id="ua-baskan-etiket" name="etiket" maxlength="{{ etiket_en_uzun }}" autocomplete="off" aria-describedby="ua-baskan-etiket-ipucu">
+    <p class="dugme-satiri"><button class="ana"><svg class="simge" aria-hidden="true"><use href="#s-kilit"/></svg>Seçilen şubeler için üret</button></p>
+  </form>
+  {% else %}
+  <p class="bos-not">Öğrenci listesi yüklenmemiş: başkan anahtarı şubeye bağlıdır (<a href="/ogrenciler">Öğrenci listesi</a>).</p>
+  {% endif %}
+</section>
+{% endif %}
+
 <h2 id="anahtar-liste">{{ 'Bütün anahtarlar' if yonetici else 'Anahtarlarım' }}</h2>
 {% if anahtarlar %}
 <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="anahtar-liste">
@@ -71,7 +105,7 @@
   {% for a in anahtarlar %}
   <tr{% if a.durum == 'iptal' %} class="pasif"{% endif %}>
     <th scope="row" data-etiket="Kimlik" class="kod">{{ a.kimlik }}</th>
-    <td data-etiket="Sahip">{{ a.sahip }} <span class="not">· {{ 'öğretmen' if a.tur == 'ogretmen' else 'idare' }}</span></td>
+    <td data-etiket="Sahip">{{ a.sahip }} <span class="not">· {{ tur_adlari[a.tur] }}</span></td>
     <td data-etiket="Etiket">{{ a.etiket or '—' }}</td>
     <td data-etiket="Üretildi">{{ a.olusturma }}<br><span class="not">{{ a.olusturan }}</span></td>
     <td data-etiket="Son kullanım">{{ a.son_kullanim }}</td>

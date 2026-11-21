@@ -66,6 +66,8 @@ def ayar_baglami(b) -> dict:
         ],
         "yoklama_sinirlari": yk.SINIRLAR,
         "yoklama_ogrenci_sayisi": b.execute("SELECT COUNT(*) FROM ogrenci WHERE aktif = 1").fetchone()[0],
+        # 0.21.0: yalnız not için (ayar USB anahtar bölümündedir; bu form onu YAZMAZ)
+        "yoklama_baskan_acik": usb_anahtar.baskan_acik(usb_anahtar.ayar_al(b)),
     }
 
 
@@ -705,7 +707,8 @@ def kaydet(uygulama, y) -> None:
                 "oneri": program["oneri"], "subeler_once": program["subeler_once"]}  # fmt: skip
 
     def liste_denetimi(b, tahta, govde, an: int):
-        """(oturum, şube, ders_no) ya da JSONResponse (hata)."""
+        """(oturum, şube, ders_no) ya da JSONResponse (hata). Sınıf başkanı oturumunda (0.21.0) ayrıca
+        `yk.baskan_denetle`: kendi şubesi, kendi dersliği, şu anki ders, öğretmen önceliği (/liste ve /kaydet)."""
         oturum = yk.oturum_coz(b, govde.get("belirtec"), tahta["id"], an)
         if not oturum:
             return JSONResponse({"hata": yk.ILETI_OTURUM_BITTI}, status_code=401)
@@ -716,6 +719,10 @@ def kaydet(uygulama, y) -> None:
         hata = yk.ders_no_denetle(b, yk.bugun(an), sube, ders_no, an)
         if hata:
             return JSONResponse({"hata": hata}, status_code=400)
+        if oturum["tur"] == "baskan":
+            red = yk.baskan_denetle(b, tahta, oturum, sube, int(ders_no), an)
+            if red:
+                return JSONResponse({"hata": red[1]}, status_code=red[0])
         return oturum, sube, int(ders_no)
 
     @uygulama.post("/ajan/yoklama/liste")
@@ -746,7 +753,7 @@ def kaydet(uygulama, y) -> None:
             eski_ajan = not yetenekli(tahta)
             liste = [{"id": o["id"], "etiket": maske.gec_ekli(etiketler[o["id"]]) if eski_ajan and o["id"] in gec else etiketler[o["id"]]}
                      for o in ogrenciler]  # fmt: skip
-            baska = yk.baska_yoklama_var(b, tarih, sube, ders_no, ogretmen_id, "tahta")
+            baska = yk.baska_yoklama_var(b, tarih, sube, ders_no, ogretmen_id, yk.oturum_kaynagi(oturum))
         yanit = {"sube": sube, "ders_no": ders_no, "ders_adi": "", "ogrenciler": liste, "yok": yok, "gec": gec,
                  "gec_secilebilir": gec_sec, "baska_yoklama": baska, "kalan_sn": oturum["bitis"] - an, "mevcut": len(liste)}  # fmt: skip
         if not liste:
@@ -791,14 +798,18 @@ def kaydet(uygulama, y) -> None:
             if gec and not gec_sec:
                 return JSONResponse({"hata": yk.ILETI_GEC_ILK_DERS}, status_code=400)
             # 0.11.0: idare USB anahtarıyla açılan oturumda öğretmen yoktur; kayıt "kullanici:<ad>" adına yazılır.
+            # 0.21.0: sınıf başkanı oturumu kaynak='baskan', kaydeden 'baskan:10/A' (kişi adı yok).
             ogretmen_id, kaydeden, kim = yk.oturum_kaydedeni(oturum, tahta["ad"])
             yk.yoklama_yaz(b, tarih=gun.isoformat(), sube=sube, ders_no=ders_no, ogretmen_id=ogretmen_id,
-                           kaynak="tahta", kaydeden=kaydeden, tahta_id=tahta["id"], yok=yok, gec=gec, kim=kim, an=an)  # fmt: skip
+                           kaynak=yk.oturum_kaynagi(oturum), kaydeden=kaydeden, tahta_id=tahta["id"], yok=yok, gec=gec, kim=kim,
+                           an=an)  # fmt: skip
             b.execute("DELETE FROM yoklama_belirtec WHERE belirtec_ozet = ?", (oturum["belirtec_ozet"],))  # kaydet tek seferliktir
             ayrinti = yk.kayit_metni(sube, ders_no, len(yok), oturum["kod"] if oturum["tur"] == "ogretmen" else None,
                                      gec_sayisi=len(gec))  # fmt: skip
             if oturum["tur"] == "idare":
                 ayrinti += f", kullanıcı {oturum['kullanici_ad']}"
+            elif oturum["tur"] == "baskan":
+                ayrinti += ", sınıf başkanı anahtarı"
             if oturum["anahtar_kimlik"]:
                 ayrinti += f" · USB {oturum['anahtar_kimlik'][:4]}-{oturum['anahtar_kimlik'][4:]}"
             vt.kayit_dus(b, f"tahta:{tahta['ad']}", "Yoklama alındı", ayrinti, ip(istek))

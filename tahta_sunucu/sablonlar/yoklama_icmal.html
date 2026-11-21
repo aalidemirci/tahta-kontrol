@@ -61,6 +61,7 @@
   {% if s.alinan_sayisi %}
   <p class="not icmal-lejant">Y: yok · Ö: yok, özürlü (mazeret/izin girilmiş; "Yok" toplamına dahildir) · G: geç · .: derste · -: yoklama alınmadı</p>
   <p class="not">Yoklamayı alan: {% for a in s.alanlar %}{{ a.ders_no }}. {{ a.metin }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</p>
+  {% if s.baskan_var %}<p class="not">{{ icmal.baskan_notu }}</p>{% endif %}
   {% endif %}
   <p class="icmal-not">Bu çizelge e-Okul girişine yardımcı çalışma belgesidir: tahtadan alınan yoklama kâğıt yoklamanın yanında tutulan yardımcı kayıttır, onun yerine geçmez; resmî devamsızlık kaydı e-Okul'dadır.</p>
   <p class="imza-satiri">Düzenleyen: <span class="cizgi-alan"></span> İmza: <span class="cizgi-alan kisa"></span></p>

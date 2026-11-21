@@ -84,7 +84,18 @@ MAZERET_DAYANAKLARI = {"": "Belirtilmedi", "dilekce": "Veli dilekçesi", "yazi":
                        "idare": "İdare izni"}  # fmt: skip
 
 GUN_ADLARI = program_mod.GUN_ADLARI
-KAYNAK_ADI = {"tahta": "Tahta", "panel": "Panel"}
+# 0.21.0: 'baskan' = sınıf başkanı USB anahtarıyla tahtadan alınan kayıt (deneme; yardımcı kayıt). Sütunda CHECK yoktur.
+KAYNAK_ADI = {"tahta": "Tahta", "panel": "Panel", "baskan": "Sınıf başkanı"}
+KAYNAK_BASKAN = "baskan"
+BASKAN_NOTU = "Sınıf başkanı kaydı deneme amaçlı yardımcı kayıttır; öğretmenin yoklamasının yerine geçmez."
+ILETI_BASKAN_OGRETMEN_ALDI = "Bu dersin yoklaması öğretmen tarafından alınmış."
+ILETI_BASKAN_IDARE_DUZELTTI = "Bu dersin yoklaması idare tarafından düzeltilmiş."
+ILETI_BASKAN_DERS = "Sınıf başkanı yalnız şu anki dersin yoklamasını alabilir."
+ILETI_BASKAN_ZIL_YOK = "Zil saatleri tanımlı olmadığı için sınıf başkanı yoklama alamaz."
+ILETI_BASKAN_DERS_YOK = "Bugün zil düzeninde ders yok; sınıf başkanı yoklama alamaz."
+ILETI_BASKAN_DEVRE_YOK = (
+    "Şubenin bugünkü devresi (sabah/öğle) belirlenemedi; derslik programı yüklenmeden sınıf başkanı yoklama alamaz."
+)
 IZ_ISLEM_ADI = {"olustur": "Oluşturuldu", "guncelle": "Güncellendi", "duzelt": "Düzeltildi"}
 
 
@@ -716,16 +727,25 @@ def oturum_ac(
 ) -> tuple[str, int]:  # fmt: skip
     """Yoklama belirteci üretir; (belirteç, bitiş). Aynı kişi-tahta çiftinin eski oturumları silinir.
 
-    Öğretmen oturumu (`ogretmen_id`; kod + PIN ya da öğretmen USB anahtarı) ya da idare oturumu
-    (`kullanici_id`; yalnız idare USB anahtarı). `anahtar_id` doluysa oturum o anahtarla açılmıştır
-    (anahtar iptal edilince düşer). 0.6.0'daki konumsal çağrı biçimi (ilk argüman ogretmen_id) korunur.
+    Öğretmen oturumu (`ogretmen_id`; kod + PIN ya da öğretmen USB anahtarı), idare oturumu (`kullanici_id`; yalnız
+    idare USB anahtarı) ya da (0.21.0) sınıf başkanı oturumu (ikisi de boş, yalnız `anahtar_id`: şube anahtarı).
+    `anahtar_id` doluysa oturum o anahtarla açılmıştır (anahtar iptal edilince düşer). 0.6.0'daki konumsal çağrı
+    biçimi (ilk argüman ogretmen_id) korunur.
     """
-    if (ogretmen_id is None) == (kullanici_id is None):
+    if ogretmen_id is not None and kullanici_id is not None:
         raise ValueError("Oturum ya öğretmenin ya idarenin olmalı.")
+    if ogretmen_id is None and kullanici_id is None and anahtar_id is None:
+        raise ValueError("Oturum ya öğretmenin ya idarenin ya da bir şube anahtarının olmalı.")
     if ogretmen_id is not None:
         b.execute("DELETE FROM yoklama_belirtec WHERE (ogretmen_id = ? AND tahta_id = ?) OR bitis <= ?", (ogretmen_id, tahta_id, an))
-    else:
+    elif kullanici_id is not None:
         b.execute("DELETE FROM yoklama_belirtec WHERE (kullanici_id = ? AND tahta_id = ?) OR bitis <= ?", (kullanici_id, tahta_id, an))
+    else:
+        b.execute(
+            "DELETE FROM yoklama_belirtec WHERE (anahtar_id = ? AND ogretmen_id IS NULL AND kullanici_id IS NULL AND tahta_id = ?) "
+            "OR bitis <= ?",
+            (anahtar_id, tahta_id, an),
+        )
     belirtec = guvenlik.belirtec()
     bitis = an + oturum_dk * 60
     b.execute(
@@ -740,33 +760,44 @@ def oturum_coz(b, belirtec, tahta_id: int, an: int):
     """Geçerli (bu tahtanın, süresi dolmamış) oturum; değilse None.
 
     Öğretmen oturumu: öğretmen etkin ve PIN'i kilitsiz. İdare oturumu: kullanıcı etkin ve rolü yönetici/idareci.
-    USB anahtarla açılmışsa anahtar `etkin` olmalı (iptal ya da PIN kilidi oturumu düşürür).
-    Satır: belirtec_ozet, bitis, ogretmen_id, kullanici_id, anahtar_id, ad, soyad, kod, tur ('ogretmen'|'idare'),
-    kullanici_ad, gorunen_ad, anahtar_kimlik.
+    Sınıf başkanı oturumu (0.21.0): anahtar şube anahtarı ve Ayarlar'da başkan anahtarları açık (kapatılınca açık
+    oturum da anında geçersizdir). USB anahtarla açılmışsa anahtar `etkin` olmalı (iptal ya da PIN kilidi oturumu düşürür).
+    Satır: belirtec_ozet, bitis, ogretmen_id, kullanici_id, anahtar_id, ad, soyad, kod, tur ('ogretmen'|'idare'|'baskan'),
+    kullanici_ad, gorunen_ad, anahtar_kimlik, baskan_sube.
     """
     if not isinstance(belirtec, str) or not belirtec or len(belirtec) > 200:
         return None
-    return b.execute(
+    satir = b.execute(
         "SELECT y.belirtec_ozet, y.bitis, y.ogretmen_id, y.kullanici_id, y.anahtar_id, o.ad, o.soyad, p.kod, "
-        "CASE WHEN y.kullanici_id IS NOT NULL THEN 'idare' ELSE 'ogretmen' END AS tur, "
-        "k.ad AS kullanici_ad, k.gorunen_ad, a.kimlik AS anahtar_kimlik FROM yoklama_belirtec y "
+        "CASE WHEN y.kullanici_id IS NOT NULL THEN 'idare' WHEN y.ogretmen_id IS NOT NULL THEN 'ogretmen' ELSE 'baskan' END AS tur, "
+        "k.ad AS kullanici_ad, k.gorunen_ad, a.kimlik AS anahtar_kimlik, a.sube AS baskan_sube FROM yoklama_belirtec y "
         "LEFT JOIN ogretmen o ON o.id = y.ogretmen_id LEFT JOIN ogretmen_pin p ON p.ogretmen_id = y.ogretmen_id "
         "LEFT JOIN kullanici k ON k.id = y.kullanici_id LEFT JOIN usb_anahtar a ON a.id = y.anahtar_id "
         "WHERE y.belirtec_ozet = ? AND y.tahta_id = ? AND y.bitis > ? "
         "AND ((y.ogretmen_id IS NOT NULL AND o.aktif = 1 AND p.kilitli = 0) "
-        "  OR (y.kullanici_id IS NOT NULL AND k.aktif = 1 AND k.rol IN ('yonetici', 'idareci'))) "
+        "  OR (y.kullanici_id IS NOT NULL AND k.aktif = 1 AND k.rol IN ('yonetici', 'idareci')) "
+        "  OR (y.ogretmen_id IS NULL AND y.kullanici_id IS NULL AND a.sahip_turu = 'sube' AND a.sube IS NOT NULL)) "
         "AND (y.anahtar_id IS NULL OR a.durum = 'etkin')",
         (guvenlik.ozet(belirtec), tahta_id, an),
     ).fetchone()
+    if satir is not None and satir["tur"] == "baskan":
+        from . import usb_anahtar  # döngüsel içe aktarma olmasın (usb_anahtar bu modülü kullanır)
+
+        if not usb_anahtar.baskan_acik(usb_anahtar.ayar_al(b)):
+            return None
+    return satir
 
 
 def oturum_kaydedeni(oturum, tahta_ad: str) -> tuple[int | None, str, str]:
     """Tahtadan alınan yoklamanın (ogretmen_id, kaydeden, iz `kim`) üçlüsü, oturumun türüne göre.
 
-    Öğretmen: (id, 'ogretmen:112', 'ogretmen:112 (tahta:X)'); idare: (None, 'kullanici:mdryrd', …).
-    USB anahtarla açılan oturumda iz metnine ' USB K7Q2M9XA' eklenir (kayit_ayrintisi bunu okur).
+    Öğretmen: (id, 'ogretmen:112', 'ogretmen:112 (tahta:X)'); idare: (None, 'kullanici:mdryrd', …); sınıf başkanı
+    (0.21.0): (None, 'baskan:10/A', …). USB anahtarla açılan oturumda iz metnine ' USB K7Q2M9XA' eklenir
+    (kayit_ayrintisi bunu okur).
     """
-    if oturum["tur"] == "idare":
+    if oturum["tur"] == "baskan":
+        ogretmen_id, kaydeden = None, f"baskan:{oturum['baskan_sube']}"
+    elif oturum["tur"] == "idare":
         ogretmen_id, kaydeden = None, f"kullanici:{oturum['kullanici_ad']}"
     else:
         ogretmen_id, kaydeden = oturum["ogretmen_id"], f"ogretmen:{oturum['kod']}"
@@ -774,6 +805,74 @@ def oturum_kaydedeni(oturum, tahta_ad: str) -> tuple[int | None, str, str]:
     if oturum["anahtar_kimlik"]:
         kim += f" USB {oturum['anahtar_kimlik']}"
     return ogretmen_id, kaydeden, kim
+
+
+def oturum_kaynagi(oturum) -> str:
+    """Tahtadan yazılan kaydın `kaynak`ı: sınıf başkanı oturumunda 'baskan', öbürlerinde 'tahta'."""
+    return KAYNAK_BASKAN if oturum["tur"] == "baskan" else "tahta"
+
+
+def baskan_denetle(b, tahta, oturum, sube: str, ders_no: int, an: int) -> tuple[int, str] | None:
+    """Sınıf başkanı oturumunun dar yetkisi (0.21.0; /liste ve /kaydet ikisinde de). (HTTP kodu, ileti) ya da None.
+
+    Sıra: 1) yalnız anahtarın şubesi (400: ajan seçime döner); 2) yalnız bu şubenin tahtası: `tahta.subeler` şubeyi
+    içeriyor ya da derslik programı bu ders saatinde şubeyi bu tahtaya koyuyor (409); 3) yalnız `ders_kurali`
+    penceresindeki ders: süren, 5 dk içinde başlayacak ya da son 15 dk'da biten (pencere dışı 400; ders saati
+    bulunamazsa 409, nedeni ayrı iletiyle: zil yok, bugün ders yok, şubenin devresi belirsiz); 4) öğretmen önceliği
+    (C1): o ders saatinde başka kaynaklı (öğretmen, idare, panel) kayıt, şube defteri düzeltmesi ya da başkan
+    kaydının kayıt sayfasından düzeltilmesi (`yoklama_iz.islem = 'duzelt'`) varsa 409. Başkanın kendi kaydı
+    ('baskan') engel değildir. Kural 33'ün (program yalnız ön seçimdir) BİLİNÇLİ istisnasıdır; öğretmen, idare ve
+    panel yolları değişmez.
+    """
+    baskan_sube = oturum["baskan_sube"]
+    if sube != baskan_sube:
+        return 400, f"Bu anahtar yalnız {baskan_sube} için yoklama alır."
+    gun = bugun(an)
+    plan = _plan(b, gun)
+    tahta_subeleri = tahta_subeleri_(tahta)
+    if sube not in tahta_subeleri:
+        try:
+            devre = sube_devresi(b, plan, sube)
+            odadaki = any(
+                d[2] == ders_no and metin.sube_duzelt(d[5] or "") == sube and (devre is None or d[0] == devre)
+                for d in _tahtanin_dersleri(b, tahta, plan)
+            )
+        except Exception:  # bozuk program: yetki verilmez
+            odadaki = False
+        if not odadaki:
+            if not tahta_subeleri:
+                return 409, f"Bu tahtaya şube atanmamış; {sube} sınıf başkanı yoklamayı yalnız kendi dersliğindeki tahtada alır."
+            return 409, f"Bu tahta {sube} şubesinin dersliği değil."
+    saatler = program_ders_saatleri(b, gun, sube, plan)
+    if not saatler:
+        # Neden ayrı söylenir: zil hiç yok / bugün ders yok (tatil) / ikili eğitimde şubenin devresi belirsiz.
+        if plan.get("dersler"):
+            return 409, ILETI_BASKAN_DEVRE_YOK
+        if b.execute("SELECT 1 FROM ders_saati LIMIT 1").fetchone():
+            return 409, ILETI_BASKAN_DERS_YOK
+        return 409, ILETI_BASKAN_ZIL_YOK
+    pencere = {
+        s["ders_no"] for s in saatler
+        if s["bas"] <= an < s["bit"] or 0 < s["bas"] - an <= GELECEK_PAYI_SN or 0 <= an - s["bit"] <= ALINMADI_PAYI_SN
+    }  # fmt: skip
+    if ders_no not in pencere:
+        return 400, ILETI_BASKAN_DERS
+    tarih = gun.isoformat()
+    if b.execute(
+        "SELECT 1 FROM yoklama WHERE tarih = ? AND sube = ? AND ders_no = ? AND kaynak != ? LIMIT 1", (tarih, sube, ders_no, KAYNAK_BASKAN)
+    ).fetchone():
+        return 409, ILETI_BASKAN_OGRETMEN_ALDI
+    if b.execute("SELECT 1 FROM yoklama_duzeltme WHERE tarih = ? AND sube = ? AND ders_no = ? LIMIT 1", (tarih, sube, ders_no)).fetchone():
+        return 409, ILETI_BASKAN_IDARE_DUZELTTI
+    # İdare başkan kaydını kayıt sayfasından ("Düzelt") düzelttiyse kayıt yine 'baskan' kaynaklıdır ve yoklama_duzeltme'ye
+    # satır girmez; düzeltme yalnız izde görünür. O da şube defterindeki düzeltme gibi başkanı engeller.
+    if b.execute(
+        "SELECT 1 FROM yoklama_iz z JOIN yoklama y ON y.id = z.yoklama_id WHERE y.tarih = ? AND y.sube = ? AND y.ders_no = ? "
+        "AND y.kaynak = ? AND z.islem = 'duzelt' LIMIT 1",
+        (tarih, sube, ders_no, KAYNAK_BASKAN),
+    ).fetchone():
+        return 409, ILETI_BASKAN_IDARE_DUZELTTI
+    return None
 
 
 def oturum_kapat(b, belirtec) -> None:
@@ -931,7 +1030,10 @@ def _gunun_yoklamalari(b, tarih: str) -> list:
 
 
 def alan_etiketi(y) -> str:
-    """Yoklamayı alan: öğretmen etiketi, "idare (kullanıcı adı)" (idare USB anahtarı, 0.11.0) ya da "panel"."""
+    """Yoklamayı alan: öğretmen etiketi, "idare (kullanıcı adı)" (idare USB anahtarı, 0.11.0), "sınıf başkanı"
+    (0.21.0) ya da "panel"."""
+    if y["kaynak"] == KAYNAK_BASKAN:
+        return "sınıf başkanı"
     if y["ogretmen_id"] and y["ogretmen_ad"] is not None:
         return ogretmen_etiketi(y["ogretmen_ad"], y["ogretmen_soyad"])
     kaydeden = str(y["kaydeden"] or "")
@@ -1117,7 +1219,8 @@ def icmal(b, gun: date, sube: str | None = None) -> dict:
         alanlar = []
         for n in range(1, sutun + 1):
             bu = [y for y in ks if y["ders_no"] == n]
-            alanlar.append({"ders_no": n, "metin": ", ".join(dict.fromkeys(alan_etiketi(y) for y in bu)) if bu else "(alınmadı)"})
+            alanlar.append({"ders_no": n, "metin": ", ".join(dict.fromkeys(alan_etiketi(y) for y in bu)) if bu else "(alınmadı)",
+                            "baskan": any(y["kaynak"] == KAYNAK_BASKAN for y in bu)})  # fmt: skip
         mevcut = b.execute("SELECT COUNT(*) FROM ogrenci WHERE sube = ? AND aktif = 1", (s,)).fetchone()[0]
         mevcut = mevcut or max([y["mevcut"] for y in ks] + [0])
         sonuc.append({
@@ -1126,8 +1229,10 @@ def icmal(b, gun: date, sube: str | None = None) -> dict:
             "alinan_sayisi": len(alinan), "sutun_sayisi": sutun, "ogrenciler": ogrenciler, "alanlar": alanlar,
             "program_bilinir": program_bilinir,
             "gec_var": any(o["gec_sayisi"] for o in ogrenciler), "ozurlu_var": any(o["ozurlu_sayisi"] for o in ogrenciler),
+            "baskan_var": any(y["kaynak"] == KAYNAK_BASKAN for y in ks),
         })  # fmt: skip
-    return {"tarih": tarih, "tarih_yazi": tarih_yazi(gun), "tarih_kisa": tarih_kisa(gun), "subeler": sonuc}
+    return {"tarih": tarih, "tarih_yazi": tarih_yazi(gun), "tarih_kisa": tarih_kisa(gun), "subeler": sonuc,
+            "baskan_var": any(s["baskan_var"] for s in sonuc), "baskan_notu": BASKAN_NOTU}  # fmt: skip
 
 
 def icmal_metni(veri: dict) -> str:
@@ -1213,6 +1318,10 @@ def kayit_ayrintisi(b, yoklama_id: int) -> dict | None:
         )]
     if y["kaynak"] == "panel":
         kaynak = f"panel: {y['kaydeden']}"
+    elif y["kaynak"] == KAYNAK_BASKAN:
+        kaynak = (f"tahta: {y['tahta_ad']}" if y["tahta_ad"] else "tahta (kaldırılmış)") + " · sınıf başkanı anahtarı"
+        if usb:
+            kaynak += " · USB anahtar"
     else:
         kaynak = f"tahta: {y['tahta_ad']}" if y["tahta_ad"] else "tahta (kaldırılmış)"
         if not y["ogretmen_id"] and str(y["kaydeden"]).startswith("kullanici:"):
@@ -1230,9 +1339,13 @@ def kayit_ayrintisi(b, yoklama_id: int) -> dict | None:
         "ogretmen_kod": y["ogretmen_kod"] or "",
         "usb_kimlikleri": sorted(usb_kimlikleri),
         "program_ogretmenleri": [" ".join((o["ad"], o["soyad"])) for o in beklenen],
-        "program_eslesiyor": any(o["id"] == y["ogretmen_id"] for o in beklenen) if beklenen else None,
+        # Başkan kaydında öğretmen yoktur: "eşleşmiyor" (nöbet/ders değişimi) sayılmaz, şablon ayrı not çizer.
+        "program_eslesiyor": (any(o["id"] == y["ogretmen_id"] for o in beklenen)
+                              if beklenen and y["kaynak"] != KAYNAK_BASKAN else None),  # fmt: skip
         "kaynak": kaynak,
         "kaynak_turu": y["kaynak"],
+        "baskan": y["kaynak"] == KAYNAK_BASKAN,
+        "baskan_notu": BASKAN_NOTU,
         "olusturma": an_yazi(y["olusturma"]),
         "guncelleme": an_yazi(y["guncelleme"]),
         "mevcut": y["mevcut"],
@@ -1479,10 +1592,12 @@ def imha(b, an: int) -> dict:
         if kayit or katman:
             ayrinti += f" (öğretim yılı bitişi {saklama.tarih_metni(sinir)})"
         vt.kayit_dus(b, "sistem", "Yoklama imhası", ayrinti)
-    if usb["silinen"] or usb["bosaltilan"]:
-        vt.kayit_dus(b, "sistem", "USB anahtar yıl sonu temizliği",
-                     f"{usb['silinen']} iptal edilmiş anahtar silindi, {usb['bosaltilan']} anahtarın son kullanım bilgisi silindi")  # fmt: skip
-    return {"kayit": kayit, "ogrenci": ogrenci, "usb": usb["silinen"] + usb["bosaltilan"], "program": program_sayisi,
+    if usb["silinen"] or usb["bosaltilan"] or usb.get("baskan"):
+        ayrinti = f"{usb['silinen']} iptal edilmiş anahtar silindi, {usb['bosaltilan']} anahtarın son kullanım bilgisi silindi"
+        if usb.get("baskan"):
+            ayrinti += f", {usb['baskan']} sınıf başkanı anahtarı silindi"
+        vt.kayit_dus(b, "sistem", "USB anahtar yıl sonu temizliği", ayrinti)
+    return {"kayit": kayit, "ogrenci": ogrenci, "usb": usb["silinen"] + usb["bosaltilan"] + usb.get("baskan", 0), "program": program_sayisi,
             "katman": katman}  # fmt: skip
 
 

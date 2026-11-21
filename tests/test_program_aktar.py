@@ -903,7 +903,7 @@ def test_goc_0_21_0_eski_asc_saat_eslesmeleri_silinir_surumde_tahta_bilgisi_alan
     import sqlite3
 
     monkeypatch.setenv("TAHTA_VERI_DIZINI", str(tmp_path))
-    onceki = len(vt.GOCLER) - 1
+    onceki = next(i for i, g in enumerate(vt.GOCLER) if "tahta_json" in g)  # sonda olmayabilir (0.21.0 başkan göçü)
     assert "tur = 'saat'" in vt.GOCLER[onceki] and "tahta_json" in vt.GOCLER[onceki]
     b = sqlite3.connect(tmp_path / "tahta-kontrol.db")
     for sira in range(onceki):

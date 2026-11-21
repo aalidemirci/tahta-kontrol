@@ -1,7 +1,8 @@
 {% from "_ayar.html" import ileti, nedir, kaydet_cubugu with context %}
 {# USB anahtar (0.11.0): tek form (bolum=usb_anahtar); yalnız `usb_anahtar` anahtarını yazar. Varsayılan kapalı.
-   DÖRT kutu da aynı formdadır (ua_etkin, ua_kilit_acar, ua_pin_idare, ua_pin_ogretmen): işaretsiz kutu gönderilmez,
-   kutular bölünürse öbür yarı "kapalı" yazılır. Tahtaya yalnız açık/kapalı bayrağı gider. #}
+   ALTI kutu da aynı formdadır (ua_etkin, ua_kilit_acar, ua_pin_idare, ua_pin_ogretmen, 0.21.0: ua_baskan, ua_pin_baskan):
+   işaretsiz kutu gönderilmez, kutular bölünürse öbür yarı "kapalı" yazılır. Tahtaya yalnız açık/kapalı bayrağı gider.
+   `ua_baskan_formu` nöbetçidir: yoksa (eski sekmeden gelen form) başkan kutuları kayıtlı değerinde kalır. #}
 <section class="kutu ayar-kart" id="usb_anahtar" aria-labelledby="usb-baslik">
   <div class="kutu-bas">
     <h2 id="usb-baslik">USB anahtar</h2>
@@ -15,20 +16,24 @@
   {% if usb_ayari.etkin and usb_yoklama_kapali %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Ders yoklaması kapalı; USB anahtar yalnız kilit açmada işe yarar (<a href="/ayarlar/yoklama">Ders yoklaması</a>).</p>{% endif %}
   {% if usb_ayari.etkin and usb_destek.eski %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ usb_destek.eski }} tahtada ajan güncellenmeli (eski ajan belleğe bakmaz).</p>{% endif %}
   <form method="post" action="/ayarlar" data-kirli-izle>
-    <input type="hidden" name="bolum" value="usb_anahtar">
+    <input type="hidden" name="bolum" value="usb_anahtar"><input type="hidden" name="ua_baskan_formu" value="1">
     <div class="ayar-satir">
       <div class="ayar-etiket"><label for="ua_etkin">USB anahtar kullanılsın</label><p class="not" id="ua-etkin-not">Kapalıyken tahtalar takılan belleklere hiç bakmaz. Kapalıyken aşağıdaki seçenekler de uygulanmaz.</p></div>
       <div class="ayar-denetim"><input type="checkbox" name="ua_etkin" value="1" {% if usb_ayari.etkin %}checked{% endif %} id="ua_etkin" class="anahtar" aria-describedby="ua-etkin-not"></div>
     </div>
     <div class="ayar-satir">
-      <div class="ayar-etiket"><label for="ua_kilit_acar">USB anahtar kilitli tahtayı açabilsin</label><p class="not" id="ua-kilit-not">Ortak kilit kodunun yaptığını yapar; sınav ekranında çalışmaz. İdare ve öğretmen anahtarlarının ikisi de açar.</p></div>
+      <div class="ayar-etiket"><label for="ua_kilit_acar">USB anahtar kilitli tahtayı açabilsin</label><p class="not" id="ua-kilit-not">Ortak kilit kodunun yaptığını yapar; sınav ekranında çalışmaz. İdare ve öğretmen anahtarlarının ikisi de açar; sınıf başkanı anahtarı hiçbir zaman açmaz.</p></div>
       <div class="ayar-denetim"><input type="checkbox" name="ua_kilit_acar" value="1" {% if usb_ayari.kilit_acar %}checked{% endif %} id="ua_kilit_acar" class="anahtar" aria-describedby="ua-kilit-not"></div>
+    </div>
+    <div class="ayar-satir">
+      <div class="ayar-etiket"><label for="ua_baskan">Sınıf başkanı anahtarları (deneme)</label><p class="not" id="ua-baskan-not">Şubeye bağlı anahtarla sınıf başkanı, yalnız kendi şubesinin dersliğindeki tahtada o anki dersin yoklamasını alır. Kilit açmaz; öğretmen o dersin yoklamasını aldıysa yazamaz. Ders yoklaması kapalıyken çalışmaz. Kapatılınca açık başkan ekranları hemen kapanır. {{ baskan_notu }}</p></div>
+      <div class="ayar-denetim"><input type="checkbox" name="ua_baskan" value="1" {% if usb_ayari.baskan %}checked{% endif %} id="ua_baskan" class="anahtar" aria-describedby="ua-baskan-not"></div>
     </div>
     <fieldset class="olcut">
       <legend>Anahtarla birlikte PIN de sorulsun</legend>
-      <div class="secenekler"><label><input type="checkbox" name="ua_pin_idare" value="1" {% if usb_ayari.pin_idare %}checked{% endif %}> İdare anahtarlarında (önerilen)</label><label><input type="checkbox" name="ua_pin_ogretmen" value="1" {% if usb_ayari.pin_ogretmen %}checked{% endif %}> Öğretmen anahtarlarında</label></div>
+      <div class="secenekler"><label><input type="checkbox" name="ua_pin_idare" value="1" {% if usb_ayari.pin_idare %}checked{% endif %}> İdare anahtarlarında (önerilen)</label><label><input type="checkbox" name="ua_pin_ogretmen" value="1" {% if usb_ayari.pin_ogretmen %}checked{% endif %}> Öğretmen anahtarlarında</label><label><input type="checkbox" name="ua_pin_baskan" value="1" {% if usb_ayari.pin_baskan %}checked{% endif %}> Sınıf başkanı anahtarlarında (önerilen)</label></div>
     </fieldset>
-    <p class="not">Öğretmen anahtarında PIN, öğretmenin kendi yoklama PIN'idir.</p>
+    <p class="not">Öğretmen anahtarında PIN, öğretmenin kendi yoklama PIN'idir. İdare ve sınıf başkanı anahtarında anahtarın kendi PIN'idir (üretimde bir kez gösterilir).</p>
     {% call nedir('Bellek nasıl kullanılır?') %}
     <p>Bellek biçimlendirilmez ve anahtar olarak işgal edilmez: dosya belleğin en üst klasöründe öteki dosyaların yanında durur.
       Takılınca hiçbir ekran kendiliğinden açılmaz; tahtada küçük bir bildirim çıkar, yoklama ve kilit açma dokunuşla başlar.
