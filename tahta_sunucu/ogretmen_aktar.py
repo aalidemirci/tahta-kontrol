@@ -66,8 +66,10 @@ class OkumaHatasi(eokul.OkumaHatasi):
 
 # ---- metin ---------------------------------------------------------------------------------------
 def ad_bicimle(ad: str, soyad: str) -> tuple[str, str]:
-    """Adın tamamı büyük harfse (ad ve soyad birlikte) Türkçe baş harf büyük biçime çevrilir; değilse aynen."""
-    if metin.tamami_buyuk_mu(f"{ad} {soyad}"):
+    """Adın tamamı büyük ya da tamamı küçük harfse (ad ve soyad birlikte) Türkçe baş harf büyük biçime çevrilir;
+    karışık yazılmış ad aynen kalır ("McKenzie", "Ayşe nur" elle düzeltilir)."""
+    tam = f"{ad} {soyad}"
+    if metin.tamami_buyuk_mu(tam) or (any(h.isalpha() for h in tam) and not any(h.isupper() for h in tam)):
         return metin.tr_bas_buyuk(ad), metin.tr_bas_buyuk(soyad)
     return ad, soyad
 
@@ -248,6 +250,8 @@ def matris_coz(bicim: str, matris: list[list[str]]) -> dict:
             ad, soyad, bolme = _tek_sutun_bol(hucre(satir, "ad_soyad"))
         else:
             ad, soyad, bolme = hucre(satir, "ad"), hucre(satir, "soyad"), False
+            if not _sade(soyad) and len(_sade(ad).split()) > 1:  # Soyadı boş, Adı'nda tam ad: tek sütun gibi böl
+                ad, soyad, bolme = _tek_sutun_bol(ad)
         sonuc = _satir(no, ad, soyad, kod=hucre(satir, "kod"), gorev=hucre(satir, "gorev") if eokul_mu else "", bolme=bolme)
         if isinstance(sonuc, str):
             atlanan.append({"satir": no, "neden": sonuc})

@@ -352,3 +352,15 @@ def test_sablon_indirilir_ve_oturum_ister(yonetici, uygulama):
     assert yanit.content.decode("utf-8-sig").splitlines() == ["Adı;Soyadı;Kod", "Ayşe;Örnek;"]
     yonetici.cookies.clear()
     assert yonetici.get("/ogretmenler/sablon.csv").headers["location"].startswith("/giris")
+
+
+def test_tamami_kucuk_ad_da_bas_harfe_cevrilir():
+    assert ogretmen_aktar.ad_bicimle("mehmet", "örnek") == ("Mehmet", "Örnek")
+    assert ogretmen_aktar.ad_bicimle("ışıl", "") == ("Işıl", "")
+    assert ogretmen_aktar.ad_bicimle("Ayşe", "nur") == ("Ayşe", "nur")  # karışık: aynen
+
+
+def test_soyadi_bos_adi_tam_ad_ise_bolunur_ve_isaretlenir():
+    sonuc = ogretmen_aktar.dosya_oku(tablo(["Adı;Soyadı;Kod", "Ali Rıza Deneme;;", "Can Tan;;", "Ece;;"]))
+    satirlar = [(o["ad"], o["soyad"], o["bolme"]) for o in sonuc["ogretmenler"]]
+    assert satirlar == [("Ali Rıza", "Deneme", True), ("Can", "Tan", False), ("Ece", "", False)]
