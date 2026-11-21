@@ -77,7 +77,11 @@ def test_menu_ogeleri_hizmeti_baslat_yalniz_durmusken():
 
 
 def test_tepsi_paneli_yalniz_yerel_adresle_acar():
-    assert tepsi.PANEL_ADRESI == "http://127.0.0.1:8787"
+    # Kapı içe aktarma anındaki ayar.HTTP_PORT'tur; hizmet kipi testleri onu değiştirebilir (test sırası CI'da farklı).
+    # Sınanan şey yerel adres olmasıdır: ağ adresi, okul adı ya da sorgu taşımaz.
+    import re
+
+    assert re.fullmatch(r"http://127\.0\.0\.1:\d{2,5}", tepsi.PANEL_ADRESI)
 
 
 # ---- geçiş bildirimi ----------------------------------------------------------------------
