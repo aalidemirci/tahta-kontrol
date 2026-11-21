@@ -36,38 +36,39 @@ Calistir 'PyInstaller' {
 }
 $Exe = Join-Path $Dist 'TahtaKontrol\TahtaKontrol.exe'
 
-Adim 'duman testi (geçici veri dizini, 8797/8798 kapıları)'
+# Kapılar Windows'un ayırdığı 8789-9188 aralığının dışında (netsh int ipv4 show excludedportrange).
+Adim 'duman testi (geçici veri dizini, 18797/18798 kapıları)'
 $Gecici = Join-Path $Build 'duman-veri'
 if (Test-Path $Gecici) { Remove-Item -Recurse -Force $Gecici }
 New-Item -ItemType Directory -Force $Gecici | Out-Null
 $env:TAHTA_VERI_DIZINI = $Gecici
-$env:TAHTA_HTTP_PORT = '8797'
-$env:TAHTA_HTTPS_PORT = '8798'
+$env:TAHTA_HTTP_PORT = '18797'
+$env:TAHTA_HTTPS_PORT = '18798'
 $Surec = Start-Process -FilePath $Exe -ArgumentList 'sunucu' -PassThru -WindowStyle Hidden
 try {
     $hazir = $false
     for ($i = 0; $i -lt 60; $i++) {
         Start-Sleep -Milliseconds 500
         try {
-            $yanit = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8797/saglik' -TimeoutSec 2
+            $yanit = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:18797/saglik' -TimeoutSec 2
             if ($yanit.StatusCode -eq 200) { $hazir = $true; break }
         } catch { }
     }
     if (-not $hazir) { throw 'Paketlenmiş sunucu 30 saniyede açılmadı.' }
-    $kurulum = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8797/kurulum' -TimeoutSec 5
+    $kurulum = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:18797/kurulum' -TimeoutSec 5
     if ($kurulum.Content -notmatch 'İlk kurulum') { throw 'Kurulum sayfası beklenen içeriği vermedi.' }
-    $stil = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8797/statik/stil.css' -TimeoutSec 5
+    $stil = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:18797/statik/stil.css' -TimeoutSec 5
     if ($stil.StatusCode -ne 200) { throw 'Statik dosyalar sunulmuyor.' }
-    $paket = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8797/kur/paket' -TimeoutSec 10
+    $paket = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:18797/kur/paket' -TimeoutSec 10
     if ($paket.RawContentLength -lt 5000) { throw 'Ajan paketi üretilemedi.' }
-    $betik = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8797/kur' -TimeoutSec 5
+    $betik = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:18797/kur' -TimeoutSec 5
     $betikMetni = $betik.Content
     if ($betikMetni -is [byte[]]) { $betikMetni = [Text.Encoding]::UTF8.GetString($betikMetni) }
     if ($betikMetni -notmatch 'PAKET_SHA256') { throw 'Kurulum betiği üretilemedi.' }
     foreach ($dosya in 'tahta-kontrol.db', 'sunucu-sertifika.pem', 'sunucu-anahtar.pem') {
         if (-not (Test-Path (Join-Path $Gecici $dosya))) { throw "Veri dizininde $dosya oluşmadı." }
     }
-    $durum = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8797/yerel/durum' -TimeoutSec 5
+    $durum = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:18797/yerel/durum' -TimeoutSec 5
     if ($durum.Content -notmatch '"hizmet"') { throw '/yerel/durum beklenen içeriği vermedi.' }
     Write-Host 'Duman testi geçti.'
 } finally {
