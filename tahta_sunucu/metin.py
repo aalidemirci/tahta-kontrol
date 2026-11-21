@@ -40,6 +40,22 @@ def tr_kucuk(s: str) -> str:
     return str(s).replace("I", "ı").replace("İ", "i").lower()
 
 
+def tamami_buyuk_mu(s) -> bool:
+    """Metinde harf var ve hiçbiri küçük harf değil mi? ("ŞULE İPEK" → True, "Şule İPEK" → False)."""
+    s = str(s or "")
+    return any(h.isalpha() for h in s) and not any(h.islower() for h in s)
+
+
+def tr_bas_buyuk(s) -> str:
+    """Her sözcüğün (ve tireyle ayrılan parçanın) ilk harfi Türkçe büyük, kalanı Türkçe küçük:
+    "ŞULE İPEK" → "Şule İpek", "IŞIK" → "Işık", "AYŞE-NUR" → "Ayşe-Nur" (0.21.0, öğretmen aktarımı)."""
+
+    def parca(p: str) -> str:
+        return tr_buyuk(p[:1]) + tr_kucuk(p[1:])
+
+    return " ".join("-".join(parca(p) for p in sozcuk.split("-")) for sozcuk in str(s or "").split())
+
+
 def tr_sirala_anahtari(s: str) -> tuple:
     """Türk abecesine göre sıralama anahtarı (ç c'den, ı i'den önce gelir)."""
     return tuple(_SIRA.get(h, 100 + ord(h)) for h in tr_kucuk(s or ""))

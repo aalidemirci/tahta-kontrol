@@ -79,10 +79,24 @@ def _sayi_metni(deger) -> str:
 def xls_oku(veri: bytes, asiri_ileti: str | None = None) -> list[list[str]]:
     """Excel 97-2003 (BIFF) ilk sayfa. Her bozukluk Türkçe OkumaHatasi'na döner (500 düşmesin).
     `asiri_ileti`: sayfa sınırı aşınca gösterilecek ileti (varsayılan öğrenci listesi iletisi)."""
+    try:
+        return _xls_oku(veri, asiri_ileti, None)
+    except UnicodeDecodeError:
+        # 0.21.0: kod sayfası kaydı olmayan eski (BIFF5) dosyada xlrd ASCII varsayar; Türkçe Excel'in kod sayfasıyla
+        # yeniden denenir. BIFF8 metinleri Unicode'dur, bu yola düşmez.
+        try:
+            return _xls_oku(veri, asiri_ileti, "cp1254")
+        except UnicodeDecodeError as hata:
+            raise OkumaHatasi("Excel 97-2003 (.xls) dosyasının içeriği okunamadı; dosya bozuk olabilir.") from hata
+
+
+def _xls_oku(veri: bytes, asiri_ileti: str | None, kodlama: str | None) -> list[list[str]]:
     import xlrd  # yerel: yalnız .xls yolunda yüklensin
 
     try:
-        kitap = xlrd.open_workbook(file_contents=veri, on_demand=True)
+        kitap = xlrd.open_workbook(file_contents=veri, on_demand=True, encoding_override=kodlama)
+    except UnicodeDecodeError:
+        raise
     except Exception as hata:  # xlrd bozuk kapta struct.error, IndexError, AssertionError da atar
         raise OkumaHatasi(XLS_BOZUK) from hata
     try:
@@ -92,7 +106,7 @@ def xls_oku(veri: bytes, asiri_ileti: str | None = None) -> list[list[str]]:
         if sayfa.nrows > SATIR_SINIRI * 3 or sayfa.ncols > 200:
             raise OkumaHatasi(asiri_ileti or f"Dosyada en çok {SATIR_SINIRI} öğrenci satırı olabilir.")
         return [[_sayi_metni(sayfa.cell_value(r, c)) for c in range(sayfa.ncols)] for r in range(sayfa.nrows)]
-    except OkumaHatasi:
+    except (OkumaHatasi, UnicodeDecodeError):
         raise
     except Exception as hata:
         raise OkumaHatasi("Excel 97-2003 (.xls) dosyasının içeriği okunamadı; dosya bozuk olabilir.") from hata
@@ -100,14 +114,15 @@ def xls_oku(veri: bytes, asiri_ileti: str | None = None) -> list[list[str]]:
         kitap.release_resources()
 
 
-def matris_oku(veri: bytes) -> tuple[str, list[list[str]]]:
-    """(biçim, satırlar). Biçim uzantıdan değil ilk baytlardan anlaşılır: OLE2 → .xls, ZIP → .xlsx, yoksa CSV."""
+def matris_oku(veri: bytes, asiri_ileti: str | None = None) -> tuple[str, list[list[str]]]:
+    """(biçim, satırlar). Biçim uzantıdan değil ilk baytlardan anlaşılır: OLE2 → .xls, ZIP → .xlsx, yoksa CSV.
+    `asiri_ileti`: .xls sayfa sınırı aşılınca gösterilecek ileti (`xls_oku`; varsayılan öğrenci iletisi)."""
     if len(veri) > DOSYA_SINIRI:
         raise OkumaHatasi(f"Dosya en çok {DOSYA_SINIRI // (1024 * 1024)} MB olabilir.")
     if not veri:
         raise OkumaHatasi("Dosya boş.")
     if veri[:8] == OLE2:
-        return "eokul_xls", xls_oku(veri)
+        return "eokul_xls", xls_oku(veri, asiri_ileti)
     if veri[:4] == ZIP:
         try:
             return "xlsx", xlsx.oku(veri)
@@ -252,8 +267,14 @@ def _kimlik_sutunu_mu(norm: str) -> bool:
     return "kimlik" in norm or norm.startswith(("t c ", "tc ")) or norm in ("tc", "t c", "tckn")
 
 
-def baslik_esle(matris: list[list[str]]) -> tuple[int, dict[str, int], list[str]]:
-    """İlk 20 satırda en iyi başlık satırı. (satır sırası, {alan: sütun}, okunmayan sütun adları)."""
+def baslik_esle(matris: list[list[str]], alan_bul=None, kullanilir_mi=None) -> tuple[int, dict[str, int], list[str]]:
+    """İlk 20 satırda en iyi başlık satırı. (satır sırası, {alan: sütun}, okunmayan sütun adları).
+
+    `alan_bul` (katlanmış başlık → alan adı ya da None) ve `kullanilir_mi` ({alan: sütun} → bool) verilmezse
+    öğrenci listesinin eş anlamlıları kullanılır (0.21.0: öğretmen listesi `ogretmen_aktar` kendi eşlemesini verir).
+    T.C. kimlik sütunu her durumda hiçbir alana eşlenmez."""
+    alan_bul = alan_bul or _alan
+    kullanilir_mi = kullanilir_mi or _kullanilir
     en_iyi: tuple[int, dict[str, int], list[str]] | None = None
     for r in range(min(BASLIK_TARAMA, len(matris))):
         alanlar: dict[str, int] = {}
@@ -262,15 +283,15 @@ def baslik_esle(matris: list[list[str]]) -> tuple[int, dict[str, int], list[str]
             norm = baslik_katla(h)
             if not norm:
                 continue
-            alan = None if _kimlik_sutunu_mu(norm) else _alan(norm)
+            alan = None if _kimlik_sutunu_mu(norm) else alan_bul(norm)
             if alan and alan not in alanlar:
                 alanlar[alan] = i
             elif not alan:
                 okunmayan.append(_metin(h)[:40])
         if not alanlar:
             continue
-        kullanilir = _kullanilir(alanlar)
-        if en_iyi is None or (kullanilir, len(alanlar)) > (_kullanilir(en_iyi[1]), len(en_iyi[1])):
+        kullanilir = kullanilir_mi(alanlar)
+        if en_iyi is None or (kullanilir, len(alanlar)) > (kullanilir_mi(en_iyi[1]), len(en_iyi[1])):
             en_iyi = (r, alanlar, okunmayan)
         if kullanilir:
             break
