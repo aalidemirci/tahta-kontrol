@@ -11,7 +11,7 @@
 <div class="sayfa-bas">
   <div class="bas-yazi">
     <h1>Arıza #{{ ariza.id }} · {{ ariza.kategori_adi }} {{ durum_rozeti(ariza.durum, ariza.durum_adi) }}</h1>
-    <p>{% if ariza.tahta_kaldirildi %}{{ ariza.tahta_adi }} (kaldırıldı){% else %}<a href="/tahta/{{ ariza.tahta_id }}">{{ ariza.tahta_adi }}</a>{% endif %}{% if ariza.derslik %} · {{ ariza.derslik }}{% endif %}</p>
+    <p>{% if ariza.tahta_kaldirildi %}{{ ariza.tahta_adi }} · No {{ ariza.tahta_id }} (kaldırıldı){% else %}<a href="/tahta/{{ ariza.tahta_id }}">{{ ariza.tahta_adi }} · No {{ ariza.tahta_id }}</a>{% endif %}{% if ariza.derslik %} · {{ ariza.derslik }}{% endif %}</p>
   </div>
 </div>
 {% include "_tahtalar_bas.html" %}

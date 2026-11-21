@@ -22,7 +22,7 @@
   {% endfor %}
   <a href="/arizalar?durum=hepsi{{ ek }}" {% if secili_durum == 'hepsi' %}aria-current="page"{% endif %}>Hepsi <span class="sekme-sayi">{{ durum_sayilari.hepsi }}</span></a>
 </nav>
-{% if tahta_suzgeci %}<p class="bant" role="status"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg><span>Yalnız <strong>{{ tahta_suzgeci.ad }}</strong> gösteriliyor (sayılar bütün tahtalarındır). <a href="/arizalar{{ '?durum=' ~ secili_durum if secili_durum else '' }}">Süzgeci kaldır</a></span></p>{% endif %}
+{% if tahta_suzgeci %}<p class="bant" role="status"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg><span>Yalnız <strong>{{ tahta_suzgeci.ad }} · No {{ tahta_suzgeci.id }}</strong> gösteriliyor (sayılar bütün tahtalarındır). <a href="/arizalar{{ '?durum=' ~ secili_durum if secili_durum else '' }}">Süzgeci kaldır</a></span></p>{% endif %}
 
 {% if arizalar %}
 <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="ariza-baslik">
@@ -34,7 +34,7 @@
   {% for a in arizalar %}
   <tr>
     <th scope="row" data-etiket="No"><a href="/ariza/{{ a.id }}">#{{ a.id }}</a></th>
-    <td data-etiket="Tahta">{{ a.tahta_adi }}{% if a.tahta_kaldirildi %} <span class="not">(kaldırıldı)</span>{% endif %}{% if a.derslik %}<div class="not">{{ a.derslik }}</div>{% endif %}</td>
+    <td data-etiket="Tahta">{{ a.tahta_adi }} · No {{ a.tahta_id }}{% if a.tahta_kaldirildi %} <span class="not">(kaldırıldı)</span>{% endif %}{% if a.derslik %}<div class="not">{{ a.derslik }}</div>{% endif %}</td>
     <td data-etiket="Kategori">{{ a.kategori_adi }}</td>
     <td data-etiket="Açıklama" class="kirp">{{ a.aciklama_kisa or '—' }}</td>
     <td data-etiket="Kaynak">{{ a.kaynak_metni }}</td>

@@ -295,7 +295,7 @@ def test_satir_birincil_dugmesi_ve_menu_pasifligi(panel, okul):
     cevrimdisi_yap(3)
     sayfa = panel.get("/tahtalar").text
     birincil = {i: re.search(r'<span class="birincil" data-alan="dugme">(.*?)</span><details', satir(sayfa, i), re.S).group(1) for i in (1, 2, 3)}
-    assert 'name="tek" value="kilitle:1"' in birincil[1] and "Kilitle" in birincil[1] and "(T-1)" in birincil[1]
+    assert 'name="tek" value="kilitle:1"' in birincil[1] and "Kilitle" in birincil[1] and "(T-1 · No 1)" in birincil[1]
     assert 'name="tek" value="kilit_ac:2"' in birincil[2] and "Kilidi aç" in birincil[2]
     assert birincil[3].strip() == ""  # çevrimdışı: birincil düğme yok, menü durur
     assert all(b_.count("<button") <= 1 for b_ in birincil.values())
@@ -497,7 +497,7 @@ def test_gruplu_liste_konuma_gore(panel, tahta):
     tahta_ekle(panel, tahta, "Kütüphane", yeni_ajan_durumu())
     sayfa = panel.get("/tahtalar").text
     assert re.findall(r'<span class="grup-ad">([^<]+)</span>', sayfa) == ["A Blok · 2. kat", "B Blok · 1. kat", "Konumu belirtilmemiş"]
-    assert re.findall(r'<tr class="tahta-satir" id="t-\d+" data-id="\d+" data-ad="([^"]+)"', sayfa) == ["A-1", "A-2", "B-1", "Kütüphane"]
+    assert re.findall(r'<tr class="tahta-satir" id="t-\d+" data-id="\d+" data-ad="([^"]+?) · No \d+"', sayfa) == ["A-1", "A-2", "B-1", "Kütüphane"]
     assert sayfa.count('<tr class="grup"') == 3 and "(2 tahta)" in re.sub(r"<[^>]+>", "", sayfa) and " / " not in sayfa.split("<table")[1].split("</table>")[0]
     # Süzgeçte bütün satırları gizlenen grubun başlığı da gizlenir.
     cevrimdisi_yap(2)  # A-2: iki tahtalı grubun biri

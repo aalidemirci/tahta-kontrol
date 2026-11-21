@@ -424,7 +424,7 @@ def test_tahta_ozeti_grup_sirasi_listeyle_ayni():
     assert cipler[4]["ek"] == ["ariza"] and "Arıza" in cipler[4]["okunur"] and cipler[5]["ek"] == ["sinav"]
     assert ozet["grup_haritasi"] == {str(t["id"]): g["no"] for g in ozet["gruplar"] for t in g["tahtalar"]}
     # Çip yalnız ad, durum ve ek simge taşır: ders, oturum, sınav adı sözlükte yok.
-    assert set(cipler[5]) == {"id", "ad", "birincil", "simge", "okunur", "ek"} and "Uydurma Sınav" not in repr(ozet["gruplar"])
+    assert set(cipler[5]) == {"id", "ad", "no", "birincil", "simge", "okunur", "ek"} and "Uydurma Sınav" not in repr(ozet["gruplar"])
 
 
 def test_cipin_okunur_metninde_bos_ders_yok():

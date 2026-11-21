@@ -117,9 +117,8 @@ def kurallar(b) -> str:
 
 
 def sirala_anahtari(ad: str) -> tuple:
-    """Salon/şube adları için doğal sıra: "9/A" < "10/A"; Türk abecesi."""
-    parcalar = re.split(r"(\d+)", str(ad))
-    return tuple((0, int(p), ()) if metin.rakam_mi(p) else (1, 0, metin.tr_sirala_anahtari(p)) for p in parcalar if p)
+    """Salon/şube adları için doğal sıra: "9/A" < "10/A"; Türk abecesi (`metin.dogal_sirala_anahtari`)."""
+    return metin.dogal_sirala_anahtari(ad)
 
 
 def no_anahtari(okul_no: str) -> tuple:

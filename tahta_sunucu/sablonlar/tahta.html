@@ -1,7 +1,7 @@
 {% extends "taban.html" %}
 {% from "_tahta_komut.html" import rozetler, birincil_dugme, komut_menusu %}
 {% from "_ariza.html" import durum_rozeti %}
-{% block baslik %}{{ t.ad }} · Tahta Kontrol{% endblock %}
+{% block baslik %}{{ t.ad }} · No {{ t.id }} · Tahta Kontrol{% endblock %}
 {# 0.17.0 (arayüz 3. aşama) — tahta sayfası dört sekmedir: ?sekme=genel (varsayılan) · program · bakim · bilgiler
    (tahta_liste.sekme_coz; yönlendirme yok). Sayfa başı her sekmede aynıdır: kırıntı, ad + durum rozeti, birincil düğme,
    "Program kilidini durdur" (program kilidi açıksa ve tahta muaf değilse), "Duyuru gönder", "Diğer" (bugünkü 8 komut + oturum temizliği). Formların alan adları ve uçları
@@ -14,10 +14,10 @@
 {% set yonetici = kullanici.rol == 'yonetici' %}
 {% set onayli = t.durum == 'onayli' %}
 {% set taban_yolu = '/tahta/' ~ t.id %}
-<nav class="kirinti" aria-label="Konum"><a href="/tahtalar">Tahtalar</a><span aria-hidden="true">›</span><span>{{ t.ad }}</span></nav>
+<nav class="kirinti" aria-label="Konum"><a href="/tahtalar">Tahtalar</a><span aria-hidden="true">›</span><span>{{ t.ad }} · No {{ t.id }}</span></nav>
 <div class="sayfa-bas tahta-bas">
   <div class="bas-yazi">
-    <h1>{{ t.ad }}
+    <h1>{{ t.ad }} <span class="not tahta-no">No {{ t.id }}</span>
       {% if t.durum == 'bekliyor' %}<span class="rozet" data-durum="onay"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Onay bekliyor</span>
       {% else %}{% set r = t.liste.rozetler[0] %}<span class="rozet" data-durum="{{ r.d }}"><svg class="simge" aria-hidden="true"><use href="#{{ r.s }}"/></svg>{{ r.m }}</span>{% endif %}
     </h1>
@@ -292,7 +292,9 @@
   <h2>Tahta bilgileri</h2>
   <form method="post" action="{{ taban_yolu }}/kaydet" class="form-dar" id="tahta-bilgi">
     <label for="ad">Tahtanın adı</label>
-    <input type="text" id="ad" name="ad" value="{{ t.ad }}" maxlength="60" required>
+    <input type="text" id="ad" name="ad" value="{{ t.ad }}" maxlength="60" required aria-describedby="ad-ipucu">
+    <p class="ipucu" id="ad-ipucu">Bu tahtanın numarası <strong>No {{ t.id }}</strong>: kurulumun sonunda tahtanın ekranında çıkan
+      numaradır. Her tahtaya ayrı bir ad verin (ör. dersliğin adı); aynı ad kaydedilir ama uyarı verilir.</p>
     <label for="derslik">Derslik</label>
     <input type="text" id="derslik" name="derslik" value="{{ t.derslik }}" maxlength="60" placeholder="ör. D-204, 11/A sınıfı">
     {# Nitelik alanları: gizli "alanlar=1" işareti varsa sunucu bina/kat/düzey/devre/şube/grubu yazar. #}

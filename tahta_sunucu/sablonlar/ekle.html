@@ -40,6 +40,11 @@ bash tahta-kur.sh {{ kod or 'ESLESTIRME_KODU' }}</pre>
      Parola hiçbir yere kaydedilmez.</p>
   <p class="not"><span class="kod">wget</span> yoksa aynı dosyayı tahtanın tarayıcısında <span class="kod">{{ adres }}/kur</span> adresini açarak indirebilirsiniz
      (tarayıcı sertifika uyarısı verir; “Gelişmiş → devam et”). Dosya İndirilenler klasörüne iner.</p>
+  <p class="bant" role="note" id="tahta-no-notu"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg><span><strong>Tahta numarasını not edin.</strong>
+     Kurulumun sonunda ekranda çerçeveli bir <span class="kod">TAHTA NO</span> satırı çıkar. Bu numarayı dersliğin adıyla
+     birlikte not edin: panelde her tahtanın yanında aynı numara görünür (ör. “No 7”) ve yeni tahta önce
+     “Tahta 7” adıyla gelir. Pardus ETAP'ta bütün tahtaların bilgisayar adı aynı olduğu için tahtayı sınıfıyla eşlemenin
+     yolu bu numaradır.</span></p>
   <p>Betik sunucunun kimliğini parmak iziyle denetler. Ekranda yazan parmak izinin başı şununla aynı olmalı:</p>
   <p class="kod"><strong>{{ parmak_izi[:16] }}</strong>…</p>
   <p class="not">Tahtaların kullanacağı sunucu adresi: <span class="kod">{{ adres }}</span>.

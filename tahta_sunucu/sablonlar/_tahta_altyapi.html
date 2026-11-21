@@ -97,6 +97,7 @@
 <section class="kutu" id="baglanti" aria-labelledby="baglanti-baslik">
   <h2 id="baglanti-baslik">Bağlantı ve ajan</h2>
   <dl class="ozellikler">
+    <dt>Tahta no</dt><dd>No {{ t.id }} <span class="not">· kurulumun sonunda tahtanın ekranında çıkan numara</span></dd>
     <dt>Kayıt zamanı</dt><dd>{{ ham.kayit_zamani | zaman }}</dd>
     <dt>IP · MAC</dt><dd class="kod">{{ ham.ip or '—' }} · {{ ham.mac or '—' }}</dd>
     <dt>Makine adı</dt><dd>{{ ham.makine_adi or '—' }}</dd>

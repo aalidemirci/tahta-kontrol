@@ -141,13 +141,13 @@ def test_tahta_sayfasi_diger_menusu_sekiz_komut_ve_temizlik(panel, okul):
     for etkin in ("kilitle", "tani", "guncelle"):
         assert f'<button type="submit" name="tur" value="{etkin}" data-komut="{etkin}" form="tahta-islem">' in menu, etkin
     for onay in ("kapat", "yeniden_baslat"):
-        assert re.search(rf'<button type="button" class="tehlike" data-komut="{onay}" data-onay="{onay}" data-onay-ad="T-1" form="tahta-islem"', menu), onay
+        assert re.search(rf'<button type="button" class="tehlike" data-komut="{onay}" data-onay="{onay}" data-onay-ad="T-1 · No {t}" form="tahta-islem"', menu), onay
     # Pasifler gerekçeli ve değersiz (çevrimiçi, kilitsiz, duyurusuz tahta).
     pasifler = re.findall(r"<button[^>]*disabled[^>]*>.*?</button>", menu, re.S)
     assert len(pasifler) == 3 and all(" name=" not in p for p in pasifler)
     assert "kilitli değil" in menu and "ekranda duyuru yok" in menu and "tahta açık" in menu
     # Oturum temizliği: ayrı boş forma bağlı onay düğmesi.
-    assert 'data-onay="temizlik" data-onay-ad="T-1" form="tahta-temizlik-menu"' in menu
+    assert f'data-onay="temizlik" data-onay-ad="T-1 · No {t}" form="tahta-temizlik-menu"' in menu
     assert f'<form method="post" action="/tahta/{t}/temizlik" id="tahta-temizlik-menu" hidden></form>' in bas
     # Sayfa başı: birincil düğme tek ve yıkıcı değil; "Program kilidini durdur" iki süreyle.
     form = bas.split('id="tahta-islem"')[1].split("</form>")[0]
