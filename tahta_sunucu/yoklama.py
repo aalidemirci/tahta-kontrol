@@ -1524,13 +1524,17 @@ def ogrenci_aktar(b, ayristirma: dict, kullanici: str, an: int) -> dict:
     return sonuc
 
 
-def hepsini_sil(b) -> tuple[int, int]:
-    """Yıl sonu: bütün yoklama, öğrenci, e-Okul işareti ve yoklama oturumları. (öğrenci, yoklama) sayıları.
+def hepsini_sil(b) -> tuple[int, int, int]:
+    """Yıl sonu: bütün yoklama, öğrenci, e-Okul işareti, yoklama oturumları ve sınıf başkanı USB anahtarları.
+    (öğrenci, yoklama, başkan anahtarı) sayıları.
 
-    Çağıran işlemden sonra `vt.wal_buda()`.
+    0.21.0: şube (başkan) anahtarı yetkisini "şubede etkin öğrenci var mı" diye canlı hesaplar; silinmezse geçen
+    yılın anahtarı yeni yılın aynı adlı şubesinde yeniden çalışırdı (`usb_anahtar.yil_sonu` ile aynı ilke: başkan her
+    yıl değişir). Öğretmen ve idare anahtarlarına dokunulmaz. Çağıran işlemden sonra `vt.wal_buda()`.
     """
     ogrenci = b.execute("SELECT COUNT(*) FROM ogrenci").fetchone()[0]
     yoklama_ = b.execute("SELECT COUNT(*) FROM yoklama").fetchone()[0]
+    baskan = b.execute("DELETE FROM usb_anahtar WHERE sahip_turu = 'sube'").rowcount  # CASCADE: başkan oturumları
     # Sıra bağlayıcıdır: öğrenciye giden yabancı anahtarlar CASCADE'siz (yok, geç, düzeltme, mazeret); önce onlar.
     b.execute("DELETE FROM yoklama_yok")
     b.execute("DELETE FROM yoklama_gec")
@@ -1540,7 +1544,7 @@ def hepsini_sil(b) -> tuple[int, int]:
     b.execute("DELETE FROM yoklama_belirtec")
     b.execute("DELETE FROM eokul_islendi")
     b.execute("DELETE FROM ogrenci")
-    return ogrenci, yoklama_
+    return ogrenci, yoklama_, baskan
 
 
 # ---- imha ----------------------------------------------------------------------------------------

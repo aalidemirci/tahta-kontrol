@@ -1176,7 +1176,10 @@ def sube_guncellemesi(bilgi: dict, cozum: dict, tahtalar: list[dict]) -> list[di
     Eşlenen her tahtanın şubeleri = ana dersliği (class@classroomids, tek derslik) o tahtaya eşlenen dersliklerden biri
     olan aSc sınıflarının eşlemedeki şubeleri (`hedef.subeler_coz` biçimi: "9/A,10/B", düzey sırasıyla). Tahtanın derslik
     alanı boşsa ve ona tek bir aSc dersliği eşlendiyse dersliğin kısa adı ("D-101") yazılır; dolu derslik değişmez.
-    Hiç sınıfı düşmeyen tahtanın (ör. atölye) şubeleri silinmez. Yalnız DEĞİŞECEK tahtalar döner:
+    Hiç sınıfı düşmeyen eşlenmiş tahtanın (ör. atölye) şubeleri silinmez; YALNIZ bu aktarımda yeni ana tahtası BAŞKA bir
+    eşlenmiş tahta olarak belirlenen şubeler ondan çıkarılır (yoksa aynı şube iki tahtada kalır: başkan anahtarının oda
+    kısıtı, e-Okul/tablo otomatik eşlemesi ve şube hedefli duyurular bozulur). Yeni tahtası belirlenmemiş (elle girilmiş)
+    şubeye ve eşlenmemiş tahtaya dokunulmaz. Yalnız DEĞİŞECEK tahtalar döner:
     [{"id", "ad", "eski_subeler", "subeler", "eski_derslik", "derslik"}] (ad, sonra numara sırasıyla)."""
     tahta_derslikleri: dict[int, list[str]] = {}
     for d_anahtar, idler in (cozum.get("derslik_tahtalari") or {}).items():
@@ -1187,14 +1190,33 @@ def sube_guncellemesi(bilgi: dict, cozum: dict, tahtalar: list[dict]) -> list[di
         sube = (cozum.get("sinif_subeleri") or {}).get(s_anahtar)
         if sube:
             dersligin_subeleri.setdefault(d_anahtar, set()).add(sube)
-    sonuc = []
-    for t in sorted(tahtalar, key=lambda t: (metin.tr_sirala_anahtari(t["ad"]), t["id"])):
+    # Önce eşlenen tahtaların yeni şubeleri ve şube → yeni ana tahta(lar) haritası (bir derslik birden çok tahtaya
+    # eşlenebilir; şube o tahtaların hepsinde kalır).
+    yeni_kume: dict[int, set[str]] = {}
+    sube_tahtalari: dict[str, set[int]] = {}
+    for t in tahtalar:
         derslikler = tahta_derslikleri.get(t["id"])
         if not derslikler:
             continue
-        yeni = set().union(*(dersligin_subeleri.get(d, set()) for d in derslikler))
+        yeni_kume[t["id"]] = set().union(*(dersligin_subeleri.get(d, set()) for d in derslikler))
+        for sube in yeni_kume[t["id"]]:
+            sube_tahtalari.setdefault(sube, set()).add(t["id"])
+    sonuc = []
+    for t in sorted(tahtalar, key=lambda t: (metin.tr_sirala_anahtari(t["ad"]), t["id"])):
+        if t["id"] not in yeni_kume:
+            continue
+        derslikler = tahta_derslikleri[t["id"]]
+        yeni = yeni_kume[t["id"]]
         eski_subeler = str(t.get("subeler") or "")
-        subeler = ",".join(sorted(yeni, key=sube_sira_anahtari)) if yeni else eski_subeler
+        if yeni:
+            subeler = ",".join(sorted(yeni, key=sube_sira_anahtari))
+        else:
+            try:
+                eski_liste = hedef.subeler_coz(eski_subeler)
+            except ValueError:
+                eski_liste = hedef.kume(eski_subeler)
+            kalan = [s for s in eski_liste if not (sube_tahtalari.get(s, set()) - {t["id"]})]
+            subeler = ",".join(kalan) if len(kalan) < len(eski_liste) else eski_subeler
         eski_derslik = str(t.get("derslik") or "")
         derslik = eski_derslik
         if not eski_derslik and len(derslikler) == 1:

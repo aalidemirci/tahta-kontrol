@@ -803,6 +803,27 @@ def test_asc_sube_guncellemesi_ana_derslikten():
     assert [(x["id"], x["subeler"], x["derslik"]) for x in g] == [(3, "9/İ,11/B", "D-102"), (7, "9/I,11/A", "D-101")]
 
 
+def test_asc_sube_guncellemesi_yeni_tahtasi_belli_subeyi_eski_tahtadan_cikarir():
+    """Şube yeni ana dersliğinin tahtasına eklenirken bu aktarımda başka dersliğe eşlenmiş eski tahtasından çıkar; yeni
+    tahtası belirlenmemiş (elle girilmiş) şube ve eşlenmemiş tahta değişmez. Veriler uydurmadır."""
+    tahta = ikili_tahtalar() + [{"id": 9, "ad": "Atölye", "derslik": "GSA", "subeler": "11/A,10/C"},
+                                {"id": 12, "ad": "Kimya", "derslik": "GSA", "subeler": "9/I"},
+                                {"id": 11, "ad": "Eşlenmemiş", "derslik": "", "subeler": "11/A"}]  # fmt: skip
+    okunan, cozum = ikili_esle(tahta=tahta[:3])
+    assert cozum["derslik_tahtalari"]["derslik-101"] == [7] and 9 in [t for v in cozum["derslik_tahtalari"].values() for t in v]
+    g = {x["id"]: (x["eski_subeler"], x["subeler"]) for x in program_aktar.sube_guncellemesi(okunan["bilgi"], cozum, tahta[:3])}
+    assert g == {7: ("", "9/I,11/A"), 3: ("", "9/İ,11/B"), 9: ("11/A,10/C", "10/C")}  # 10/C elle girilmiş: kalır
+    # aynı aSc dersliği iki tahtaya eşlenmiş olsa da (9 ve 12) şube başka tahtaya taşındıysa ikisinden de çıkar; tek
+    # şubesi giden tahtanın şube alanı boşalır, eşlenmemiş tahtaya (11) dokunulmaz
+    cozum["derslik_tahtalari"] = {k: (v + [12] if 9 in v else v) for k, v in cozum["derslik_tahtalari"].items()}
+    g = {x["id"]: (x["eski_subeler"], x["subeler"]) for x in program_aktar.sube_guncellemesi(okunan["bilgi"], cozum, tahta)}
+    assert g == {7: ("", "9/I,11/A"), 3: ("", "9/İ,11/B"), 9: ("11/A,10/C", "10/C"), 12: ("9/I", "")}
+    # yeni tahtası yine kendisi olan şube çıkmaz
+    tahta[0]["subeler"] = "11/A"
+    g = {x["id"]: x["subeler"] for x in program_aktar.sube_guncellemesi(okunan["bilgi"], cozum, tahta)}
+    assert g[7] == "9/I,11/A" and 11 not in g
+
+
 # ---- 0.21.0: panel uçları (zilsiz okul, eşleme ekranı, unut, şube güncellemesi) ------------------------------------
 def ikili_okul(panel, tahta, derslikler=("D-101", "")):
     kur_ve_gir(panel)
@@ -1036,3 +1057,26 @@ def test_asc_sube_guncellemesi_geri_yuklemede_doner_sonradan_degisen_korunur(uyg
     panel.post(f"/program/gecmis/{son['id']}/geri-yukle", data={"onay": "1"})
     assert sorgu("SELECT subeler FROM tahta WHERE id = ?", t1) == [{"subeler": "9/I,11/A"}]
     assert sorgu("SELECT COUNT(*) AS n FROM tahta_ders")[0]["n"] == 159
+
+
+def test_asc_sube_guncellemesi_eski_tahtadan_cikan_sube_geri_yuklemede_doner(uygulama, panel, tahta, saat):
+    """Ana dersliği başka tahtaya taşınan şube eski tahtadan çıkar; önizlemede listelenir, geri yüklemede döner."""
+    t1, t2, t3 = ikili_okul(panel, tahta, ("D-101", "D-102", "GSA"))
+    with vt.islem() as b:
+        b.execute("UPDATE tahta SET subeler = '10/C,11/A' WHERE id = ?", (t3,))  # 11/A eski yılda atölyedeydi (uydurma)
+    zil_kur(ikili_zil())
+    panel.post("/program/aktar/asc", files={"dosya": ("p.xml", ikili_xml(), "text/xml")})
+    onizleme = panel.get("/program/aktar?adim=onizleme").text
+    assert "Tahtaların şube bilgisini programdan güncelle (3 tahta)" in onizleme
+    assert f"No {t3} · ETAP: şubeler 10/C,11/A → 10/C<" in onizleme
+    yanit = panel.post("/program/aktar/onayla", data={"onizleme": onizleme_kimligi(), "subeleri_guncelle": "1"})
+    assert "3 tahtanın şube bilgisi programdan güncellendi" in ileti(yanit)
+    assert sorgu("SELECT id, subeler FROM tahta WHERE id IN (?, ?, ?) ORDER BY id", t1, t2, t3) == [
+        {"id": t1, "subeler": "9/I,11/A"}, {"id": t2, "subeler": "9/İ,11/B"}, {"id": t3, "subeler": "10/C"}]
+    assert len(sorgu("SELECT id FROM tahta WHERE ',' || subeler || ',' LIKE '%,11/A,%'")) == 1  # şube tek tahtada
+    surum = sorgu("SELECT * FROM program_surum ORDER BY id DESC")[0]
+    assert {g["id"]: (g["subeler"], g["yeni_subeler"]) for g in json.loads(surum["tahta_json"])}[t3] == ("10/C,11/A", "10/C")
+    yanit = panel.post(f"/program/gecmis/{surum['id']}/geri-yukle", data={"onay": "1"})
+    assert "3 tahtanın şube bilgisi de eski hâline döndü" in ileti(yanit)
+    assert sorgu("SELECT id, subeler FROM tahta WHERE id IN (?, ?, ?) ORDER BY id", t1, t2, t3) == [
+        {"id": t1, "subeler": ""}, {"id": t2, "subeler": ""}, {"id": t3, "subeler": "10/C,11/A"}]

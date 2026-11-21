@@ -620,11 +620,13 @@ def kaydet(uygulama, y) -> None:
         if str(form.get("onay", "")).strip() != "SİL":
             return y.yonlendir(donus, "Silmek için onay kutusuna büyük harflerle SİL yazın.", hata=True)
         with vt.islem() as b:
-            ogrenci, yoklama_ = yk.hepsini_sil(b)
-            vt.kayit_dus(b, k["ad"], "Tüm öğrenci ve yoklama verisi silindi", f"{ogrenci} öğrenci, {yoklama_} yoklama", ip(istek))
+            ogrenci, yoklama_, baskan = yk.hepsini_sil(b)
+            # Başkan anahtarı yalnız SAYI olarak yazılır (şube adı, anahtar kimliği yok).
+            ek = f", {baskan} sınıf başkanı USB anahtarı" if baskan else ""
+            vt.kayit_dus(b, k["ad"], "Tüm öğrenci ve yoklama verisi silindi", f"{ogrenci} öğrenci, {yoklama_} yoklama{ek}", ip(istek))
         depo.bosalt()
         vt.wal_buda()
-        return y.yonlendir(donus, f"Silindi: {ogrenci} öğrenci, {yoklama_} yoklama kaydı.")
+        return y.yonlendir(donus, f"Silindi: {ogrenci} öğrenci, {yoklama_} yoklama kaydı{ek}.")
 
     # ---- tahta (ajan) uçları -------------------------------------------------------------------------
     async def ajan_govdesi(istek: Request, etkinlik_gerek: bool = True):

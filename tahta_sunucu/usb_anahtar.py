@@ -756,7 +756,8 @@ def yil_sonu(b, sinir: date) -> dict:
     (son_kullanim, son_tahta_id, kopya_uyarisi) sınırdan önceyse boşaltılır. Etkin idare/öğretmen anahtarları yeni
     yıla geçer. 0.21.0: sınır günü bitmeden ÜRETİLMİŞ şube (sınıf başkanı) anahtarları etkin olsalar da silinir
     (başkan her yıl değişir; açık oturumları CASCADE ile düşer). Bitiş tarihi henüz güncellenmemişken yeni yılda
-    üretilenler korunur (imha saatte bir çalışır). Çağıran işlemden sonra `vt.wal_buda()`."""
+    üretilenler korunur (imha saatte bir çalışır). Öğrenciler › "Tümünü sil" (`yoklama.hepsini_sil`) öğrenci listesiyle
+    birlikte BÜTÜN şube anahtarlarını siler (aynı ilke). Çağıran işlemden sonra `vt.wal_buda()`."""
     son_an = int(datetime.combine(sinir + timedelta(days=1), time(0, 0), ISTANBUL).timestamp())
     baskan = b.execute("DELETE FROM usb_anahtar WHERE sahip_turu = 'sube' AND olusturma < ?", (son_an,)).rowcount
     silinen = b.execute("DELETE FROM usb_anahtar WHERE durum = 'iptal' AND iptal_zamani < ?", (son_an,)).rowcount

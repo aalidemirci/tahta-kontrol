@@ -13,8 +13,17 @@ import zipfile
 from datetime import date
 
 import pytest
-from test_usb_anahtar import USB_DURUMU, usb, usb_ayar, usb_hazir  # noqa: F401
-from test_yoklama import ajan, ayar_kaydet, baslat, ders_saatleri_yaz, hazir, ogrenci_id, tum_metin  # noqa: F401
+from test_usb_anahtar import USB_DURUMU, anahtar_al, usb, usb_ayar, usb_hazir  # noqa: F401
+from test_yoklama import (  # noqa: F401
+    ajan,
+    ayar_kaydet,
+    baslat,
+    ders_saatleri_yaz,
+    hazir,
+    ogrenci_id,
+    ogrenci_yukle,
+    tum_metin,
+)
 from yardimci import an, bekle, gir, ileti, kullanici_ekle, sorgu, tahta_ekle
 
 from tahta_sunucu import usb_anahtar as ua
@@ -100,7 +109,11 @@ def test_goc_eski_anahtarlari_korur_yeni_kisitlari_kurar(tmp_path, monkeypatch):
             ("AAAAAAAA", "kullanici", 1, None, None), ("BBBBBBBB", "ogretmen", None, 1, None)]  # fmt: skip
         assert (satirlar[0]["etiket"], satirlar[0]["pin_ozet"], satirlar[0]["son_kullanim"], satirlar[0]["son_tahta_id"]) == ("Mavi", "p", 7, 1)
         assert (satirlar[1]["durum"], satirlar[1]["iptal_zamani"]) == ("iptal", 9)
-        assert b.execute("SELECT COUNT(*) FROM yoklama_belirtec").fetchone()[0] == 0  # eski oturumlar göçte düştü
+        # Yükseltme anında açık yoklama oturumları korunur (tahtadaki yoklama kaydedilebilsin); anahtar bağı aynı kalır.
+        oturumlar = [tuple(s) for s in b.execute("SELECT belirtec_ozet, ogretmen_id, kullanici_id, anahtar_id, tahta_id, bitis, "
+                                                 "olusturma FROM yoklama_belirtec ORDER BY belirtec_ozet")]  # fmt: skip
+        assert oturumlar == [("k", None, 1, 1, 1, 9, 0), ("o", 1, None, None, 1, 9, 0)]
+        assert b.execute("SELECT name FROM sqlite_temp_master WHERE name = 'yb_eski'").fetchone() is None
         dizinler = {s["name"] for s in b.execute("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'usb_anahtar'")}
         assert {"usb_anahtar_kullanici", "usb_anahtar_ogretmen", "usb_anahtar_sube"} <= dizinler
         # Şube anahtarı: yalnız sube dolu
@@ -126,6 +139,8 @@ def test_goc_eski_anahtarlari_korur_yeni_kisitlari_kurar(tmp_path, monkeypatch):
                 b.execute(sql)
         b.execute("DELETE FROM usb_anahtar WHERE id = 3")  # CASCADE: başkan oturumu
         assert b.execute("SELECT COUNT(*) FROM yoklama_belirtec WHERE belirtec_ozet = 'b'").fetchone()[0] == 0
+        b.execute("DELETE FROM usb_anahtar WHERE id = 1")  # geri yazılan oturumun yabancı anahtarı da çalışır
+        assert b.execute("SELECT COUNT(*) FROM yoklama_belirtec WHERE belirtec_ozet = 'k'").fetchone()[0] == 0
 
 
 def test_oturum_ac_sahipsiz_oturum_acmaz(tmp_path, monkeypatch):
@@ -538,3 +553,42 @@ def test_yil_sonu_eski_yilin_baskan_anahtarlari_silinir(panel, tahta, baskan_haz
     assert "1 sınıf başkanı anahtarı silindi" in sorgu("SELECT ayrinti FROM kayit WHERE islem = 'USB anahtar yıl sonu temizliği'")[0]["ayrinti"]
     with vt.islem() as b:
         assert ua.yil_sonu(b, date(2026, 11, 16))["baskan"] == 0
+
+
+def test_tumunu_sil_baskan_anahtarlarini_siler_ogretmen_ve_idare_kalir(panel, tahta, baskan_hazir):
+    """Öğrenciler › "Tümünü sil" (yıl sonu): başkan anahtarı yetkisini şubeden canlı hesapladığı için silinmezse geçen
+    yılın anahtarı yeni yılın aynı adlı şubesinde yeniden çalışırdı. Öğretmen ve idare anahtarları yeni yıla geçer."""
+    h = baskan_hazir
+    idare, _ = anahtar_al(panel)
+    ogretmen, _ = anahtar_al(panel, "ogretmen", h["ogretmen_id"])
+    oturum = oturum_ac(tahta, h)
+    assert sorgu("SELECT COUNT(*) AS n FROM yoklama_belirtec")[0]["n"] == 1
+    onceki = sorgu("SELECT COALESCE(MAX(id), 0) AS n FROM kayit")[0]["n"]
+    yanit = panel.post("/ogrenciler/temizle", data={"onay": "SİL"})
+    assert ileti(yanit) == "Silindi: 6 öğrenci, 0 yoklama kaydı, 1 sınıf başkanı USB anahtarı."
+    kayit = sorgu("SELECT ayrinti FROM kayit WHERE id > ? AND islem = 'Tüm öğrenci ve yoklama verisi silindi'", onceki)
+    assert [s["ayrinti"] for s in kayit] == ["6 öğrenci, 0 yoklama, 1 sınıf başkanı USB anahtarı"]  # yalnız sayı
+    assert sorted(s["sahip_turu"] for s in sorgu("SELECT sahip_turu FROM usb_anahtar")) == ["kullanici", "ogretmen"]
+    assert sorgu("SELECT COUNT(*) AS n FROM yoklama_belirtec")[0]["n"] == 0
+    assert liste(tahta, h, oturum["belirtec"]).status_code == 401
+    # Yeni yılın listesinde aynı adlı şube (10/A) yeniden var: eski başkan anahtarı yine çalışmaz.
+    assert "t=hata" not in ogrenci_yukle(panel).headers["location"]
+    assert sorgu("SELECT COUNT(*) AS n FROM ogrenci WHERE sube = '10/A' AND aktif = 1")[0]["n"] > 0
+    red = usb(tahta, h["basliklar"], "tani", h["anahtar"])
+    assert red.status_code == 403 and red.json()["neden"] == "gecersiz"
+    assert usb(tahta, h["basliklar"], "yoklama", h["anahtar"]).status_code == 403
+    assert usb(tahta, h["basliklar"], "tani", idare).status_code == 200
+    assert usb(tahta, h["basliklar"], "tani", ogretmen).status_code == 200
+
+
+def test_hepsini_sil_cascade_baskan_oturumunu_dusurur(panel, tahta, baskan_hazir):
+    """Başkan anahtarının silinmesi açık başkan oturumunu CASCADE ile düşürür (belirteç silinmeden önce sınanır)."""
+    oturum_ac(tahta, baskan_hazir)
+    with vt.islem() as b:
+        assert b.execute("SELECT COUNT(*) FROM yoklama_belirtec WHERE anahtar_id IS NOT NULL").fetchone()[0] == 1
+        assert b.execute("DELETE FROM usb_anahtar WHERE sahip_turu = 'sube'").rowcount == 1
+        assert b.execute("SELECT COUNT(*) FROM yoklama_belirtec").fetchone()[0] == 0
+        b.rollback()
+    with vt.islem() as b:
+        assert yk.hepsini_sil(b)[2] == 1
+        assert b.execute("SELECT COUNT(*) FROM usb_anahtar WHERE sahip_turu = 'sube'").fetchone()[0] == 0

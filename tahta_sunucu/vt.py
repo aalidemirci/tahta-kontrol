@@ -503,8 +503,11 @@ GOCLER = [
     # 0.21.0 — sınıf başkanı USB anahtarı: anahtar KİŞİYE değil ŞUBEYE bağlıdır (sahip_turu='sube', sube='10/A');
     # sistemde başkanın adı ya da öğrenci kimliği tutulmaz. Başkan oturumunda öğretmen ve kullanıcı yoktur, yalnız
     # anahtar vardır. Sıra bağlayıcıdır (foreign_keys açık): usb_anahtar'a başvuran tek tablo yoklama_belirtec önce
-    # düşer (satırları ≤ 15 dk yaşar), usb_anahtar yeni CHECK ile yeniden kurulur, belirteç tablosu yeniden kurulur.
+    # düşer, usb_anahtar yeni CHECK ile yeniden kurulur, belirteç tablosu yeniden kurulur. Açık yoklama oturumları
+    # (yükseltme anında tahtada süren yoklama) geçici tabloda korunur ve yeni tabloya geri yazılır (anahtar kimlikleri
+    # aynı kalır); TEMP tablo bağlantıya özeldir, kısıt taşımaz, göçün kendi işleminde silinir.
     """
+    CREATE TEMP TABLE yb_eski AS SELECT * FROM yoklama_belirtec;
     DROP TABLE yoklama_belirtec;
     CREATE TABLE usb_anahtar_yeni (
         id INTEGER PRIMARY KEY,
@@ -547,6 +550,9 @@ GOCLER = [
         -- öğretmen ya da idare oturumu (en çok biri) ya da ikisi de boşken sınıf başkanı oturumu (anahtar zorunlu)
         CHECK (NOT (ogretmen_id IS NOT NULL AND kullanici_id IS NOT NULL)
                AND (ogretmen_id IS NOT NULL OR kullanici_id IS NOT NULL OR anahtar_id IS NOT NULL)));
+    INSERT INTO yoklama_belirtec (belirtec_ozet, ogretmen_id, kullanici_id, anahtar_id, tahta_id, bitis, olusturma)
+        SELECT belirtec_ozet, ogretmen_id, kullanici_id, anahtar_id, tahta_id, bitis, olusturma FROM yb_eski;
+    DROP TABLE yb_eski;
     """,
 ]
 GOC_ONCESI_KALAN = 3
