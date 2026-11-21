@@ -14,6 +14,9 @@ datas = [
 # Ajanın kaynak dosyaları veri olarak da taşınır: sunucu .deb paketini bunlardan üretir.
 datas += [(str(yol), "tahta_ajan") for yol in sorted((KOK / "tahta_ajan").glob("*.py"))]
 datas += collect_data_files("tzdata")
+# Bildirim alanı durum simgeleri (scripts/durum_simgeleri.py üretir) ve yedek olarak ana simge (0.21.0).
+datas += [(str(yol), "tahta_sunucu/simgeler") for yol in sorted(Path(SPECPATH).glob("durum-*.ico"))]
+datas += [(str(Path(SPECPATH) / "tahta-kontrol.ico"), "tahta_sunucu/simgeler")]
 
 a = Analysis(
     [str(KOK / "packaging" / "windows" / "giris.py")],
@@ -23,7 +26,9 @@ a = Analysis(
     + ["python_multipart", "tahta_sunucu.pencere", "xlrd"]
     # Windows hizmeti (pywin32): hizmet kabuğu ve kurucunun çağırdığı veri taşıma.
     + ["tahta_sunucu.hizmet", "tahta_sunucu.tasima", "win32timezone", "win32service", "win32serviceutil",
-       "servicemanager", "pywintypes", "winreg"],
+       "servicemanager", "pywintypes", "winreg"]
+    # Bildirim alanı durum simgesi (0.21.0; pywin32 yalnız işlev içinde içe aktarılır).
+    + ["tahta_sunucu.tepsi", "win32gui", "win32con", "win32api", "win32event"],
     excludes=["gi", "pytest", "httpx"],
     noarchive=False,
 )

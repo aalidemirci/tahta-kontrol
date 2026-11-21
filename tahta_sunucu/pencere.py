@@ -10,6 +10,13 @@ durdurmaz. Kip, açılışta `/yerel/durum` yanıtına ve hizmetin durumuna gör
                        hizmetle çift çalışma olmasın).
 - gelistirme         : `uv run … pencere` → sunucuyu pencere içinde çalıştırır (eski davranış).
 
+0.21.0: kurulu programda pencere bildirim alanında simgeyle durur (tepsi.py): X pencereyi gizler, süreç
+simgede kalır, gerçek çıkış simge menüsündeki "Çık"tır; durum 15 sn arayla ayrı iş parçacığında okunur ve
+pencere/simge değişince güncellenir. `pencere --gizli` pencere açmadan yalnız simgeyi getirir (kurucunun
+isteğe bağlı oturum açılışı kısayolu). Bu yolların HİÇBİRİ sunucu açmaz: Sunucu yalnız geliştirme kipinde
+(`_gelistirme_penceresi`) içe aktarılır. Geliştirmede bildirim alanı yoktur (TAHTA_TEPSI_DENE=1 ile elle
+denenebilir; o kip de sunucu açmaz).
+
 Pencere hizmetin veri dizinine (ProgramData) dokunmaz; kendi günlüğü
 `%LOCALAPPDATA%\\TahtaKontrol\\pencere.log`'dur.
 """
@@ -18,16 +25,18 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
 import re
 import subprocess
 import sys
+import threading
 import time
 import tkinter as tk
 import urllib.request
 import webbrowser
 from tkinter import messagebox
 
-from . import __version__, ayar
+from . import __version__, ayar, tepsi
 
 DURUMLAR = (
     "STOPPED",
@@ -210,15 +219,26 @@ def _adresler(cerceve, yerel: str, ag: list[str]) -> None:
     ).pack(anchor="w", pady=(4, 10))
 
 
-def calistir() -> int:
+def calistir(gizli: bool = False) -> int:
+    """Durum penceresi. Kurulu programda (ya da TAHTA_TEPSI_DENE=1 ile geliştirmede) bildirim alanı simgesiyle
+    çalışır ve SUNUCU AÇMAZ; `gizli` ile pencere açılmadan yalnız simge gelir (oturum açılışı kısayolu).
+    Geliştirmede (hizmet yok) sunucu pencere içinde çalışır; orada bildirim alanı yoktur."""
     _gunluk_kur()
-    while True:
-        sonuc = _bir_kez()
-        if sonuc != "yeniden":
-            return int(sonuc)
+    if ayar.paketli_windows() or tepsi.deneme_kipi():
+        return _durum_uygulamasi(gizli, tepsi_acik=True)
+    if gizli:
+        # Gizli kip yalnız durum simgesi içindir; geliştirmede sunucu açan pencereye hiçbir yoldan düşmez.
+        ileti = f"pencere --gizli yalnız kurulu programda (ya da {tepsi.DENEME_DEGISKENI}=1 ile) çalışır."
+        logging.warning(ileti)
+        print(ileti, file=sys.stderr)
+        return 2
+    if _gelistirme_kipi_mi():
+        return _gelistirme_penceresi()
+    return _durum_uygulamasi(False, tepsi_acik=False)
 
 
-def _bir_kez() -> int | str:
+def _gelistirme_kipi_mi() -> bool:
+    """Geliştirmede: ne sunucu yanıt veriyor ne hizmet kurulu → pencere sunucuyu kendisi çalıştırır."""
     durum = yerel_durum_oku()
     hizmet = hizmet_durumu() if durum is None else None
     bitis = time.time() + ACILIS_BEKLEME_SN
@@ -227,89 +247,231 @@ def _bir_kez() -> int | str:
         time.sleep(1)
         durum = yerel_durum_oku()
         hizmet = hizmet_durumu() if durum is None else None
-    kip = kip_sec(durum, hizmet, ayar.paketli_windows())
+    kip = kip_sec(durum, hizmet, False)
     logging.info("Durum penceresi: %s", kip)
-    if kip == "gelistirme":
-        return _gelistirme_penceresi()
+    return kip == "gelistirme"
 
-    kok = tk.Tk()
-    kok.title("Tahta Kontrol")
-    kok.resizable(False, False)
-    cerceve = tk.Frame(kok, padx=22, pady=18)
-    cerceve.pack()
-    yerel = f"http://127.0.0.1:{ayar.HTTP_PORT}"
-    dugmeler = tk.Frame(cerceve)
-    sonuc: list[int | str] = [0]
 
-    def yeniden(gecikme_ms: int = 0) -> None:
-        sonuc[0] = "yeniden"
-        kok.after(gecikme_ms, kok.destroy)
+def pencere_kipi(anlik: tepsi.Anlik | None) -> str:
+    """Durum uygulamasının kipi. `kip_sec`'e her zaman paketli=True verilir: bu uygulama "gelistirme" kipine
+    (sunucu açan pencere) hiçbir durumda geçmez."""
+    if anlik is None:
+        return "okunuyor"
+    if anlik.bekleniyor:
+        return "bekleniyor"
+    return kip_sec(anlik.durum, anlik.hizmet, True)
 
-    if kip == "calisiyor":
-        assert durum is not None
-        ek = " (Windows hizmeti)" if durum.get("hizmet") else ""
-        _baslik(
-            cerceve, f"Tahta Kontrol sunucusu çalışıyor{ek}", f"Sürüm {durum.get('surum') or __version__}"
-        )
-        _adresler(cerceve, yerel, list(durum.get("ag_adresleri") or []))
-        for metin in uyarilar(durum):
-            tk.Label(cerceve, text="• " + metin, fg="#92400e", justify="left", wraplength=420).pack(
-                anchor="w"
+
+def _durum_uygulamasi(gizli: bool, tepsi_acik: bool) -> int:
+    olaylar: queue.Queue = queue.Queue()
+    simge = None
+    _mutex = None  # süreç boyunca tutulur; bırakılırsa tek örnek engeli kalkar
+    if tepsi_acik:
+        _mutex, ilk = tepsi.tek_ornek_al()
+        if not ilk:  # bu oturumda zaten açık: onu göster (gizli açılışta hiçbir şey yapma)
+            if not gizli:
+                tepsi.var_olani_goster()
+            return 0
+        simge = tepsi.Tepsi(olaylar)
+        if not simge.baslat():
+            logging.warning("Bildirim alanı simgesi kurulamadı; pencere kapatılınca program kapanır.")
+            simge = None
+    if gizli and simge is None:
+        return 1
+    izleyici = tepsi.DurumIzleyici(olaylar, yerel_durum_oku, hizmet_durumu)
+    uygulama = DurumUygulamasi(olaylar, izleyici, simge, gizli=gizli)
+    izleyici.baslat()
+    try:
+        return uygulama.calistir()
+    finally:
+        izleyici.durdur()
+        if simge is not None:
+            simge.kapat()
+
+
+class DurumUygulamasi:
+    """Tek Tk kökü; içerik bir çerçevede durum değiştikçe yeniden çizilir. Simge varsa X pencereyi gizler
+    (süreç bildirim alanında kalır), gerçek çıkış simge menüsündeki "Çık"tır; simge yoksa X kapatır.
+    Sunucu açmaz (kip_sec'e paketli=True; bkz. pencere_kipi)."""
+
+    def __init__(
+        self, olaylar: queue.Queue, izleyici: tepsi.DurumIzleyici, simge: tepsi.Tepsi | None, gizli: bool
+    ):
+        self.olaylar = olaylar
+        self.izleyici = izleyici
+        self.simge = simge
+        self.anlik: tepsi.Anlik | None = None
+        self.kip = "okunuyor"
+        self.kararli: str | None = None
+        self.balon_gosterildi = False
+        self.kok = tk.Tk()
+        if gizli:
+            self.kok.withdraw()
+        self.kok.title("Tahta Kontrol")
+        self.kok.resizable(False, False)
+        self.kok.protocol("WM_DELETE_WINDOW", self.gizle if simge else self.cik)
+        self.cerceve: tk.Frame | None = None
+        self._ciz()
+        self.kok.after(200, self._olaylari_isle)
+
+    def calistir(self) -> int:
+        self.kok.mainloop()
+        return 0
+
+    # -- olaylar (yalnız Tk iş parçacığında)
+    def _olaylari_isle(self) -> None:
+        try:
+            while True:
+                olay = self.olaylar.get_nowait()
+                try:
+                    self._olay(olay)
+                except Exception:
+                    logging.exception("Durum penceresi olayı işlenemedi: %s", olay[0])
+        except queue.Empty:
+            pass
+        except tk.TclError:  # pencere kapandı
+            return
+        try:
+            self.kok.after(200, self._olaylari_isle)
+        except tk.TclError:
+            pass
+
+    def _olay(self, olay: tuple) -> None:
+        tur = olay[0]
+        if tur == "durum":
+            self._durum_degisti(olay[1])
+        elif tur == "uyari":
+            self.goster()
+            messagebox.showwarning("Tahta Kontrol", olay[1], parent=self.kok)
+        elif tur == "menu":
+            eylem = {
+                "goster": self.goster,
+                "panel": lambda: webbrowser.open(tepsi.PANEL_ADRESI),
+                "baslat": self.baslat,
+                "cik": self.cik,
+            }.get(olay[1])
+            if eylem:
+                eylem()
+
+    def _durum_degisti(self, anlik: tepsi.Anlik) -> None:
+        self.anlik = anlik
+        self.kip = pencere_kipi(anlik)
+        logging.info("Durum penceresi: %s", self.kip)
+        simge_turu, ipucu = tepsi.tepsi_durumu(anlik.durum, anlik.hizmet)
+        if self.simge is not None:
+            self.simge.guncelle(simge_turu, ipucu, tepsi.menu_ogeleri(self.kip, anlik.hizmet))
+            metin = tepsi.gecis_bildirimi(self.kararli, simge_turu)
+            if metin:
+                self.simge.balon(metin, uyari=True)
+        self.kararli = tepsi.kararli_tur(self.kararli, simge_turu)
+        self._ciz()
+
+    # -- eylemler
+    def gizle(self) -> None:
+        self.kok.withdraw()
+        if self.simge is not None and not self.balon_gosterildi:
+            self.balon_gosterildi = True
+            self.simge.balon(tepsi.BALON_GIZLENDI)
+
+    def goster(self) -> None:
+        self._ciz()  # uyarılar zamana bağlı (son yedeğin yaşı): gösterirken tazele
+        self.kok.deiconify()
+        self.kok.lift()
+        self.kok.focus_force()
+
+    def cik(self) -> None:
+        self.izleyici.durdur()
+        if self.simge is not None:
+            self.simge.kapat()
+        self.kok.destroy()
+
+    def baslat(self) -> None:
+        try:
+            hizmeti_baslat()
+        except Exception as hata:  # UAC reddi ya da Windows dışı
+            self.goster()
+            messagebox.showerror("Tahta Kontrol", f"Hizmet başlatılamadı:\n\n{hata}", parent=self.kok)
+            return
+        self.izleyici.hizlandir()
+        self.kok.after(6000, self._baslatma_denetimi)
+
+    def _baslatma_denetimi(self) -> None:
+        def denetle() -> None:  # sc ve HTTP beklemesi Tk'yi dondurmasın
+            if yerel_durum_oku(1.0) is None:
+                metin = baslatma_sonucu_metni(hizmet_durumu(), hizmet_cikis_kodu())
+                if metin:
+                    self.olaylar.put(("uyari", metin))
+            self.izleyici.simdi()
+
+        threading.Thread(target=denetle, name="baslatma-denetimi", daemon=True).start()
+
+    # -- çizim
+    def _ciz(self) -> None:
+        if self.cerceve is not None:
+            self.cerceve.destroy()
+        cerceve = self.cerceve = tk.Frame(self.kok, padx=22, pady=18)
+        cerceve.pack()
+        dugmeler = tk.Frame(cerceve)
+        anlik = self.anlik
+        if self.kip == "okunuyor":
+            _baslik(cerceve, "Tahta Kontrol", "Sunucunun durumu okunuyor…")
+        elif self.kip == "bekleniyor":
+            _baslik(cerceve, "Sunucu başlatılıyor", "Hizmet yeni başladı; sunucu birkaç saniyede yanıt verir.")
+        elif self.kip == "calisiyor" and anlik is not None and anlik.durum is not None:
+            durum = anlik.durum
+            ek = " (Windows hizmeti)" if durum.get("hizmet") else ""
+            _baslik(
+                cerceve, f"Tahta Kontrol sunucusu çalışıyor{ek}", f"Sürüm {durum.get('surum') or __version__}"
             )
-        tk.Label(cerceve, text="Bu pencereyi kapatmak sunucuyu durdurmaz.", fg="#555", justify="left").pack(
-            anchor="w", pady=(10, 12)
-        )
+            _adresler(cerceve, tepsi.PANEL_ADRESI, list(durum.get("ag_adresleri") or []))
+            for metin in uyarilar(durum):
+                tk.Label(cerceve, text="• " + metin, fg="#92400e", justify="left", wraplength=420).pack(
+                    anchor="w"
+                )
+            tk.Button(
+                dugmeler, text="Paneli aç", width=16, command=lambda: webbrowser.open(tepsi.PANEL_ADRESI)
+            ).pack(side="left", padx=(0, 8))
+        elif self.kip == "hizmet_calismiyor":
+            hizmet = anlik.hizmet if anlik else None
+            _baslik(
+                cerceve,
+                "Sunucu hizmeti çalışmıyor",
+                f"Hizmet durumu: {DURUM_TURKCE.get(hizmet or '', hizmet or 'bilinmiyor')} · pencere sürümü {__version__}",
+            )
+            tk.Label(
+                cerceve,
+                text=(
+                    "Tahtalar çevrimdışı; kilitler 90 saniye sonra tahtadan açılabilir.\n\n"
+                    "Ayrıntı: Olay Görüntüleyicisi > Windows Günlükleri > Uygulama, ya da yönetici olarak\n"
+                    f"{ayar.hizmet_veri_dizini()}\\gunluk\\sunucu.log\n"
+                    "Kurulumdan sonra hiç açılmadıysa eski veri taşınmayı bekliyor olabilir:\n"
+                    f"{ayar.hizmet_veri_dizini()}\\TASIMA-BEKLIYOR.txt"
+                ),
+                justify="left",
+            ).pack(anchor="w", pady=(0, 12))
+            tk.Button(dugmeler, text="Hizmeti başlat", width=16, command=self.baslat).pack(side="left")
+            tk.Button(dugmeler, text="Yeniden dene", width=14, command=self.izleyici.simdi).pack(
+                side="left", padx=8
+            )
+        else:  # kurulu_degil
+            _baslik(
+                cerceve,
+                "Sunucu hizmeti kurulu değil",
+                "Tahta Kontrol kurucusunu yeniden çalıştırın; kurucu hizmeti kaydeder ve başlatır.",
+            )
+        if self.simge is not None:
+            not_ = (
+                "Pencereyi gizlemek sunucuyu durdurmaz. Tahta Kontrol bildirim alanında kalır;\n"
+                'programı kapatmak için simgeye sağ tıklayıp "Çık"ı seçin.'
+            )
+        else:
+            not_ = "Bu pencereyi kapatmak sunucuyu durdurmaz."
+        tk.Label(cerceve, text=not_, fg="#555", justify="left").pack(anchor="w", pady=(10, 12))
         dugmeler.pack(anchor="w")
-        tk.Button(dugmeler, text="Paneli aç", width=16, command=lambda: webbrowser.open(yerel)).pack(
-            side="left"
-        )
-    elif kip == "hizmet_calismiyor":
-        _baslik(
-            cerceve,
-            "Sunucu hizmeti çalışmıyor",
-            f"Hizmet durumu: {DURUM_TURKCE.get(hizmet or '', hizmet or 'bilinmiyor')} · pencere sürümü {__version__}",
-        )
-        tk.Label(
-            cerceve,
-            text=(
-                "Tahtalar çevrimdışı; kilitler 90 saniye sonra tahtadan açılabilir.\n\n"
-                "Ayrıntı: Olay Görüntüleyicisi > Windows Günlükleri > Uygulama, ya da yönetici olarak\n"
-                f"{ayar.hizmet_veri_dizini()}\\gunluk\\sunucu.log\n"
-                "Kurulumdan sonra hiç açılmadıysa eski veri taşınmayı bekliyor olabilir:\n"
-                f"{ayar.hizmet_veri_dizini()}\\TASIMA-BEKLIYOR.txt"
-            ),
-            justify="left",
-        ).pack(anchor="w", pady=(0, 12))
-        dugmeler.pack(anchor="w")
-
-        def baslat():
-            try:
-                hizmeti_baslat()
-            except Exception as hata:  # UAC reddi ya da Windows dışı
-                messagebox.showerror("Tahta Kontrol", f"Hizmet başlatılamadı:\n\n{hata}")
-                return
-
-            def denetle():
-                if yerel_durum_oku(1.0) is None:
-                    metin = baslatma_sonucu_metni(hizmet_durumu(), hizmet_cikis_kodu())
-                    if metin:
-                        messagebox.showwarning("Tahta Kontrol", metin)
-                yeniden(0)
-
-            kok.after(6000, denetle)
-
-        tk.Button(dugmeler, text="Hizmeti başlat", width=16, command=baslat).pack(side="left")
-        tk.Button(dugmeler, text="Yeniden dene", width=14, command=yeniden).pack(side="left", padx=8)
-    else:  # kurulu_degil
-        _baslik(
-            cerceve,
-            "Sunucu hizmeti kurulu değil",
-            "Tahta Kontrol kurucusunu yeniden çalıştırın; kurucu hizmeti kaydeder ve başlatır.",
-        )
-        dugmeler.pack(anchor="w")
-    tk.Button(dugmeler, text="Kapat", width=12, command=kok.destroy).pack(side="left", padx=(8, 0))
-    kok.mainloop()
-    return sonuc[0]
+        if self.simge is not None:
+            tk.Button(dugmeler, text="Gizle", width=12, command=self.gizle).pack(side="left")
+        else:
+            tk.Button(dugmeler, text="Kapat", width=12, command=self.cik).pack(side="left")
 
 
 def _gelistirme_penceresi() -> int:

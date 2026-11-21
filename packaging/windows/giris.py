@@ -4,6 +4,8 @@ Bağımsız değişken verilmezse durum penceresi açılır (kısayolların yapt
 başlatmaz, Windows hizmetinin durumunu gösterir). "hizmet" ile Hizmet Denetim
 Yöneticisi'nin başlattığı sunucu hizmeti olur (kurucunun kaydettiği komut); "sunucu"
 ile penceresiz çalışır (derleme duman testi); "tasi" kurucunun veri taşımasıdır.
+"pencere --gizli" pencere açmadan yalnız bildirim alanı simgesini getirir (kurucunun isteğe
+bağlı "Tahta Kontrol durum simgesi" oturum açılışı kısayolu); o da sunucu açmaz.
 """
 
 import os

@@ -61,10 +61,11 @@ def test_hizmet_modulu_pywin32_olmadan_ice_aktarilir():
         "class Engel:\n"
         "    def find_spec(self, ad, yol=None, hedef=None):\n"
         "        if ad.split('.')[0] in ('win32service', 'win32serviceutil', 'servicemanager', 'pywintypes',"
-        " 'win32api', 'win32event'):\n"
+        " 'win32api', 'win32event', 'win32gui', 'win32con'):\n"
         "            raise ImportError('engellendi: ' + ad)\n"
         "sys.meta_path.insert(0, Engel())\n"
-        "import tahta_sunucu.hizmet, tahta_sunucu.tasima, tahta_sunucu.pencere\n"
+        "import tahta_sunucu.hizmet, tahta_sunucu.tasima, tahta_sunucu.pencere, tahta_sunucu.tepsi\n"
+        "assert tahta_sunucu.tepsi.tek_ornek_al() == (None, True)  # pywin32 yoksa engel yok sayılır\n"
         "print('tamam')\n"
     )
     sonuc = subprocess.run([sys.executable, "-c", betik], cwd=KOK, capture_output=True, text=True, timeout=60)
@@ -600,9 +601,18 @@ def test_kurucu_betigi_hizmeti_kurar_ve_eski_baslangic_kisayolunu_siler():
     metin = ham.decode("utf-8-sig")
     assert "{commonstartup}\\Tahta Kontrol.lnk" in metin and "[InstallDelete]" in metin
     simgeler = metin.split("[Icons]")[1].split("\n[")[0]
-    assert (
-        "commonstartup" not in simgeler and "[Tasks]" in metin
-    )  # oturum açılınca başlatma kısayolu artık yok
+    # Oturum açılınca SUNUCU açan kısayol yok (kural 28). 0.21.0: tek istisna, yalnız durum simgesini getiren
+    # "Tahta Kontrol durum simgesi" kısayolu; "--gizli" taşır ve isteğe bağlı görevle kurulur.
+    baslangic = [s for s in simgeler.splitlines() if "commonstartup" in s and not s.lstrip().startswith(";")]
+    assert baslangic == [
+        'Name: "{commonstartup}\\Tahta Kontrol durum simgesi"; Filename: "{app}\\TahtaKontrol.exe"; '
+        'Parameters: "pencere --gizli"; Tasks: durumsimgesi'
+    ]
+    assert '{commonstartup}\\Tahta Kontrol"' not in simgeler  # eski ad (0.8 öncesi sunucu kısayolu) yasak
+    gorevler = metin.split("[Tasks]")[1].split("\n[")[0]
+    assert 'Name: "durumsimgesi"; Description: "Oturum açılınca durum simgesini göster' in gorevler
+    assert "unchecked" not in gorevler.split('Name: "durumsimgesi"')[1].splitlines()[0]  # işaretli gelir
+    assert 'Name: "{commonstartup}\\Tahta Kontrol durum simgesi.lnk"; Tasks: not durumsimgesi' in metin
     assert 'obj= "NT AUTHORITY\\LocalService"' in metin
     assert "*S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-19:(OI)(CI)M" in metin
     assert "'tasi --hedef" in metin and "TASIMA-BEKLIYOR.txt" in metin

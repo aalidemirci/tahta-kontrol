@@ -7,6 +7,9 @@
 ; kullanıcının %LOCALAPPDATA%\TahtaKontrol klasörü) kurulumda KOPYALANIR
 ; (tahta_sunucu/tasima.py); taşınamazsa hizmet başlatılmaz ki yeni sertifika
 ; üretilip bütün tahtalar kopmasın. Masaüstü kısayolu yalnız durum penceresini açar.
+; 0.21.0: durum penceresi bildirim alanında simgeyle kalır; isteğe bağlı (işaretli gelen görev)
+; "Tahta Kontrol durum simgesi" kısayolu oturum açılınca YALNIZ simgeyi getirir ("pencere --gizli").
+; Simge sunucu açmaz; 0.8 öncesinin sunucu açan "Tahta Kontrol.lnk" başlangıç kısayolu yine silinir.
 
 #ifndef Surum
   #define Surum "0.0.0"
@@ -41,7 +44,7 @@ UsedUserAreasWarning=no
 Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
 
 [CustomMessages]
-turkish.HizmetBasladi=Sunucu Windows hizmeti olarak çalışıyor: bilgisayar açılınca, kimse oturum açmadan başlar. Masaüstündeki "Tahta Kontrol" kısayolu durum penceresini açar; pencereyi kapatmak sunucuyu durdurmaz.
+turkish.HizmetBasladi=Sunucu Windows hizmeti olarak çalışıyor: bilgisayar açılınca, kimse oturum açmadan başlar. Masaüstündeki "Tahta Kontrol" kısayolu durum penceresini açar; pencere kapatılınca bildirim alanında simge olarak kalır ve sunucuyu durdurmaz.
 turkish.HizmetBaslamadi=UYARI: Sunucu hizmeti başlatılamadı. Durum penceresinden "Hizmeti başlat" deneyin. Ayrıntı (yönetici olarak): %1\gunluk\sunucu.log ve Olay Görüntüleyicisi > Windows Günlükleri > Uygulama.
 turkish.TasimaTamam=Önceki sürümün verisi ve sunucu sertifikası %1 klasörüne kopyalandı; tahtalar yeniden kurulum yapılmadan bağlanmayı sürdürür. Eski klasör silinmedi, içine TASINDI.txt bırakıldı.
 turkish.TasimaYok=Önceki bir kurulumun verisi bulunmadı. Durum penceresinden "Paneli aç" ile ilk kurulumu yapın.
@@ -54,6 +57,7 @@ turkish.KaldirmaVeri=Sunucu hizmeti kaldırıldı. Veri, sertifika ve yedekler S
 
 [Tasks]
 Name: "masaustu"; Description: "Masaüstüne kısayol oluştur (durum penceresi)"
+Name: "durumsimgesi"; Description: "Oturum açılınca durum simgesini göster (bildirim alanı; sunucuyu açmaz)"
 
 [Dirs]
 ; Veri klasörü kaldırmada silinmez (veritabanı, sertifika, yedekler).
@@ -62,6 +66,8 @@ Name: "{commonappdata}\TahtaKontrol"; Flags: uninsneveruninstall
 [InstallDelete]
 ; 0.8 öncesinin "Windows açılınca başlat" kısayolu: hizmetle birlikte ikinci bir sunucu açmasın.
 Type: files; Name: "{commonstartup}\Tahta Kontrol.lnk"
+; Durum simgesi görevi bu kurulumda seçilmediyse önceki kurulumun kısayolu kalmasın.
+Type: files; Name: "{commonstartup}\Tahta Kontrol durum simgesi.lnk"; Tasks: not durumsimgesi
 
 [Files]
 Source: "{#Kaynak}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
@@ -69,6 +75,8 @@ Source: "{#Kaynak}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 [Icons]
 Name: "{group}\Tahta Kontrol"; Filename: "{app}\TahtaKontrol.exe"
 Name: "{autodesktop}\Tahta Kontrol"; Filename: "{app}\TahtaKontrol.exe"; Tasks: masaustu
+; Yalnız durum simgesi (pencere açmaz, sunucu açmaz); kaldırmada Inno kısayolu da siler.
+Name: "{commonstartup}\Tahta Kontrol durum simgesi"; Filename: "{app}\TahtaKontrol.exe"; Parameters: "pencere --gizli"; Tasks: durumsimgesi
 
 [Run]
 Filename: "{app}\TahtaKontrol.exe"; Description: "Durum penceresini aç"; Flags: nowait postinstall skipifsilent runasoriginaluser
