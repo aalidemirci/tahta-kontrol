@@ -492,6 +492,59 @@ def test_usb_idare_anahtarinda_oneri_yok_tahtanin_onerisi_gecerli(servis):
     assert y["liste_yuklu"] and (y["sube"], y["ders_no"]) == ("10/A", 2) and y["subeler_once"] == []
 
 
+# ---- 0.21.0: sınıf başkanı anahtarı — AJAN DEĞİŞMEDİ; sunucunun yanıtı bugünkü ajanda doğru işlenmeli ----------------
+BASKAN_TANI = {"anahtar": {"tur": "baskan", "etiket": "Sınıf başkanı · 10/A", "kod": ""}, "pin_gerek": False,
+               "izinler": ["yoklama"], "omur_sn": 600}  # fmt: skip
+BASKAN_BASLAT = {"belirtec": "GIZLI-BELIRTEC-baskan", "kalan_sn": 480, "bosta_sn": 180,
+                 "ogretmen": {"kod": "", "etiket": "Sınıf başkanı · 10/A"}, "tur": "baskan",
+                 "oneri": {"sube": "10/A", "ders_no": 2, "ders_adaylari": []}, "subeler_once": ["10/A"]}  # fmt: skip
+
+
+def test_baskan_anahtari_bilinmeyen_tur_kilit_dugmesi_yok_etiket_kodsuz(servis):
+    servis.istemci.yanitlar["/ajan/usb/tani"] = (200, BASKAN_TANI)
+    servis.kilitli, servis.kilit_kaynak = True, "idare"
+    tak(servis)
+    # Eski ajan bilinmeyen türü "öğretmen" sayar; kod boştur, izinlerde kilit_ac yoktur.
+    assert servis.usb["durum"] == "tanindi" and servis.usb["kod"] == "" and servis.usb["izinler"] == ["yoklama"]
+    assert servis.gorunum()["usb"]["kilit_ac"] is False
+    assert ua.sahip_metni(servis.usb) == "Sınıf başkanı · 10/A"
+    assert "(kod" not in servis.gorunum()["usb"]["metin"] and "Sınıf başkanı · 10/A" in servis.gorunum()["usb"]["metin"]
+    servis.ekran_mesaji(1, {"tur": "usb_kilit_ac"})  # ekran yine de isterse: istek gitmez, kilit kalır
+    assert servis.kilitli and "/ajan/usb/kilit_ac" not in servis.istemci.yollar()
+
+
+def test_baskan_kendi_subesinde_liste_acilir(servis):
+    servis.istemci.yanitlar["/ajan/usb/tani"] = (200, BASKAN_TANI)
+    servis.istemci.yanitlar["/ajan/usb/yoklama"] = (200, BASKAN_BASLAT)
+    tak(servis)
+    servis.ekran_mesaji(1, {"tur": "yoklama_ac"})
+    y = servis.gorunum()["yoklama"]
+    assert y["asama"] == "liste" and y["liste_yuklu"] and y["ogretmen"] == {"kod": "", "etiket": "Sınıf başkanı · 10/A"}
+    assert servis.istemci.istekler[-1] == ("/ajan/yoklama/liste", {"belirtec": "GIZLI-BELIRTEC-baskan", "sube": "10/A", "ders_no": 2})
+
+
+def test_baskan_baska_subede_secime_doner_409da_iletiyle_kapanir(servis):
+    servis.istemci.yanitlar["/ajan/usb/tani"] = (200, BASKAN_TANI)
+    servis.istemci.yanitlar["/ajan/usb/yoklama"] = (200, BASKAN_BASLAT)
+    servis.istemci.yanitlar["/ajan/yoklama/oneri"] = (200, dict(ONERI, oneri={"sube": "10/B", "ders_no": 2}, subeler=["10/A", "10/B"]))
+    tak(servis)
+    servis.ekran_mesaji(1, {"tur": "yoklama_ac"})
+    y = servis.gorunum()["yoklama"]
+    # Tahtanın önerisi (10/B) başkanınkinden (10/A) farklı: liste açılmaz, seçim görünür.
+    assert y["asama"] == "liste" and not y["liste_yuklu"] and y["sube"] == "10/B"
+    assert servis.istemci.yollar()[-1] == "/ajan/usb/yoklama"
+    servis.istemci.yanitlar["/ajan/yoklama/liste"] = (400, {"hata": "Bu anahtar yalnız 10/A için yoklama alır."})
+    servis.ekran_mesaji(1, {"tur": "yoklama_sec", "sube": "10/B", "ders_no": 2})
+    y = servis.gorunum()["yoklama"]
+    assert servis.istemci.yollar()[-1] == "/ajan/yoklama/liste"
+    assert y["asama"] == "liste" and not y["liste_yuklu"] and y["ders_no"] is None
+    assert y["hata"] == "Bu anahtar yalnız 10/A için yoklama alır."
+    servis.istemci.yanitlar["/ajan/yoklama/liste"] = (409, {"hata": "Bu dersin yoklaması öğretmen tarafından alınmış."})
+    servis.ekran_mesaji(1, {"tur": "yoklama_sec", "sube": "10/A", "ders_no": 2})
+    y = servis.gorunum()["yoklama"]
+    assert y["asama"] == "ileti" and y["ileti"] == "Bu dersin yoklaması öğretmen tarafından alınmış."
+
+
 def test_pin_gerekiyorsa_usb_kipi(servis):
     servis.istemci.yanitlar["/ajan/usb/tani"] = (200, dict(TANI, pin_gerek=True))
     tak(servis)

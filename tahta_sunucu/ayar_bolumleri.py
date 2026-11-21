@@ -50,7 +50,7 @@ BOLUMLER: list[dict] = [
      "sozcukler": "yoklama maske pin süre öğrenci adı görünümü oturum"},
     {"anahtar": "usb", "baslik": "USB anahtar", "kume": "Özellikler", "simge": "a-usb",
      "aciklama": "USB anahtarla yoklama ve kilit açma", "yerler": ["usb_anahtar"],
-     "sozcukler": "usb bellek anahtar flash pin kilit açar"},
+     "sozcukler": "usb bellek anahtar flash pin kilit açar sınıf başkanı başkan"},
     {"anahtar": "sinav", "baslik": "Sınav ekranı", "kume": "Özellikler", "simge": "m-sinav",
      "aciklama": "Sınav ekranındaki kurallar metni", "yerler": ["sinav"],
      "sozcukler": "sınav kuralları sınav ekranı metin"},
@@ -240,7 +240,11 @@ def ozetler(b, bugun: date, ipler: list[str] | None = None) -> dict[str, dict]:
     yk = yoklama.ayar_al(b)
     ornek = maske.bicim_parcalari(yk["maske"])[1]  # sabit örnek ("123 Ayşe Y."); gerçek öğrenci adı değildir
     sonuc["yoklama"] = _ozet(f"Açık · {ornek}" if ornek else "Açık", kisa="Açık") if yk["etkin"] else _ozet("Kapalı")
-    sonuc["usb"] = _ozet("Açık" if usb_anahtar.ayar_al(b)["etkin"] else "Kapalı")
+    usb_ayari = usb_anahtar.ayar_al(b)
+    if not usb_ayari["etkin"]:
+        sonuc["usb"] = _ozet("Kapalı")
+    else:  # 0.21.0: başkan anahtarları açıksa kartta görünür (deneme)
+        sonuc["usb"] = _ozet("Açık · sınıf başkanı (deneme)" if usb_ayari["baskan"] else "Açık", kisa="Açık")
     sonuc["sinav"] = _ozet("Özel metin" if isinstance(vt.ayar_al(b, "sinav_kurallari"), str) else "Varsayılan")
 
     sk = saklama.durum(b, bugun)

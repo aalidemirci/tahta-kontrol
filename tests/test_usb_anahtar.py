@@ -95,7 +95,8 @@ def test_usb_goc_tablolari_ve_belirtec_yeniden_kurulur(tmp_path, monkeypatch):
 
 def test_usb_ayar_varsayilan_kapali_ve_ajana_yalniz_etkin_iner(panel, tahta, hazir):  # noqa: F811
     with vt.islem() as b:
-        assert ua.ayar_al(b) == {"etkin": False, "kilit_acar": True, "pin_idare": True, "pin_ogretmen": False}
+        assert ua.ayar_al(b) == {"etkin": False, "kilit_acar": True, "pin_idare": True, "pin_ogretmen": False, "baskan": False,
+                                 "pin_baskan": True}  # fmt: skip
     assert bekle(tahta, hazir["basliklar"])["ayar"]["usb_anahtar"] == {"etkin": False}
     yanit = usb_ayar(panel, ua_pin_ogretmen="1")
     assert "USB anahtar ayarı kaydedildi" in ileti(yanit)
@@ -582,7 +583,7 @@ def test_usb_yil_sonu_iptalleri_siler_son_kullanimi_bosaltir(panel, tahta, usb_h
     # Sınırdan sonraki kullanım silinmez; ikinci tur bir şey yapmaz.
     usb(tahta, usb_hazir["basliklar"], "tani", ogretmen)
     with vt.islem() as b:
-        assert ua.yil_sonu(b, date(2026, 11, 16)) == {"silinen": 0, "bosaltilan": 0}
+        assert ua.yil_sonu(b, date(2026, 11, 16)) == {"silinen": 0, "bosaltilan": 0, "baskan": 0}
     assert sorgu("SELECT son_kullanim FROM usb_anahtar")[0]["son_kullanim"] == vt.simdi()
 
 

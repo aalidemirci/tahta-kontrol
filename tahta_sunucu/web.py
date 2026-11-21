@@ -1638,11 +1638,18 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             vt.ayar_yaz(b, usb_anahtar.AYAR_ANAHTARI, yeni)
             vt.kayit_dus(b, k["ad"], "USB anahtar ayarı kaydedildi", usb_anahtar.ayar_ozeti(yeni), ip)
             yoklama_kapali = not yoklama_mod.etkin(b)
+            if not usb_anahtar.baskan_acik(yeni):
+                # 0.21.0: başkan anahtarları kapatılınca onlarla açılmış yoklama ekranları anında düşer
+                # (oturum_coz da ayarı denetler; bu silme ikinci kattır).
+                b.execute("DELETE FROM yoklama_belirtec WHERE ogretmen_id IS NULL AND kullanici_id IS NULL AND anahtar_id IN "
+                          "(SELECT id FROM usb_anahtar WHERE sahip_turu = 'sube')")  # fmt: skip
         if onceki != yeni:
             onayli_tahtalari_uyandir()
         mesaj = "USB anahtar ayarı kaydedildi." if yeni["etkin"] else "USB anahtar kapalı; tahtalar takılan belleklere bakmaz."
         if yeni["etkin"] and yoklama_kapali:
             mesaj += " Ders yoklaması kapalı; USB anahtar yalnız kilit açmada işe yarar."
+        elif usb_anahtar.baskan_acik(yeni):
+            mesaj += " Sınıf başkanı anahtarları açık (deneme)."
         return yonlendir("/ayarlar/usb?yer=usb_anahtar#ileti", mesaj)
 
     def guncelleme_ayarini_kaydet(k, form, ip: str):

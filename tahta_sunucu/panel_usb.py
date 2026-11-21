@@ -9,6 +9,11 @@ kayda gizli değer, PIN ve kişi adı YAZILMAZ (anahtar kimliği + öğretmen ko
 Gizli değer sunucudan yalnız bir kez ve yalnız dosya olarak çıkar: üretim satırı yazmaz, bekleyen anahtar
 bellekte 5 dk durur; `GET /usb-anahtarlar/indir/{belirtec}` satırı yazar ve dosyayı verir (no-store).
 
+0.21.0 — sınıf başkanı (şube) anahtarları: yalnız yönetici üretir, bir ya da birden çok şube için tek POST'ta.
+Yanıt PIN pusulasıdır (no-store, yönlendirmesiz; kural 19 kalıbı); indirme tek şubede düz dosya, birden çok şubede
+şube klasörlü zip'tir (yine tek seferlik, 5 dk). Başkan anahtarı tahtada yalnız yoklama alır: `/ajan/usb/kilit_ac`
+onu 403 ile reddeder; yoklamanın dar yetkisi `yoklama.baskan_denetle`'dedir.
+
 Şablon bağlamları ve ajan sözleşmesi modül sonundaki SÖZLEŞME'dedir.
 """
 
@@ -42,12 +47,26 @@ def ogretmen_secenekleri(b) -> list[dict]:
     ]
 
 
+def sube_secenekleri(b, bekleyen: dict[str, int] | None = None) -> list[dict]:
+    """Başkan anahtarı üretilebilecek şubeler (öğrenci listesindeki etkin şubeler): [{sube, sayi, dolu}]."""
+    bekleyen = bekleyen or {}
+    sayilar = {
+        s["sube"]: s["n"]
+        for s in b.execute("SELECT sube, COUNT(*) AS n FROM usb_anahtar WHERE sahip_turu = 'sube' AND durum != 'iptal' GROUP BY sube")
+    }
+    return [
+        {"sube": s, "sayi": sayilar.get(s, 0), "dolu": sayilar.get(s, 0) + bekleyen.get(s, 0) >= ua.SUBE_BASI_EN_COK}
+        for s in yk.aktif_subeler(b)
+    ]
+
+
 def ayar_baglami(b) -> dict:
     """Ayarlar › USB anahtar bölümünün bağlamı (web.bolum_baglami çağırır)."""
     return {
         "usb_ayari": ua.ayar_al(b),
         "usb_destek": ua.tahta_destegi(b),
         "usb_yoklama_kapali": not yk.etkin(b),
+        "baskan_notu": ua.BASKAN_NOTU,
     }
 
 
@@ -100,6 +119,7 @@ def kaydet(uygulama, y) -> None:
             ayar_ = ua.ayar_al(b)
             tum = ua.liste(b, an, None if yonetici else k["id"])
             ogretmenler = ogretmen_secenekleri(b) if yonetici else []
+            subeler = sube_secenekleri(b, depo.sube_sayilari()) if yonetici else []
             destek = ua.tahta_destegi(b)
             yoklama_kapali = not yk.etkin(b)
         kendi = [a for a in tum if a["kullanici_id"] == k["id"]]
@@ -109,7 +129,9 @@ def kaydet(uygulama, y) -> None:
             kendi_anahtarlar=kendi, kendi_dolu=sum(1 for a in kendi if a["durum"] != "iptal") >= ua.KISI_BASI_EN_COK,
             anahtarlar=tum, ogretmenler=ogretmenler, secili_ogretmen_id=_tamsayi(istek.query_params.get("ogretmen_id")),
             destek=destek, yoklama_kapali=yoklama_kapali, kisi_basi=ua.KISI_BASI_EN_COK,
-            etiket_en_uzun=ua.ETIKET_EN_UZUN, dosya_adi=ua.DOSYA_ADI,
+            etiket_en_uzun=ua.ETIKET_EN_UZUN, dosya_adi=ua.DOSYA_ADI, tur_adlari=ua.TUR_ADI,
+            sube_secenekleri=subeler, sube_basi=ua.SUBE_BASI_EN_COK, baskan_acik=ua.baskan_acik(ayar_),
+            baskan_kapali_iletisi=ua.ILETI_BASKAN_KAPALI_PANEL, baskan_notu=ua.BASKAN_NOTU,
         )  # fmt: skip
 
     @uygulama.post("/usb-anahtarlar")
@@ -122,6 +144,8 @@ def kaydet(uygulama, y) -> None:
         an = vt.simdi()
         donus = "/usb-anahtarlar"
         bekleyenleri_temizle(an)
+        if eylem == "uret" and str(form.get("sahip", "")) == "baskan":
+            return baskan_uret(istek, k, form, an)
         if eylem == "uret":
             sahip = str(form.get("sahip", "kendim"))
             if sahip == "ogretmen" and k["rol"] != "yonetici":
@@ -181,6 +205,51 @@ def kaydet(uygulama, y) -> None:
             return y.yonlendir(donus, f"{ua.kimlik_bicimli(satir['kimlik'])} iptal edildi; tahtalarda hemen geçersiz.")
         return y.yonlendir(donus, "Bilinmeyen işlem.", hata=True)
 
+    def baskan_uret(istek: Request, k, form, an: int):
+        """Sınıf başkanı anahtarları (0.21.0): yalnız yönetici; seçilen her şubeye bir anahtar. Yanıt PIN pusulasıdır."""
+        donus = "/usb-anahtarlar?yer=baskan#baskan"
+        if k["rol"] != "yonetici":
+            return reddet(istek, k, "USB anahtar üretme (sınıf başkanı)", donus)
+        secilen = list(dict.fromkeys(str(s) for s in form.getlist("sube") if str(s).strip()))
+        if not secilen:
+            return y.yonlendir(donus, "En az bir şube seçin.", hata=True)
+        if len(secilen) > ua.TOPLU_EN_COK:
+            return y.yonlendir(donus, f"Bir seferde en çok {ua.TOPLU_EN_COK} şube seçilebilir.", hata=True)
+        uretilen: list[tuple[ua.Bekleyen, str]] = []
+        try:
+            with vt.islem() as b:
+                bekleyen_sayilari = depo.sube_sayilari()
+                kimlikler = depo.kimlikler()
+                for ham in secilen:
+                    sube = metin.sube_duzelt(ham) or ham
+                    bekleyen, pin = ua.uret(b, sahip_turu="sube", kullanici_id=None, ogretmen_id=None, etiket=form.get("etiket", ""),
+                                            olusturan=k["ad"], olusturan_id=k["id"], parmak_izi=y.parmak_izi, an=an,
+                                            bekleyen_kimlikler=kimlikler, sube=sube,
+                                            bekleyen_sayisi=bekleyen_sayilari.get(sube, 0))  # fmt: skip
+                    bekleyen_sayilari[bekleyen.sube] = bekleyen_sayilari.get(bekleyen.sube, 0) + 1
+                    kimlikler = kimlikler | {bekleyen.kimlik}
+                    uretilen.append((bekleyen, pin))
+                    vt.kayit_dus(b, k["ad"], "USB anahtar üretildi",
+                                 f"{ua.kimlik_bicimli(bekleyen.kimlik)} · {bekleyen.sahip_kodu} (indirilmeyi bekliyor)", ip(istek))  # fmt: skip
+                ayar_ = ua.ayar_al(b)
+        except ValueError as hata_:
+            return y.yonlendir(donus, str(hata_), hata=True)
+        anahtarlar = [a for a, _ in uretilen]
+        toplu = len(anahtarlar) > 1
+        belirtec = depo.koy(ua.BekleyenPaket(anahtarlar, k["id"], an + ua.BEKLEYEN_OMRU_SN) if toplu else anahtarlar[0])
+        klasorler = ua.paket_klasorleri(anahtarlar) if toplu else [""] * len(anahtarlar)
+        pusulalar = [{"sube": a.sube, "kimlik": ua.kimlik_bicimli(a.kimlik), "pin": yk.pin_bicimli(pin), "klasor": klasor}
+                     for (a, pin), klasor in zip(uretilen, klasorler, strict=True)]  # fmt: skip
+        yanit = y.sayfa(
+            istek, "usb_baskan_pusula.html", k,
+            pusulalar=pusulalar, toplu=toplu, indir_adresi=f"/usb-anahtarlar/indir/{belirtec}", paket_adi=ua.PAKET_ADI,
+            dosya_adi=ua.DOSYA_ADI, omur_dk=ua.BEKLEYEN_OMRU_SN // 60, pin_sorulur=ayar_["pin_baskan"],
+            baskan_acik=ua.baskan_acik(ayar_), baskan_kapali_iletisi=ua.ILETI_BASKAN_KAPALI_PANEL, baskan_notu=ua.BASKAN_NOTU,
+            etiket=anahtarlar[0].etiket,
+        )  # fmt: skip
+        yanit.headers["Cache-Control"] = "no-store"
+        return yanit
+
     @uygulama.get("/usb-anahtarlar/indir/{belirtec}")
     async def anahtar_indir(istek: Request, belirtec: str):
         k = y.kullanici(istek)
@@ -191,6 +260,20 @@ def kaydet(uygulama, y) -> None:
         bekleyen = depo.al(belirtec, k["id"], an)
         if not bekleyen:
             return y.yonlendir("/usb-anahtarlar", ua.ILETI_INDIRME_YOK, hata=True)
+        if isinstance(bekleyen, ua.BekleyenPaket):
+            # Toplu başkan anahtarları: hepsi tek işlemde yazılır (biri şube sınırına takılırsa hiçbiri yazılmaz).
+            try:
+                with vt.islem() as b:
+                    for a in bekleyen.anahtarlar:
+                        ua.kaydet(b, a, an)
+                        vt.kayit_dus(b, k["ad"], "USB anahtar indirildi", f"{ua.kimlik_bicimli(a.kimlik)} · {a.sahip_kodu}", ip(istek))
+            except ValueError as hata_:
+                return y.yonlendir("/usb-anahtarlar?yer=baskan#baskan", str(hata_), hata=True)
+            return Response(
+                ua.paket_zip(bekleyen.anahtarlar, an),
+                media_type="application/zip",
+                headers={"Content-Disposition": f'attachment; filename="{ua.PAKET_ADI}"', "Cache-Control": "no-store"},
+            )
         try:
             with vt.islem() as b:
                 ua.kaydet(b, bekleyen, an)
@@ -248,6 +331,10 @@ def kaydet(uygulama, y) -> None:
             return satir, sahip
         if durum == "kapali":
             return hata(ua.ILETI_KAPALI, "kapali", 409)
+        if durum == "baskan_kapali":
+            vt.kayit_dus(b, kim, "Reddedilen USB anahtar", f"{ua.kimlik_bicimli(satir['kimlik'])} · sınıf başkanı anahtarları kapalı",
+                         ip(istek))  # fmt: skip
+            return hata(ua.ILETI_BASKAN_KAPALI, "baskan_kapali", 409)
         if durum == "gecersiz":
             kimlik = ua.kimlik_duzelt(govde.get("kimlik"))
             kapandi = sinir.gecersiz(tahta["id"], an)
@@ -314,8 +401,8 @@ def kaydet(uygulama, y) -> None:
             # hangi gün hangi tahtada olduğunu süresiz biriktirirdi (§7 "yalnız son değer"). Son kullanım ve
             # tahtası usb_anahtar satırında tutulur; reddedilen denemeler ve kullanıcının işlemleri kayda düşer.
             ua.kullanildi(b, satir, tahta["id"], an)
-            return {"anahtar": ua.gorunum(b, satir, sahip), "pin_gerek": ua.pin_gerek(satir, ayar_), "izinler": ua.izinler(b, ayar_),
-                    "omur_sn": ua.TANI_OMRU_SN}  # fmt: skip
+            return {"anahtar": ua.gorunum(b, satir, sahip), "pin_gerek": ua.pin_gerek(satir, ayar_),
+                    "izinler": ua.izinler(b, ayar_, satir), "omur_sn": ua.TANI_OMRU_SN}  # fmt: skip
 
     @uygulama.post("/ajan/usb/yoklama")
     async def ajan_yoklama(istek: Request):
@@ -338,6 +425,10 @@ def kaydet(uygulama, y) -> None:
             if satir["sahip_turu"] == "ogretmen":
                 belirtec, bitis = yk.oturum_ac(b, ogretmen_id=satir["ogretmen_id"], tahta_id=tahta["id"], an=an,
                                                oturum_dk=yoklama_ayari["oturum_dk"], anahtar_id=satir["id"])  # fmt: skip
+            elif satir["sahip_turu"] == "sube":
+                # 0.21.0: sınıf başkanı oturumu öğretmensiz ve kullanıcısızdır; yalnız anahtara (şubeye) bağlıdır.
+                belirtec, bitis = yk.oturum_ac(b, tahta_id=tahta["id"], an=an, oturum_dk=yoklama_ayari["oturum_dk"],
+                                               anahtar_id=satir["id"])  # fmt: skip
             else:
                 belirtec, bitis = yk.oturum_ac(b, kullanici_id=satir["kullanici_id"], tahta_id=tahta["id"], an=an,
                                                oturum_dk=yoklama_ayari["oturum_dk"], anahtar_id=satir["id"])  # fmt: skip
@@ -346,8 +437,15 @@ def kaydet(uygulama, y) -> None:
             vt.kayit_dus(b, f"tahta:{tahta['ad']}", "Yoklama oturumu açıldı (USB anahtar)", ua.kayit_ayrintisi(b, satir, sahip),
                          ip(istek))  # fmt: skip
             # 0.14.0: öğretmen anahtarında programdan ön seçim; idare anahtarında (ogretmen_id yok) ikisi de boş.
-            program = yk.ogretmen_onerisi(b, satir["ogretmen_id"] if satir["sahip_turu"] == "ogretmen" else None, tahta, an,
-                                          yk.GEC_YETENEGI in acil.yetenekler(tahta))  # fmt: skip
+            # 0.21.0: başkan anahtarında öneri anahtarın şubesidir (ders saati şubenin kendi devresinden).
+            yetenekli_ = yk.GEC_YETENEGI in acil.yetenekler(tahta)
+            if satir["sahip_turu"] == "sube":
+                o = yk.oneri(b, tahta, an, satir["sube"], yetenekli_)["oneri"]
+                program = {"oneri": {"sube": satir["sube"], "ders_no": o["ders_no"], "ders_adaylari": o["ders_adaylari"]},
+                           "subeler_once": [satir["sube"]]}  # fmt: skip
+            else:
+                program = yk.ogretmen_onerisi(b, satir["ogretmen_id"] if satir["sahip_turu"] == "ogretmen" else None, tahta, an,
+                                              yetenekli_)  # fmt: skip
         # /ajan/yoklama/baslat ile AYNI biçim (+ "tur", 0.14.0: "oneri", "subeler_once"): sonraki uçlar değişmeden kullanılır.
         return {"belirtec": belirtec, "kalan_sn": bitis - an, "bosta_sn": yoklama_ayari["bosta_dk"] * 60,
                 "ogretmen": {"kod": gorunum["kod"], "etiket": gorunum["etiket"]}, "tur": gorunum["tur"],
@@ -367,6 +465,11 @@ def kaydet(uygulama, y) -> None:
             if isinstance(sonuc, JSONResponse):
                 return sonuc
             satir, sahip = sonuc
+            if satir["sahip_turu"] == "sube":
+                # 0.21.0: sınıf başkanı anahtarı hiçbir zaman kilit açmaz (PIN sorulmadan, sayaç tüketmeden reddedilir).
+                vt.kayit_dus(b, f"tahta:{tahta['ad']}", "Reddedilen USB anahtar",
+                             f"{ua.kimlik_bicimli(satir['kimlik'])} · sınıf başkanı anahtarı kilit açmaz", ip(istek))  # fmt: skip
+                return hata(ua.ILETI_BASKAN_KILIT, "kilit_yetkisiz", 403)
             red = pin_asamasi(b, istek, tahta, govde, satir, sahip, an)
             if red:
                 return red
@@ -388,22 +491,33 @@ def kaydet(uygulama, y) -> None:
 #            etiket, olusturma "gg.aa.yyyy SS:DD", olusturan, son_kullanim ("… · Tahta adı" | "Hiç kullanılmadı"),
 #            durum etkin|kilitli|iptal, durum_adi, iptal (metin), kopya_uyarisi (bool), kullanici_id, ogretmen_id}.
 #   Formlar: POST /usb-anahtarlar {eylem=uret, sahip=kendim, etiket} · {eylem=uret, sahip=ogretmen, ogretmen_id, etiket}
-#            · {eylem=iptal, id} (<dialog> onayı).
+#            · {eylem=uret, sahip=baskan, sube* (çoklu), etiket} (0.21.0, yalnız yönetici) · {eylem=iptal, id} (<dialog> onayı).
+#   0.21.0 ek bağlam: tur_adlari{idare,ogretmen,baskan}, sube_secenekleri[{sube,sayi,dolu}] (yalnız yönetici), sube_basi (2),
+#     baskan_acik (bool), baskan_kapali_iletisi, baskan_notu. satir += sube ('' ya da '10/A'); tur += baskan.
+# usb_baskan_pusula.html (0.21.0; POST yanıtı, no-store, yönlendirme yok): pusulalar[{sube, kimlik, pin "482 913", klasor}],
+#   toplu (bool: birden çok şube → zip), indir_adresi, paket_adi, dosya_adi, omur_dk, pin_sorulur, baskan_acik,
+#   baskan_kapali_iletisi, baskan_notu, etiket. İndirme: tek şube → tahta-kontrol.anahtar; toplu → application/zip
+#   "tahta-kontrol-baskan-anahtarlari.zip" (OKUBENI.txt + "<10-A>/tahta-kontrol.anahtar").
 # usb_anahtar_uretildi.html (POST yanıtı, no-store): kimlik, tur (idare|ogretmen), sahip_metni, etiket, indir_adresi,
 #   pin ("482 913" | None; yalnız idare anahtarında), pin_sorulur (bool, şu anki ayara göre), omur_dk (5), dosya_adi,
 #   ozellik_kapali. İndirme: GET {indir_adresi} → application/octet-stream, attachment; filename="tahta-kontrol.anahtar".
-# _ayar_usb.html (/ayarlar/usb; bolum=usb_anahtar, web.py): usb_ayari, usb_destek{onayli,destekleyen,eski}, usb_yoklama_kapali.
-#   Alanlar: ua_etkin, ua_kilit_acar, ua_pin_idare, ua_pin_ogretmen (=1). Yönlendirme /ayarlar/usb?yer=usb_anahtar#ileti.
+# _ayar_usb.html (/ayarlar/usb; bolum=usb_anahtar, web.py): usb_ayari, usb_destek{onayli,destekleyen,eski}, usb_yoklama_kapali,
+#   baskan_notu. Alanlar: ua_etkin, ua_kilit_acar, ua_pin_idare, ua_pin_ogretmen, ua_baskan, ua_pin_baskan (=1; altısı aynı
+#   formda). Yönlendirme /ayarlar/usb?yer=usb_anahtar#ileti.
 # ogretmenler.html: ek bağlam usb_sayilari {ogretmen_id: n} → "USB anahtar" sütunu; yönetici bağlantısı
 #   /usb-anahtarlar?ogretmen_id=<id>#ogretmen.
 #
 # Ajan uçları (hepsi POST, X-Tahta-Id/X-Tahta-Anahtar, onaylı tahta, gövde ≤ 4096 bayt JSON; her gövdede kimlik, gizli):
 #   Ortak hatalar (hepsi {"hata": ileti, "neden": kod, ["bekleme_sn"]}):
 #     409 kapali · 429 cok_istek|tahta_kapali (+bekleme_sn) · 409 sinav · 403 gecersiz · 410 iptal · 423 kilitli.
-#   /ajan/usb/tani → 200 {"anahtar": {"tur": "idare"|"ogretmen", "etiket": "A. Yılmaz"|"İdare · A. Demir", "kod": "112"|""},
+#   /ajan/usb/tani → 200 {"anahtar": {"tur": "idare"|"ogretmen"|"baskan", "etiket": "A. Yılmaz"|"İdare · A. Demir"|
+#                                      "Sınıf başkanı · 10/A", "kod": "112"|""},
 #                         "pin_gerek": bool, "izinler": ["yoklama"?, "kilit_ac"?], "omur_sn": 600}
 #   /ajan/usb/yoklama {+pin?} → 200 {"belirtec","kalan_sn","bosta_sn","ogretmen":{"kod","etiket"},"tur"}
 #                         ek hatalar: 409 yoklama_kapali · 403 pin_gerek (+pin_gerek:true) · 403 pin · 429 bekle · 423 kilitli
 #   /ajan/usb/kilit_ac {+pin?} → 200 {"tamam": true}; ek hatalar: 409 kilit_kapali · 403 pin_gerek · 403 pin · 429 bekle · 423
+#                         · 403 kilit_yetkisiz (0.21.0: başkan anahtarı). Ortak: 409 baskan_kapali (başkan ayarı kapalı).
+#   Başkan oturumunda /ajan/yoklama/liste ve /kaydet: 400 başka şube ya da pencere dışı ders (ajan seçime döner) ·
+#     409 başka tahta, zil saati yok, öğretmen/idare kaydı ya da düzeltmesi var (ajan iletiyle kapanır).
 #   /ajan/bekle yanıtında ayar.usb_anahtar = {"etkin": bool} (durum tabanlı; alan yoksa = eski sunucu → izleme kapalı).
 # =================================================================================================

@@ -11,6 +11,7 @@
   </div>
 </div>
 <p class="bant uyari kvkk-bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ adli_not }}</p>
+{% if kayit.baskan %}<p class="bant" role="note" id="baskan-notu"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ kayit.baskan_notu }}</p>{% endif %}
 
 <section class="kutu" aria-labelledby="kayit-bilgi">
   <h2 id="kayit-bilgi">Kayıt</h2>
@@ -18,7 +19,7 @@
     <dt>Tarih</dt><dd>{{ kayit.tarih_yazi }}</dd>
     <dt>Şube · ders saati</dt><dd>{{ kayit.sube }} · {{ kayit.ders_no }}. ders{% if kayit.ders_adi %} · {{ kayit.ders_adi }}{% endif %}</dd>
     <dt>Öğretmen</dt><dd>{{ kayit.ogretmen or '—' }}{% if kayit.ogretmen_kod %} <span class="not">(kod <span class="kod">{{ kayit.ogretmen_kod }}</span>)</span>{% endif %}</dd>
-    <dt>Kaynak</dt><dd><span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#{{ 's-acik' if kayit.kaynak_turu == 'tahta' else 's-onay' }}"/></svg>{{ kayit.kaynak }}</span></dd>
+    <dt>Kaynak</dt><dd><span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#{{ 's-acik' if kayit.kaynak_turu in ('tahta', 'baskan') else 's-onay' }}"/></svg>{{ kayit.kaynak }}</span></dd>
     {% if kayit.usb_kimlikleri %}<dt>Kullanılan USB kimlikleri</dt><dd>{{ kayit.usb_kimlikleri | join(', ') }}</dd>{% endif %}
     {% if kayit.program_ogretmenleri %}<dt>Güncel haftalık programdaki öğretmen</dt><dd>{{ kayit.program_ogretmenleri | join(', ') }}
       {% if kayit.program_eslesiyor %}<span class="not">· kaydı alanla eşleşiyor</span>{% else %}<span class="not">· başka öğretmen/idare kaydı; nöbet veya ders değişimi olabilir</span>{% endif %}

@@ -490,6 +490,54 @@ GOCLER = [
         WHERE anahtar = 'yoklama' AND json_valid(deger) AND json_type(deger) = 'object'
           AND json_extract(deger, '$.maske') = 'ad_soyadbas';
     """,
+    # 0.21.0 — sınıf başkanı USB anahtarı: anahtar KİŞİYE değil ŞUBEYE bağlıdır (sahip_turu='sube', sube='10/A');
+    # sistemde başkanın adı ya da öğrenci kimliği tutulmaz. Başkan oturumunda öğretmen ve kullanıcı yoktur, yalnız
+    # anahtar vardır. Sıra bağlayıcıdır (foreign_keys açık): usb_anahtar'a başvuran tek tablo yoklama_belirtec önce
+    # düşer (satırları ≤ 15 dk yaşar), usb_anahtar yeni CHECK ile yeniden kurulur, belirteç tablosu yeniden kurulur.
+    """
+    DROP TABLE yoklama_belirtec;
+    CREATE TABLE usb_anahtar_yeni (
+        id INTEGER PRIMARY KEY,
+        kimlik TEXT NOT NULL UNIQUE,            -- 'K7Q2M9XA'; gizli değil
+        gizli_ozet TEXT NOT NULL,               -- sha256(gizli) onaltılık
+        sahip_turu TEXT NOT NULL,               -- 'kullanici' | 'ogretmen' | 'sube' (sınıf başkanı, 0.21.0)
+        kullanici_id INTEGER REFERENCES kullanici(id) ON DELETE CASCADE,
+        ogretmen_id INTEGER REFERENCES ogretmen(id) ON DELETE CASCADE,
+        etiket TEXT NOT NULL DEFAULT '',        -- "Mavi bellek" gibi; kişi adı yazılmaz
+        pin_ozet TEXT,                          -- kullanıcı ve şube anahtarında (guvenlik.parola_ozetle)
+        hatali_sayi INTEGER NOT NULL DEFAULT 0, -- yalnız anahtarın kendi PIN'i
+        hatali_ilk INTEGER,
+        durum TEXT NOT NULL DEFAULT 'etkin',    -- 'etkin' | 'kilitli' | 'iptal'
+        olusturan TEXT NOT NULL,                -- panel kullanıcı adı
+        olusturma INTEGER NOT NULL,
+        iptal_eden TEXT, iptal_zamani INTEGER,
+        son_kullanim INTEGER,                   -- yalnız SON başarılı tanıma/işlem (geçmiş tutulmaz)
+        son_tahta_id INTEGER REFERENCES tahta(id) ON DELETE SET NULL,
+        kopya_uyarisi INTEGER,                  -- son "iki tahtada" uyarısının zamanı
+        sube TEXT,                              -- yalnız şube anahtarında: kanonik '10/A'
+        CHECK ((sahip_turu = 'kullanici' AND kullanici_id IS NOT NULL AND ogretmen_id IS NULL AND sube IS NULL)
+            OR (sahip_turu = 'ogretmen' AND ogretmen_id IS NOT NULL AND kullanici_id IS NULL AND sube IS NULL)
+            OR (sahip_turu = 'sube' AND sube IS NOT NULL AND sube != '' AND kullanici_id IS NULL AND ogretmen_id IS NULL)));
+    INSERT INTO usb_anahtar_yeni (id, kimlik, gizli_ozet, sahip_turu, kullanici_id, ogretmen_id, etiket, pin_ozet, hatali_sayi,
+        hatali_ilk, durum, olusturan, olusturma, iptal_eden, iptal_zamani, son_kullanim, son_tahta_id, kopya_uyarisi, sube)
+        SELECT id, kimlik, gizli_ozet, sahip_turu, kullanici_id, ogretmen_id, etiket, pin_ozet, hatali_sayi, hatali_ilk, durum,
+               olusturan, olusturma, iptal_eden, iptal_zamani, son_kullanim, son_tahta_id, kopya_uyarisi, NULL FROM usb_anahtar;
+    DROP TABLE usb_anahtar;
+    ALTER TABLE usb_anahtar_yeni RENAME TO usb_anahtar;
+    CREATE INDEX usb_anahtar_kullanici ON usb_anahtar (kullanici_id, durum);
+    CREATE INDEX usb_anahtar_ogretmen ON usb_anahtar (ogretmen_id, durum);
+    CREATE INDEX usb_anahtar_sube ON usb_anahtar (sube, durum);
+    CREATE TABLE yoklama_belirtec (
+        belirtec_ozet TEXT PRIMARY KEY,         -- guvenlik.ozet(belirtec)
+        ogretmen_id INTEGER REFERENCES ogretmen(id) ON DELETE CASCADE,
+        kullanici_id INTEGER REFERENCES kullanici(id) ON DELETE CASCADE,
+        anahtar_id INTEGER REFERENCES usb_anahtar(id) ON DELETE CASCADE,   -- NULL: kod + PIN ile açıldı
+        tahta_id INTEGER NOT NULL REFERENCES tahta(id) ON DELETE CASCADE,
+        bitis INTEGER NOT NULL, olusturma INTEGER NOT NULL,
+        -- öğretmen ya da idare oturumu (en çok biri) ya da ikisi de boşken sınıf başkanı oturumu (anahtar zorunlu)
+        CHECK (NOT (ogretmen_id IS NOT NULL AND kullanici_id IS NOT NULL)
+               AND (ogretmen_id IS NOT NULL OR kullanici_id IS NOT NULL OR anahtar_id IS NOT NULL)));
+    """,
 ]
 GOC_ONCESI_KALAN = 3
 # Göç (ve göç öncesi kopya), yedek alma ve geri yükleme aynı anda çalışmaz (A6 K-B2).

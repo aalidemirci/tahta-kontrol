@@ -364,7 +364,8 @@ BEKLENEN_FORMLAR = {
     ],
     "yuzer": [("/ayarlar", "dugme", {"bolum", "dg_acik", *(f"dg_{k}" for k in dugme.ISLEMLER)})],
     "yoklama": [("/ayarlar", "yoklama", {"bolum", "yk_etkin", "yk_maske", "yk_oturum_dk", "yk_bosta_dk"})],
-    "usb": [("/ayarlar", "usb_anahtar", {"bolum", "ua_etkin", "ua_kilit_acar", "ua_pin_idare", "ua_pin_ogretmen"})],
+    "usb": [("/ayarlar", "usb_anahtar", {"bolum", "ua_etkin", "ua_kilit_acar", "ua_pin_idare", "ua_pin_ogretmen", "ua_baskan",
+                                          "ua_pin_baskan"})],  # 0.21.0: başkan kutuları aynı formda
     "sinav": [("/ayarlar", "sinav", {"bolum", "sinav_kurallari", "eylem"})],
     "veri": [
         ("/ayarlar", "saklama", {"bolum", "ogretim_yili_bitis", "oneri_kullan", "sk_onay"}),
@@ -406,9 +407,14 @@ def test_usb_dort_kutu_tek_formda(okul):
     for ad in ("ua_etkin", "ua_kilit_acar", "ua_pin_idare", "ua_pin_ogretmen"):
         (alan,) = form["alanlar"][ad]
         assert alan["type"] == "checkbox" and alan["value"] == "1" and "checked" in alan and "disabled" not in alan, ad
-    # Yalnız biri işaretli gönderilirse öbür üçü bilerek kapanır: dördü aynı formda olduğu için sessiz ezilme olmaz.
+    # 0.21.0: sınıf başkanı kutuları da AYNI formdadır; `doldur` onları göndermediği için ikisi de kapalı kaydedildi.
+    for ad in ("ua_baskan", "ua_pin_baskan"):
+        (alan,) = form["alanlar"][ad]
+        assert alan["type"] == "checkbox" and alan["value"] == "1" and "checked" not in alan and "disabled" not in alan, ad
+    # Yalnız biri işaretli gönderilirse öbürleri bilerek kapanır: hepsi aynı formda olduğu için sessiz ezilme olmaz.
     gonder(okul, bolum="usb_anahtar", ua_etkin="1")
-    assert ayar(usb_anahtar.AYAR_ANAHTARI) == {"etkin": True, "kilit_acar": False, "pin_idare": False, "pin_ogretmen": False}
+    assert ayar(usb_anahtar.AYAR_ANAHTARI) == {"etkin": True, "kilit_acar": False, "pin_idare": False, "pin_ogretmen": False,
+                                               "baskan": False, "pin_baskan": False}  # fmt: skip
 
 
 def test_sayfalarda_devre_disi_ya_da_gizli_ayar_alani_yok(okul):
@@ -460,9 +466,9 @@ def test_hicbir_alan_adi_kaybolmadi(okul):
     # kilit_kodu_sil artık form alanı değil, onay penceresinin gönderdiği değerdir (düğme + ONAY sözlüğü).
     assert 'data-onay="kilit_kodu_sil"' in ayar_sayfasi(okul, "kilit")
     assert re.search(r'kilit_kodu_sil:\s*\{\s*ad: "kilit_kodu_sil", deger: "1"', BETIK)
-    # Fazladan gelen tek alan `donus` (yedek formlarının dönüş adresi).
+    # Fazladan gelen alanlar: `donus` (yedek formlarının dönüş adresi) ve 0.21.0'ın sınıf başkanı kutuları.
     fazla = {ad for uc, ad in yeni - eski if uc != "/ayarlar" or ad != "ara"}
-    assert fazla == {"donus"}, fazla
+    assert fazla == {"donus", "ua_baskan", "ua_pin_baskan"}, fazla
 
 
 # §4'te kalın/uyarı sayılan cümleler: ilgili sayfada geçer ve kapalı <details> içinde DEĞİLDİR.

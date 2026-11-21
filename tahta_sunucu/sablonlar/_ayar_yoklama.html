@@ -38,6 +38,8 @@
       <div class="ayar-denetim"><input id="yk_bosta_dk" name="yk_bosta_dk" type="number" required class="alan-sayi" min="{{ yoklama_sinirlari.bosta_dk[0] }}" max="{{ yoklama_sinirlari.bosta_dk[1] }}" value="{{ yoklama_ayari.bosta_dk }}" aria-describedby="yk-bosta-not"></div>
     </div>
     <p class="not">Yoklamalar öğretim yılı sonuna kadar saklanır (<a href="/ayarlar/veri#saklama">Veri saklama ve yedek</a>).</p>
+    {# 0.21.0: yalnız bilgi; başkan ayarı USB anahtar bölümündedir ve bu form onu YAZMAZ. #}
+    <p class="not" id="yk-baskan-not">Sınıf başkanı anahtarları (deneme): {{ 'açık' if yoklama_baskan_acik else 'kapalı' }} (<a href="/ayarlar/usb">USB anahtar</a>). Ders yoklaması kapalıyken onlar da çalışmaz; ders yoklaması açıkken ayrıca kapatılabilir.</p>
     {{ kaydet_cubugu('Yoklama ayarlarını kaydet') }}
   </form>
 </section>

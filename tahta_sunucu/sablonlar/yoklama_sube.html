@@ -68,7 +68,7 @@
       <th scope="col" rowspan="2" class="sayi-hucre ozet-bas"><abbr title="Gösterilen günlerde yok / geç ders saati">Y / G</abbr></th>
     </tr>
     <tr>
-      {% for gun in d.gunler %}{% set gi = loop.index0 %}{% for ders in gun.dersler %}<th scope="col" class="dh g{{ gi % 2 }}{% if loop.first %} gun-ilk{% endif %}"><abbr title="{{ gun.kisa }} {{ ders.ders_no }}. ders{% if not ders.plan %} (programda yok){% endif %}">{{ ders.ders_no }}{% if not ders.plan %}*{% endif %}</abbr></th>{% endfor %}{% endfor %}
+      {% for gun in d.gunler %}{% set gi = loop.index0 %}{% for ders in gun.dersler %}<th scope="col" class="dh g{{ gi % 2 }}{% if loop.first %} gun-ilk{% endif %}"><abbr title="{{ gun.kisa }} {{ ders.ders_no }}. ders{% if not ders.plan %} (programda yok){% endif %}{% if ders.baskan %} · kayıt sınıf başkanının{% endif %}">{{ ders.ders_no }}{% if not ders.plan %}*{% endif %}{% if ders.baskan %}<sup>b</sup>{% endif %}</abbr></th>{% endfor %}{% endfor %}
     </tr>
   </thead>
   <tbody>
@@ -88,6 +88,7 @@
 <p class="not">{{ d.satirlar | length }} öğrenci{% if d.yalniz_yok %} (yokluğu olanlar; şubede {{ d.ogrenci_sayisi }}){% endif %}. Düzeltmek için gün başlığına ya da hücreye dokunun: gün görünümü açılır. Bu görünüm dışa aktarılmaz; yalnız yazdırılır.</p>
 {% endif %}
 {{ yh.lejant(true, false, d.plan_disi_var) }}
+{% if d.baskan_var %}<p class="not" id="baskan-notu">b: o ders saatinin kaydı sınıf başkanının (deneme). {{ d.baskan_notu }}</p>{% endif %}
 <p class="defter-lejant not">{{ yh.serit_lejanti() }}</p>
 <p class="not">{{ n_gun_notu }}</p>
 
@@ -146,7 +147,7 @@
         <th scope="col" class="yap y2">Ad Soyad</th>
         {% for s in g.sutunlar %}
         <th scope="col" class="dh">
-          <abbr title="{{ s.ders_no }}. ders{% if s.aralik %} {{ s.aralik }}{% endif %}{% if not s.plan %} (programda yok){% endif %}{% if s.gelecek %}: henüz başlamadı{% elif not s.alindi %}: yoklama alınmadı{% endif %}">{{ s.ders_no }}{% if not s.plan %}*{% endif %}</abbr>
+          <abbr title="{{ s.ders_no }}. ders{% if s.aralik %} {{ s.aralik }}{% endif %}{% if not s.plan %} (programda yok){% endif %}{% if s.gelecek %}: henüz başlamadı{% elif not s.alindi %}: yoklama alınmadı{% endif %}{% if s.baskan %} · kayıt sınıf başkanının{% endif %}">{{ s.ders_no }}{% if not s.plan %}*{% endif %}{% if s.baskan %}<sup>b</sup>{% endif %}</abbr>
           {% if s.aralik %}<span class="saat">{{ s.aralik.split('–')[0] }}</span>{% endif %}
           {% if s.alinabilir %}<button name="sutun" value="{{ s.ders_no }}" formaction="/yoklama/sube/toplu" class="kucuk yazdirma" aria-label="{{ s.ders_no }}. ders: alındı say (herkes var)">Alındı</button>{% endif %}
         </th>
@@ -190,6 +191,7 @@
   </div>
 </form>
 {{ yh.lejant(g.gec_var, true, g.plan_disi_var) }}
+{% if g.baskan_var %}<p class="not" id="baskan-notu">b: o ders saatinin kaydı sınıf başkanının (deneme). {{ g.baskan_notu }}</p>{% endif %}
 <p class="not">{{ g.satirlar | length }} öğrenci · {{ g.alinan }} / {{ g.sutunlar | length }} ders saatinin yoklaması alındı.
   <a href="/yoklama/icmal?tarih={{ g.tarih }}&amp;sube={{ sube | urlencode }}">İcmal</a> · <a href="/yoklama?tarih={{ g.tarih }}">Günlük görünüm</a></p>
 {% endif %}

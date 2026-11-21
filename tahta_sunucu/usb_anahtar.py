@@ -6,7 +6,12 @@ Sunucu gizlinin yalnız SHA-256 özetini saklar; gizli değer sunucudan yalnız 
 (`Bekleyen` → indirme). Tahtada dosyayı yalnız kök yetkili servis okur (kural 5).
 
 Kapsam dardır: ders yoklaması ve (ayar açıksa) kilit açma. Panel oturumu açmaz, ayar değiştirmez, komut
-vermez, sınav penceresinde hiçbir şey yapmaz. Her işlem (yoklama, kilit açma) ve reddedilen her deneme işlem
+vermez, sınav penceresinde hiçbir şey yapmaz.
+
+0.21.0 — sınıf başkanı anahtarı (`sahip_turu='sube'`): anahtar KİŞİYE değil ŞUBEYE bağlıdır; sistemde başkanın adı
+tutulmaz. Yalnız kendi şubesinin, o şubenin dersliğindeki tahtada, şu anki dersinin yoklamasını alır; hiçbir zaman
+kilit açmaz; o ders saatinde öğretmen/idare/panel kaydı varsa yazamaz (öğretmen önceliği). Ayrı ayarla (`baskan`,
+varsayılan kapalı) açılır; ders yoklaması kapalıyken çalışmaz. Kayıt `yoklama.kaynak='baskan'` olarak yazılır. Her işlem (yoklama, kilit açma) ve reddedilen her deneme işlem
 kaydına anahtar kimliği ve sahip koduyla (öğretmen kodu ya da panel kullanıcı adı) düşer; kişi adı yazılmaz.
 Kendiliğinden yapılan başarılı tanıma kayda düşmez (yalnız son kullanım tutulur, §7).
 """
@@ -16,7 +21,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import io
 import secrets
+import zipfile
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -27,7 +34,8 @@ from . import yoklama as yk
 ISTANBUL = ZoneInfo("Europe/Istanbul")
 YETENEK = "usb_anahtar"
 AYAR_ANAHTARI = "usb_anahtar"
-VARSAYILAN_AYAR = {"etkin": False, "kilit_acar": True, "pin_idare": True, "pin_ogretmen": False}
+VARSAYILAN_AYAR = {"etkin": False, "kilit_acar": True, "pin_idare": True, "pin_ogretmen": False, "baskan": False,
+                   "pin_baskan": True}  # fmt: skip
 
 DOSYA_ADI = "tahta-kontrol.anahtar"
 BASLIK = "TAHTA-KONTROL-ANAHTAR"
@@ -40,6 +48,8 @@ GIZLI_UZUNLUGU = 52  # 32 bayt, base32, dolgusuz
 _BASE32 = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
 
 KISI_BASI_EN_COK = 2
+SUBE_BASI_EN_COK = 2        # 0.21.0: şube başına etkin sınıf başkanı anahtarı (başkan + yardımcısı)
+TOPLU_EN_COK = 80           # bir toplu üretimde en çok şube
 TANI_OMRU_SN = 600          # tahta, tanınan anahtarı en çok bu kadar tutar (ajan da aynı değeri kullanır)
 KOPYA_PENCERE_SN = 60
 KOPYA_ROZET_SN = 7 * 86400  # listede "kopyalanmış olabilir" rozeti
@@ -66,8 +76,14 @@ ILETI_INDIRME_YOK = "Bu indirme bağlantısı kullanıldı ya da süresi doldu; 
 # Etiket yalnız panelde görünür (tahtaya inmez): genel "Tahta herkese açık ekrandır" iletisi yanıltırdı.
 ILETI_ETIKET_TC = "Etikette T.C. kimlik numarasına benzeyen bir sayı var; kişi bilgisi yazmayın."
 ILETI_KAPALI_PANEL = "USB anahtar Ayarlar'da kapalı; üretilen anahtarlar tahtalarda çalışmaz."
+# 0.21.0 — sınıf başkanı anahtarı
+ILETI_BASKAN_KAPALI = "Sınıf başkanı anahtarları şu an kapalı."
+ILETI_BASKAN_KILIT = "Sınıf başkanı anahtarı kilit açmaz."
+ILETI_BASKAN_KAPALI_PANEL = "Sınıf başkanı anahtarları Ayarlar'da kapalı; üretilen anahtarlar tahtalarda çalışmaz."
+BASKAN_NOTU = "Sınıf başkanı kaydı deneme amaçlı yardımcı kayıttır; öğretmenin yoklamasının yerine geçmez."
 
 DURUM_ADI = {"etkin": "Etkin", "kilitli": "PIN kilitli", "iptal": "İptal"}
+TUR_ADI = {"idare": "idare", "ogretmen": "öğretmen", "baskan": "sınıf başkanı"}
 
 
 # ---- ayar --------------------------------------------------------------------------------------
@@ -80,16 +96,22 @@ def ayar_al(b) -> dict:
 
 
 def ayar_coz(form) -> dict:
-    """Ayarlar › USB anahtar formu (bolum=usb_anahtar): ua_etkin, ua_kilit_acar, ua_pin_idare, ua_pin_ogretmen (=1)."""
+    """Ayarlar › USB anahtar formu (bolum=usb_anahtar): ua_etkin, ua_kilit_acar, ua_pin_idare, ua_pin_ogretmen, ua_baskan,
+    ua_pin_baskan (=1). Altı kutu da AYNI formdadır: işaretsiz kutu gönderilmez, eksik alan "kapalı" sayılır."""
     return {anahtar: form.get(f"ua_{anahtar}") == "1" for anahtar in VARSAYILAN_AYAR}
 
 
 def ayar_ozeti(a: dict) -> str:
-    """İşlem kaydı: "açık · kilit açar · PIN: idare" / "kapalı · PIN: yok"."""
+    """İşlem kaydı: "açık · kilit açar · PIN: idare" / "kapalı · PIN: yok"; başkan anahtarları açıksa
+    "açık · kilit açar · sınıf başkanı · PIN: idare, başkan"."""
     pinler = [ad for ad, alan in (("idare", "pin_idare"), ("öğretmen", "pin_ogretmen")) if a[alan]]
+    if a["baskan"] and a["pin_baskan"]:
+        pinler.append("başkan")
     parca = ["açık" if a["etkin"] else "kapalı"]
     if a["kilit_acar"]:
         parca.append("kilit açar")
+    if a["baskan"]:
+        parca.append("sınıf başkanı")
     parca.append("PIN: " + (", ".join(pinler) if pinler else "yok"))
     return " · ".join(parca)
 
@@ -99,12 +121,18 @@ def ajan_gorunumu(b) -> dict:
     return {"etkin": ayar_al(b)["etkin"]}
 
 
-def izinler(b, a: dict | None = None) -> list[str]:
+def baskan_acik(a: dict) -> bool:
+    """Sınıf başkanı anahtarları çalışıyor mu (USB anahtar ve başkan ayarı birlikte açık)? Ders yoklaması ayrıca gerekir."""
+    return bool(a["etkin"] and a["baskan"])
+
+
+def izinler(b, a: dict | None = None, satir=None) -> list[str]:
+    """Tahtaya inen izinler. Şube (sınıf başkanı) anahtarı hiçbir zaman `kilit_ac` almaz."""
     a = a or ayar_al(b)
     sonuc = []
     if yk.etkin(b):
         sonuc.append("yoklama")
-    if a["kilit_acar"]:
+    if a["kilit_acar"] and not (satir is not None and satir["sahip_turu"] == "sube"):
         sonuc.append("kilit_ac")
     return sonuc
 
@@ -185,6 +213,16 @@ class Bekleyen:
     pin_ozet: str | None
     bitis: int
     sahip_kodu: str
+    sube: str | None = None  # 0.21.0: yalnız şube (sınıf başkanı) anahtarında
+
+
+@dataclass
+class BekleyenPaket:
+    """0.21.0: toplu üretilen sınıf başkanı anahtarları; tek belirteçle, tek seferde (zip) indirilir."""
+
+    anahtarlar: list[Bekleyen]
+    olusturan_id: int
+    bitis: int
 
 
 def dosya_metni(bekleyen: Bekleyen) -> bytes:
@@ -199,6 +237,46 @@ def dosya_metni(bekleyen: Bekleyen) -> bytes:
         f"gizli={bekleyen.gizli}",
     ]
     return ("\n".join(satirlar) + "\n").encode("ascii")
+
+
+PAKET_ADI = "tahta-kontrol-baskan-anahtarlari.zip"
+PAKET_OKUBENI = (
+    "Tahta Kontrol - sinif baskani USB anahtarlari\n\n"
+    "Her klasor bir subenindir (ornek: 10-A = 10/A). Klasordeki tahta-kontrol.anahtar dosyasini o subenin\n"
+    "bellegine, bellegin EN UST klasorune, adini degistirmeden kopyalayin. Bellekteki diger dosyalar kalir.\n"
+    "PIN'ler yalniz uretim sayfasindaki pusulada yazar. Kopyalamadan sonra bu zip dosyasini ve acilmis\n"
+    "klasorleri bilgisayardan silin (Indirilenler ve cop kutusu). Kaybolan bellek panelden iptal edilir.\n"
+)
+
+
+def klasor_adi(sube: str) -> str:
+    """Zip içindeki şube klasörü: "10/A" → "10-A", "Hazırlık/B" → "Hazırlık-B" (harf, rakam ve '-' dışındakiler '-')."""
+    ad = "".join(c if c.isalnum() else "-" for c in str(sube or "").replace("/", "-")).strip("-")
+    return ad or "sube"
+
+
+def paket_klasorleri(anahtarlar: list) -> list[str]:
+    """Her anahtarın klasörü (aynı adı alan iki şube olursa ikincisine "-2" eklenir; aynı şubenin ikinci anahtarı da)."""
+    sonuc: list[str] = []
+    for a in anahtarlar:
+        aday = klasor_adi(a.sube)
+        ad, n = aday, 1
+        while ad in sonuc:
+            n += 1
+            ad = f"{aday}-{n}"
+        sonuc.append(ad)
+    return sonuc
+
+
+def paket_zip(anahtarlar: list, an: int) -> bytes:
+    """Toplu başkan anahtarlarının tek seferlik zip'i: "<klasör>/tahta-kontrol.anahtar" + OKUBENI.txt (kişi verisi YOK)."""
+    zaman = datetime.fromtimestamp(int(an), ISTANBUL).timetuple()[:6]
+    tampon = io.BytesIO()
+    with zipfile.ZipFile(tampon, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(zipfile.ZipInfo("OKUBENI.txt", date_time=zaman), PAKET_OKUBENI.encode("ascii"))
+        for anahtar, klasor in zip(anahtarlar, paket_klasorleri(anahtarlar), strict=True):
+            z.writestr(zipfile.ZipInfo(f"{klasor}/{DOSYA_ADI}", date_time=zaman), dosya_metni(anahtar))
+    return tampon.getvalue()
 
 
 class DosyaHatasi(ValueError):
@@ -280,7 +358,11 @@ def idare_etiketi(gorunen_ad: str, kullanici_adi: str = "") -> str:
 
 
 def _sahip_satiri(b, satir):
-    """Anahtarın sahibi: öğretmen ({aktif, ad, soyad, kod, kilitli, pin_ozet}) ya da kullanıcı ({aktif, rol, ad, gorunen_ad})."""
+    """Anahtarın sahibi: öğretmen ({aktif, ad, soyad, kod, kilitli, pin_ozet}), kullanıcı ({aktif, rol, ad, gorunen_ad})
+    ya da şube ({sube, aktif}: aktif = şubede etkin öğrenci var; kişi verisi YOK)."""
+    if satir["sahip_turu"] == "sube":
+        var = b.execute("SELECT 1 FROM ogrenci WHERE sube = ? AND aktif = 1 LIMIT 1", (satir["sube"],)).fetchone()
+        return {"sube": satir["sube"], "aktif": bool(var)}
     if satir["sahip_turu"] == "ogretmen":
         return b.execute(
             "SELECT o.id, o.ad, o.soyad, o.aktif, p.kod, p.kilitli, p.pin_ozet FROM ogretmen o "
@@ -291,7 +373,9 @@ def _sahip_satiri(b, satir):
 
 
 def sahip_kodu(b, satir, sahip=None) -> str:
-    """İşlem kaydındaki sahip: "öğretmen kodu 112" ya da "kullanıcı mdryrd" (ad soyad YAZILMAZ)."""
+    """İşlem kaydındaki sahip: "öğretmen kodu 112", "kullanıcı mdryrd" ya da "şube 10/A (başkan)" (ad soyad YAZILMAZ)."""
+    if satir["sahip_turu"] == "sube":
+        return f"şube {satir['sube']} (başkan)"
     sahip = sahip or _sahip_satiri(b, satir)
     if satir["sahip_turu"] == "ogretmen":
         return f"öğretmen kodu {sahip['kod'] if sahip else '?'}"
@@ -303,7 +387,12 @@ def kayit_ayrintisi(b, satir, sahip=None) -> str:
 
 
 def gorunum(b, satir, sahip=None) -> dict:
-    """Tahtaya inen anahtar görünümü: {"tur": "idare"|"ogretmen", "etiket", "kod"} (kimlik, id, tam ad YOK)."""
+    """Tahtaya inen anahtar görünümü: {"tur": "idare"|"ogretmen"|"baskan", "etiket", "kod"} (kimlik, id, tam ad YOK).
+
+    Şube anahtarında etiket yalnız "Sınıf başkanı · 10/A"dır (öğrenci adı tutulmaz; panel etiketi tahtaya inmez).
+    Eski ajan bilinmeyen türü "öğretmen" sayar; kod boş olduğu için yalnız etiketi gösterir."""
+    if satir["sahip_turu"] == "sube":
+        return {"tur": "baskan", "etiket": f"Sınıf başkanı · {satir['sube']}", "kod": ""}
     sahip = sahip or _sahip_satiri(b, satir)
     if satir["sahip_turu"] == "ogretmen":
         return {"tur": "ogretmen", "etiket": yk.ogretmen_etiketi(sahip["ad"], sahip["soyad"]), "kod": sahip["kod"]}
@@ -311,26 +400,45 @@ def gorunum(b, satir, sahip=None) -> dict:
 
 
 def pin_gerek(satir, a: dict) -> bool:
-    return bool(a["pin_idare"] if satir["sahip_turu"] == "kullanici" else a["pin_ogretmen"])
+    alan = {"kullanici": "pin_idare", "sube": "pin_baskan"}.get(satir["sahip_turu"], "pin_ogretmen")
+    return bool(a[alan])
 
 
 # ---- üretim ------------------------------------------------------------------------------------------
-def etkin_sayisi(b, *, kullanici_id: int | None = None, ogretmen_id: int | None = None) -> int:
+def etkin_sayisi(b, *, kullanici_id: int | None = None, ogretmen_id: int | None = None, sube: str | None = None) -> int:
+    if sube is not None:
+        return b.execute("SELECT COUNT(*) FROM usb_anahtar WHERE sahip_turu = 'sube' AND sube = ? AND durum != 'iptal'",
+                         (sube,)).fetchone()[0]  # fmt: skip
     if kullanici_id is not None:
         return b.execute("SELECT COUNT(*) FROM usb_anahtar WHERE kullanici_id = ? AND durum != 'iptal'", (kullanici_id,)).fetchone()[0]
     return b.execute("SELECT COUNT(*) FROM usb_anahtar WHERE ogretmen_id = ? AND durum != 'iptal'", (ogretmen_id,)).fetchone()[0]
 
 
+def sinir_iletisi(sube: str) -> str:
+    return f"{sube} şubesinin {SUBE_BASI_EN_COK} etkin başkan anahtarı var. Önce birini iptal edin."
+
+
 def uret(
     b, *, sahip_turu: str, kullanici_id: int | None, ogretmen_id: int | None, etiket: str, olusturan: str,
-    olusturan_id: int, parmak_izi: str, an: int, bekleyen_kimlikler: set[str] | None = None,
+    olusturan_id: int, parmak_izi: str, an: int, bekleyen_kimlikler: set[str] | None = None, sube: str | None = None,
+    bekleyen_sayisi: int = 0,
 ) -> tuple[Bekleyen, str | None]:  # fmt: skip
-    """Bekleyen anahtar + (kullanıcı anahtarında) düz PIN. Satırı YAZMAZ (§4.3: indirme anında `kaydet`).
+    """Bekleyen anahtar + (kullanıcı ve şube anahtarında) düz PIN. Satırı YAZMAZ (§4.3: indirme anında `kaydet`).
 
-    Sahip denetimi: öğretmen etkin ve kodlu olmalı; kullanıcı etkin olmalı; kişi başı en çok 2 etkin.
+    Sahip denetimi: öğretmen etkin ve kodlu olmalı; kullanıcı etkin olmalı; kişi başı en çok 2 etkin. Şube
+    (0.21.0): öğrenci listesinde etkin şube olmalı; şube başı en çok 2 etkin (`bekleyen_sayisi` = aynı şube için
+    henüz indirilmemiş anahtarlar, sınır üretimde de denetlensin diye).
     """
     etiket = etiket_coz(etiket)
-    if sahip_turu == "ogretmen":
+    if sahip_turu == "sube":
+        sube = metin.sube_duzelt(sube or "")
+        if not sube or sube not in yk.aktif_subeler(b):
+            raise ValueError("Şube öğrenci listesinde yok.")
+        kullanici_id = ogretmen_id = None
+        kod = f"şube {sube} (başkan)"
+        if etkin_sayisi(b, sube=sube) + bekleyen_sayisi >= SUBE_BASI_EN_COK:
+            raise ValueError(sinir_iletisi(sube))
+    elif sahip_turu == "ogretmen":
         sahip = b.execute(
             "SELECT o.id, o.aktif, p.kod FROM ogretmen o JOIN ogretmen_pin p ON p.ogretmen_id = o.id WHERE o.id = ?", (ogretmen_id,)
         ).fetchone()
@@ -348,29 +456,35 @@ def uret(
             raise ValueError(ILETI_SINIR)
     else:
         raise ValueError("Bilinmeyen sahip.")
-    pin = yk.pin_uret() if sahip_turu == "kullanici" else None
+    if sahip_turu != "sube":
+        sube = None
+    pin = yk.pin_uret() if sahip_turu in ("kullanici", "sube") else None
     bekleyen = Bekleyen(
         kimlik=kimlik_uret(b, bekleyen_kimlikler), gizli=gizli_uret(), sahip_turu=sahip_turu, kullanici_id=kullanici_id,
         ogretmen_id=ogretmen_id, etiket=etiket, olusturan=olusturan, olusturan_id=olusturan_id,
         sunucu=sunucu_kisa(parmak_izi), pin_ozet=guvenlik.parola_ozetle(pin) if pin else None,
-        bitis=an + BEKLEYEN_OMRU_SN, sahip_kodu=kod,
+        bitis=an + BEKLEYEN_OMRU_SN, sahip_kodu=kod, sube=sube,
     )  # fmt: skip
     return bekleyen, pin
 
 
 def kaydet(b, bekleyen: Bekleyen, an: int) -> int:
-    """İndirme anında satırı yazar (kişi başı sınırı yeniden denetlenir: aynı anda iki üretim olabilir)."""
-    if bekleyen.sahip_turu == "ogretmen":
-        sayi = etkin_sayisi(b, ogretmen_id=bekleyen.ogretmen_id)
+    """İndirme anında satırı yazar (kişi/şube başı sınırı yeniden denetlenir: aynı anda iki üretim olabilir)."""
+    if bekleyen.sahip_turu == "sube":
+        if etkin_sayisi(b, sube=bekleyen.sube) >= SUBE_BASI_EN_COK:
+            raise ValueError(sinir_iletisi(bekleyen.sube))
     else:
-        sayi = etkin_sayisi(b, kullanici_id=bekleyen.kullanici_id)
-    if sayi >= KISI_BASI_EN_COK:
-        raise ValueError(ILETI_SINIR)
+        if bekleyen.sahip_turu == "ogretmen":
+            sayi = etkin_sayisi(b, ogretmen_id=bekleyen.ogretmen_id)
+        else:
+            sayi = etkin_sayisi(b, kullanici_id=bekleyen.kullanici_id)
+        if sayi >= KISI_BASI_EN_COK:
+            raise ValueError(ILETI_SINIR)
     return b.execute(
-        "INSERT INTO usb_anahtar (kimlik, gizli_ozet, sahip_turu, kullanici_id, ogretmen_id, etiket, pin_ozet, olusturan, olusturma) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO usb_anahtar (kimlik, gizli_ozet, sahip_turu, kullanici_id, ogretmen_id, etiket, pin_ozet, olusturan, olusturma, "
+        "sube) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (bekleyen.kimlik, gizli_ozeti(bekleyen.gizli), bekleyen.sahip_turu, bekleyen.kullanici_id, bekleyen.ogretmen_id,
-         bekleyen.etiket, bekleyen.pin_ozet, bekleyen.olusturan, an),
+         bekleyen.etiket, bekleyen.pin_ozet, bekleyen.olusturan, an, bekleyen.sube),
     ).lastrowid  # fmt: skip
 
 
@@ -382,23 +496,36 @@ class BekleyenDepo:
     """
 
     def __init__(self):
-        self.kayitlar: dict[str, Bekleyen] = {}
+        self.kayitlar: dict[str, Bekleyen | BekleyenPaket] = {}
+
+    @staticmethod
+    def _tekler(deger) -> list[Bekleyen]:
+        return list(deger.anahtarlar) if isinstance(deger, BekleyenPaket) else [deger]
 
     def temizle(self, an: int) -> list[Bekleyen]:
-        """Süresi dolanları çıkarır ve döndürür (çağıran "indirilmedi" kaydı düşer)."""
-        dusen = [v for v in self.kayitlar.values() if v.bitis <= an]
+        """Süresi dolanları çıkarır ve döndürür (paketin her anahtarı ayrı; çağıran "indirilmedi" kaydı düşer)."""
+        dusen = [t for v in self.kayitlar.values() if v.bitis <= an for t in self._tekler(v)]
         self.kayitlar = {k: v for k, v in self.kayitlar.items() if v.bitis > an}
         return dusen
 
     def kimlikler(self) -> set[str]:
-        return {v.kimlik for v in self.kayitlar.values()}
+        return {t.kimlik for v in self.kayitlar.values() for t in self._tekler(v)}
 
-    def koy(self, bekleyen: Bekleyen) -> str:
+    def sube_sayilari(self) -> dict[str, int]:
+        """Henüz indirilmemiş şube anahtarları: şube → sayı (şube başı sınır üretimde de denetlensin)."""
+        sonuc: dict[str, int] = {}
+        for v in self.kayitlar.values():
+            for t in self._tekler(v):
+                if t.sahip_turu == "sube" and t.sube:
+                    sonuc[t.sube] = sonuc.get(t.sube, 0) + 1
+        return sonuc
+
+    def koy(self, bekleyen: Bekleyen | BekleyenPaket) -> str:
         belirtec = guvenlik.belirtec()
         self.kayitlar[guvenlik.ozet(belirtec)] = bekleyen
         return belirtec
 
-    def al(self, belirtec, kullanici_id: int, an: int) -> Bekleyen | None:
+    def al(self, belirtec, kullanici_id: int, an: int) -> Bekleyen | BekleyenPaket | None:
         """Tek kullanımlık: bulunursa depodan çıkar. Başka kullanıcının belirteci bulunmuş sayılmaz (silinmez de)."""
         if not isinstance(belirtec, str) or not belirtec or len(belirtec) > 200:
             return None
@@ -418,10 +545,12 @@ def tani(b, kimlik, gizli, tahta_id: int, an: int):
     """Anahtarı doğrular. (durum, satır|None, sahip|None).
 
     durum: 'tamam' · 'gecersiz' (bilinmeyen kimlik, yanlış gizli, biçimsiz; AYNI yanıt) · 'iptal' ·
-    'kilitli' (anahtarın PIN'i ya da öğretmenin PIN'i kilitli) · 'sahip_pasif' · 'kapali' (özellik kapalı).
+    'kilitli' (anahtarın PIN'i ya da öğretmenin PIN'i kilitli) · 'sahip_pasif' · 'kapali' (özellik kapalı) ·
+    'baskan_kapali' (0.21.0: şube anahtarı, başkan ayarı kapalı).
     İptal/kilit/pasif ayrımı yalnız gizli değer DOĞRUYSA yapılır (yalnız kimliği bilen bilgi alamasın).
     """
-    if not ayar_al(b)["etkin"]:
+    a = ayar_al(b)
+    if not a["etkin"]:
         return "kapali", None, None
     kimlik_ = kimlik_duzelt(kimlik)
     gizli_ = gizli_duzelt(gizli)
@@ -434,8 +563,13 @@ def tani(b, kimlik, gizli, tahta_id: int, an: int):
         return "iptal", satir, None
     if satir["durum"] == "kilitli":
         return "kilitli", satir, None
+    if satir["sahip_turu"] == "sube" and not baskan_acik(a):
+        return "baskan_kapali", satir, None
     sahip = _sahip_satiri(b, satir)
-    if satir["sahip_turu"] == "ogretmen":
+    if satir["sahip_turu"] == "sube":
+        if not sahip["aktif"]:  # şubede etkin öğrenci kalmadı
+            return "sahip_pasif", satir, sahip
+    elif satir["sahip_turu"] == "ogretmen":
         if not sahip or not sahip["aktif"]:
             return "sahip_pasif", satir, sahip
         if sahip["kilitli"]:
@@ -474,7 +608,7 @@ def pin_dogrula(b, kapi: yk.PinKapisi, satir, sahip, pin, tahta_id: int, an: int
     """USB anahtarla birlikte PIN. (durum, bekleme_sn); durum: 'tamam' | 'hatali' | 'bekle' | 'kilitli'.
 
     Öğretmen anahtarı → öğretmenin kendi yoklama PIN'i (`yoklama.pin_dogrula`, aynı sayaçlar ve kilit).
-    Kullanıcı anahtarı → anahtarın PIN'i; `PinKapisi` katmanları ("usb:"+kimlik çifti) + 24 saatte 10 hata →
+    Kullanıcı ve şube (başkan) anahtarı → anahtarın PIN'i; `PinKapisi` katmanları ("usb:"+kimlik çifti) + 24 saatte 10 hata →
     anahtar `kilitli` (açık oturumları düşer).
     """
     if satir["sahip_turu"] == "ogretmen":
@@ -562,7 +696,9 @@ def liste(b, an: int, kullanici_id: int | None = None) -> list[dict]:
     ).fetchall()
     sonuc = []
     for a in satirlar:
-        if a["sahip_turu"] == "ogretmen":
+        if a["sahip_turu"] == "sube":
+            sahip = f"{a['sube']} sınıf başkanı"
+        elif a["sahip_turu"] == "ogretmen":
             sahip = f"{yk.ogretmen_etiketi(a['o_ad'], a['o_soyad'])} ({a['o_kod']})" if a["o_ad"] is not None else "?"
         else:
             sahip = a["k_gorunen"] or a["k_ad"] or "?"
@@ -571,7 +707,8 @@ def liste(b, an: int, kullanici_id: int | None = None) -> list[dict]:
             son = _an_yazi(a["son_kullanim"]) + (f" · {a['tahta_ad']}" if a["tahta_ad"] else "")
         sonuc.append({
             "id": a["id"], "kimlik": kimlik_bicimli(a["kimlik"]), "sahip_turu": a["sahip_turu"],
-            "tur": "ogretmen" if a["sahip_turu"] == "ogretmen" else "idare", "sahip": sahip, "etiket": a["etiket"],
+            "tur": {"ogretmen": "ogretmen", "sube": "baskan"}.get(a["sahip_turu"], "idare"), "sahip": sahip, "etiket": a["etiket"],
+            "sube": a["sube"] or "",
             "olusturma": _an_yazi(a["olusturma"]), "olusturan": a["olusturan"], "son_kullanim": son,
             "durum": a["durum"], "durum_adi": DURUM_ADI.get(a["durum"], a["durum"]),
             "iptal": _an_yazi(a["iptal_zamani"]) + (f" · {a['iptal_eden']}" if a["iptal_eden"] else "") if a["durum"] == "iptal" else "",
@@ -604,12 +741,15 @@ def tahta_destegi(b) -> dict:
 
 def yil_sonu(b, sinir: date) -> dict:
     """§7 saklama: iptal zamanı sınır günü bitmeden olan satırlar SİLİNİR; diğerlerinin son kullanım bilgisi
-    (son_kullanim, son_tahta_id, kopya_uyarisi) sınırdan önceyse boşaltılır. Etkin anahtarlar yeni yıla geçer.
-    Çağıran işlemden sonra `vt.wal_buda()`."""
+    (son_kullanim, son_tahta_id, kopya_uyarisi) sınırdan önceyse boşaltılır. Etkin idare/öğretmen anahtarları yeni
+    yıla geçer. 0.21.0: sınır günü bitmeden ÜRETİLMİŞ şube (sınıf başkanı) anahtarları etkin olsalar da silinir
+    (başkan her yıl değişir; açık oturumları CASCADE ile düşer). Bitiş tarihi henüz güncellenmemişken yeni yılda
+    üretilenler korunur (imha saatte bir çalışır). Çağıran işlemden sonra `vt.wal_buda()`."""
     son_an = int(datetime.combine(sinir + timedelta(days=1), time(0, 0), ISTANBUL).timestamp())
+    baskan = b.execute("DELETE FROM usb_anahtar WHERE sahip_turu = 'sube' AND olusturma < ?", (son_an,)).rowcount
     silinen = b.execute("DELETE FROM usb_anahtar WHERE durum = 'iptal' AND iptal_zamani < ?", (son_an,)).rowcount
     bosaltilan = b.execute(
         "UPDATE usb_anahtar SET son_kullanim = NULL, son_tahta_id = NULL WHERE durum != 'iptal' AND son_kullanim < ?", (son_an,)
     ).rowcount
     b.execute("UPDATE usb_anahtar SET kopya_uyarisi = NULL WHERE kopya_uyarisi < ?", (son_an,))
-    return {"silinen": silinen, "bosaltilan": bosaltilan}
+    return {"silinen": silinen, "bosaltilan": bosaltilan, "baskan": baskan}

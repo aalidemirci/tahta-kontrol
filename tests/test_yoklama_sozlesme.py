@@ -188,7 +188,8 @@ def eski_veritabani(dizin: Path, yoklama_ayari: dict | None) -> None:
 
 
 def test_goc_tek_ogedir_ve_sondadir():
-    assert GOC_SIRASI == len(vt.GOCLER) - 1
+    # 0.14.0 göçü tek öğedir; sonraki göçler (0.21.0: usb_anahtar) bu tablolara dokunmaz.
+    assert GOC_SIRASI == next(i for i, g in enumerate(vt.GOCLER) if "ALTER TABLE yoklama ADD COLUMN devre" in g)
     assert sum("yoklama_gec" in g or "yoklama_duzeltme" in g or "yoklama_mazeret" in g for g in vt.GOCLER) == 1
 
 
