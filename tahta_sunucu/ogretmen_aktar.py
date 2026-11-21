@@ -1,12 +1,13 @@
 """Toplu öğretmen listesi aktarımı (0.21.0; FastAPI'siz). Uçlar `panel_yoklama.py`'dedir.
 
 Kaynaklar (içerikten tanınır, uzantıdan değil):
-- aSc Timetables XML: YALNIZ `<teachers><teacher>` öğesinin `firstname`, `lastname` (ikisi de boşsa `name`)
+- aSc Timetables XML: YALNIZ `<teachers><teacher>` öğesinin `firstname`, `lastname` (biri boşsa `name`)
   öznitelikleri okunur; kısa ad, cinsiyet, renk, e-posta, telefon, ortak kimliği OKUNMAZ. Derslik sihirbazının
   okuyucusu (`program_aktar.asc_oku`, `ASC_ATLA`) değişmedi: bu ayrı bir okuyucudur.
-- e-Okul personel listesi (OOK01001R1, .XLS): başlıktan "ADI SOYADI" ve "GÖREVİ" sütunları bulunur (sütun yeri
-  dosyadan dosyaya değişir). Görev yalnız önizlemede gösterilir; KADRO DURUMU ve BRANŞI okunmaz. Görevi boş satır
-  rapor altbilgisidir, atlanır.
+- e-Okul personel listesi (OOK01001R1, .XLS): başlık satırında "ADI SOYADI", "GÖREVİ" ve "KADRO DURUMU" ya da
+  "BRANŞI" olup "Kod" sütunu YOKSA rapor sayılır (sütun yeri dosyadan dosyaya değişir; okulun kendi "Adı Soyadı;
+  Görevi;Kod" tablosu düz tablodur). Görev yalnız önizlemede gösterilir; KADRO DURUMU ve BRANŞI okunmaz. Görevi boş
+  satır rapor altbilgisidir: adı da boşsa sessizce, adı doluysa "Atlanan satırlar"da nedeniyle atlanır.
 - Düz tablo (.xlsx, .xls, .csv): "Adı; Soyadı" (ya da tek "Adı Soyadı") ve isteğe bağlı "Kod".
 
 T.C. kimlik sütunu hiçbir kaynakta okunmaz (uyarılır); adında T.C. no geçen satır atlanır. Tek "Adı Soyadı"
@@ -42,7 +43,8 @@ BASLIK_YOK = (
     "Dosyada öğretmen adı sütunları bulunamadı. aSc Timetables XML'ini, e-Okul personel listesini (OOK01001R1) "
     "ya da 'Adı; Soyadı; Kod' başlıklı bir tablo yükleyin."
 )
-ASC_OGRETMEN_YOK = "aSc dosyasında öğretmen listesi bulunamadı; aSc'den 'aSc Timetables 2012 XML' olarak dışa aktarın."
+GOREVSIZ_NEDEN = "görevi boş: e-Okul rapor altbilgisi sayıldı (personelse tek tek ekleyin)"
+ASC_OGRETMEN_YOK ="aSc dosyasında öğretmen listesi bulunamadı; aSc'den 'aSc Timetables 2012 XML' olarak dışa aktarın."
 SABLON_BASLIKLAR = ["Adı", "Soyadı", "Kod"]
 SABLON_ORNEK = ["Ayşe", "Örnek", ""]  # uydurma; plan bu satırı tanır ve varsayılan olarak eklemez
 _SABLON_ANAHTAR = metin.katla(" ".join(SABLON_ORNEK[:2]))
@@ -111,6 +113,16 @@ def _tek_sutun_bol(ad_soyad: str) -> tuple[str, str, bool]:
 
 
 # ---- aSc XML -------------------------------------------------------------------------------------
+def _asc_ad(k: dict) -> tuple[str, str, bool]:
+    """aSc öğretmeninin (ad, soyad, bölme işareti). firstname ve lastname ikisi de doluysa onlar; biri ya da ikisi
+    boşsa tam ad olan `name` bölünür (son sözcük soyad), `name` de boşsa dolu olan alan bölünür. Yarım alanla
+    eklemek "Can Ok" adını soyadsız yazar, yalnız lastname dolu satırı "ad boş" diye atlardı."""
+    ad, soyad, tam = _sade(k["firstname"]), _sade(k["lastname"]), _sade(k["name"])
+    if ad and soyad:
+        return ad, soyad, False
+    return _tek_sutun_bol(tam or ad or soyad)
+
+
 def asc_ogretmenleri(bayt: bytes) -> dict:
     """aSc XML'den yalnız öğretmen ad ve soyadı. Okunamazsa ValueError (Türkçe ileti)."""
     if len(bayt) > program_aktar.ASC_EN_COK_BAYT:
@@ -156,10 +168,7 @@ def asc_ogretmenleri(bayt: bytes) -> dict:
         raise OkumaHatasi(ASC_OGRETMEN_YOK)
     ogretmenler, atlanan = [], []
     for i, k in enumerate(ham, start=1):
-        if _sade(k["firstname"]) or _sade(k["lastname"]):
-            ad, soyad, bolme = k["firstname"], k["lastname"], False
-        else:
-            ad, soyad, bolme = _tek_sutun_bol(k["name"])
+        ad, soyad, bolme = _asc_ad(k)
         sonuc = _satir(i, ad, soyad, bolme=bolme)
         if isinstance(sonuc, str):
             atlanan.append({"satir": i, "neden": sonuc})
@@ -187,16 +196,24 @@ def _kullanilir(alanlar: dict[str, int]) -> bool:
     return "ad_soyad" in alanlar or ("ad" in alanlar and "soyad" in alanlar)
 
 
+def _eokul_raporu_mu(baslik: list[str], alanlar: dict[str, int]) -> bool:
+    """e-Okul OOK01001R1 mi? "Adı Soyadı" + "Görevi" tek başına yetmez (okulun kendi tablosu da böyle olabilir):
+    raporun öbür sütunlarından biri (KADRO DURUMU, BRANŞI) da başlıkta olmalı ve "Kod" sütunu OLMAMALI (raporda
+    öğretmen kodu yoktur; kod taşıyan tablo düz tablodur, kodu da okunur)."""
+    if not ("ad_soyad" in alanlar and "gorev" in alanlar) or "kod" in alanlar:
+        return False
+    katli = [f" {eokul.baslik_katla(h)} " for h in baslik]
+    return any(" kadro " in h or " bransi " in h or " brans " in h for h in katli)
+
+
 def matris_coz(bicim: str, matris: list[list[str]]) -> dict:
     """Tablo matrisi (ilk satırlarda başlık) → öğretmen satırları. Başlık bulunamazsa OkumaHatasi."""
     r, alanlar, okunmayan = eokul.baslik_esle(matris, _alan_bul, _kullanilir)
     if not _kullanilir(alanlar):
         raise OkumaHatasi(BASLIK_YOK)
-    eokul_mu = "ad_soyad" in alanlar and "gorev" in alanlar
+    eokul_mu = _eokul_raporu_mu(matris[r], alanlar)
     if not eokul_mu and "gorev" in alanlar:
         okunmayan.append(_sade(matris[r][alanlar.pop("gorev")])[:40])
-    if eokul_mu:
-        alanlar.pop("kod", None)  # e-Okul raporunda öğretmen kodu yoktur
     uyarilar = []
     if any(eokul._kimlik_sutunu_mu(eokul.baslik_katla(h)) for h in matris[r]):
         uyarilar.append("T.C. Kimlik No sütunu bulundu, okunmadı.")
@@ -209,16 +226,23 @@ def matris_coz(bicim: str, matris: list[list[str]]) -> dict:
         return satir[i] if i is not None and i < len(satir) else ""
 
     ogretmenler, atlanan = [], []
-    altbilgi = 0
+    altbilgi = gorevsiz = 0
     for i in range(r + 1, len(matris)):
         satir = matris[i]
         if all(not _sade(h) for h in satir):
             continue
         no = i + 1
         if eokul_mu and not _sade(hucre(satir, "gorev")):
-            altbilgi += 1  # e-Okul rapor altbilgisi (okul adı, tarih, sayfa no): her personel satırında görev doludur
+            # e-Okul rapor altbilgisi (okul adı, tarih, sayfa no): her personel satırında görev doludur. Adı boş
+            # altbilgi sessizce geçilir; adı dolu satır (okul adı ya da görevi girilmemiş personel) nedeniyle
+            # "Atlanan satırlar"a yazılır (sessizce düşmesin; ad sayfaya basılmaz, yalnız satır numarası).
+            if _sade(hucre(satir, "ad_soyad")):
+                gorevsiz += 1
+                atlanan.append({"satir": no, "neden": GOREVSIZ_NEDEN})
+            else:
+                altbilgi += 1
             continue
-        if len(ogretmenler) + len(atlanan) >= SATIR_SINIRI:
+        if len(ogretmenler) + len(atlanan) - gorevsiz >= SATIR_SINIRI:
             raise OkumaHatasi(ASIRI_ILETI)
         if "ad_soyad" in alanlar and _sade(hucre(satir, "ad_soyad")):
             ad, soyad, bolme = _tek_sutun_bol(hucre(satir, "ad_soyad"))
@@ -231,8 +255,10 @@ def matris_coz(bicim: str, matris: list[list[str]]) -> dict:
             ogretmenler.append(sonuc)
     notlar = []
     if eokul_mu:
-        notlar.append(f"e-Okul personel listesi algılandı: {len(ogretmenler) + len(atlanan)} personel satırı"
-                      + (f", {altbilgi} altbilgi satırı atlandı." if altbilgi else "."))  # fmt: skip
+        notlar.append(f"e-Okul personel listesi algılandı: {len(ogretmenler) + len(atlanan) - gorevsiz} personel satırı"
+                      + (f", {altbilgi} altbilgi satırı atlandı" if altbilgi else "")
+                      + (f", görevi boş {gorevsiz} satır eklenmedi (rapor altbilgisi sayıldı; Atlanan satırlara bakın)"
+                         if gorevsiz else "") + ".")  # fmt: skip
         notlar.append("Kadro durumu ve branş okunmadı. Görev yalnız bu önizlemede gösterilir, saklanmaz.")
     kaynak = "eokul" if eokul_mu else bicim
     return {"kaynak": kaynak, "kaynak_adi": KAYNAK_ADI[kaynak], "satir_adi": "Satır", "notlar": notlar,

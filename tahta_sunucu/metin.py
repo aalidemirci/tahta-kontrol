@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+import unicodedata
 
 _KATLA = str.maketrans(
     {"ç": "c", "ğ": "g", "ı": "i", "ö": "o", "ş": "s", "ü": "u", "â": "a", "î": "i", "û": "u",
@@ -47,13 +48,20 @@ def tamami_buyuk_mu(s) -> bool:
 
 
 def tr_bas_buyuk(s) -> str:
-    """Her sözcüğün (ve tireyle ayrılan parçanın) ilk harfi Türkçe büyük, kalanı Türkçe küçük:
-    "ŞULE İPEK" → "Şule İpek", "IŞIK" → "Işık", "AYŞE-NUR" → "Ayşe-Nur" (0.21.0, öğretmen aktarımı)."""
-
-    def parca(p: str) -> str:
-        return tr_buyuk(p[:1]) + tr_kucuk(p[1:])
-
-    return " ".join("-".join(parca(p) for p in sozcuk.split("-")) for sozcuk in str(s or "").split())
+    """Harf olmayan her karakterden (boşluk, tire, nokta, kesme, ayraç…) sonraki ilk harf Türkçe büyük, kalan harfler
+    Türkçe küçük; boşluklar sadeleşir: "ŞULE İPEK" → "Şule İpek", "IŞIK" → "Işık", "AYŞE-NUR" → "Ayşe-Nur",
+    "M.ALİ" → "M.Ali", "(İLKER)" → "(İlker)" (0.21.0, öğretmen aktarımı). Metin NFC'ye getirilir; birleşik işaret
+    yine de kalırsa harfin parçası sayılır."""
+    sonuc = []
+    onceki_harf = False
+    for h in unicodedata.normalize("NFC", " ".join(str(s or "").split())):
+        harf = h.isalpha()
+        if harf:
+            sonuc.append(tr_kucuk(h) if onceki_harf else tr_buyuk(h))
+        else:
+            sonuc.append(h)
+        onceki_harf = harf or (onceki_harf and unicodedata.category(h).startswith("M"))
+    return "".join(sonuc)
 
 
 def tr_sirala_anahtari(s: str) -> tuple:

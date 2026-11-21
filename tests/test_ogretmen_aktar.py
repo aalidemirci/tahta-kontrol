@@ -84,6 +84,15 @@ def test_buyuk_harf_turkce_bas_harfe_cevrilir(ham, beklenen):
     assert metin.tr_bas_buyuk(ham) == beklenen
 
 
+@pytest.mark.parametrize(
+    ("ham", "beklenen"),
+    [("M.ALİ KAYA", "M.Ali Kaya"), ("(İLKER)", "(İlker)"), ("D'ANGELO", "D'Angelo"), ("ALİ RIZA/İNCE", "Ali Rıza/İnce"),
+     ("İLKER", "İlker")],
+)  # fmt: skip
+def test_bas_harf_noktalama_ve_ayractan_sonra_da_buyur(ham, beklenen):
+    assert metin.tr_bas_buyuk(ham) == beklenen
+
+
 def test_karisik_yazilmis_ad_aynen_kalir():
     assert ogretmen_aktar.ad_bicimle("Ayşe", "YILMAZ") == ("Ayşe", "YILMAZ")
     assert ogretmen_aktar.ad_bicimle("ŞULE", "İPEK") == ("Şule", "İpek")
@@ -101,6 +110,19 @@ def test_asc_yalniz_ad_ve_soyad_okunur():
     for gizli in ("zzqposta", "05559990011", "ZZQORTAK", "ZQS", "#FF0000", "ZZQDERS", "ZZQOGRENCI", "A1"):
         assert gizli not in metin_, gizli
     assert all(set(s) == {"satir", "ad", "soyad", "kod", "gorev", "bolme"} for s in sonuc["ogretmenler"])
+
+
+def test_asc_ad_ya_da_soyad_bossa_tam_ad_bolunur():
+    xml = ("""<?xml version="1.0"?><timetable><teachers>
+      <teacher name="AYŞE YILMAZ" firstname="" lastname="YILMAZ"/>
+      <teacher name="Can Ok" firstname="Can Ok" lastname=""/>
+      <teacher name="" firstname="Ece Nur Su" lastname=""/>
+      <teacher name="" firstname="" lastname="Tan"/>
+    </teachers></timetable>""").encode()  # fmt: skip
+    sonuc = ogretmen_aktar.dosya_oku(xml, "program.xml")
+    assert [(s["ad"], s["soyad"], s["bolme"]) for s in sonuc["ogretmenler"]] == [
+        ("Ayşe", "Yılmaz", False), ("Can", "Ok", False), ("Ece Nur", "Su", True), ("Tan", "", False)]
+    assert sonuc["atlanan"] == []
 
 
 def test_asc_okuyucusu_derslik_sihirbazinin_atlama_listesine_dokunmaz():
@@ -136,10 +158,42 @@ def test_eokul_personel_listesi_basliktan_bulunur(monkeypatch):
         ("Deniz", "Kaya", "Sözleşmeli Öğretmen(657 S.K. 4/B)", False),  # karışık yazım aynen
         ("Zeki", "Memuroğlu", "Memur", False),
     ]
-    assert sonuc["atlanan"] == []
-    assert "2 altbilgi satırı atlandı" in sonuc["notlar"][0]
-    assert "ZZQKADRO" not in repr(sonuc) and "ZZQBRANS" not in repr(sonuc)
+    # Adı boş altbilgi sessizce geçilir; adı dolu, görevi boş satır (okul adı) nedeniyle atlanır, ad taşınmaz.
+    assert sonuc["atlanan"] == [{"satir": 8, "neden": ogretmen_aktar.GOREVSIZ_NEDEN}]
+    assert "5 personel satırı, 1 altbilgi satırı atlandı, görevi boş 1 satır eklenmedi" in sonuc["notlar"][0]
+    assert "ZZQKADRO" not in repr(sonuc) and "ZZQBRANS" not in repr(sonuc) and "Müdürlüğü" not in repr(sonuc)
     assert any("KADRO DURUMU" in u and "BRANŞI" in u for u in sonuc["uyarilar"])
+
+
+def test_eokul_raporunda_gorevi_bos_personel_sessizce_dusmez():
+    matris = [["ADI SOYADI", "GÖREVİ", "KADRO DURUMU", "BRANŞI"],
+              ["AYŞE TAN", "Öğretmen", "ZZQKADRO", "ZZQBRANS"],
+              ["CAN OK", "", "ZZQKADRO", "ZZQBRANS"],
+              ["", "", "", "", "45000"]]  # fmt: skip
+    sonuc = ogretmen_aktar.matris_coz("eokul_xls", matris)
+    assert sonuc["kaynak"] == "eokul"
+    assert [(s["ad"], s["soyad"]) for s in sonuc["ogretmenler"]] == [("Ayşe", "Tan")]
+    assert sonuc["atlanan"] == [{"satir": 3, "neden": ogretmen_aktar.GOREVSIZ_NEDEN}]
+    assert "1 personel satırı, 1 altbilgi satırı atlandı, görevi boş 1 satır eklenmedi" in sonuc["notlar"][0]
+
+
+@pytest.mark.parametrize(
+    "basliklar",
+    [("Adı Soyadı", "Görevi", "Kod"),  # okulun kendi tablosu: kod okunur
+     ("Adı Soyadı", "Görevi"),  # raporun öbür sütunları yok
+     ("Adı Soyadı", "Görevi", "Kadro Durumu", "Kodu")],
+)  # fmt: skip
+def test_ad_soyad_ve_gorev_tek_basina_eokul_raporu_sayilmaz(basliklar):
+    kodlu = any("Kod" in b for b in basliklar)
+    satirlar = [";".join(basliklar)]
+    for ad, gorev, kod in (("Ayşe Tan", "Öğretmen", "150"), ("Can Ok", "", "151"), ("Ece Su", "Müdür", "")):
+        satirlar.append(";".join([ad, gorev] + (["X"] if "Kadro Durumu" in basliklar else []) + ([kod] if kodlu else [])))
+    sonuc = ogretmen_aktar.dosya_oku(tablo(satirlar), "liste.csv")
+    assert sonuc["kaynak"] == "csv" and "e-Okul" not in repr(sonuc["notlar"])
+    assert [(s["ad"], s["soyad"], s["kod"], s["gorev"]) for s in sonuc["ogretmenler"]] == [
+        ("Ayşe", "Tan", "150" if kodlu else "", ""), ("Can", "Ok", "151" if kodlu else "", ""), ("Ece", "Su", "", "")]
+    assert sonuc["atlanan"] == []
+    assert any("Görevi" in u for u in sonuc["uyarilar"])  # okunmayan sütun olarak bildirilir
 
 
 def test_eokul_sutun_yeri_degisebilir_ve_tc_sutunu_okunmaz():
