@@ -48,14 +48,16 @@ def ogretmen_secenekleri(b) -> list[dict]:
 
 
 def sube_secenekleri(b, bekleyen: dict[str, int] | None = None) -> list[dict]:
-    """Başkan anahtarı üretilebilecek şubeler (öğrenci listesindeki etkin şubeler): [{sube, sayi, dolu}]."""
+    """Başkan anahtarı üretilebilecek şubeler (öğrenci listesindeki etkin şubeler): [{sube, sayi, bekleyen, dolu}].
+    `bekleyen` üretilip henüz indirilmemiş (5 dk) anahtarlardır; sınıra sayılır ve sayfada ayrıca yazılır."""
     bekleyen = bekleyen or {}
     sayilar = {
         s["sube"]: s["n"]
         for s in b.execute("SELECT sube, COUNT(*) AS n FROM usb_anahtar WHERE sahip_turu = 'sube' AND durum != 'iptal' GROUP BY sube")
     }
     return [
-        {"sube": s, "sayi": sayilar.get(s, 0), "dolu": sayilar.get(s, 0) + bekleyen.get(s, 0) >= ua.SUBE_BASI_EN_COK}
+        {"sube": s, "sayi": sayilar.get(s, 0), "bekleyen": bekleyen.get(s, 0),
+         "dolu": sayilar.get(s, 0) + bekleyen.get(s, 0) >= ua.SUBE_BASI_EN_COK}  # fmt: skip
         for s in yk.aktif_subeler(b)
     ]
 
@@ -323,7 +325,8 @@ def kaydet(uygulama, y) -> None:
         return (tahta, govde), None
 
     def tanima(b, istek: Request, tahta, govde, an: int):
-        """Anahtarı doğrular; (satır, sahip) ya da hata yanıtı. Reddedilen her deneme işlem kaydına düşer."""
+        """Anahtarı doğrular; (satır, sahip) ya da hata yanıtı. Reddedilen her deneme işlem kaydına düşer (ayar
+        durumları "kapali" ve "baskan_kapali" hariç)."""
         kim = f"tahta:{tahta['ad']}"
         durum, satir, sahip = ua.tani(b, govde.get("kimlik"), govde.get("gizli"), tahta["id"], an)
         if durum == "tamam":
@@ -332,8 +335,9 @@ def kaydet(uygulama, y) -> None:
         if durum == "kapali":
             return hata(ua.ILETI_KAPALI, "kapali", 409)
         if durum == "baskan_kapali":
-            vt.kayit_dus(b, kim, "Reddedilen USB anahtar", f"{ua.kimlik_bicimli(satir['kimlik'])} · sınıf başkanı anahtarları kapalı",
-                         ip(istek))  # fmt: skip
+            # "kapali" gibi bir AYAR durumudur, anahtarın reddi değil: işlem kaydına yazılmaz. Ajan belleği takılınca
+            # kendiliğinden tanıttığı için her takılış "hangi öğrenci anahtarı, hangi gün, hangi tahtada" satırı
+            # bırakırdı (kural 29: belleğin kendiliğinden tanınması konum geçmişi biriktirmez).
             return hata(ua.ILETI_BASKAN_KAPALI, "baskan_kapali", 409)
         if durum == "gecersiz":
             kimlik = ua.kimlik_duzelt(govde.get("kimlik"))

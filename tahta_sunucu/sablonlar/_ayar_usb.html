@@ -1,7 +1,8 @@
 {% from "_ayar.html" import ileti, nedir, kaydet_cubugu with context %}
 {# USB anahtar (0.11.0): tek form (bolum=usb_anahtar); yalnız `usb_anahtar` anahtarını yazar. Varsayılan kapalı.
    ALTI kutu da aynı formdadır (ua_etkin, ua_kilit_acar, ua_pin_idare, ua_pin_ogretmen, 0.21.0: ua_baskan, ua_pin_baskan):
-   işaretsiz kutu gönderilmez, kutular bölünürse öbür yarı "kapalı" yazılır. Tahtaya yalnız açık/kapalı bayrağı gider. #}
+   işaretsiz kutu gönderilmez, kutular bölünürse öbür yarı "kapalı" yazılır. Tahtaya yalnız açık/kapalı bayrağı gider.
+   `ua_baskan_formu` nöbetçidir: yoksa (eski sekmeden gelen form) başkan kutuları kayıtlı değerinde kalır. #}
 <section class="kutu ayar-kart" id="usb_anahtar" aria-labelledby="usb-baslik">
   <div class="kutu-bas">
     <h2 id="usb-baslik">USB anahtar</h2>
@@ -15,7 +16,7 @@
   {% if usb_ayari.etkin and usb_yoklama_kapali %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Ders yoklaması kapalı; USB anahtar yalnız kilit açmada işe yarar (<a href="/ayarlar/yoklama">Ders yoklaması</a>).</p>{% endif %}
   {% if usb_ayari.etkin and usb_destek.eski %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ usb_destek.eski }} tahtada ajan güncellenmeli (eski ajan belleğe bakmaz).</p>{% endif %}
   <form method="post" action="/ayarlar" data-kirli-izle>
-    <input type="hidden" name="bolum" value="usb_anahtar">
+    <input type="hidden" name="bolum" value="usb_anahtar"><input type="hidden" name="ua_baskan_formu" value="1">
     <div class="ayar-satir">
       <div class="ayar-etiket"><label for="ua_etkin">USB anahtar kullanılsın</label><p class="not" id="ua-etkin-not">Kapalıyken tahtalar takılan belleklere hiç bakmaz. Kapalıyken aşağıdaki seçenekler de uygulanmaz.</p></div>
       <div class="ayar-denetim"><input type="checkbox" name="ua_etkin" value="1" {% if usb_ayari.etkin %}checked{% endif %} id="ua_etkin" class="anahtar" aria-describedby="ua-etkin-not"></div>

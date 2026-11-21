@@ -21,7 +21,7 @@ USB_DURUMU = yeni_ajan_durumu(yetenekler=["acil", "duyuru_id", "yoklama", "usb_a
 
 
 def usb_ayar(panel, **alanlar):
-    form = {"bolum": "usb_anahtar", "ua_etkin": "1", "ua_kilit_acar": "1", "ua_pin_idare": "1"}
+    form = {"bolum": "usb_anahtar", "ua_etkin": "1", "ua_kilit_acar": "1", "ua_pin_idare": "1", "ua_baskan_formu": "1"}
     form.update({k: v for k, v in alanlar.items()})
     return panel.post("/ayarlar", data={k: v for k, v in form.items() if v is not None})
 

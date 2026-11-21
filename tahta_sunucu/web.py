@@ -1632,9 +1632,9 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
 
         Tahtaya yalnız `ayar.usb_anahtar.etkin` iner; değişiklikte tahtalar uyandırılır (izleme hemen başlasın/dursun).
         """
-        yeni = usb_anahtar.ayar_coz(form)
         with vt.islem() as b:
             onceki = usb_anahtar.ayar_al(b)
+            yeni = usb_anahtar.ayar_coz(form, onceki)
             vt.ayar_yaz(b, usb_anahtar.AYAR_ANAHTARI, yeni)
             vt.kayit_dus(b, k["ad"], "USB anahtar ayarı kaydedildi", usb_anahtar.ayar_ozeti(yeni), ip)
             yoklama_kapali = not yoklama_mod.etkin(b)

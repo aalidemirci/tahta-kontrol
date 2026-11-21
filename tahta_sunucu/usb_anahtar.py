@@ -95,10 +95,22 @@ def ayar_al(b) -> dict:
     return sonuc
 
 
-def ayar_coz(form) -> dict:
+BASKAN_NOBETCI = "ua_baskan_formu"
+BASKAN_ALANLARI = ("baskan", "pin_baskan")
+
+
+def ayar_coz(form, onceki: dict | None = None) -> dict:
     """Ayarlar › USB anahtar formu (bolum=usb_anahtar): ua_etkin, ua_kilit_acar, ua_pin_idare, ua_pin_ogretmen, ua_baskan,
-    ua_pin_baskan (=1). Altı kutu da AYNI formdadır: işaretsiz kutu gönderilmez, eksik alan "kapalı" sayılır."""
-    return {anahtar: form.get(f"ua_{anahtar}") == "1" for anahtar in VARSAYILAN_AYAR}
+    ua_pin_baskan (=1). Altı kutu da AYNI formdadır: işaretsiz kutu gönderilmez, eksik alan "kapalı" sayılır.
+
+    0.21.0 nöbetçisi: başkan kutuları yalnız formda `ua_baskan_formu=1` varsa okunur. Yoksa (0.21.0'dan önce açılmış
+    sekmeden gelen eski form) `baskan` ve `pin_baskan` `onceki` değerinde kalır; yoksa varsayılan "PIN de sorulsun"
+    sessizce kapanırdı."""
+    sonuc = {anahtar: form.get(f"ua_{anahtar}") == "1" for anahtar in VARSAYILAN_AYAR}
+    if form.get(BASKAN_NOBETCI) != "1":
+        kaynak = onceki if onceki is not None else VARSAYILAN_AYAR
+        sonuc.update({anahtar: bool(kaynak[anahtar]) for anahtar in BASKAN_ALANLARI})
+    return sonuc
 
 
 def ayar_ozeti(a: dict) -> str:

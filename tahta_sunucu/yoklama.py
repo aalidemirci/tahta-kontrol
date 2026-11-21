@@ -92,6 +92,10 @@ ILETI_BASKAN_OGRETMEN_ALDI = "Bu dersin yoklaması öğretmen tarafından alınm
 ILETI_BASKAN_IDARE_DUZELTTI = "Bu dersin yoklaması idare tarafından düzeltilmiş."
 ILETI_BASKAN_DERS = "Sınıf başkanı yalnız şu anki dersin yoklamasını alabilir."
 ILETI_BASKAN_ZIL_YOK = "Zil saatleri tanımlı olmadığı için sınıf başkanı yoklama alamaz."
+ILETI_BASKAN_DERS_YOK = "Bugün zil düzeninde ders yok; sınıf başkanı yoklama alamaz."
+ILETI_BASKAN_DEVRE_YOK = (
+    "Şubenin bugünkü devresi (sabah/öğle) belirlenemedi; derslik programı yüklenmeden sınıf başkanı yoklama alamaz."
+)
 IZ_ISLEM_ADI = {"olustur": "Oluşturuldu", "guncelle": "Güncellendi", "duzelt": "Düzeltildi"}
 
 
@@ -813,10 +817,12 @@ def baskan_denetle(b, tahta, oturum, sube: str, ders_no: int, an: int) -> tuple[
 
     Sıra: 1) yalnız anahtarın şubesi (400: ajan seçime döner); 2) yalnız bu şubenin tahtası: `tahta.subeler` şubeyi
     içeriyor ya da derslik programı bu ders saatinde şubeyi bu tahtaya koyuyor (409); 3) yalnız `ders_kurali`
-    penceresindeki ders: süren, 5 dk içinde başlayacak ya da son 15 dk'da biten (zil saati yoksa 409, pencere dışı
-    400); 4) öğretmen önceliği (C1): o ders saatinde başka kaynaklı (öğretmen, idare, panel) kayıt ya da panel
-    düzeltmesi varsa 409. Başkanın kendi kaydı ('baskan') engel değildir. Kural 33'ün (program yalnız ön seçimdir)
-    BİLİNÇLİ istisnasıdır; öğretmen, idare ve panel yolları değişmez.
+    penceresindeki ders: süren, 5 dk içinde başlayacak ya da son 15 dk'da biten (pencere dışı 400; ders saati
+    bulunamazsa 409, nedeni ayrı iletiyle: zil yok, bugün ders yok, şubenin devresi belirsiz); 4) öğretmen önceliği
+    (C1): o ders saatinde başka kaynaklı (öğretmen, idare, panel) kayıt, şube defteri düzeltmesi ya da başkan
+    kaydının kayıt sayfasından düzeltilmesi (`yoklama_iz.islem = 'duzelt'`) varsa 409. Başkanın kendi kaydı
+    ('baskan') engel değildir. Kural 33'ün (program yalnız ön seçimdir) BİLİNÇLİ istisnasıdır; öğretmen, idare ve
+    panel yolları değişmez.
     """
     baskan_sube = oturum["baskan_sube"]
     if sube != baskan_sube:
@@ -839,6 +845,11 @@ def baskan_denetle(b, tahta, oturum, sube: str, ders_no: int, an: int) -> tuple[
             return 409, f"Bu tahta {sube} şubesinin dersliği değil."
     saatler = program_ders_saatleri(b, gun, sube, plan)
     if not saatler:
+        # Neden ayrı söylenir: zil hiç yok / bugün ders yok (tatil) / ikili eğitimde şubenin devresi belirsiz.
+        if plan.get("dersler"):
+            return 409, ILETI_BASKAN_DEVRE_YOK
+        if b.execute("SELECT 1 FROM ders_saati LIMIT 1").fetchone():
+            return 409, ILETI_BASKAN_DERS_YOK
         return 409, ILETI_BASKAN_ZIL_YOK
     pencere = {
         s["ders_no"] for s in saatler
@@ -852,6 +863,14 @@ def baskan_denetle(b, tahta, oturum, sube: str, ders_no: int, an: int) -> tuple[
     ).fetchone():
         return 409, ILETI_BASKAN_OGRETMEN_ALDI
     if b.execute("SELECT 1 FROM yoklama_duzeltme WHERE tarih = ? AND sube = ? AND ders_no = ? LIMIT 1", (tarih, sube, ders_no)).fetchone():
+        return 409, ILETI_BASKAN_IDARE_DUZELTTI
+    # İdare başkan kaydını kayıt sayfasından ("Düzelt") düzelttiyse kayıt yine 'baskan' kaynaklıdır ve yoklama_duzeltme'ye
+    # satır girmez; düzeltme yalnız izde görünür. O da şube defterindeki düzeltme gibi başkanı engeller.
+    if b.execute(
+        "SELECT 1 FROM yoklama_iz z JOIN yoklama y ON y.id = z.yoklama_id WHERE y.tarih = ? AND y.sube = ? AND y.ders_no = ? "
+        "AND y.kaynak = ? AND z.islem = 'duzelt' LIMIT 1",
+        (tarih, sube, ders_no, KAYNAK_BASKAN),
+    ).fetchone():
         return 409, ILETI_BASKAN_IDARE_DUZELTTI
     return None
 
@@ -1320,7 +1339,9 @@ def kayit_ayrintisi(b, yoklama_id: int) -> dict | None:
         "ogretmen_kod": y["ogretmen_kod"] or "",
         "usb_kimlikleri": sorted(usb_kimlikleri),
         "program_ogretmenleri": [" ".join((o["ad"], o["soyad"])) for o in beklenen],
-        "program_eslesiyor": any(o["id"] == y["ogretmen_id"] for o in beklenen) if beklenen else None,
+        # Başkan kaydında öğretmen yoktur: "eşleşmiyor" (nöbet/ders değişimi) sayılmaz, şablon ayrı not çizer.
+        "program_eslesiyor": (any(o["id"] == y["ogretmen_id"] for o in beklenen)
+                              if beklenen and y["kaynak"] != KAYNAK_BASKAN else None),  # fmt: skip
         "kaynak": kaynak,
         "kaynak_turu": y["kaynak"],
         "baskan": y["kaynak"] == KAYNAK_BASKAN,

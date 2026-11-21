@@ -77,9 +77,10 @@
     <input type="hidden" name="eylem" value="uret"><input type="hidden" name="sahip" value="baskan">
     <fieldset class="olcut" aria-describedby="ua-baskan-sinir">
       <legend>Şubeler</legend>
-      <p class="not" id="ua-baskan-sinir">Bir şubede en çok {{ sube_basi }} etkin anahtar olur (başkan ve yardımcısı). Birden çok şube seçilirse anahtarlar şube klasörlü tek bir zip dosyasıyla iner.</p>
+      <p class="not" id="ua-baskan-sinir">Bir şubede en çok {{ sube_basi }} etkin anahtar olur (başkan ve yardımcısı). Birden çok şube seçilirse anahtarlar şube klasörlü tek bir zip dosyasıyla iner.
+        İndirilmeyi bekleyen anahtar da sayılır; 5 dakika içinde indirilmezse yeri açılır.</p>
       <div class="secenekler">
-        {% for s in sube_secenekleri %}<label><input type="checkbox" name="sube" value="{{ s.sube }}" {% if s.dolu %}disabled{% endif %}> {{ s.sube }}{% if s.sayi %} <span class="not">({{ s.sayi }}/{{ sube_basi }})</span>{% endif %}</label>{% endfor %}
+        {% for s in sube_secenekleri %}<label><input type="checkbox" name="sube" value="{{ s.sube }}" {% if s.dolu %}disabled{% endif %}> {{ s.sube }}{% if s.sayi or s.bekleyen %} <span class="not">({{ s.sayi + s.bekleyen }}/{{ sube_basi }}{% if s.bekleyen %}, {{ s.bekleyen }} indirilmeyi bekliyor{% endif %})</span>{% endif %}</label>{% endfor %}
       </div>
     </fieldset>
     <label for="ua-baskan-etiket">Etiket (isteğe bağlı)</label>

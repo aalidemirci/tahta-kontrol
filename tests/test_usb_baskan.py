@@ -203,7 +203,15 @@ def test_sube_basina_en_cok_iki_bekleyenler_dahil(panel, tahta, usb_hazir):
     assert adres2 is None and ileti(yanit) == ua.sinir_iletisi("10/A")
     assert "yer=baskan" in yanit.headers["location"]
     assert sorgu("SELECT COUNT(*) AS n FROM kayit WHERE islem = 'USB anahtar üretildi'")[0]["n"] == 2  # yarım üretim kaydı yok
-    assert 'value="10/A" disabled' in panel.get("/usb-anahtarlar").text
+    sayfa = panel.get("/usb-anahtarlar").text
+    assert 'value="10/A" disabled> 10/A <span class="not">(2/2, 1 indirilmeyi bekliyor)</span>' in sayfa
+    # Yalnız indirilmeyi bekleyenlerle dolan şube de nedenini yazar (gerekçesiz devre dışı kutu yok).
+    _, adres3, _ = baskan_uret(panel, "10/B")
+    _, adres4, _ = baskan_uret(panel, "10/B")
+    assert adres3 and adres4
+    sayfa = panel.get("/usb-anahtarlar").text
+    assert 'value="10/B" disabled> 10/B <span class="not">(2/2, 2 indirilmeyi bekliyor)</span>' in sayfa
+    assert "5 dakika içinde indirilmezse yeri açılır" in sayfa
 
 
 def test_sube_listede_yoksa_ve_secimsiz_red(panel, tahta, usb_hazir):
@@ -252,7 +260,14 @@ def test_ayar_kapaliyken_tani_reddi_ve_ana_yoklama_kapaliyken_calismaz(panel, ta
     usb_ayar(panel)  # başkan kapalı
     yanit = usb(tahta, baskan_hazir["basliklar"], "tani", baskan_hazir["anahtar"])
     assert yanit.status_code == 409 and yanit.json()["neden"] == "baskan_kapali" and yanit.json()["hata"] == ua.ILETI_BASKAN_KAPALI
-    assert "sınıf başkanı anahtarları kapalı" in sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Reddedilen USB anahtar'")[0]["ayrinti"]
+    # Ayar durumudur, anahtarın reddi değil: belleğin kendiliğinden tanınması işlem kaydına yazılmaz (kural 29).
+    for _ in range(3):
+        assert usb(tahta, baskan_hazir["basliklar"], "tani", baskan_hazir["anahtar"]).json()["neden"] == "baskan_kapali"
+    assert usb(tahta, baskan_hazir["basliklar"], "yoklama", baskan_hazir["anahtar"]).json()["neden"] == "baskan_kapali"
+    assert not sorgu("SELECT 1 FROM kayit WHERE islem = 'Reddedilen USB anahtar'")
+    kimlik = baskan_hazir["anahtar"]["kimlik"]
+    metin = " ".join(f"{s['kullanici']} {s['islem']} {s['ayrinti']}" for s in sorgu("SELECT * FROM kayit WHERE kullanici LIKE 'tahta:%'"))
+    assert kimlik not in metin and ua.kimlik_bicimli(kimlik) not in metin
     baskan_ayar(panel)
     ayar_kaydet(panel, yk_etkin=None)  # ders yoklaması kapalı
     yanit = usb(tahta, baskan_hazir["basliklar"], "yoklama", baskan_hazir["anahtar"])
@@ -348,6 +363,28 @@ def test_zil_saati_yoksa_409(panel, tahta, baskan_hazir):
     assert yanit.status_code == 409 and yanit.json()["hata"] == yk.ILETI_BASKAN_ZIL_YOK
 
 
+def test_bugun_ders_yoksa_zil_yok_denmez(panel, tahta, baskan_hazir, saat):
+    saat.ayarla(an(17, 8, 30))  # Salı: zil yalnız Pazartesi için tanımlı
+    oturum = oturum_ac(tahta, baskan_hazir)
+    yanit = liste(tahta, baskan_hazir, oturum["belirtec"])
+    assert yanit.status_code == 409 and yanit.json()["hata"] == yk.ILETI_BASKAN_DERS_YOK
+
+
+def test_ikili_egitimde_devre_belirsizse_ayri_ileti(panel, tahta, baskan_hazir):
+    """Zil iki devrede de tanımlı, derslik ve öğretmen programı yok: şubenin devresi belirlenemez; ileti "zil yok"
+    demez, eksik olanı (derslik programı) söyler."""
+    ders_saatleri_yaz(devre="ogle", saatler=[("13:00", "13:40"), ("13:50", "14:30")])
+    oturum = oturum_ac(tahta, baskan_hazir)
+    yanit = liste(tahta, baskan_hazir, oturum["belirtec"])
+    assert yanit.status_code == 409 and yanit.json()["hata"] == yk.ILETI_BASKAN_DEVRE_YOK
+    assert "derslik programı" in yk.ILETI_BASKAN_DEVRE_YOK and "Zil" not in yk.ILETI_BASKAN_DEVRE_YOK
+    # Derslik programı şubeyi sabah devresine koyunca yazabilir.
+    with vt.islem() as b:
+        b.execute("INSERT INTO tahta_ders (tahta_id, gun, devre, ders_no, sube) VALUES (?, 0, 'normal', 1, '10/A')",
+                  (sorgu("SELECT id FROM tahta WHERE ad = '10A Tahtası'")[0]["id"],))  # fmt: skip
+    assert liste(tahta, baskan_hazir, oturum["belirtec"]).status_code == 200
+
+
 def test_ogretmen_kaydi_varken_baskan_yazamaz(panel, tahta, baskan_hazir):
     h = baskan_hazir
     ogr = baslat(tahta, h).json()["belirtec"]
@@ -395,6 +432,27 @@ def test_idare_duzeltmesi_varsa_baskan_yazamaz(panel, tahta, baskan_hazir):
     assert yanit.status_code == 409 and yanit.json()["hata"] == yk.ILETI_BASKAN_IDARE_DUZELTTI
 
 
+def test_kayit_sayfasindan_idare_duzeltmesi_de_baskani_engeller(panel, tahta, baskan_hazir, saat):
+    """İdare başkan kaydını /yoklama/kayit/{id} "Düzelt" ile değiştirirse kayıt 'baskan' kaynaklı kalır ve
+    yoklama_duzeltme'ye satır girmez; başkan yine de aynı ders penceresinde idarenin düzeltmesini ezemez."""
+    h = baskan_hazir
+    yok = ogrenci_id("1047")
+    assert kaydet(tahta, h, oturum_ac(tahta, h)["belirtec"], [yok]).status_code == 200
+    kayit_id = sorgu("SELECT id FROM yoklama")[0]["id"]
+    saat.ilerlet(60)
+    yanit = panel.post(f"/yoklama/kayit/{kayit_id}", data={"eylem": "duzelt", "aciklama": "Öğrenci derste görüldü"})
+    assert "t=hata" not in yanit.headers["location"], ileti(yanit)
+    assert sorgu("SELECT kaynak FROM yoklama")[0]["kaynak"] == "baskan" and not sorgu("SELECT 1 FROM yoklama_duzeltme")
+    saat.ilerlet(60)
+    oturum = oturum_ac(tahta, h)
+    yanit = liste(tahta, h, oturum["belirtec"])
+    assert yanit.status_code == 409 and yanit.json()["hata"] == yk.ILETI_BASKAN_IDARE_DUZELTTI
+    yanit = kaydet(tahta, h, oturum["belirtec"], [yok])
+    assert yanit.status_code == 409 and yanit.json()["hata"] == yk.ILETI_BASKAN_IDARE_DUZELTTI
+    with vt.islem() as b:
+        assert yk.gecerli_durum(b, "2026-11-16", "10/A", 1)[0] == set()  # idarenin düzeltmesi geçerli kaldı
+
+
 def test_ayar_kapatilinca_acik_oturum_aninda_duser(panel, tahta, baskan_hazir):
     h = baskan_hazir
     oturum = oturum_ac(tahta, h)
@@ -430,6 +488,14 @@ def test_panelde_sinif_baskani_olarak_gorunur(panel, tahta, baskan_hazir):
         assert ayrinti["kaynak"].startswith("tahta: 10A Tahtası · sınıf başkanı anahtarı") and ayrinti["baskan"] is True
     sayfa = panel.get(f"/yoklama/kayit/{kayit_id}").text
     assert "sınıf başkanı anahtarı" in sayfa and yk.BASKAN_NOTU in sayfa and "#s-acik" in sayfa
+    # Öğretmen programı yüklüyken başkan kaydı "başka öğretmen/idare kaydı; nöbet…" diye anlatılmaz.
+    with vt.islem() as b:
+        ogretmen_id = b.execute("INSERT INTO ogretmen (ad, soyad) VALUES ('Uydurma', 'Öğretmen')").lastrowid
+        b.execute("INSERT INTO ogretmen_program (sube, gun, ders_no, baslangic, bitis, ders_adi, ogretmen_id, guncelleme) "
+                  "VALUES ('10/A', 0, 1, '08:20', '09:00', 'Deneme', ?, 0)", (ogretmen_id,))  # fmt: skip
+        assert yk.kayit_ayrintisi(b, kayit_id)["program_eslesiyor"] is None
+    sayfa = panel.get(f"/yoklama/kayit/{kayit_id}").text
+    assert "bu kaydı sınıf başkanı aldı" in sayfa and "nöbet veya ders değişimi" not in sayfa and "alanla eşleşiyor" not in sayfa
     assert "Alan: sınıf başkanı" in panel.get("/yoklama?tarih=2026-11-16").text
     icmal = panel.get("/yoklama/icmal?tarih=2026-11-16&sube=10/A").text
     assert "1. sınıf başkanı" in icmal and yk.BASKAN_NOTU in icmal

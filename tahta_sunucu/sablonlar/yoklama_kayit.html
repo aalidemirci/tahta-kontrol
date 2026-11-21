@@ -22,7 +22,7 @@
     <dt>Kaynak</dt><dd><span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#{{ 's-acik' if kayit.kaynak_turu in ('tahta', 'baskan') else 's-onay' }}"/></svg>{{ kayit.kaynak }}</span></dd>
     {% if kayit.usb_kimlikleri %}<dt>Kullanılan USB kimlikleri</dt><dd>{{ kayit.usb_kimlikleri | join(', ') }}</dd>{% endif %}
     {% if kayit.program_ogretmenleri %}<dt>Güncel haftalık programdaki öğretmen</dt><dd>{{ kayit.program_ogretmenleri | join(', ') }}
-      {% if kayit.program_eslesiyor %}<span class="not">· kaydı alanla eşleşiyor</span>{% else %}<span class="not">· başka öğretmen/idare kaydı; nöbet veya ders değişimi olabilir</span>{% endif %}
+      {% if kayit.baskan %}<span class="not">· bu kaydı sınıf başkanı aldı; programdaki öğretmenin kaydı değildir</span>{% elif kayit.program_eslesiyor %}<span class="not">· kaydı alanla eşleşiyor</span>{% else %}<span class="not">· başka öğretmen/idare kaydı; nöbet veya ders değişimi olabilir</span>{% endif %}
       <p class="not">Bu bilgi şu an yüklü programa göredir; geçmişteki programı kanıtlamaz ve yoklama girişini kısıtlamaz.</p></dd>{% endif %}
     <dt>İlk kayıt · son değişiklik</dt><dd>{{ kayit.olusturma }} · {{ kayit.guncelleme }}</dd>
   </dl>
