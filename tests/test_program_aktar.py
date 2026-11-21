@@ -214,7 +214,9 @@ def test_asc_ikili_egitim_saatten_devre_ve_dosya_devresi_secimi():
     bayt = asc_xml([kart("L1", 0, 1, "r1"), kart("L1", 0, 2, "r1")], TEMEL_DERSLER)  # period 1 08:20, 2 09:10: saatler tutmaz
     _, cozum = esle_asc(bayt, saatler=saatler)
     assert cozum["satirlar"] == {} and any("eşlenemedi" in u for u in cozum["uyarilar"])
-    _, cozum = esle_asc(bayt, {"devre_secimi": "ogle"}, saatler=saatler)
+    assert [(e["anahtar"], e["durum"], e.get("tek")) for e in cozum["eslesme"]["devre"]] == [("tek", "eslesmedi", True)]
+    # 0.21.0: eski tek "devre_secimi" sorusu, tek gruplu dosyada grubun devre seçimidir (g_0)
+    _, cozum = esle_asc(bayt, {"devre": {"tek": "ogle"}}, saatler=saatler)
     assert set(cozum["satirlar"][1]) == {(0, "ogle", 1), (0, "ogle", 2)}
     # starttime sabah devresinin 2. dersine (08:20) ±5 dk içinde: saatten sabah 2 önerilir
     sabah = zil_satirlari({**ELLE, "devre_adi": "Sabah", "ilk_ders": "07:30", "ders_sayisi": "6", "ogle_sonra": "0"})
@@ -624,3 +626,273 @@ def test_sihirbaz_arayuzu_adimlar_kopyala_ve_sube_sirasi(uygulama, panel, tahta,
     assert sayfa.index("9/A: 2 saat") < sayfa.index("10/B: 1 saat")  # düzey sırası (abece değil)
     assert program_aktar.sube_sayilari({"satirlar": {1: {(0, "normal", 1): "10/B"}, 2: {(0, "normal", 1): "9/A"}}}) == [
         ("9/A", 1), ("10/B", 1)]
+
+
+# ---- 0.21.0: ikili eğitimli aSc dosyası (bir okulun gerçek dışa aktarımının YAPISI; içerik UYDURMA) -----------------
+# Yapı: 16 ders saati "S1…S8" (sabah, 08:00'den) + "Ö1…Ö8" (öğle, 13:30'dan), aralarında `breaks` (devre arası);
+# derslikler "DERSLİK-101" (kısa ad "D-101"); sabahçı 11/A, 11/B ve öğlenci 9/I, 9/İ aynı iki dersliği paylaşır;
+# her ders saati ayrı kart (ppc=2, kart sayısı = ppw); kartın dersliği çoğunlukla boş (sınıfın ana dersliği);
+# bir bölünmüş grup kartı; bir kart Görsel Sanatlar atölyesinde (tahtası yok). Öğretmen ve ders adları uydurmadır.
+IKILI_SABAH = ["08:00", "08:35", "09:25", "10:00", "10:45", "11:20", "12:05", "12:40"]
+IKILI_OGLE = ["13:30", "14:05", "14:50", "15:25", "16:15", "16:50", "17:35", "18:10"]
+IKILI_SINIFLAR = [("c1", "11/A", "r1", "s"), ("c2", "9/I", "r1", "o"), ("c3", "11/B", "r2", "s"), ("c4", "9/İ", "r2", "o")]
+
+
+def ikili_xml(*, adlar="onek", ara=True, yayil=False, kart_sayisi=8) -> bytes:
+    """adlar: "onek" (S1…Ö8) | "sayi" (1…16) | "tekrar" (1…8, 1…8). yayil: her sınıf iki devrenin saatlerini de
+    kullanır (tek devreli okul). kart_sayisi: sınıfın günlük ders saati (≤ 8)."""
+    p = []
+    for i, bas in enumerate(IKILI_SABAH + IKILI_OGLE, start=1):
+        ad = {"onek": ("S" if i <= 8 else "Ö") + str((i - 1) % 8 + 1), "sayi": str(i), "tekrar": str((i - 1) % 8 + 1)}[adlar]
+        p.append(f'<period name="{ad}" short="{ad}" period="{i}" starttime="{bas}" endtime="{program.saat_metni(program.dk(bas) + 35)}"/>')
+    aralar = '<breaks><break name="DEVRE ARASI" short="ARA" break="9" starttime="13:15" endtime="13:30"/></breaks>' if ara else ""
+    gunler = "".join(f'<daysdef id="d{i}" name="{ad}" short="{ad[:3]}" days="{gun_maskesi(i)}"/>' for i, ad in enumerate(GUNLER_TR))
+    siniflar = "".join(f'<class id="{c}" name="{ad}" short="{ad}" classroomids="{r}" teacherid="o1"/>' for c, ad, r, _d in IKILI_SINIFLAR)
+    gruplar = ('<group id="g1" classid="c3" name="Grup 1" entireclass="0" divisiontag="1" studentids=""/>'
+               '<group id="g2" classid="c3" name="Grup 2" entireclass="0" divisiontag="1" studentids=""/>')  # fmt: skip
+    dersler, kartlar = [], []
+    for c, _ad, _r, devre in IKILI_SINIFLAR:
+        say = 0
+        for gun in range(5):
+            for n in range(1, kart_sayisi + 1):
+                period = n + (8 if devre == "o" else 0)
+                if yayil and n % 2 == 0:
+                    period = n + (0 if devre == "o" else 8)
+                ders, oda = f"L{c}", ""
+                if c == "c1" and gun == 4 and n == 8:
+                    ders, oda = "Lgs", "r9"  # Görsel Sanatlar atölyesi: tahtası yok, atlanır
+                elif c == "c3" and gun == 0 and n == 1:
+                    ders = "Lgr"  # bölünmüş grup dersi: sınıfın ana dersliğine düşer
+                else:
+                    say += 1
+                kartlar.append(f'<card lessonid="{ders}" classroomids="{oda}" period="{period}" days="{gun_maskesi(gun)}" weeks="1" terms="1"/>')
+        dersler.append(f'<lesson id="L{c}" classids="{c}" groupids="" subjectid="s1" teacherids="o1" classroomids="" '
+                       f'periodsperweek="{say}" periodspercard="2" weeksdefid="w1" termsdefid="t1"/>')  # fmt: skip
+    dersler.append('<lesson id="Lgs" classids="c1" groupids="" subjectid="s1" teacherids="o2" classroomids="r9" periodsperweek="1" '
+                   'periodspercard="1" weeksdefid="w1" termsdefid="t1"/>')  # fmt: skip
+    dersler.append('<lesson id="Lgr" classids="" groupids="g1" subjectid="s1" teacherids="o2" classroomids="" periodsperweek="1" '
+                   'periodspercard="1" weeksdefid="w1" termsdefid="t1"/>')  # fmt: skip
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n<timetable importtype="database" displayname="aSc Timetables 2012 XML">'
+        f"<periods>{''.join(p)}</periods>{aralar}<daysdefs>{gunler}</daysdefs>"
+        '<weeksdefs><weeksdef id="w1" name="Her hafta" weeks="1"/></weeksdefs>'
+        '<termsdefs><termsdef id="t1" name="Bütün yıl" terms="1"/></termsdefs>'
+        '<subjects><subject id="s1" name="Uydurma Ders" short="UYD"/></subjects>'
+        '<teachers><teacher id="o1" firstname="Uydurma" lastname="Öğretmenoğlu" name="Uydurma Öğretmenoğlu" short="UÖ"/>'
+        '<teacher id="o2" firstname="Deneme" lastname="Kişi" name="Deneme Kişi" short="DK"/></teachers>'
+        '<buildings><building id="b1" name="Ana bina"/></buildings>'
+        '<classrooms><classroom id="r1" name="DERSLİK-101" short="D-101"/><classroom id="r2" name="DERSLİK-102" short="D-102"/>'
+        '<classroom id="r3" name="DERSLİK-501" short="D-501"/><classroom id="r9" name="Görsel Sanatlar Atölyesi" short="GSA"/></classrooms>'
+        f"<classes>{siniflar}</classes><groups>{gruplar}</groups><lessons>{''.join(dersler)}</lessons>"
+        f"<cards>{''.join(kartlar)}</cards></timetable>"
+    )  # fmt: skip
+    return xml.encode("utf-8")
+
+
+def ikili_zil(kaydir: int = 0, devreler=(("Sabah", IKILI_SABAH), ("Öğleden sonra", IKILI_OGLE))) -> list[tuple]:
+    satirlar = []
+    for adi, baslar in devreler:
+        for no, bas in enumerate(baslar, start=1):
+            b = program.dk(bas) + kaydir
+            satirlar += [(g, program.devre_kimligi(adi), adi, no, program.saat_metni(b), program.saat_metni(b + 35)) for g in range(5)]
+    return satirlar
+
+
+def ikili_tahtalar(derslik=("D-101", "D-102"), ad="ETAP"):
+    return [{"id": 7, "ad": ad, "derslik": derslik[0], "subeler": ""}, {"id": 3, "ad": ad, "derslik": derslik[1], "subeler": ""}]
+
+
+def ikili_esle(bayt=None, secimler=None, saatler=None, tahta=None, hatirlanan=None):
+    return esle_asc(bayt or ikili_xml(), secimler, saatler if saatler is not None else ikili_zil(), tahta or ikili_tahtalar(), hatirlanan)
+
+
+def test_asc_ikili_onekli_dosya_devre_gruplari_ve_ders_numaralari():
+    okunan, cozum = ikili_esle()
+    assert [(g["anahtar"], g["kaynak"], g["ad"], len(g["dersler"])) for g in okunan["devre_gruplari"]] == [
+        ("onek:s", "onek", "S1–S8", 8), ("onek:ö", "onek", "Ö1–Ö8", 8)]
+    assert okunan["hata_sayisi"] == 0 and not any("Blok ders" in u for u in okunan["uyarilar"])  # her saat ayrı kart
+    d101, d102 = cozum["satirlar"][7], cozum["satirlar"][3]
+    assert {n for (_g, d, n) in d101 if d == "sabah"} == set(range(1, 9)) == {n for (_g, d, n) in d101 if d == "ogle"}
+    assert d101[(0, "sabah", 1)] == "11/A" and d101[(0, "ogle", 1)] == "9/I" and d102[(0, "ogle", 8)] == "9/İ"
+    assert d102[(0, "sabah", 1)] == "11/B"  # bölünmüş grup kartı sınıfın ana dersliğine
+    assert (4, "sabah", 8) not in d101 and cozum["atlanan"] == 1  # Görsel Sanatlar: tahtası yok
+    assert sum(len(v) for v in cozum["satirlar"].values()) == 4 * 40 - 1
+    assert [(e["durum"], e["deger"]) for e in cozum["eslesme"]["devre"]] == [("otomatik", "sabah"), ("otomatik", "ogle")]
+    assert not cozum["saat_farki"] and cozum["hata_sayisi"] == 0
+
+
+def test_asc_I_ve_İ_subeleri_ayri_kalir_eski_hatirlanan_anahtar_yok_sayilir():
+    okunan, cozum = ikili_esle()
+    assert {"9/I", "9/İ"} <= set(okunan["bilgi"]["sinif"])
+    sinif = {e["ad"]: e["deger"] for e in cozum["eslesme"]["sinif"]}
+    assert sinif["9/I"] == "9/I" and sinif["9/İ"] == "9/İ"
+    assert set(cozum["satirlar"][7].values()) == {"11/A", "9/I"} and set(cozum["satirlar"][3].values()) == {"11/B", "9/İ"}
+    # 0.20.0 katlanmış anahtarla ("9/i") hatırlanan eşleşme yeni anahtarla eşleşmez: 9/İ yine 9/İ
+    _, cozum = ikili_esle(hatirlanan={("sinif", "9/i"): {"tahta_id": None, "deger": "9/I"}})
+    assert set(cozum["satirlar"][3].values()) == {"11/B", "9/İ"}
+
+
+def test_asc_ikili_zil_kaymis_numara_dogru_devreye_ve_uyari():
+    _, cozum = ikili_esle(saatler=ikili_zil(10))
+    assert sum(len(v) for v in cozum["satirlar"].values()) == 159
+    assert cozum["satirlar"][7][(2, "ogle", 3)] == "9/I"  # Ö3 → öğlenin 3. dersi (saat tutmasa da)
+    assert set(cozum["saat_farki"]) == {"onek:s", "onek:ö"}
+    assert any(u.startswith("Ö1–Ö8: dosyadaki 8 ders saati zil çizelgesinden 5 dakikadan çok farklı") for u in cozum["uyarilar"])
+
+
+def test_asc_ikili_tek_devreli_zilde_grup_sorusu_ve_secim():
+    tek = ikili_zil(devreler=(("Normal", IKILI_SABAH),))
+    _, cozum = ikili_esle(saatler=tek)
+    assert [(e["anahtar"], e["durum"], e["deger"]) for e in cozum["eslesme"]["devre"]] == [
+        ("onek:s", "otomatik", "normal"), ("onek:ö", "eslesmedi", "")]  # S1 saati tutar, Ö tutmaz
+    assert {d for v in cozum["satirlar"].values() for (_g, d, _n) in v} == {"normal"} and cozum["eslesmedi_sayisi"] > 0
+    _, cozum = ikili_esle(secimler={"devre": {"onek:ö": "yok"}}, saatler=tek)
+    assert cozum["eslesme"]["devre"][1]["durum"] == "secildi" and not any(e["durum"] == "eslesmedi" for e in cozum["eslesme"]["saat"])
+    assert sum(len(v) for v in cozum["satirlar"].values()) == 79  # yalnız sabah (öğle yok sayıldı)
+
+
+def test_asc_oneksiz_dosya_siniflardan_ve_aradan_bolunur_tek_devreli_okul_bolunmez():
+    okunan, cozum = ikili_esle(ikili_xml(adlar="sayi"))
+    assert [(g["kaynak"], g["dersler"][0][0], len(g["dersler"])) for g in okunan["devre_gruplari"]] == [("ara", 1, 8), ("ara", 1, 8)]
+    assert cozum["satirlar"][7][(0, "ogle", 1)] == "9/I"  # period 9 → öğlenin 1. dersi
+    okunan = ara(ikili_xml(adlar="tekrar", ara=False))
+    assert [g["kaynak"] for g in okunan["devre_gruplari"]] == ["ara", "ara"]
+    # tek devreli okul: sınıflar iki yarıyı da kullanır → bölünmez (önekli adlar yalnız etiket sayılır)
+    for adlar in ("sayi", "onek"):
+        okunan = ara(ikili_xml(adlar=adlar, yayil=True))
+        assert [g["kaynak"] for g in okunan["devre_gruplari"]] == ["tek"], adlar
+        assert okunan["bilgi"]["saat"]["9|13:30"]["no"] == 9  # period numarası (bugünkü davranış)
+    # az kartlı dosya (her sınıf günde 2 saat) önek olmadan bölünmez
+    assert [g["kaynak"] for g in ara(ikili_xml(adlar="sayi", kart_sayisi=2))["devre_gruplari"]] == ["tek"]
+
+
+def test_asc_breaks_yalniz_saatleri_okunur_ogretmen_ve_ders_adi_okunmaz():
+    asc = program_aktar.asc_oku(ikili_xml())
+    assert asc["breaks"] == [{"break": "9", "starttime": "13:15", "endtime": "13:30"}]
+    metin_ = json.dumps(asc, ensure_ascii=False)
+    for yasak in ("Uydurma", "Öğretmenoğlu", "Deneme Kişi", "UÖ", "Uydurma Ders", "UYD", "Grup 1", "DEVRE ARASI", "Ana bina"):
+        assert yasak not in metin_, yasak
+    assert "teachers" not in asc and "subjects" not in asc
+
+
+def test_asc_derslik_rakam_kumesiyle_ikinci_aday_yalniz_tek_adayda():
+    assert [metin.rakam_anahtari(x) for x in ("DERSLİK-101", "D-101", "101", "Z-04", "ETAP", "Blok 2 / 101")] == [
+        "101", "101", "101", "4", "", "2-101"]
+    _, cozum = ikili_esle(tahta=ikili_tahtalar(("101", "DERSLİK-102")))
+    durum = {e["ad"]: (e["durum"], e["deger"]) for e in cozum["eslesme"]["derslik"]}
+    assert durum["DERSLİK-101 (D-101)"] == ("otomatik", "7") and durum["DERSLİK-102 (D-102)"] == ("otomatik", "3")
+    # tahta adı da aday: derslik alanı boş, ad "101"
+    _, cozum = ikili_esle(tahta=[{"id": 7, "ad": "101", "derslik": "", "subeler": ""}])
+    assert next(e for e in cozum["eslesme"]["derslik"] if e["ad"].startswith("DERSLİK-101"))["deger"] == "7"
+    # iki tahta aynı rakamı taşırsa eşlenmez
+    _, cozum = ikili_esle(tahta=[{"id": 7, "ad": "ETAP", "derslik": "101", "subeler": ""},
+                                 {"id": 8, "ad": "Tahta 101", "derslik": "", "subeler": ""}])  # fmt: skip
+    assert next(e for e in cozum["eslesme"]["derslik"] if e["ad"].startswith("DERSLİK-101"))["durum"] == "eslesmedi"
+    # dosyada aynı rakamlı iki derslik varsa da eşlenmez (biri öbürünün tahtasına düşmesin)
+    bayt = ikili_xml().replace(b'name="DERSL\xc4\xb0K-501" short="D-501"', b'name="LAB-101" short="L-101"')
+    bayt = bayt.replace(b'lessonid="Lgs" classroomids="r9"', b'lessonid="Lgs" classroomids="r3"')
+    _, cozum = ikili_esle(bayt, tahta=[{"id": 7, "ad": "ETAP", "derslik": "101", "subeler": ""}])
+    assert all(e["durum"] == "eslesmedi" for e in cozum["eslesme"]["derslik"] if "101" in e["ad"])
+
+
+def test_asc_sube_guncellemesi_ana_derslikten():
+    okunan, cozum = ikili_esle(tahta=ikili_tahtalar(("", "D-102")))
+    assert cozum["satirlar"] == {3: cozum["satirlar"][3]}  # derslik alanı boş tahta (7) eşlenmedi
+    _, cozum = ikili_esle(secimler={"derslik": {"derslik-101": "7"}}, tahta=ikili_tahtalar(("", "D-102")))
+    g = program_aktar.sube_guncellemesi(okunan["bilgi"], cozum, ikili_tahtalar(("", "D-102")))
+    assert [(x["id"], x["subeler"], x["derslik"]) for x in g] == [(3, "9/İ,11/B", "D-102"), (7, "9/I,11/A", "D-101")]
+
+
+# ---- 0.21.0: panel uçları (zilsiz okul, eşleme ekranı, unut, şube güncellemesi) ------------------------------------
+def ikili_okul(panel, tahta, derslikler=("D-101", "")):
+    kur_ve_gir(panel)
+    idler = []
+    for d in derslikler:
+        t = kimlik(tahta_ekle(panel, tahta, "ETAP", durum()))
+        panel.post(f"/tahta/{t}/kaydet", data={"ad": "ETAP", "derslik": d, "eylem": "kaydet"})
+        idler.append(t)
+    return idler
+
+
+def test_asc_zilsiz_okulda_dosyadan_zil_cizelgesi_ve_ucdan_uca_onay(uygulama, panel, tahta, saat):
+    t1, t2 = ikili_okul(panel, tahta)
+    kaynak = panel.get("/program/aktar").text
+    assert 'action="/program/aktar/asc"' in kaynak and "Sınanıyor" not in kaynak and "aSc Timetables 2012 dosyasıyla denendi" in kaynak
+    yanit = panel.post("/program/aktar/asc", files={"dosya": ("p.xml", ikili_xml(), "text/xml")})
+    assert yanit.headers["location"] == "/program/aktar?adim=esleme"
+    sayfa = panel.get("/program/aktar?adim=esleme").text
+    assert 'action="/program/aktar/asc/zil"' in sayfa and "Sabah</strong> · 8 ders · 08:00–13:15" in sayfa
+    assert "Öğleden sonra</strong> · 8 ders · 13:30–18:45" in sayfa and 'name="g_0"' in sayfa
+    assert "Aynı adı taşıyan tahtalar var; numaralarına bakın" in sayfa
+    assert f'<option value="{t1}">No {t1} · ETAP · D-101</option>' in sayfa and f'<option value="{t2}">No {t2} · ETAP</option>' in sayfa
+    assert sayfa.index(f">No {t1} · ETAP") < sayfa.index(f">No {t2} · ETAP")  # ad, sonra numara sırası
+    assert "süresi geçmiş" in ileti(panel.post("/program/aktar/asc/zil", data={"onizleme": "yok", "onay": "1"}))
+    assert "onay kutusunu" in ileti(panel.post("/program/aktar/asc/zil", data={"onizleme": onizleme_kimligi()}))
+    assert sorgu("SELECT COUNT(*) AS n FROM ders_saati")[0]["n"] == 0
+    yanit = panel.post("/program/aktar/asc/zil", data={"onizleme": onizleme_kimligi(), "onay": "1"})
+    assert "“aSc · Pzt–Cum” zil çizelgesi oluşturuldu" in ileti(yanit)
+    assert sorgu("SELECT COUNT(*) AS n FROM ders_saati")[0]["n"] == 80
+    assert {(s["devre"], s["ders_no"], s["baslangic"]) for s in sorgu("SELECT * FROM ders_saati WHERE gun = 0")} >= {
+        ("sabah", 1, "08:00"), ("ogle", 1, "13:30"), ("ogle", 8, "18:10")}
+    assert sorgu("SELECT kaynak FROM zil_cizelgesi")[0]["kaynak"] == "asc"
+    assert "aSc dosyasından" in sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Zil çizelgesi oluşturuldu'")[0]["ayrinti"]
+    # zil kuruldu: devreler otomatik eşlenir, D-101'in iki devresi yazılır; D-102'nin tahtası seçilir
+    with vt.islem() as b:
+        derslikler = program_aktar.coz(b, vt.ayar_al(b, "program_onizleme")["veri"])["cozum"]["eslesme"]["derslik"]
+    n = next(i for i, e in enumerate(derslikler) if e["ad"].startswith("DERSLİK-102"))
+    panel.post("/program/aktar/esle", data={"onizleme": onizleme_kimligi(), f"d_{n}": str(t2)})
+    onizleme = panel.get("/program/aktar?adim=onizleme").text
+    assert 'name="subeleri_guncelle" value="1">' in onizleme and "checked" not in onizleme.split('name="subeleri_guncelle"')[1][:40]
+    assert f"No {t1} · ETAP: şubeler boş → 9/I,11/A" in onizleme and f"No {t2} · ETAP: şubeler boş → 9/İ,11/B · derslik D-102" in onizleme
+    yanit = panel.post("/program/aktar/onayla", data={"onizleme": onizleme_kimligi()})
+    assert "2 tahtanın programı güncellendi" in ileti(yanit) and "şube bilgisi" not in ileti(yanit)
+    assert len(sorgu("SELECT * FROM tahta_ders")) == 159
+    assert {(s["devre"], s["sube"]) for s in sorgu("SELECT * FROM tahta_ders WHERE tahta_id = ?", t2)} == {("sabah", "11/B"), ("ogle", "9/İ")}
+    assert sorgu("SELECT subeler, derslik FROM tahta WHERE id = ?", t2) == [{"subeler": "", "derslik": ""}]  # kutu işaretsiz
+    # hatırlanan: derslik ve sınıf; otomatik devre ve saat eşlemeleri hatırlanmaz
+    turler = {s["tur"] for s in sorgu("SELECT tur FROM program_eslesme WHERE kaynak = 'asc'")}
+    assert {"derslik", "sinif"} <= turler and not turler & {"saat", "devre"}
+    # ikinci aktarım, şube kutusu işaretli
+    panel.post("/program/aktar/asc", files={"dosya": ("p.xml", ikili_xml(), "text/xml")})
+    assert "Değişecek tahta yok" in ileti(panel.post("/program/aktar/onayla", data={"onizleme": onizleme_kimligi()}))
+    yanit = panel.post("/program/aktar/onayla", data={"onizleme": onizleme_kimligi(), "subeleri_guncelle": "1"})
+    assert ileti(yanit) == "Derslik programları değişmedi. 2 tahtanın şube bilgisi programdan güncellendi."
+    assert sorgu("SELECT subeler, derslik FROM tahta WHERE id = ?", t2) == [{"subeler": "9/İ,11/B", "derslik": "D-102"}]
+    assert sorgu("SELECT subeler, derslik FROM tahta WHERE id = ?", t1) == [{"subeler": "9/I,11/A", "derslik": "D-101"}]
+    assert "2 tahtanın şube bilgisi güncellendi" in sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Ders programı içe aktarıldı' "
+                                                          "ORDER BY id DESC")[0]["ayrinti"]  # fmt: skip
+
+
+def test_asc_zil_kaymissa_yalniz_fark_notu_ve_satirlar_yazilir(uygulama, panel, tahta, saat):
+    ikili_okul(panel, tahta, ("D-101", "D-102"))
+    zil_kur(ikili_zil(10))
+    panel.post("/program/aktar/asc", files={"dosya": ("p.xml", ikili_xml(), "text/xml")})
+    sayfa = panel.get("/program/aktar?adim=esleme").text
+    assert "Zil çizelgeniz bu dosyaya uyuyor; yalnız bazı ders saatleri 5 dakikadan çok farklı" in sayfa
+    assert "Devreler: S1–S8 → Sabah · Ö1–Ö8 → Öğleden sonra (otomatik" in sayfa  # kesin eşleşme: soru açılır içinde
+    assert "159 ders saati eklenecek" in panel.get("/program/aktar?adim=onizleme").text
+
+
+def test_asc_hatirlanan_eslesmeleri_unut(uygulama, panel, tahta, saat):
+    t1, t2 = ikili_okul(panel, tahta, ("D-101", "D-102"))
+    zil_kur(ikili_zil())
+    panel.post("/program/aktar/asc", files={"dosya": ("p.xml", ikili_xml(), "text/xml")})
+    assert 'action="/program/aktar/unut"' not in panel.get("/program/aktar?adim=esleme").text  # hatırlanan yok
+    panel.post("/program/aktar/onayla", data={"onizleme": onizleme_kimligi()})
+    with vt.islem() as b:
+        b.execute("INSERT INTO program_eslesme (kaynak, tur, anahtar, tahta_id, deger, guncelleme) VALUES ('tablo', 'sube', '9/A', ?, '', 0)", (t1,))
+    hatirlanan = len(sorgu("SELECT * FROM program_eslesme WHERE kaynak = 'asc'"))
+    panel.post("/program/aktar/asc", files={"dosya": ("p.xml", ikili_xml(), "text/xml")})
+    sayfa = panel.get("/program/aktar?adim=esleme").text
+    assert 'action="/program/aktar/unut"' in sayfa and f"bu kaynak için {hatirlanan} eşleşme hatırlanıyor" in sayfa
+    assert "onay kutusunu" in ileti(panel.post("/program/aktar/unut", data={"onizleme": onizleme_kimligi()}))
+    assert len(sorgu("SELECT * FROM program_eslesme WHERE kaynak = 'asc'")) == hatirlanan
+    yanit = panel.post("/program/aktar/unut", data={"onizleme": onizleme_kimligi(), "onay": "1"})
+    assert f"Hatırlanan {hatirlanan} eşleşme silindi" in ileti(yanit)
+    assert sorgu("SELECT kaynak FROM program_eslesme") == [{"kaynak": "tablo"}]  # yalnız o kaynak
+    assert sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Hatırlanan ders programı eşleşmeleri silindi'") == [
+        {"ayrinti": f"aSc · {hatirlanan} eşleşme"}]
+    kullanici_ekle(panel, "idareci1")
+    gir(panel, "idareci1")
+    assert "yönetici yetkisi" in ileti(panel.post("/program/aktar/unut", data={"onay": "1"}))
+    assert "yönetici yetkisi" in ileti(panel.post("/program/aktar/asc/zil", data={"onay": "1"}))

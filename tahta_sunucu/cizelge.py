@@ -36,7 +36,7 @@ CSV_EN_COK_BAYT = 64 * 1024
 CSV_EN_COK_SATIR = 100
 OGLE_GECIS_DK = 20  # Okul Zili suggest_next_session_start: sabah bitişi + 20 dk, 5'e yukarı yuvarla
 TENEFFUS_ESIGI_DK = program.TENEFFUS_EN_UZUN_SN // 60
-KAYNAK_ADI = {"elle": "Elle", "okulzili": "Okul Zili", "tasima": "Önceki sürümden", "eokul": "e-Okul raporu"}
+KAYNAK_ADI = {"elle": "Elle", "okulzili": "Okul Zili", "tasima": "Önceki sürümden", "eokul": "e-Okul raporu", "asc": "aSc Timetables"}
 TC_ILETISI = "Adda T.C. kimlik numarasına benzeyen bir sayı var; kişi bilgisi yazmayın."
 
 # Hızlı oluştur varsayılanları (şartname §5.3): ilk, sayı, ders dk, teneffüs dk, uzun ara sonrası, uzun ara dk.

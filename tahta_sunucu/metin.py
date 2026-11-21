@@ -84,6 +84,12 @@ def derslik_anahtari(s) -> str:
     return metin
 
 
+def rakam_anahtari(s) -> str:
+    """Addaki rakam kümeleri, baştaki sıfırlar atılmış ve "-" ile birleşmiş: "DERSLİK-101" → "101", "D-101" → "101",
+    "Z-04" → "4", "Blok 2 / 101" → "2-101"; rakam yoksa "". Derslik eşlemesinde İKİNCİ aday anahtardır (0.21.0)."""
+    return "-".join(k.lstrip("0") or "0" for k in re.findall(r"[0-9]+", str(s or ""))[:4])
+
+
 def csv_oku(bayt: bytes, en_cok_bayt: int, en_cok_satir: int) -> tuple[list[str], list[list[str]]]:
     """CSV baytlarını (başlıklar, satırlar) olarak döndürür.
 
