@@ -601,10 +601,18 @@ def test_kurucu_betigi_hizmeti_kurar_ve_eski_baslangic_kisayolunu_siler():
     metin = ham.decode("utf-8-sig")
     assert "{commonstartup}\\Tahta Kontrol.lnk" in metin and "[InstallDelete]" in metin
     simgeler = metin.split("[Icons]")[1].split("\n[")[0]
-    # Oturum açılınca başlatma kısayolu yok (kural 28: "başlangıç kısayolu geri getirilmez"); 0.21.0'ın
-    # bildirim alanı simgesi de başlangıca kısayol koymaz (istisna ancak kullanıcı onayıyla, kural 28 ile).
-    assert "commonstartup" not in simgeler and "[Tasks]" in metin
-    assert "--gizli" not in metin and "durumsimgesi" not in metin
+    # Oturum açılınca SUNUCU açan kısayol yok (kural 28). 0.21.0: tek istisna, yalnız durum simgesini getiren
+    # "Tahta Kontrol durum simgesi" kısayolu; "--gizli" taşır ve isteğe bağlı görevle kurulur.
+    baslangic = [s for s in simgeler.splitlines() if "commonstartup" in s and not s.lstrip().startswith(";")]
+    assert baslangic == [
+        'Name: "{commonstartup}\\Tahta Kontrol durum simgesi"; Filename: "{app}\\TahtaKontrol.exe"; '
+        'Parameters: "pencere --gizli"; Tasks: durumsimgesi'
+    ]
+    assert '{commonstartup}\\Tahta Kontrol"' not in simgeler  # eski ad (0.8 öncesi sunucu kısayolu) yasak
+    gorevler = metin.split("[Tasks]")[1].split("\n[")[0]
+    assert 'Name: "durumsimgesi"; Description: "Oturum açılınca durum simgesini göster' in gorevler
+    assert "unchecked" not in gorevler.split('Name: "durumsimgesi"')[1].splitlines()[0]  # işaretli gelir
+    assert 'Name: "{commonstartup}\\Tahta Kontrol durum simgesi.lnk"; Tasks: not durumsimgesi' in metin
     assert 'obj= "NT AUTHORITY\\LocalService"' in metin
     assert "*S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-19:(OI)(CI)M" in metin
     assert "'tasi --hedef" in metin and "TASIMA-BEKLIYOR.txt" in metin

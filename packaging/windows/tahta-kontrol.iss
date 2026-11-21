@@ -7,8 +7,9 @@
 ; kullanıcının %LOCALAPPDATA%\TahtaKontrol klasörü) kurulumda KOPYALANIR
 ; (tahta_sunucu/tasima.py); taşınamazsa hizmet başlatılmaz ki yeni sertifika
 ; üretilip bütün tahtalar kopmasın. Masaüstü kısayolu yalnız durum penceresini açar.
-; 0.21.0: durum penceresi kapatılınca bildirim alanında simgeyle kalır (sunucu açmaz). Başlangıç
-; kısayolu YOKTUR (kural 28); 0.8 öncesinin "Tahta Kontrol.lnk" başlangıç kısayolu yine silinir.
+; 0.21.0: durum penceresi bildirim alanında simgeyle kalır; isteğe bağlı (işaretli gelen görev)
+; "Tahta Kontrol durum simgesi" kısayolu oturum açılınca YALNIZ simgeyi getirir ("pencere --gizli").
+; Simge sunucu açmaz; 0.8 öncesinin sunucu açan "Tahta Kontrol.lnk" başlangıç kısayolu yine silinir.
 
 #ifndef Surum
   #define Surum "0.0.0"
@@ -56,6 +57,7 @@ turkish.KaldirmaVeri=Sunucu hizmeti kaldırıldı. Veri, sertifika ve yedekler S
 
 [Tasks]
 Name: "masaustu"; Description: "Masaüstüne kısayol oluştur (durum penceresi)"
+Name: "durumsimgesi"; Description: "Oturum açılınca durum simgesini göster (bildirim alanı; sunucuyu açmaz)"
 
 [Dirs]
 ; Veri klasörü kaldırmada silinmez (veritabanı, sertifika, yedekler).
@@ -64,6 +66,8 @@ Name: "{commonappdata}\TahtaKontrol"; Flags: uninsneveruninstall
 [InstallDelete]
 ; 0.8 öncesinin "Windows açılınca başlat" kısayolu: hizmetle birlikte ikinci bir sunucu açmasın.
 Type: files; Name: "{commonstartup}\Tahta Kontrol.lnk"
+; Durum simgesi görevi bu kurulumda seçilmediyse önceki kurulumun kısayolu kalmasın.
+Type: files; Name: "{commonstartup}\Tahta Kontrol durum simgesi.lnk"; Tasks: not durumsimgesi
 
 [Files]
 Source: "{#Kaynak}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
@@ -71,6 +75,8 @@ Source: "{#Kaynak}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 [Icons]
 Name: "{group}\Tahta Kontrol"; Filename: "{app}\TahtaKontrol.exe"
 Name: "{autodesktop}\Tahta Kontrol"; Filename: "{app}\TahtaKontrol.exe"; Tasks: masaustu
+; Yalnız durum simgesi (pencere açmaz, sunucu açmaz); kaldırmada Inno kısayolu da siler.
+Name: "{commonstartup}\Tahta Kontrol durum simgesi"; Filename: "{app}\TahtaKontrol.exe"; Parameters: "pencere --gizli"; Tasks: durumsimgesi
 
 [Run]
 Filename: "{app}\TahtaKontrol.exe"; Description: "Durum penceresini aç"; Flags: nowait postinstall skipifsilent runasoriginaluser

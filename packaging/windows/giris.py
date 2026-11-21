@@ -5,7 +5,7 @@ başlatmaz, Windows hizmetinin durumunu gösterir). "hizmet" ile Hizmet Denetim
 Yöneticisi'nin başlattığı sunucu hizmeti olur (kurucunun kaydettiği komut); "sunucu"
 ile penceresiz çalışır (derleme duman testi); "tasi" kurucunun veri taşımasıdır.
 "pencere --gizli" pencere açmadan yalnız bildirim alanı simgesini getirir; o da sunucu açmaz
-(kurucu onu başlangıca kısayol olarak KOYMAZ, kural 28).
+(kurucudaki isteğe bağlı "Tahta Kontrol durum simgesi" oturum açılışı kısayolu; kural 28 istisnası).
 """
 
 import os

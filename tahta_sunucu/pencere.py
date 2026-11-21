@@ -13,8 +13,8 @@ durdurmaz. Kip, açılışta `/yerel/durum` yanıtına ve hizmetin durumuna gör
 
 0.21.0: kurulu programda pencere bildirim alanında simgeyle durur (tepsi.py): X pencereyi gizler, süreç
 simgede kalır, gerçek çıkış simge menüsündeki "Çık"tır; durum 15 sn arayla ayrı iş parçacığında okunur ve
-pencere/simge değişince güncellenir. `pencere --gizli` pencere açmadan yalnız simgeyi getirir (kurucu
-başlangıç kısayolu KURMAZ, kural 28). Bu yolların HİÇBİRİ sunucu açmaz: Sunucu yalnız geliştirme kipinde
+pencere/simge değişince güncellenir. `pencere --gizli` pencere açmadan yalnız simgeyi getirir (kurucudaki
+isteğe bağlı "Tahta Kontrol durum simgesi" oturum açılışı kısayolu; kural 28 istisnası). Bu yolların HİÇBİRİ sunucu açmaz: Sunucu yalnız geliştirme kipinde
 (`_gelistirme_penceresi`) içe aktarılır. Geliştirmede bildirim alanı yoktur (TAHTA_TEPSI_DENE=1 ile elle
 denenebilir; o kip de sunucu açmaz).
 
