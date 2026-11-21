@@ -1,0 +1,77 @@
+{% extends "taban.html" %}
+{% block baslik %}Öğretmen listesi önizleme · Tahta Kontrol{% endblock %}
+{% block icerik %}
+{# Toplu öğretmen yükleme önizlemesi (0.21.0). Bağlam: panel_yoklama.py SÖZLEŞME — plan, ayristirma, durum_adi, onizleme,
+   omur_dk. Önizleme yalnız sunucu belleğinde omur_dk dakika durur; "Ekle" ve "Vazgeç" tek kullanımlıktır, bu sayfa hiçbir
+   şey yazmaz. Kod "öngörülen"dir: eklerken yeniden hesaplanır. #}
+<p class="geri"><a href="/ogretmenler">← Öğretmenler ve PIN</a></p>
+<div class="sayfa-bas">
+  <div class="bas-yazi">
+    <h1>Öğretmen listesi önizleme</h1>
+    <p>{{ ayristirma.kaynak_adi }} · dosyada {{ plan.sayilar.dosyada }} öğretmen satırı. Önizleme {{ omur_dk }} dakika geçerlidir.</p>
+  </div>
+</div>
+{% for n in ayristirma.notlar %}<p class="bant" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ n }}</p>{% endfor %}
+{% for u in ayristirma.uyarilar %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{{ u }}</p>{% endfor %}
+
+<ul class="sayi-kutulari" aria-label="Özet">
+  <li class="sayi-kutusu"><span class="deger">{{ plan.sayilar.ekle }}</span><span class="etiket">Yeni ({{ plan.sayilar.secili }} seçili)</span></li>
+  <li class="sayi-kutusu"><span class="deger">{{ plan.sayilar.var }}</span><span class="etiket">Zaten var (eklenmez)</span></li>
+  {% if plan.sayilar.pasif %}<li class="sayi-kutusu"><span class="deger">{{ plan.sayilar.pasif }}</span><span class="etiket">Pasif olarak var</span></li>{% endif %}
+  {% if plan.sayilar.yinelenen %}<li class="sayi-kutusu"><span class="deger">{{ plan.sayilar.yinelenen }}</span><span class="etiket">Dosyada yinelenen</span></li>{% endif %}
+  {% if plan.sayilar.atlanan %}<li class="sayi-kutusu"><span class="deger">{{ plan.sayilar.atlanan }}</span><span class="etiket">Atlanan satır</span></li>{% endif %}
+  {% if plan.sayilar.bolme %}<li class="sayi-kutusu"><span class="deger">{{ plan.sayilar.bolme }}</span><span class="etiket">Ad bölmesini denetleyin</span></li>{% endif %}
+</ul>
+
+<form method="post" action="/ogretmenler/aktar">
+  <input type="hidden" name="onizleme" value="{{ onizleme }}">
+  <section class="kutu onizleme-kutu" aria-labelledby="plan-baslik">
+    <h2 id="plan-baslik">Eklenince</h2>
+    <p class="not">İşaretli yeni satırlar eklenir. Adı aynı olan etkin öğretmen yeniden eklenmez. Pasif öğretmen yalnız "Etkinleştir"
+      işaretliyse etkinleşir. Dosyada olmayan öğretmenlere dokunulmaz. Kodlar öngörülendir; eklerken yeniden verilir.</p>
+    <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="plan-baslik">
+    <table>
+      <thead><tr><th scope="col">Seç</th><th scope="col" class="sayi-hucre">{{ ayristirma.satir_adi }}</th><th scope="col">Ad</th><th scope="col">Soyad</th>
+        <th scope="col">Kod</th><th scope="col">Durum</th>{% if plan.gorev_var %}<th scope="col">Görev</th>{% endif %}<th scope="col">Not</th></tr></thead>
+      <tbody>
+      {% for x in plan.satirlar %}
+      <tr{% if x.durum in ('var', 'yinelenen') %} class="pasif"{% endif %}>
+        <td data-etiket="Seç">
+          {%- if x.durum == 'ekle' %}<label class="satir"><input type="checkbox" name="ekle" value="{{ x.satir }}"{% if x.secili %} checked{% endif %}> Ekle<span class="gizli"> ({{ x.ad_soyad }})</span></label>
+          {%- elif x.durum == 'pasif' %}<label class="satir"><input type="checkbox" name="etkinlestir" value="{{ x.ogretmen_id }}"> Etkinleştir<span class="gizli"> ({{ x.ad_soyad }})</span></label>
+          {%- else %}—{% endif -%}
+        </td>
+        <td data-etiket="{{ ayristirma.satir_adi }}" class="sayi-hucre">{{ x.satir }}</td>
+        <th scope="row" data-etiket="Ad">{{ x.ad }}</th>
+        <td data-etiket="Soyad">{{ x.soyad }}</td>
+        <td data-etiket="Kod" class="kod">{% if x.kod %}{{ x.kod }}{% if x.kod_kaynagi == 'otomatik' %} <span class="not">(öngörülen)</span>{% elif x.kod_kaynagi == 'dosya' %} <span class="not">(dosyadan)</span>{% endif %}{% else %}—{% endif %}</td>
+        <td data-etiket="Durum">
+          {%- if x.durum == 'ekle' %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>{{ durum_adi[x.durum] }}</span>
+          {%- elif x.durum == 'pasif' %}<span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>{{ durum_adi[x.durum] }}</span>
+          {%- else %}<span class="rozet" data-durum="bilgi"><svg class="simge" aria-hidden="true"><use href="#s-kapali"/></svg>{{ durum_adi[x.durum] }}</span>{% endif -%}
+        </td>
+        {% if plan.gorev_var %}<td data-etiket="Görev">{{ x.gorev or '—' }}</td>{% endif %}
+        <td data-etiket="Not">{% if x.isaretler %}{% for i in x.isaretler %}<span class="satir">{% if x.bolme and loop.first %}<strong class="alinmadi">{{ i }}</strong>{% else %}{{ i }}{% endif %}</span>{% if not loop.last %}<br>{% endif %}{% endfor %}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  {% if ayristirma.atlanan %}
+  <h2 id="atlanan-baslik">Atlanan satırlar ({{ ayristirma.atlanan | length }})</h2>
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="atlanan-baslik">
+  <table><thead><tr><th scope="col" class="sayi-hucre">{{ ayristirma.satir_adi }}</th><th scope="col">Neden</th></tr></thead>
+  <tbody>{% for a in ayristirma.atlanan %}<tr><td data-etiket="{{ ayristirma.satir_adi }}" class="sayi-hucre">{{ a.satir }}</td><td data-etiket="Neden">{{ a.neden }}</td></tr>{% endfor %}</tbody></table>
+  </div>
+  {% endif %}
+
+  <p class="not">Eklenen öğretmenlerin PIN'i yoktur. Ekledikten sonra "Öğretmenler ve PIN" sayfasının başındaki "PIN'i olmayanların hepsine
+    PIN üret" düğmesiyle pusulaları tek seferde yazdırın.</p>
+  <div class="dugme-satiri">
+    <button class="ana"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Ekle</button>
+    <button name="eylem" value="vazgec">Vazgeç</button>
+  </div>
+</form>
+{% endblock %}

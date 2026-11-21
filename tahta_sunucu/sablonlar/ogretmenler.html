@@ -31,6 +31,24 @@
     <p class="not" id="og-kod-not">Kod boş bırakılırsa 101'den başlayan ilk boş kod verilir. Kod gizli değildir; PIN gizlidir.</p>
   </form>
 </details>
+<details class="kutu ice-aktar" id="toplu-yukle"{% if not ogretmenler %} open{% endif %}>
+  <summary><h2 class="satir-ici">Toplu yükle</h2></summary>
+  <form method="post" action="/ogretmenler/onizle" enctype="multipart/form-data" class="form-dar">
+    <label for="og-dosya">Öğretmen listesi dosyası (.xml, .xls, .xlsx ya da .csv)</label>
+    <input id="og-dosya" type="file" name="dosya" accept=".xml,.xls,.xlsx,.csv" required aria-describedby="og-dosya-not">
+    <div class="not" id="og-dosya-not">
+      <p>Şu dosyalardan biri olur:</p>
+      <ul>
+        <li><strong>aSc Timetables</strong>: Dosya › Dışa aktar › aSc Timetables 2012 XML (en çok {{ toplu_xml_mb }} MB). Yalnız öğretmenlerin adı ve soyadı okunur.</li>
+        <li><strong>e-Okul</strong>: personel listesi raporu <strong>OOK01001R1</strong>, Excel (.XLS) çıktısı olduğu gibi. Yalnız adı soyadı okunur; görev önizlemede gösterilir, kadro ve branş okunmaz.</li>
+        <li><strong>Şablon</strong>: <a href="/ogretmenler/sablon.csv" download>şablonu indirin</a> (Adı · Soyadı · isteğe bağlı Kod), Excel'de doldurup .xlsx ya da .csv olarak kaydedin. Örnek satırı silin.</li>
+      </ul>
+      <p>Tablo dosyaları en çok {{ toplu_tablo_mb }} MB olabilir. T.C. kimlik no sütunu okunmaz. Dosya sunucuda saklanmaz; önce önizleme gösterilir,
+        "Ekle" demeden hiçbir şey yazılmaz. Dosyada olmayan öğretmenlere dokunulmaz. PIN bu adımda üretilmez.</p>
+    </div>
+    <p class="dugme-satiri"><button class="ana">Önizle</button></p>
+  </form>
+</details>
 {% endif %}
 
 {% if ogretmenler %}
@@ -79,7 +97,7 @@
 </table>
 </div>
 {% else %}
-<p class="bos-not">Henüz öğretmen yok.{% if yonetici %} Yukarıdan ekleyin.{% else %} Öğretmenleri yönetici ekler.{% endif %}</p>
+<p class="bos-not">Henüz öğretmen yok.{% if yonetici %} Yukarıdan tek tek ekleyin ya da listeyi toplu yükleyin.{% else %} Öğretmenleri yönetici ekler.{% endif %}</p>
 {% endif %}
 <p class="not">PIN sunucuda yalnız geri çevrilemez özet olarak durur; tahtaya ne PIN ne özeti gider. Aynı öğretmen 24 saatte 10 kez hatalı PIN
   girerse PIN kilitlenir ve yalnız buradan açılır ("Kilidi aç" aynı PIN'i geçerli kılar). Unutulan PIN için "Yeni PIN" üretin.</p>

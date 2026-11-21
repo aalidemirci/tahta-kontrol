@@ -1,8 +1,8 @@
 """Ders yoklaması uçları (Aşama 5): panel sayfaları ve tahtanın yoklama uçları (/ajan/yoklama/*).
 
 Yetki (ortak sözlük §3): yoklama görme/düzeltme/icmal, panelden yoklama, PIN üret/kilit aç iki role
-(yonetici, idareci) açık; öğretmen ekleme/düzenleme/pasifleştirme, toplu PIN, öğrenci aktarma ve yıl
-sonu silme yalnız yöneticinin. Her yazma işlemi işlem kaydına düşer; kayda öğrenci adı ve okul no
+(yonetici, idareci) açık; öğretmen ekleme/düzenleme/pasifleştirme, toplu PIN, öğrenci ve öğretmen listesi
+aktarma (0.21.0) ve yıl sonu silme yalnız yöneticinin. Her yazma işlemi işlem kaydına düşer; kayda öğrenci adı ve okul no
 YAZILMAZ (M6), öğretmen için yalnız kod yazılır. PIN düz metni yalnız pusula yanıtında görünür
 (Cache-Control: no-store, ara katman); adres satırına, kayda, veritabanına girmez.
 Yüklenen dosya diske yazılmaz (`bellekte_form`: geçici dosyaya taşma yok); önizleme yalnız bellekte, 15 dk.
@@ -19,7 +19,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.datastructures import UploadFile
 
-from . import acil, eokul, maske, metin, panel_defter, sinav, usb_anahtar, vt
+from . import acil, eokul, maske, metin, ogretmen_aktar, panel_defter, sinav, usb_anahtar, vt
 from . import yoklama as yk
 from .panel_program import bellekte_form, govde_uzunlugu
 
@@ -333,7 +333,9 @@ def kaydet(uygulama, y) -> None:
             liste = yk.ogretmen_listesi(b, vt.simdi())
             usb_sayilari = usb_anahtar.ogretmen_sayilari(b)  # 0.11.0: "USB anahtar" sütunu
         return y.sayfa(istek, "ogretmenler.html", k, ogretmenler=liste, yonetici=k["rol"] == "yonetici", usb_sayilari=usb_sayilari,
-                       pin_yok_sayisi=sum(1 for o in liste if o["aktif"] and o["pin_durumu"] == "yok"))  # fmt: skip
+                       pin_yok_sayisi=sum(1 for o in liste if o["aktif"] and o["pin_durumu"] == "yok"),
+                       toplu_xml_mb=ogretmen_aktar.DOSYA_SINIRI // (1024 * 1024),
+                       toplu_tablo_mb=ogretmen_aktar.TABLO_SINIRI // (1024 * 1024))  # fmt: skip
 
     def pusula_sayfasi(istek: Request, k, pusulalar: list[dict]) -> HTMLResponse:
         return y.sayfa(istek, "ogretmen_pusula.html", k, pusulalar=pusulalar)
@@ -416,6 +418,95 @@ def kaydet(uygulama, y) -> None:
                 raise ValueError("Bilinmeyen işlem.")
         except ValueError as hata:
             return y.yonlendir(donus, str(hata), hata=True)
+
+    # ---- öğretmen listesi aktarma (0.21.0; ayrıştırma ve plan ogretmen_aktar.py) -------------------------
+    @uygulama.get("/ogretmenler/sablon.csv")
+    async def ogretmen_sablon(istek: Request):
+        if not y.kullanici(istek):
+            return y.yonlendir("/giris")
+        return Response(ogretmen_aktar.sablon_csv(), media_type="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": 'attachment; filename="ogretmen-listesi-sablon.csv"'})  # fmt: skip
+
+    @uygulama.post("/ogretmenler/onizle")
+    async def ogretmen_onizle(istek: Request):
+        k = y.kullanici(istek)
+        if not k:
+            return y.yonlendir("/giris")
+        donus = "/ogretmenler"
+        red = yonetici_gerek(istek, k, "Öğretmen listesi aktarma", donus)  # yetki, form ayrıştırılmadan önce
+        if red:
+            return red
+        sinir = ogretmen_aktar.DOSYA_SINIRI
+        uzunluk = govde_uzunlugu(istek)
+        if uzunluk is None:
+            return y.yonlendir(donus, "Dosya okunamadı.", hata=True)
+        if uzunluk > sinir + 64 * 1024:
+            return y.yonlendir(donus, f"Dosya en çok {sinir // (1024 * 1024)} MB olabilir.", hata=True)
+        try:
+            form = await bellekte_form(istek, sinir + 64 * 1024)
+        except Exception:
+            return y.yonlendir(donus, "Dosya okunamadı.", hata=True)
+        try:
+            dosya = form.get("dosya")
+            if not isinstance(dosya, UploadFile) or not dosya.filename:
+                return y.yonlendir(donus, "Dosya seçilmedi.", hata=True)
+            veri = await dosya.read(sinir + 1)
+            dosya_adi = dosya.filename
+        finally:
+            await form.close()
+        try:
+            ayristirma = ogretmen_aktar.dosya_oku(veri, dosya_adi)
+        except ValueError as hata:
+            with vt.islem() as b:
+                vt.kayit_dus(b, k["ad"], "Öğretmen listesi reddedildi", str(hata)[:200], ip(istek))
+            return y.yonlendir(donus, str(hata), hata=True)
+        finally:
+            del veri
+        if not ayristirma["ogretmenler"]:
+            return y.yonlendir(donus, f"Dosyada eklenebilecek öğretmen satırı yok ({len(ayristirma['atlanan'])} satır atlandı).",
+                               hata=True)  # fmt: skip
+        with vt.islem() as b:
+            plan = ogretmen_aktar.plan(b, ayristirma)
+            s = plan["sayilar"]
+            vt.kayit_dus(b, k["ad"], "Öğretmen listesi önizlendi",
+                         f"{s['dosyada']} satır · {s['ekle']} yeni, {s['var']} zaten var, {s['pasif']} pasif, "
+                         f"{s['yinelenen']} yinelenen, {s['atlanan']} atlandı", ip(istek))  # fmt: skip
+        belirtec = depo.koy(k["id"], {"tur": "ogretmen_aktar", "ayristirma": ayristirma})
+        return y.sayfa(istek, "ogretmen_onizleme.html", k, plan=plan, ayristirma=ayristirma, onizleme=belirtec,
+                       durum_adi=ogretmen_aktar.DURUM_ADI, omur_dk=yk.ONIZLEME_OMRU_SN // 60)  # fmt: skip
+
+    @uygulama.post("/ogretmenler/aktar")
+    async def ogretmen_listesi_aktar(istek: Request):
+        k = y.kullanici(istek)
+        if not k:
+            return y.yonlendir("/giris")
+        donus = "/ogretmenler"
+        red = yonetici_gerek(istek, k, "Öğretmen listesi aktarma", donus)
+        if red:
+            return red
+        form = await istek.form()
+        kayit = depo.al(str(form.get("onizleme", "")), k["id"])  # tek kullanımlık: Vazgeç de önizlemeyi siler
+        if not kayit or kayit.get("tur") != "ogretmen_aktar":  # depo öğrenci ve mazeret önizlemesiyle ortaktır
+            return y.yonlendir(donus, "Önizlemenin süresi doldu; dosyayı yeniden yükleyin.", hata=True)
+        if str(form.get("eylem", "")) == "vazgec":
+            return y.yonlendir(donus, "Önizleme silindi; hiçbir öğretmen eklenmedi.")
+        secilen = {n for n in (_tamsayi(v) for v in form.getlist("ekle")) if n is not None}
+        etkinlestir = {n for n in (_tamsayi(v) for v in form.getlist("etkinlestir")) if n is not None}
+        try:
+            with vt.islem() as b:
+                s = ogretmen_aktar.uygula(b, kayit["ayristirma"], secilen, etkinlestir)
+                vt.kayit_dus(b, k["ad"], "Öğretmen listesi aktarıldı",
+                             f"{s['eklenen']} eklendi, {s['etkinlestirilen']} etkinleştirildi, {s['var']} zaten vardı, "
+                             f"{s['secilmeyen']} seçilmedi, {s['atlanan']} satır atlandı", ip(istek))  # fmt: skip
+        except ValueError as hata:
+            return y.yonlendir(donus, str(hata), hata=True)
+        if not s["eklenen"] and not s["etkinlestirilen"]:
+            return y.yonlendir(donus, "Hiçbir öğretmen eklenmedi: seçili satır yoktu.")
+        ileti = f"{s['eklenen']} öğretmen eklendi"
+        if s["etkinlestirilen"]:
+            ileti += f", {s['etkinlestirilen']} öğretmen etkinleştirildi"
+        return y.yonlendir(donus, ileti + ". PIN'i olmayanların hepsine PIN üretmek için sayfanın başındaki "
+                                  "“PIN'i olmayanların hepsine PIN üret” düğmesini kullanın.")  # fmt: skip
 
     # ---- öğrenciler ve aktarma ------------------------------------------------------------------------
     def ogrenciler_sayfasi(istek: Request, k, sube: str | None, durum_kodu: int = 200, **ek) -> HTMLResponse:
@@ -751,6 +842,15 @@ def kaydet(uygulama, y) -> None:
 # ogretmenler.html: ogretmenler[{id, ad, soyad, ad_soyad, kod, aktif, pin_durumu: var|yok|kilitli, pin_metni, hatali, kilitli}],
 #   yonetici, pin_yok_sayisi. POST /ogretmenler {eylem: ekle(ad,soyad,kod?) · duzenle(id,ad,soyad,kod?) · durum(id) ·
 #   toplu_pin · pin_uret(id) · pin_kilit_ac(id)}.
+#   0.21.0 toplu yükleme (yalnız yönetici): toplu_xml_mb, toplu_tablo_mb. POST /ogretmenler/onizle multipart
+#   <input type=file name=dosya accept=".xml,.xls,.xlsx,.csv"> · GET /ogretmenler/sablon.csv (Adı;Soyadı;Kod + uydurma örnek).
+# ogretmen_onizleme.html (0.21.0; ogretmen_aktar.plan): plan{satirlar[{satir, ad, soyad, ad_soyad, gorev, bolme, dosya_kod,
+#   durum: ekle|var|pasif|yinelenen, secili, kod, kod_kaynagi: dosya|otomatik|mevcut|'', ogretmen_id, isaretler[]}],
+#   sayilar{dosyada, ekle, var, pasif, yinelenen, atlanan, bolme, secili}, gorev_var (yalnız e-Okul)},
+#   ayristirma{kaynak: asc|eokul|eokul_xls|xlsx|csv, kaynak_adi, satir_adi, notlar[], uyarilar[], atlanan[{satir,neden}]},
+#   durum_adi{durum: metin}, onizleme (belirteç), omur_dk. Onay: POST /ogretmenler/aktar {onizleme, ekle=<satir>*,
+#   etkinlestir=<ogretmen_id>*, eylem=vazgec?}; plan işlem içinde yeniden hesaplanır, kod "öngörülen"dir; dosyada olmayan
+#   öğretmene dokunulmaz; PIN üretilmez (toplu PIN düğmesi). İşlem kaydına yalnız sayılar.
 # ogretmen_pusula.html: pusulalar[{ad_soyad, kod, pin ("482 913")}] (yalnız POST yanıtı; no-store).
 # ogrenciler.html: subeler[{sube,sayi}], sube, ogrenciler[{okul_no,ad,soyad}], aktarimlar[{zaman,kullanici,bicim,sube_sayisi,
 #   eklenen,guncellenen,pasif,atlanan}], toplam, pasif, yonetici, dosya_siniri_mb, satir_siniri.
