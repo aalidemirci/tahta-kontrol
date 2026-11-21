@@ -490,6 +490,16 @@ GOCLER = [
         WHERE anahtar = 'yoklama' AND json_valid(deger) AND json_type(deger) = 'object'
           AND json_extract(deger, '$.maske') = 'ad_soyadbas';
     """,
+    # 0.21.0 — aSc içe aktarma. (1) 0.20.0 otomatik saat eşlemelerini de hatırlıyordu ('period|başlangıç' →
+    # 'devre|no'); yeni devre grubu eşlemesinin önüne geçip sabah derslerini öğle devresine yazabiliyordu. 0.21.0
+    # yalnız elle seçileni hatırlar; eskiler hangisinin elle seçildiği bilinemediği için bir kez silinir (yalnız aSc
+    # ders saati; derslik/sınıf/şube eşlemeleri kalır). (2) Program sürümü, onaydaki isteğe bağlı "tahtaların şube
+    # bilgisini güncelle" adımının eski değerlerini de taşır: geri yüklemede tahtanın şube ve derslik alanı döner.
+    """
+    DELETE FROM program_eslesme WHERE kaynak = 'asc' AND tur = 'saat';
+    ALTER TABLE program_surum ADD COLUMN tahta_json TEXT NOT NULL DEFAULT '';
+        -- [{"id", "subeler", "derslik", "yeni_subeler", "yeni_derslik"}] (eski → onayın yazdığı); '' = yok
+    """,
 ]
 GOC_ONCESI_KALAN = 3
 # Göç (ve göç öncesi kopya), yedek alma ve geri yükleme aynı anda çalışmaz (A6 K-B2).

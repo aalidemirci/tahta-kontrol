@@ -286,7 +286,8 @@ def test_bos_sistemde_rapordan_zil_cizelgesi_ikili_egitim_sube_esleme_ve_onay(uy
     kur_ve_gir(panel)
     kaynak = panel.get("/program/aktar").text
     assert "Zil saatleri tanımlı değil" in kaynak and 'action="/program/aktar/eokul"' in kaynak
-    assert 'action="/program/aktar/asc"' not in kaynak  # zil yokken yalnız e-Okul kaynağı
+    # zil yokken e-Okul ve aSc kaynağı (0.21.0: aSc dosyasından da zil çizelgesi önerilir); şablon ve yapay zekâ yok
+    assert 'action="/program/aktar/asc"' in kaynak and 'action="/program/aktar/tablo"' not in kaynak
     assert "Haftalık Ders Programları (OOK11002_R01)" in kaynak
     yanit = yukle(panel)
     assert yanit.headers["location"] == "/program/aktar?adim=esleme"

@@ -187,8 +187,9 @@ def eski_veritabani(dizin: Path, yoklama_ayari: dict | None) -> None:
     b.close()
 
 
-def test_goc_tek_ogedir_ve_sondadir():
-    assert GOC_SIRASI == len(vt.GOCLER) - 1
+def test_goc_tek_ogedir_ve_sonrakiler_yoklamaya_dokunmaz():
+    # 0.21.0'dan beri sonda değil (aSc göçü); ondan sonraki göçler yoklama tablolarına dokunmaz
+    assert GOC_SIRASI < len(vt.GOCLER) and not any("yoklama" in g for g in vt.GOCLER[GOC_SIRASI + 1 :])
     assert sum("yoklama_gec" in g or "yoklama_duzeltme" in g or "yoklama_mazeret" in g for g in vt.GOCLER) == 1
 
 

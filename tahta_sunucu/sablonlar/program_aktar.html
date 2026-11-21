@@ -3,15 +3,17 @@
 {% block icerik %}
 {# Bağlam: aktar (panel_aktar.aktar_baglami belgesi), serit, bolum='aktar' (0.19.0: kendi sekmesi), yonetici.
    Form uçları ve alan adları SÖZLEŞMEDİR: /program/aktar/asc (dosya), /program/aktar/tablo (dosya | metin, bicim=tablo|yz),
-   /program/aktar/eokul (dosya), /program/aktar/eokul/zil (onizleme, onay: 1),
-   /program/aktar/esle (onizleme, d_<n>, s_<n>, p_<n>, t_<n>, b_<blok no>, sube_listesi, donem, devre_secimi),
-   /program/aktar/onayla (onizleme, eylem=onayla|vazgec, temizle_tahta…, onay_hatali=1).
+   /program/aktar/eokul (dosya), /program/aktar/eokul/zil (onizleme, onay: 1), /program/aktar/asc/zil (onizleme, onay: 1),
+   /program/aktar/esle (onizleme, d_<n>, s_<n>, p_<n>, t_<n>, g_<n>, b_<blok no>, sube_listesi, donem),
+   /program/aktar/unut (onizleme, onay: 1),
+   /program/aktar/onayla (onizleme, eylem=onayla|vazgec, temizle_tahta…, onay_hatali=1, subeleri_guncelle=1).
    JS yalnız "İstemi kopyala" (panel.js kopyala bölümü). #}
 {% include "_program_bas.html" %}
 {% set ADIMLAR = [('kaynak', 'Kaynak'), ('esleme', 'Eşleme'), ('onizleme', 'Önizleme ve onay')] %}
 {% set DURUM = {'hatirlanan': ('bilgi', 's-bilgi', 'Hatırlanan'), 'otomatik': ('tamam', 's-tamam', 'Otomatik'),
                 'secildi': ('onay', 's-onay', 'Seçildi'), 'eslesmedi': ('uyari', 's-sorun', 'Eşleşmedi'),
-                'liste': ('bilgi', 's-bilgi', 'Listeden'), 'sistem': ('bilgi', 's-bilgi', 'Sıradan öneri')} %}
+                'liste': ('bilgi', 's-bilgi', 'Listeden'), 'sistem': ('bilgi', 's-bilgi', 'Sıradan öneri'),
+                'rakam': ('bilgi', 's-bilgi', 'Numarasından öneri')} %}
 {% macro durum_rozeti(d) %}{% set x = DURUM.get(d, ('bilgi', 's-bilgi', d)) %}<span class="rozet" data-durum="{{ x[0] }}"><svg class="simge" aria-hidden="true"><use href="#{{ x[1] }}"/></svg>{{ x[2] }}</span>{% endmacro %}
 
 <div class="kutu-bas">
@@ -20,7 +22,7 @@
 </div>
 
 {% if not aktar.ders_saati_var %}
-<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Zil saatleri tanımlı değil. aSc, şablon ve yapay zekâ yolları ders saatlerine göre okunur; önce zil saatlerini girin. e-Okul raporundan ise zil çizelgesi de oluşturulabilir.&nbsp;<a href="/program?bolum=zil">Zil saatleri</a></p>
+<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Zil saatleri tanımlı değil. Şablon ve yapay zekâ yolları ders saatlerine göre okunur; önce zil saatlerini girin. e-Okul raporundan ve aSc dosyasından ise zil çizelgesi de oluşturulabilir.&nbsp;<a href="/program?bolum=zil">Zil saatleri</a></p>
 {% endif %}
 
 <ol class="sihirbaz-adimlari" aria-label="Sihirbaz adımları">
@@ -40,9 +42,8 @@
   </form>
 </section>
 
-{% if aktar.ders_saati_var %}
 <section class="kutu" aria-labelledby="k-asc">
-  <h2 id="k-asc">aSc Timetables (XML) <span class="rozet" data-durum="onay"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Sınanıyor</span></h2>
+  <h2 id="k-asc">aSc Timetables (XML)</h2>
   <p class="ipucu">{{ aktar.asc_metni }}</p>
   <p class="not">{{ aktar.asc_deneme_notu }}</p>
   <form method="post" action="/program/aktar/asc" enctype="multipart/form-data">
@@ -51,6 +52,8 @@
     <p class="dugme-satiri"><button class="ana">Yükle ve eşle</button></p>
   </form>
 </section>
+
+{% if aktar.ders_saati_var %}
 
 <section class="kutu" aria-labelledby="k-tablo">
   <h2 id="k-tablo">Tahta Kontrol şablonu (CSV ya da Excel)</h2>
@@ -165,22 +168,64 @@ Hazırlık/A;Cuma;2,4-6;;Z-04</pre>
 {% endif %}
 {% endif %}
 
+{% if aktar.adim == 'esleme' and o.kaynak == 'asc' and o.asc_zil and o.asc_zil.zil_gerekli %}
+{% set az = o.asc_zil %}
+{% set z = o.zil_etkisi %}
+<section class="kutu" aria-labelledby="asc-zil">
+  <h2 id="asc-zil">Zil çizelgesi</h2>
+  {% if az.zil_yalniz_fark %}
+  <p class="bant" role="status"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Zil çizelgeniz bu dosyaya uyuyor; yalnız bazı ders saatleri 5 dakikadan çok farklı (uyarılarda hangileri olduğu yazar). Dersler yine ders numarasına göre programa yazılır. Yeni zil çizelgesi yalnız okulun zil saatleri gerçekten değiştiyse gerekir.</p>
+  {% else %}
+  <p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{% if not aktar.ders_saati_var %}Zil saatleri tanımlı değil.{% else %}Dosyadaki ders saatleri zil çizelgenize uymuyor.{% endif %}{% if az.zil_onerisi %} Bu dosyadaki saatlerden zil çizelgesi oluşturabilirsiniz; eşlenemeyen{% else %} Eşlenemeyen{% endif %} ders saatleri programa yazılmaz.</p>
+  {% endif %}
+  {% if az.zil_onerilemez %}<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>{{ az.zil_onerilemez }}&nbsp;<a href="/program?bolum=zil">Zil saatleri</a></span></p>{% endif %}
+  {% if az.zil_onerisi %}
+  <ul>{% for d in az.zil_onerisi.devreler %}<li><strong>{{ d.ad }}</strong> · {{ d.sayi }} ders · {{ d.aralik }}<br><span class="not">{{ d.saatler }}</span></li>{% endfor %}</ul>
+  {% if az.zil_onerisi.hatalar %}
+  <div class="bant hata" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><div><strong>Bu saatlerle çizelge oluşturulamıyor</strong><ul>{% for h in az.zil_onerisi.hatalar %}<li>{{ h }}</li>{% endfor %}</ul></div></div>
+  {% else %}
+  <form method="post" action="/program/aktar/asc/zil">
+    <input type="hidden" name="onizleme" value="{{ o.kimlik }}">
+    <p class="ipucu">Yeni çizelge “aSc · {{ az.zil_onerisi.gun_metni }}” adıyla oluşturulur ve haftalık düzende {{ az.zil_onerisi.gun_metni }} günlerine atanır. Mevcut çizelgeler silinmez, başka günler değişmez. aSc dosyasında her gün aynı saat yazar; farklı saatli bir gününüz varsa (ör. Cuma) sonra zil düzenleyicisinde ayarlayın. Dosyadaki saatler okulun gerçek zil saatleri değilse (ör. teneffüssüz ardışık dersler) çizelgeyi oluşturmayın ya da sonra düzeltin.{% if az.zil_onerisi.mevcut_kimlikler %} Devre adları zil çizelgenizdekilerle aynı kalır.{% endif %}</p>
+    {% if z and (z.atamalar or z.yetim_satir) %}
+    <div class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><div><strong>Onaylamadan önce bilin</strong><ul>
+      {% if z.atamalar %}<li>Bu günler şu an şu çizelgelere bağlı; yeni çizelge hepsinin yerini alır: {{ z.atamalar | join(' · ') }}.</li>{% endif %}
+      {% if z.yetim_satir %}<li>Mevcut derslik programında {{ z.yetim_tahta }} tahtanın {{ z.yetim_satir }} ders saatinin yeni çizelgede karşılığı kalmayacak (devre adı ya da ders numarası değişiyor). Bu satırlar silinmez ama hiçbir ders saatine bağlı olmaz (Program sayfasında uyarı olarak görünür).</li>{% endif %}
+    </ul></div></div>
+    {% endif %}
+    <label class="satir"><input type="checkbox" name="onay" value="1" required> Bu saatlerle zil çizelgesi oluşturulsun</label>
+    <p class="dugme-satiri"><button class="ana">Bu dosyadaki saatlerden zil çizelgesi oluştur</button></p>
+  </form>
+  {% endif %}
+  {% endif %}
+</section>
+{% endif %}
+
 {% if aktar.adim == 'esleme' %}
 <form method="post" action="/program/aktar/esle" class="kutu" aria-labelledby="esleme-baslik">
   <h2 id="esleme-baslik">Eşleme</h2>
   <p class="ipucu">Dosyadaki adları Tahta Kontrol'deki tahtalara, şubelere ve ders saatlerine bağlayın. Eşlenmeyen satırlar atlanır ve önizlemede sayılır. Seçimler onaylayınca hatırlanır.</p>
   <input type="hidden" name="onizleme" value="{{ o.kimlik }}">
-  {% if o.donemler | length > 1 or o.devre_sorusu %}
+  {% if o.ayni_adli_tahta %}<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Aynı adı taşıyan tahtalar var; numaralarına bakın.</p>{% endif %}
+  {% if o.donemler | length > 1 %}
   <div class="esleme-sorulari">
-    {% if o.donemler | length > 1 %}
     <div class="alan"><label for="donem">Hangi dönem?</label>
       <select id="donem" name="donem">{% for k_, ad in o.donemler %}<option value="{{ k_ }}"{% if k_ == o.secili_donem %} selected{% endif %}>{{ ad }}</option>{% endfor %}</select></div>
-    {% endif %}
-    {% if o.devre_sorusu %}
-    <div class="alan"><label for="devre-secimi">Bu dosya hangi devrenin programı?</label>
-      <select id="devre-secimi" name="devre_secimi"><option value="">İkisi de — saatlerden eşle</option>{% for d, ad in o.devre_secenekleri %}<option value="{{ d }}"{% if d == o.devre_secimi %} selected{% endif %}>{{ ad }}</option>{% endfor %}</select></div>
-    {% endif %}
   </div>
+  {% endif %}
+  {% if o.eslesme.devre %}
+  {# 0.21.0: aSc devre grupları (ikili eğitimde "S1–S8" sabah, "Ö1–Ö8" öğle). Hepsi otomatik eşlendiyse açılır içinde. #}
+  {% set acik = o.eslesme.devre | selectattr('durum', 'ne', 'otomatik') | list %}
+  {% set tek = o.eslesme.devre[0].tek %}
+  {% if not acik %}<details class="ek-bilgi"><summary>Devreler: {% for e in o.eslesme.devre %}{{ e.ad }} → {% for d, ad in o.devre_secenekleri %}{% if d == e.deger %}{{ ad }}{% endif %}{% endfor %}{% if not loop.last %} · {% endif %}{% endfor %} (otomatik; değiştirmek gerekmez)</summary>{% endif %}
+  <div class="tablo-kap" role="region" tabindex="0" aria-labelledby="e-devre">
+  <table class="esleme-tablo"><caption id="e-devre">{% if tek %}Bu dosya hangi devrenin programı?{% else %}Dosyadaki devreler · her grubun ders saatleri seçilen devrenin 1., 2., … dersine yazılır{% endif %}</caption>
+  <thead><tr><th scope="col">aSc ders saatleri</th><th scope="col">Zil çizelgesinde devre</th><th scope="col">Durum</th></tr></thead><tbody>
+  {% for e in o.eslesme.devre %}<tr><th scope="row">{{ e.ad }} <span class="not">({{ e.bas }}–{{ e.bit }} · {{ e.sayi }} ders saati)</span></th>
+    <td data-etiket="Devre"><select name="g_{{ loop.index0 }}" aria-label="{{ e.ad }}: zil çizelgesindeki devre">{% if tek %}<option value="">İkisi de — saatlerden eşle</option>{% else %}<option value=""{% if not e.deger %} selected{% endif %}>Seçin</option>{% endif %}{% for d, ad in o.devre_secenekleri %}<option value="{{ d }}"{% if d == e.deger %} selected{% endif %}>{{ ad }}</option>{% endfor %}{% if not tek %}<option value="yok"{% if e.deger == 'yok' %} selected{% endif %}>Yok say (yazılmaz)</option>{% endif %}</select></td>
+    <td data-etiket="Durum">{{ durum_rozeti(e.durum) }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% if not acik %}</details>{% endif %}
   {% endif %}
   {% if o.kaynak == 'eokul' %}
   {% set e = o.eokul %}
@@ -261,6 +306,15 @@ Hazırlık/A;Cuma;2,4-6;;Z-04</pre>
   {% endif %}
   <p class="dugme-satiri"><button class="ana">Önizlemeye geç</button></p>
 </form>
+{% if o.hatirlanan_sayisi %}
+<form method="post" action="/program/aktar/unut" class="kutu" aria-labelledby="unut-baslik">
+  <h2 id="unut-baslik">Hatırlanan eşleşmeler</h2>
+  <p class="ipucu">Önceki aktarımlardan bu kaynak için {{ o.hatirlanan_sayisi }} eşleşme hatırlanıyor (“Hatırlanan” durumundakiler). Yanlış hatırlanan bir eşleşme varsa hepsini unutabilirsiniz; eşleme dosyadan ve tahta bilgilerinden yeniden önerilir. Derslik programları değişmez.</p>
+  <input type="hidden" name="onizleme" value="{{ o.kimlik }}">
+  <label class="satir"><input type="checkbox" name="onay" value="1" required> Hatırlanan bütün eşleşmeler silinsin</label>
+  <p class="dugme-satiri"><button>Hatırlanan eşleşmeleri unut</button></p>
+</form>
+{% endif %}
 {% endif %}
 
 {% if aktar.adim == 'onizleme' %}
@@ -271,6 +325,7 @@ Hazırlık/A;Cuma;2,4-6;;Z-04</pre>
     {% if o.sube_sayilari %}<p class="not">Şube başına haftalık ders saati:</p><ul class="sayi-tablosu">{% for s, n in o.sube_sayilari %}<li>{{ s }}: {{ n }} saat</li>{% endfor %}</ul>{% endif %}</div></div>{% endif %}
   {% if o.hatalar %}<div class="bant hata" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><div><strong>Hatalı satırlar ({{ o.hata_sayisi }}; atlanır)</strong><ul>{% for h in o.hatalar %}<li>{{ h }}</li>{% endfor %}</ul>{% if o.hata_sayisi > o.hatalar | length %}<p class="not">İlk {{ o.hatalar | length }} hata gösterildi.</p>{% endif %}</div></div>{% endif %}
   {% if o.uyarilar %}<div class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><div><strong>Uyarılar</strong><ul>{% for u in o.uyarilar %}<li>{{ u }}</li>{% endfor %}</ul></div></div>{% endif %}
+  {% if o.kaynak == 'asc' and o.sube_sayilari %}<details class="ek-bilgi"><summary>Şube başına haftalık ders saati (aSc'deki programla karşılaştırın)</summary><ul class="sayi-tablosu">{% for s_, n in o.sube_sayilari %}<li>{{ s_ }}: {{ n }} saat</li>{% endfor %}</ul></details>{% endif %}
   {% if o.kaynak == 'eokul' %}<p class="not">e-Okul raporu: {{ o.eokul.sayilar.blok }} blok ({{ o.eokul.sayilar.atanan }} şubeye atandı, {{ o.eokul.sayilar.atlanan }} atlandı) · yazılacak {{ o.eokul.sayilar.dolu }} dolu ders saati · {{ o.eokul.sayilar.bos }} boş ders saati (o saatlerde ders yok sayılır)</p>
     {% if o.sube_sayilari %}<details class="ek-bilgi"><summary>Şube başına haftalık ders saati (PDF'le karşılaştırın)</summary><ul class="sayi-tablosu">{% for s_, n in o.sube_sayilari %}<li>{{ s_ }}: {{ n }} saat</li>{% endfor %}</ul></details>{% endif %}{% endif %}
   {% if o.dersliksiz_sayi %}<div class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><div>{% if o.kaynak == 'eokul' %}Tahtası belli olmayan şubelerin {{ o.dersliksiz_sayi }} dersi hiçbir tahtaya yazılmadı; eşlemede tahtasını seçin.{% else %}Dersliği belli olmayan {{ o.dersliksiz_sayi }} ders (ör. beden eğitimi): hiçbir tahtaya yazılmadı.{% endif %}<ul>{% for d in o.dersliksiz %}<li>{{ d }}</li>{% endfor %}</ul></div></div>{% endif %}
@@ -281,7 +336,7 @@ Hazırlık/A;Cuma;2,4-6;;Z-04</pre>
   <p class="ipucu"><span class="fark-ekle">+</span> eklenecek ders saati · <span class="fark-sil">−</span> silinecek · <span class="fark-degis">~</span> şubesi değişecek. Satırı açınca ayrıntı görünür.</p>
   <div class="fark-listesi">
   {% for t in o.tahtalar %}
-  <details><summary><strong>{{ t.ad }}</strong>{% if t.derslik %} <span class="not">{{ t.derslik }}</span>{% endif %} <span class="not">{{ t.devreler }}</span>
+  <details><summary><strong>{{ t.ad }}</strong> <span class="not">No {{ t.id }}</span>{% if t.derslik %} <span class="not">{{ t.derslik }}</span>{% endif %} <span class="not">{{ t.devreler }}</span>
     <span class="fark-sayilari"><span class="{{ 'fark-ekle' if t.eklenen else 'not' }}">+{{ t.eklenen }}</span><span class="{{ 'fark-sil' if t.silinen else 'not' }}">−{{ t.silinen }}</span><span class="{{ 'fark-degis' if t.degisen else 'not' }}">~{{ t.degisen }}</span></span></summary>
     <ul>{% for d in t.degisiklikler %}<li data-fark="{{ d.isaret }}">{{ d.isaret }} {{ d.gun_adi }} · {{ d.devre_adi }} · {{ d.no }}. ders{% if d.isaret == '~' %} · {{ d.sube_eski or 'şubesiz' }} → {{ d.sube_yeni or 'şubesiz' }}{% elif d.sube_yeni or d.sube_eski %} · {{ d.sube_yeni or d.sube_eski }}{% endif %}</li>{% endfor %}</ul>
   </details>
@@ -295,6 +350,13 @@ Hazırlık/A;Cuma;2,4-6;;Z-04</pre>
     <fieldset class="secim-grubu"><legend>Dosyada geçmeyen ama bu devrelerde programı olan tahtalar</legend>
       <p class="ipucu">Bunlara dokunulmaz. Bütün okulun programını yeniden yüklüyorsanız eski kalıntıyı temizlemek için işaretleyin.</p>
       <div class="secim-listesi">{% for t in o.dokunulmayan_programli %}<label class="satir"><input type="checkbox" name="temizle_tahta" value="{{ t.id }}"> <span>{{ t.ad }}{% if t.derslik %} · {{ t.derslik }}{% endif %} ({{ t.devreler }}): bu devre(ler)deki programını da temizle</span></label>{% endfor %}</div>
+    </fieldset>
+    {% endif %}
+    {% if o.kaynak == 'asc' and o.sube_guncellemesi %}
+    <fieldset class="secim-grubu"><legend>Tahtaların şube bilgisi</legend>
+      <label class="satir"><input type="checkbox" name="subeleri_guncelle" value="1"> <span>Tahtaların şube bilgisini programdan güncelle ({{ o.sube_guncellemesi | length }} tahta)</span></label>
+      <p class="ipucu">İşaretlerseniz her tahtanın şubeleri, aSc'de ana dersliği o tahtaya eşlenen sınıflarınki olur; derslik alanı boş tahtaya aSc'deki derslik kısa adı yazılır. Duyuru hedefleri tahtanın şubelerini kullanır. İşaretlemezseniz tahta bilgileri değişmez. Eski şube ve derslik bilgisi de saklanır: bu program “Önceki programlar”dan geri yüklenirse, o zamandan beri elle değiştirilmemiş tahtaların şube bilgisi de eski hâline döner.</p>
+      <details class="ek-bilgi"><summary>Değişecek tahtalar ({{ o.sube_guncellemesi | length }})</summary><ul>{% for g in o.sube_guncellemesi %}<li>No {{ g.id }} · {{ g.ad }}: {% if g.subeler != g.eski_subeler %}şubeler {{ g.eski_subeler or 'boş' }} → {{ g.subeler }}{% endif %}{% if g.derslik != g.eski_derslik %}{% if g.subeler != g.eski_subeler %} · {% endif %}derslik {{ g.derslik }}{% endif %}</li>{% endfor %}</ul></details>
     </fieldset>
     {% endif %}
     {% if o.cok_hata %}<div class="bant uyari" role="alert"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><div><p>Satırların çoğu okunamadı; dosyayı kontrol edin.</p>

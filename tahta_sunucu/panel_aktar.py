@@ -38,7 +38,8 @@ ASC_METNI = (
     "ve saklanmaz; yalnız sınıf, derslik, gün ve ders saati alınır. aSc'nin kayıtsız (ücretsiz deneme) sürümü en çok 10 ders "
     "dışa aktarır; o durumda program eksik görünür."
 )
-ASC_DENEME_NOTU = "Bu yol henüz sınanıyor; ilk kullanımda önizlemeyi dikkatle kontrol edin."
+ASC_DENEME_NOTU = ("Bir okulun aSc Timetables 2012 dosyasıyla denendi. İkili eğitimde sabah ve öğle ders saatleri ayrı "
+                   "devrelere yazılır; ilk kullanımda önizlemeyi kontrol edin.")  # fmt: skip
 TABLO_TARIFI = (
     "Yapıştırdığınız metinde kod bloğu işaretleri (```) ya da metnin başında/sonunda açıklama cümlesi varsa Tahta "
     "Kontrol onları atar; sube;gun;ders sütunlarını içeren ilk satır başlık sayılır."
@@ -75,14 +76,16 @@ def kaydet(uygulama, y) -> None:
         "onizleme": None | {"kimlik", "kaynak": "asc"|"tablo", "bicim", "bicim_adi", "ozet": {sha256, satir_sayisi,
         kart_sayisi}, "ozet_metni", "hatalar", "hata_sayisi", "uyarilar", "cok_hata", "onaylanabilir",
         "eslesme": {"derslik"|"sinif"|"saat"|"sube": [{"anahtar","ad","durum": hatirlanan|otomatik|secildi|eslesmedi,
-        "deger", ("bas","bit" saat için)}]}, "donemler": [(konum, ad)], "secili_donem", "devre_sorusu",
-        "devre_secenekleri": [(devre, ad)], "devre_secimi", "saat_secenekleri": [{"deger","ad"}],
-        "tahta_secenekleri": [(id, ad)], "tahtalar": fark.tahtalar, "toplam": fark.toplam,
-        "dokunulmayan_programli": [{"id","ad","derslik","devreler"}], "dersliksiz": [..], "dersliksiz_sayi",
-        "sube_sayilari": [(şube, saat)], "yz_bandi", "esleme_gerekli"}}.
+        "deger", ("bas","bit" saat için)}], "devre": [{"anahtar","ad","bas","bit","sayi","durum","deger",("tek")}]},
+        "donemler": [(konum, ad)], "secili_donem", "devre_secenekleri": [(devre, ad)], "saat_secenekleri": [{"deger","ad"}],
+        "tahta_secenekleri": [(id, "No <id> · ad · derslik")], "ayni_adli_tahta", "tahtalar": fark.tahtalar,
+        "toplam": fark.toplam, "dokunulmayan_programli": [{"id","ad","derslik","devreler"}], "dersliksiz": [..],
+        "dersliksiz_sayi", "sube_sayilari": [(şube, saat)], "yz_bandi", "esleme_gerekli", "asc_zil": None | {zil_onerisi,
+        zil_gerekli, zil_onerilemez, zil_yalniz_fark}, "zil_etkisi", "sube_guncellemesi": [{"id","ad","eski_subeler",
+        "subeler","eski_derslik","derslik"}], "hatirlanan_sayisi"}}.
         Eşleme formu alan adları: d_<n> (derslik → tahta id | "" atla), s_<n> (sınıf → şube | "" şubesiz),
-        p_<n> (aSc ders saati → "devre|no" | "yok"), t_<n> (şube → tahta id | ""), donem, devre_secimi;
-        n = ilgili listedeki sıra (0'dan).
+        p_<n> (aSc ders saati → "devre|no" | "yok"), t_<n> (şube → tahta id | ""), g_<n> (aSc devre grubu → devre | "yok"
+        | ""; 0.21.0, eski tek `devre_secimi`'nin yerine), donem; n = ilgili listedeki sıra (0'dan).
         """
         saatler = program.ders_saatleri_oku(b)
         baglam = {
@@ -106,7 +109,7 @@ def kaydet(uygulama, y) -> None:
         baglam["sinirlar"]["eokul_mb"] = eokul_program.EN_COK_BAYT // (1024 * 1024)
         if (isinstance(kayit, dict) and kayit.get("tur") == "aktar" and kayit.get("kullanici") == k["ad"]
                 and int(kayit.get("bitis") or 0) > vt.simdi()
-                and (saatler or (kayit.get("veri") or {}).get("kaynak") == "eokul")):  # fmt: skip
+                and (saatler or (kayit.get("veri") or {}).get("kaynak") in ("eokul", "asc"))):  # fmt: skip
             veri = kayit["veri"]
             sonuc = program_aktar.coz(b, veri)
             baglam["onizleme"] = {
@@ -124,11 +127,13 @@ def kaydet(uygulama, y) -> None:
                 "eslesme": sonuc["cozum"]["eslesme"],
                 "donemler": sonuc["donemler"],
                 "secili_donem": sonuc["secili_donem"],
-                "devre_sorusu": sonuc["devre_sorusu"],
                 "devre_secenekleri": sonuc["devre_secenekleri"],
-                "devre_secimi": (veri.get("secimler") or {}).get("devre_secimi", ""),
                 "saat_secenekleri": sonuc["saat_secenekleri"],
                 "tahta_secenekleri": sonuc["tahta_secenekleri"],
+                "ayni_adli_tahta": sonuc["ayni_adli_tahta"],
+                "asc_zil": sonuc["asc_zil"],
+                "sube_guncellemesi": sonuc["sube_guncellemesi"],
+                "hatirlanan_sayisi": program_aktar.hatirlanan_sayisi(b, program_aktar.hatirlanan_kaynagi(veri)),
                 "tahtalar": sonuc["fark"]["tahtalar"],
                 "toplam": sonuc["fark"]["toplam"],
                 "dokunulmayan_programli": sonuc["fark"]["dokunulmayan_programli"],
@@ -142,7 +147,9 @@ def kaydet(uygulama, y) -> None:
                 "sube_secenekleri": eokul_program.sistem_subeleri(b) if veri["kaynak"] == "eokul" else [],
                 "sube_listesi": ", ".join((veri.get("secimler") or {}).get("sube_listesi") or []),
                 "zil_etkisi": (eokul_program.zil_etkisi(b, sonuc["eokul"]["zil_onerisi"])
-                               if sonuc["eokul"] and sonuc["eokul"]["zil_onerisi"] else None),  # fmt: skip
+                               if sonuc["eokul"] and sonuc["eokul"]["zil_onerisi"] else
+                               eokul_program.zil_etkisi(b, sonuc["asc_zil"]["zil_onerisi"])
+                               if sonuc["asc_zil"] and sonuc["asc_zil"]["zil_onerisi"] else None),  # fmt: skip
             }
             if adim == "kaynak":
                 baglam["adim"] = "esleme" if sonuc["esleme_gerekli"] else "onizleme"
@@ -213,13 +220,16 @@ def kaydet(uygulama, y) -> None:
             bayt = await dosya.read(program_aktar.ASC_EN_COK_BAYT + 1)
         finally:
             await form.close()
-        with vt.islem() as b:
-            if not program.ders_saatleri_oku(b):
-                return y.yonlendir(donus, program_aktar.ZIL_YOK, hata=True)
+        # 0.21.0: zil yoksa da okunur; eşleme adımında dosyadaki saatlerden zil çizelgesi önerilir (onaylı).
         try:
             asc = program_aktar.asc_oku(bayt)
         except ValueError as hata:
             return y.yonlendir(donus, str(hata), hata=True)
+        if not program_aktar.asc_devre_gruplari(asc)["gruplar"]:
+            with vt.islem() as b:
+                zil_var = bool(program.ders_saatleri_oku(b))
+            if not zil_var:  # dosyada saat yok, zil yok: eşleme adımında ilerlenemez (zil önerisi de çıkamaz)
+                return y.yonlendir(donus, program_aktar.ASC_SAATSIZ, hata=True)
         okunan = {"kart_sayisi": len(asc["cards"]), "satir_sayisi": None}
         return onizle_ve_yonlendir(istek, k, "asc", "asc", program_aktar.ozet(bayt), okunan, asc)
 
@@ -360,6 +370,63 @@ def kaydet(uygulama, y) -> None:
         return y.yonlendir(donus, " ".join([f"“{ad}” zil çizelgesi oluşturuldu ve {oneri['gun_metni']} günlerine atandı.",
                                             *iletiler]))  # fmt: skip
 
+    @uygulama.post("/program/aktar/asc/zil")
+    async def aktar_asc_zil(istek: Request):
+        """0.21.0: aSc dosyasındaki ders saatlerinden zil çizelgesi oluşturur (yeni çizelge + haftalık düzende dosyadaki
+        günler); onay kutusu zorunludur."""
+        k = y.kullanici(istek)
+        engel = yetkisiz(istek, k, "Zil çizelgesini aSc dosyasından oluşturma")
+        if engel:
+            return engel
+        form = await istek.form(max_files=0, max_fields=5)
+        donus = "/program/aktar?adim=esleme"
+        with vt.islem() as b:
+            kayit = onizleme_al(b, "aktar", str(form.get("onizleme", "")), k)
+            if not kayit or kayit["veri"].get("kaynak") != "asc":
+                return y.yonlendir("/program/aktar", "Önizlemenin süresi geçmiş ya da başka bir kullanıcıya ait. Dosyayı yeniden yükleyin.", hata=True)
+            asc_zil = program_aktar.coz(b, kayit["veri"])["asc_zil"] or {}
+            oneri = asc_zil.get("zil_onerisi")
+            if not oneri or oneri["hatalar"]:
+                return y.yonlendir(donus, "Bu dosyadan zil çizelgesi oluşturulamıyor; zil saatlerini elle girin.", hata=True)
+            if form.get("onay") != "1":
+                return y.yonlendir(donus, "Zil çizelgesi oluşturmak için onay kutusunu işaretleyin.", hata=True)
+            etki = Etki(b)
+            _kimlik, ad = program_aktar.asc_zil_yaz(b, oneri, k["ad"])
+            iletiler = etki.bitir(b, k)
+            vt.kayit_dus(b, k["ad"], "Zil çizelgesi oluşturuldu",
+                         f"{ad} · {devre_sayilari(oneri['dersler'])} · aSc dosyasından · {oneri['gun_metni']}",
+                         y.istemci_ip(istek))  # fmt: skip
+        if etki.bugun_degisti:
+            isleyici = getattr(uygulama.state, "program_isleyici", None)
+            if isleyici is not None:
+                isleyici.bugun_degisti()
+        y.uyandir_hepsi(etki.uyandir)
+        return y.yonlendir(donus, " ".join([f"“{ad}” zil çizelgesi oluşturuldu ve {oneri['gun_metni']} günlerine atandı.",
+                                            *iletiler]))  # fmt: skip
+
+    @uygulama.post("/program/aktar/unut")
+    async def aktar_unut(istek: Request):
+        """0.21.0: önizlemedeki kaynağın (aSc, e-Okul ya da tablo) hatırlanan bütün eşleşmelerini siler; onay kutusu
+        zorunludur. Bu oturumda eşleme ekranında yapılan seçimler durur. İşlem kaydına yalnız kaynak ve sayı."""
+        k = y.kullanici(istek)
+        engel = yetkisiz(istek, k, "Hatırlanan ders programı eşleşmelerini silme")
+        if engel:
+            return engel
+        form = await istek.form(max_files=0, max_fields=5)
+        donus = "/program/aktar?adim=esleme"
+        with vt.islem() as b:
+            kayit = onizleme_al(b, "aktar", str(form.get("onizleme", "")), k)
+            if not kayit:
+                return y.yonlendir("/program/aktar", "Önizlemenin süresi geçmiş ya da başka bir kullanıcıya ait. Dosyayı yeniden yükleyin.", hata=True)
+            if form.get("onay") != "1":
+                return y.yonlendir(donus, "Hatırlanan eşleşmeleri silmek için onay kutusunu işaretleyin.", hata=True)
+            kaynak = program_aktar.hatirlanan_kaynagi(kayit["veri"])
+            silinen = program_aktar.hatirlananlari_unut(b, kaynak)
+            ad = {"asc": "aSc", "eokul": "e-Okul"}.get(kaynak, "CSV, Excel ve yapay zekâ")
+            vt.kayit_dus(b, k["ad"], "Hatırlanan ders programı eşleşmeleri silindi", f"{ad} · {silinen} eşleşme",
+                         y.istemci_ip(istek))  # fmt: skip
+        return y.yonlendir(donus, f"Hatırlanan {silinen} eşleşme silindi; eşleme dosyadan ve tahta bilgilerinden yeniden önerildi.")
+
     # ---- eşleme ------------------------------------------------------------------------------------------------
     def eokul_esle(istek, k, b, kayit: dict, veri: dict, sonuc: dict, form):
         """e-Okul: yapıştırılan şube listesi (değiştiyse uygulanır, blok seçimleri sıfırlanır, eşlemeye dönülür) ve
@@ -424,7 +491,7 @@ def kaydet(uygulama, y) -> None:
                 yanit = eokul_esle(istek, k, b, kayit, veri, sonuc, form)
                 if yanit is not None:
                     return yanit
-            for onek, tur in (("d", "derslik"), ("s", "sinif"), ("p", "saat"), ("t", "sube")):
+            for onek, tur in (("d", "derslik"), ("s", "sinif"), ("p", "saat"), ("t", "sube"), ("g", "devre")):
                 for n, e in enumerate(sonuc["cozum"]["eslesme"][tur]):
                     gelen = form.get(f"{onek}_{n}")
                     if gelen is None:
@@ -434,7 +501,7 @@ def kaydet(uygulama, y) -> None:
                         continue
                     secimler.setdefault(tur, {})[e["anahtar"]] = gelen
                     degisen += 1
-            for alan in ("donem", "devre_secimi"):
+            for alan in ("donem",):
                 if form.get(alan) is not None and str(form.get(alan)) != str(secimler.get(alan, "")):
                     secimler[alan] = str(form.get(alan))[:40]
                     degisen += 1
@@ -468,18 +535,27 @@ def kaydet(uygulama, y) -> None:
                                    "Satırların çoğu okunamadı; dosyayı kontrol edin ya da onay kutusunu işaretleyin.", hata=True)  # fmt: skip
             izinli = {t["id"] for t in sonuc["fark"]["dokunulmayan_programli"]}
             temizle = [int(t) for t in form.getlist("temizle_tahta") if str(t).isdigit() and int(t) in izinli]
-            kaynak = veri["kaynak"] if veri["kaynak"] in ("asc", "eokul") else "tablo"
-            sonuc_ = program_aktar.uygula(b, sonuc["cozum"], k["ad"], veri["bicim"], kaynak, temizle)
+            kaynak = program_aktar.hatirlanan_kaynagi(veri)
+            # 0.21.0: isteğe bağlı şube bilgisi (yalnız aSc; kutu işaretsiz gelir)
+            subeler = sonuc["sube_guncellemesi"] if veri["kaynak"] == "asc" and form.get("subeleri_guncelle") == "1" else None
+            if not sonuc["program_degisir"] and not subeler:
+                return y.yonlendir("/program/aktar?adim=onizleme", "Değişecek tahta yok; eşlemeyi kontrol edin.", hata=True)
+            sonuc_ = program_aktar.uygula(b, sonuc["cozum"], k["ad"], veri["bicim"], kaynak, temizle, subeler)
             vt.ayar_yaz(b, "program_onizleme", None)
             t = sonuc["fark"]["toplam"]
             vt.kayit_dus(
                 b, k["ad"], "Ders programı içe aktarıldı",
                 f"{program_aktar.BICIM_ADI.get(veri['bicim'], veri['bicim'])} · {t['tahta']} tahta · +{t['eklenen']} "
                 f"−{t['silinen']} ~{t['degisen']} · {sonuc['hata_sayisi']} hatalı satır atlandı"
-                + (f" · {len(temizle)} tahtanın devre programı temizlendi" if temizle else ""),
+                + (f" · {len(temizle)} tahtanın devre programı temizlendi" if temizle else "")
+                + (f" · {sonuc_['sube_tahta']} tahtanın şube bilgisi güncellendi" if sonuc_["sube_tahta"] else ""),
                 y.istemci_ip(istek),
             )  # fmt: skip
         ileti = f"{sonuc_['tahta']} tahtanın programı güncellendi. Önceki program “Önceki programlar” listesinden geri yüklenebilir."
+        if not sonuc["program_degisir"]:
+            ileti = "Derslik programları değişmedi."
+        if sonuc_["sube_tahta"]:
+            ileti += f" {sonuc_['sube_tahta']} tahtanın şube bilgisi programdan güncellendi."
         return y.yonlendir("/program?bolum=derslik", ileti)
 
     # ---- indirmeler ------------------------------------------------------------------------------------------------
@@ -547,7 +623,15 @@ def kaydet(uygulama, y) -> None:
             sonuc = program_aktar.geri_yukle(b, surum_id, k["ad"])
             if sonuc is None:
                 return y.yonlendir("/program?bolum=derslik", "Sürüm okunamadı.", hata=True)
-            vt.kayit_dus(b, k["ad"], "Ders programı geri yüklendi", f"sürüm #{surum_id} · {sonuc['satir']} satır",
+            ek = (f" · {sonuc['tahta_bilgisi']} tahtanın şube bilgisi geri döndü" if sonuc["tahta_bilgisi"] else "") + (
+                f" · {sonuc['tahta_bilgisi_atlanan']} tahtanın şube bilgisi sonradan değiştiği için korundu"
+                if sonuc["tahta_bilgisi_atlanan"] else "")  # fmt: skip
+            vt.kayit_dus(b, k["ad"], "Ders programı geri yüklendi", f"sürüm #{surum_id} · {sonuc['satir']} satır" + ek,
                          y.istemci_ip(istek))  # fmt: skip
-        return y.yonlendir("/program?bolum=derslik",
-                           f"Derslik programı {surum['zaman_metni']} tarihli sürüme döndürüldü ({sonuc['satir']} satır).")  # fmt: skip
+        ileti = f"Derslik programı {surum['zaman_metni']} tarihli sürüme döndürüldü ({sonuc['satir']} satır)."
+        if sonuc["tahta_bilgisi"]:
+            ileti += f" {sonuc['tahta_bilgisi']} tahtanın şube bilgisi de eski hâline döndü."
+        if sonuc["tahta_bilgisi_atlanan"]:
+            ileti += (f" {sonuc['tahta_bilgisi_atlanan']} tahtanın şube bilgisi o zamandan beri değiştirildiği için "
+                      "olduğu gibi bırakıldı.")  # fmt: skip
+        return y.yonlendir("/program?bolum=derslik", ileti)
