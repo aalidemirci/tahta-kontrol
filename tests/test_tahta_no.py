@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from yardimci import gir, ileti, kimlik, kullanici_ekle, kur_ve_gir, sorgu, tahta_ekle, yeni_ajan_durumu
 
+from tahta_sunucu import metin as metin_mod
 from tahta_sunucu import paket, tahta_liste, vt
 
 KOK = Path(__file__).resolve().parent.parent / "tahta_sunucu"
@@ -45,12 +46,43 @@ def okul(panel, tahta):
 
 
 # ---- saf işlevler -----------------------------------------------------------------------------------------
+def makine_yaz(tahta_id: int, makine_adi: str) -> None:
+    with vt.islem() as b:
+        b.execute("UPDATE tahta SET makine_adi = ? WHERE id = ?", (makine_adi, tahta_id))
+
+
 def test_varsayilan_ad_ve_ayni_ad_kumesi():
     assert tahta_liste.varsayilan_ad(7) == "Tahta 7"
     satirlar = [(1, "etap"), (2, " ETAP "), (3, "Kimya"), (4, ""), (5, ""), (6, "Kimya lab"), (7, "Etap")]
     assert tahta_liste.ayni_adlilar(satirlar) == [1, 2, 7]  # boş ad sayılmaz; büyük/küçük harf ve boşluk farkı yok
     assert tahta_liste.ayni_adlilar([(1, "İzmir"), (2, "izmir")]) == [1, 2]
     assert tahta_liste.ayni_adlilar([]) == []
+
+
+def test_adlandirilacaklar_yalniz_kurulumdan_gelen_ayni_adlar():
+    """İnceleme bulgusu: toplu adlandırma elle verilmiş adı (okulun bilerek verdiği aynı ad ya da kendi "Tahta 12"
+    numaralandırması) ezmez; yalnız adı bilgisayar adı ya da "Yeni tahta" olanlara dokunur."""
+    satirlar = [
+        (1, "etap", "etap"), (2, "ETAP", "etap"),  # kurulumdan: değişir (büyük/küçük harf farkı yok)
+        (3, "Konferans salonu", "etap"), (4, "Konferans salonu", "etap"),  # elle, bilerek aynı: değişmez
+        (5, "Yeni tahta", "Yeni tahta"), (6, "yeni tahta", ""),  # makine adı boş kayıtlar: değişir
+        (7, "Tahta 9", "etap"), (9, "Tahta 9", "etap"),  # elle "Tahta 9" ile 9'un kendi adı: ikisi de değişmez
+        (10, "Kimya", "Kimya"),  # kurulumdan ama tek: değişmez
+    ]  # fmt: skip
+    assert tahta_liste.adlandirilacaklar(satirlar) == [1, 2, 5, 6]
+    assert tahta_liste.adlandirilabilir_mi("etap", "ETAP") and not tahta_liste.adlandirilabilir_mi("", "")
+    assert not tahta_liste.adlandirilabilir_mi("D-101", "etap")
+
+
+def test_dogal_sira_tahta_numarasi():
+    """İnceleme bulgusu: harf harf sıralamada "Tahta 10" "Tahta 2"den önce geliyordu."""
+    adlar = ["Tahta 10", "Tahta 2", "tahta 1", "Çalışma", "Cam", "9/A", "10/A", ""]
+    beklenen = ["", "9/A", "10/A", "Cam", "Çalışma", "tahta 1", "Tahta 2", "Tahta 10"]
+    assert sorted(adlar, key=metin_mod.dogal_sirala_anahtari) == beklenen
+    gruplar = tahta_liste.gruplar([{"id": i, "ad": f"Tahta {i}", "derslik": ""} for i in (10, 2, 11, 1)])
+    assert [t["id"] for t in gruplar[0]["tahtalar"]] == [1, 2, 10, 11]
+    ayni = tahta_liste.gruplar([{"id": i, "ad": "etap", "derslik": ""} for i in (12, 3)])
+    assert [t["id"] for t in ayni[0]["tahtalar"]] == [3, 12]  # ad da eşitse numara sırası
 
 
 # ---- kayıt ------------------------------------------------------------------------------------------------
@@ -175,7 +207,7 @@ def test_toplu_adlandirma_yalniz_ayni_adlilari_degistirir(panel, tahta, okul):
     ad_yaz(bekleyen, "etap")
     once = {s["id"]: s for s in sorgu("SELECT * FROM tahta")}
     yanit = panel.post("/tahtalar/adlandir", data={"eylem": "adlandir"})
-    assert ileti(yanit) == "3 tahta “Tahta <no>” biçiminde yeniden adlandırıldı. Derslikler değişmedi."
+    assert ileti(yanit) == "3 tahta “Tahta <no>” biçiminde yeniden adlandırıldı. Derslikler ve elle verilen adlar değişmedi."
     sonra = {s["id"]: s for s in sorgu("SELECT * FROM tahta")}
     for tid in (okul[0], okul[1], bekleyen):
         assert sonra[tid]["ad"] == f"Tahta {tid}"
@@ -187,7 +219,7 @@ def test_toplu_adlandirma_yalniz_ayni_adlilari_degistirir(panel, tahta, okul):
     assert kayit == [{"ayrinti": "3 tahta"}]
     assert 'id="ayni-ad"' not in panel.get("/tahtalar").text
     ikinci = panel.post("/tahtalar/adlandir", data={"eylem": "adlandir"})
-    assert ileti(ikinci) == "Aynı adı taşıyan tahta yok; hiçbir ad değişmedi."
+    assert ileti(ikinci) == "Kurulumdan kalan aynı adı taşıyan tahta yok; hiçbir ad değişmedi."
 
 
 def test_toplu_adlandirma_eylemsiz_ve_idarecide_hicbir_sey_yapmaz(panel, okul):
@@ -234,3 +266,79 @@ def test_ekle_sayfasinda_numara_notu(panel):
     sayfa = metin(panel.get("/ekle").text)
     assert "Tahta numarasını not edin." in sayfa
     assert "panelde her tahtanın yanında aynı numara görünür" in sayfa
+
+
+# ---- inceleme düzeltmeleri ----------------------------------------------------------------------------------
+def test_liste_ve_onay_bekleyen_numara_sirasiyla(panel):
+    """İnceleme bulgusu: "Tahta 10" listede "Tahta 2"den önce çıkıyordu; onay bekleyenler adın abece sırasındaydı."""
+    kur_ve_gir(panel)
+    with vt.islem() as b:
+        for i in range(1, 15):  # uydurma kayıtlar: 1–11 onaylı "Tahta <no>", 12–14 onay bekliyor
+            durum = "onayli" if i <= 11 else "bekliyor"
+            ad = {12: "zeytin", 13: "armut", 14: "Tahta 14"}.get(i, f"Tahta {i}")
+            b.execute(
+                "INSERT INTO tahta (id, ad, anahtar_ozet, durum, kayit_zamani, makine_adi) VALUES (?, ?, ?, ?, ?, 'etap')",
+                (i, ad, f"ozet{i}", durum, vt.simdi()),
+            )
+    sayfa = panel.get("/tahtalar").text
+    assert [int(i) for i in re.findall(r'<tr class="tahta-satir" id="t-(\d+)"', sayfa)] == list(range(1, 12))
+    bant = sayfa.split('id="onay-bekleyen"')[1].split("</ul>")[0]
+    assert [int(i) for i in re.findall(r'href="/tahta/(\d+)\?sekme=bilgiler"', bant)] == [12, 13, 14]
+
+
+def test_onay_penceresi_ve_secim_numarayi_tasir(panel, okul):
+    """İnceleme bulgusu: aynı adlı tahtalar Kapat/Yeniden başlat onayında ve seçim kutusunun adında ayırt edilmiyordu."""
+    sayfa = panel.get("/tahtalar").text
+    for tid, ad in zip(okul[:2], ("etap", "ETAP"), strict=True):
+        acilis = sayfa.split(f'<tr class="tahta-satir" id="t-{tid}"')[1].split(">")[0]
+        satir = sayfa.split(f'<tr class="tahta-satir" id="t-{tid}"')[1].split("</tr>")[0]
+        assert f'data-ad="{ad} · No {tid}"' in acilis
+        assert f'<span class="gizli">{ad} · No {tid} seç</span>' in satir
+        assert f'aria-label="{ad} · No {tid} için diğer işlemler"' in satir
+        for onay in ("kapat", "yeniden_baslat"):
+            assert f'data-onay="{onay}" data-tek="{onay}:{tid}" data-onay-ad="{ad} · No {tid}"' in satir, onay
+    tahta_sayfasi = panel.get(f"/tahta/{okul[0]}").text
+    assert f'data-onay="kapat" data-onay-ad="etap · No {okul[0]}"' in tahta_sayfasi
+
+
+def test_toplu_adlandirma_elle_verilen_ayni_adlara_dokunmaz(panel, okul):
+    """İnceleme bulgusu: okulun bilerek verdiği aynı adlar (iki "Konferans salonu") geri alınamaz biçimde eziliyordu."""
+    panel.post(f"/tahta/{okul[2]}/kaydet", data={"ad": "Konferans salonu", "derslik": ""})
+    panel.post(f"/tahta/{okul[1]}/kaydet", data={"ad": "Konferans salonu", "derslik": ""})
+    # Yalnız elle verilmiş aynı adlar kaldı ("etap" artık tek): bant çıkmaz, işlem hiçbir şeyi değiştirmez.
+    assert 'id="ayni-ad"' not in panel.get("/tahtalar").text
+    once = sorgu("SELECT id, ad FROM tahta ORDER BY id")
+    yanit = panel.post("/tahtalar/adlandir", data={"eylem": "adlandir"})
+    assert ileti(yanit) == "Kurulumdan kalan aynı adı taşıyan tahta yok; hiçbir ad değişmedi."
+    assert sorgu("SELECT id, ad FROM tahta ORDER BY id") == once
+
+
+def test_toplu_adlandirma_yeni_cakismayi_sabit_noktaya_kadar_cozer(panel, okul):
+    """İnceleme bulgusu: verilen "Tahta <no>" adı, adını kurulumdan alan başka bir tahtayla çakışınca ikinci tıklama
+    gerekiyordu. Üçüncü tahtanın bilgisayar adı (uydurma) ilk tahtanın varsayılan adıyla aynı."""
+    birinci, ikinci, ucuncu = okul
+    ad_yaz(ucuncu, f"Tahta {birinci}")
+    makine_yaz(ucuncu, f"tahta {birinci}")  # adı kurulumdan (bilgisayar adından) gelmiş sayılır
+    assert "Aynı adı taşıyan 2 tahta var." in panel.get("/tahtalar").text  # şimdilik yalnız iki "etap"
+    yanit = panel.post("/tahtalar/adlandir", data={"eylem": "adlandir"})
+    assert ileti(yanit) == "3 tahta “Tahta <no>” biçiminde yeniden adlandırıldı. Derslikler ve elle verilen adlar değişmedi."
+    assert {s["id"]: s["ad"] for s in sorgu("SELECT id, ad FROM tahta")} == {i: f"Tahta {i}" for i in okul}
+    assert 'id="ayni-ad"' not in panel.get("/tahtalar").text
+    assert sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Aynı adlı tahtalar yeniden adlandırıldı'") == [{"ayrinti": "3 tahta"}]
+
+
+def test_toplu_adlandirma_elle_verilen_tahta_no_adini_ezmez_kalan_cakismayi_soyler(panel, okul):
+    """İnceleme bulgusu: okul kendi numaralandırmasıyla bir tahtaya "Tahta <başka no>" demişse toplu adlandırma onu
+    ezmez (zincirleme bozulma yok); oluşan çakışma iletide numaralarıyla söylenir."""
+    birinci, ikinci, ucuncu = okul
+    panel.post(f"/tahta/{ucuncu}/kaydet", data={"ad": f"Tahta {birinci}", "derslik": ""})
+    yanit = panel.post("/tahtalar/adlandir", data={"eylem": "adlandir"})
+    assert ileti(yanit) == (
+        "2 tahta “Tahta <no>” biçiminde yeniden adlandırıldı. Derslikler ve elle verilen adlar değişmedi. "
+        f"Dikkat: adı hâlâ aynı olan 2 tahta var (No {birinci}, No {ucuncu}); elle verilen ad değiştirilmedi, "
+        "birini kendi sayfasının Bilgiler sekmesinden yeniden adlandırın."
+    )
+    assert sorgu("SELECT ad FROM tahta WHERE id = ?", ucuncu)[0]["ad"] == f"Tahta {birinci}"
+    assert sorgu("SELECT ad FROM tahta WHERE id = ?", ikinci)[0]["ad"] == f"Tahta {ikinci}"
+    # Kalan çakışma elle verilmiş adladır: bant yeniden çıkmaz (düğme onu çözemez).
+    assert 'id="ayni-ad"' not in panel.get("/tahtalar").text

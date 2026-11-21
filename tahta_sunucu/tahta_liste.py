@@ -265,6 +265,30 @@ def ayni_adlilar(satirlar) -> list[int]:
     return sorted(k for liste in kumeler.values() if len(liste) > 1 for k in liste)
 
 
+_KURULUM_ADI = ad_anahtari("Yeni tahta")
+
+
+def adlandirilabilir_mi(ad, makine_adi) -> bool:
+    """Toplu yeniden adlandırmanın dokunabileceği ad mı: kurulumun verdiği ad (tahtanın bilgisayar adı — 0.20.0 ve
+    öncesi adı oradan alırdı; ETAP'ta hepsi "etap"tır — ya da "Yeni tahta"). Elle verilmiş ad (okul bilerek aynı adı
+    verebilir, "Tahta 12" gibi kendi numaralandırması da olabilir) toplu işlemde DEĞİŞMEZ. Eski ad `makine_adi`
+    sütununda durduğu için adlandırmayla kaybolmaz."""
+    anahtar = ad_anahtari(ad)
+    return bool(anahtar) and anahtar in (ad_anahtari(makine_adi), _KURULUM_ADI)
+
+
+def adlandirilacaklar(satirlar) -> list[int]:
+    """[(kimlik, ad, makine_adi), …] → toplu adlandırmanın "Tahta <no>" vereceği tahtalar (artan sırada): adı başka
+    bir tahtanın adıyla aynı (`ayni_adlilar`; aynılık bütün tahtalar arasında aranır), adı kurulumdan gelen
+    (`adlandirilabilir_mi`) ve adı zaten kendi varsayılan adı olmayanlar. Tahtalar bandının sayısı ve
+    POST /tahtalar/adlandir bu tek kuraldan çıkar."""
+    satirlar = [(int(k), ad, makine) for k, ad, makine in satirlar]
+    ayni = set(ayni_adlilar((k, ad) for k, ad, _ in satirlar))
+    return sorted(
+        k for k, ad, makine in satirlar if k in ayni and adlandirilabilir_mi(ad, makine) and ad != varsayilan_ad(k)
+    )
+
+
 def grup_adi(bina: str, kat) -> str:
     if bina and kat is not None:
         return f"{bina} · {hedef.kat_adi(kat)}"
@@ -300,7 +324,10 @@ def gruplar(tahtalar: list[dict]) -> list[dict]:
 
     sonuc = []
     for kova in sorted(kovalar.values(), key=sira):
-        kova["tahtalar"].sort(key=lambda t: (metin.tr_sirala_anahtari(t.get("derslik") or ""), metin.tr_sirala_anahtari(t.get("ad") or "")))
+        # Doğal sıra: "Tahta 2" < "Tahta 10" (0.21.0 varsayılan adı numara taşır); ad da eşitse numara sırası.
+        kova["tahtalar"].sort(
+            key=lambda t: (metin.dogal_sirala_anahtari(t.get("derslik")), metin.dogal_sirala_anahtari(t.get("ad")), t.get("id") or 0)
+        )
         sonuc.append({"ad": grup_adi(kova["bina"], kova["kat"]), "baslik": True, "tahtalar": kova["tahtalar"]})
     if len(sonuc) == 1 and sonuc[0]["ad"] == "Konumu belirtilmemiş":
         sonuc[0]["baslik"] = False

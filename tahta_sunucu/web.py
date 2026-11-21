@@ -645,11 +645,12 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             kilit_kodu_var = bool(vt.ayar_al(b, "kilit_kodu"))
             kapatma = kapatma_ozeti(vt.ayar_al(b, "otomatik_kapatma") or {})
             ortak = tahta_baglami(b)
+            # 0.21.0: toplu adlandırmanın değiştireceği tahta sayısı (bant yalnız yöneticide; kural tahta_liste'de).
+            adlandirilacak = len(tahta_liste.adlandirilacaklar(adlandirma_satirlari(b))) if yonetici else 0
         tahtalar = ortak["tahtalar"]
         onayli = [t for t in tahtalar if t["durum"] == "onayli"]
-        bekleyen = sorted(
-            (t for t in tahtalar if t["durum"] == "bekliyor"), key=lambda t: metin.tr_sirala_anahtari(t["ad"] or "")
-        )
+        # Kurulum sırası (= numara sırası): yeni kayıtlar "Tahta <no>" adıyla gelir, kurulumda not edilen numarayla aranır.
+        bekleyen = sorted((t for t in tahtalar if t["durum"] == "bekliyor"), key=lambda t: t["id"])
         for t in onayli:  # satırın "⋯" menüsü role göre kurulur: idareciye yönetici öğesi hiç çizilmez
             t["menu"] = tahta_liste.menu_ogeleri(t, k["rol"])
         gruplar = tahta_liste.gruplar(onayli)
@@ -670,8 +671,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             # Onay bekleyenin adı ve adresi yalnız yöneticiye gider; idareci yalnız sayıyı görür.
             bekleyen=bekleyen if yonetici else [],
             bekleyen_sayisi=len(bekleyen),
-            # 0.21.0: adı başka bir tahtayla aynı olan (onaylı ya da bekleyen) tahta sayısı; bant yalnız yöneticide.
-            ayni_ad_sayisi=len(tahta_liste.ayni_adlilar((t["id"], t["ad"]) for t in tahtalar)) if yonetici else 0,
+            ayni_ad_sayisi=adlandirilacak,
             liste_yolu="/tahtalar",
             donus="/tahtalar" + (f"?durum={suzgec}" if suzgec else ""),
             ileti_satiri=int(ileti_satiri) if ileti_satiri.isdigit() and hedef.kimlik_mi(ileti_satiri) else 0,
@@ -1040,6 +1040,14 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                 (tahta_id, grup_id),
             )
 
+    def adlandirma_satirlari(b) -> list[tuple]:
+        """Toplu adlandırma kuralının girdisi: kaldırılmamış (onaylı + bekleyen) tahtaların (kimlik, ad, makine adı)."""
+        return [tuple(s) for s in b.execute("SELECT id, ad, makine_adi FROM tahta WHERE durum != 'iptal' ORDER BY id")]
+
+    def nolar_metni(idler: list[int]) -> str:
+        """"No 3, No 5" (en çok 5 numara, fazlası " …")."""
+        return ", ".join(f"No {i}" for i in idler[:5]) + (" …" if len(idler) > 5 else "")
+
     def ayni_adli_baska_tahtalar(b, tahta_id: int, ad: str) -> list[int]:
         """Adı `ad` ile aynı olan (tahta_liste.ad_anahtari) öbür kaldırılmamış tahtaların kimlikleri."""
         anahtar = tahta_liste.ad_anahtari(ad)
@@ -1103,9 +1111,8 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
         # 0.21.0: aynı ad REDDEDİLMEZ (okul bilerek aynı adı verebilir); yalnız uyarılır.
         ayni_ad_notu = ""
         if ayni_ad:
-            nolar = ", ".join(f"No {i}" for i in ayni_ad[:5]) + (" …" if len(ayni_ad) > 5 else "")
             ayni_ad_notu = (
-                f" Dikkat: bu adı taşıyan {len(ayni_ad)} tahta daha var ({nolar}); "
+                f" Dikkat: bu adı taşıyan {len(ayni_ad)} tahta daha var ({nolar_metni(ayni_ad)}); "
                 "tahtaları ayırt etmek için farklı bir ad verin."
             )
         # Onaydan sonra Genel açılır (komutlar artık açık); düzenlemeden sonra Bilgiler'de kalınır.
@@ -1120,11 +1127,14 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
 
     @uygulama.post("/tahtalar/adlandir")
     async def tahtalar_adlandir(istek: Request):
-        """0.21.0: adı başka bir tahtayla AYNI olan her tahtaya "Tahta <no>" adını verir (Tahtalar › aynı ad bandı).
+        """0.21.0: adını kurulumdan alan (bilgisayar adı ya da "Yeni tahta") ve adı başka bir tahtayla AYNI olan her
+        tahtaya "Tahta <no>" adını verir (Tahtalar › aynı ad bandı; kural `tahta_liste.adlandirilacaklar`). Elle
+        verilmiş ad değişmez.
 
         Yalnız yönetici; yalnız `eylem=adlandir` ile (onay penceresinin "evet" düğmesi ekler). Derslik, nitelikler,
-        durum ve makine adı DEĞİŞMEZ. Liste sunucuda yeniden hesaplanır (formdan kimlik okunmaz). İşlem kaydına
-        yalnız sayı yazılır."""
+        durum ve makine adı DEĞİŞMEZ (eski ad makine adıdır, sütununda durur). Liste sunucuda yeniden hesaplanır
+        (formdan kimlik okunmaz) ve sabit noktaya kadar yinelenir: verilen ad yeni bir çakışma kurarsa o da çözülür;
+        elle verilmiş adla kalan çakışma iletide numaralarıyla söylenir. İşlem kaydına yalnız sayı yazılır."""
         k = kullanici(istek)
         if not k or k["rol"] != "yonetici":
             if k:
@@ -1135,22 +1145,37 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
         if str(form.get("eylem", "")) != "adlandir":
             return yonlendir("/tahtalar", "Bilinmeyen işlem.", hata=True)
         with vt.islem() as b:
-            satirlar = b.execute("SELECT id, ad FROM tahta WHERE durum != 'iptal'").fetchall()
-            idler = tahta_liste.ayni_adlilar((s["id"], s["ad"]) for s in satirlar)
-            degisen = []
-            for tahta_id in idler:
-                imlec = b.execute(
-                    "UPDATE tahta SET ad = ? WHERE id = ? AND ad != ?",
-                    (tahta_liste.varsayilan_ad(tahta_id), tahta_id, tahta_liste.varsayilan_ad(tahta_id)),
-                )
-                if imlec.rowcount:
+            degisen: list[int] = []
+            satirlar = adlandirma_satirlari(b)
+            # Sabit nokta: her tahta en çok bir kez değişir (kendi varsayılan adını alan tahta bir daha seçilmez).
+            for _ in range(len(satirlar) + 1):
+                idler = tahta_liste.adlandirilacaklar(satirlar)
+                if not idler:
+                    break
+                for tahta_id in idler:
+                    b.execute("UPDATE tahta SET ad = ? WHERE id = ?", (tahta_liste.varsayilan_ad(tahta_id), tahta_id))
                     degisen.append(tahta_id)
+                satirlar = adlandirma_satirlari(b)
+            # Verilen adlardan biri elle verilmiş bir adla hâlâ çakışıyorsa (ör. başka tahtaya elle "Tahta 7" denmiş).
+            yeni_adlar = {tahta_liste.ad_anahtari(tahta_liste.varsayilan_ad(i)) for i in degisen}
+            adlar = {k_: ad for k_, ad, _ in satirlar}
+            kalan = [
+                i
+                for i in tahta_liste.ayni_adlilar((k_, ad) for k_, ad, _ in satirlar)
+                if tahta_liste.ad_anahtari(adlar[i]) in yeni_adlar
+            ]
             if degisen:
                 vt.kayit_dus(b, k["ad"], "Aynı adlı tahtalar yeniden adlandırıldı", f"{len(degisen)} tahta", istemci_ip(istek))
         uyandir_hepsi(degisen)  # kilit ekranının üst bandı tahtanın adını taşır
         if not degisen:
-            return yonlendir("/tahtalar", "Aynı adı taşıyan tahta yok; hiçbir ad değişmedi.")
-        return yonlendir("/tahtalar", f"{len(degisen)} tahta “Tahta <no>” biçiminde yeniden adlandırıldı. Derslikler değişmedi.")
+            return yonlendir("/tahtalar", "Kurulumdan kalan aynı adı taşıyan tahta yok; hiçbir ad değişmedi.")
+        mesaj = f"{len(degisen)} tahta “Tahta <no>” biçiminde yeniden adlandırıldı. Derslikler ve elle verilen adlar değişmedi."
+        if kalan:
+            mesaj += (
+                f" Dikkat: adı hâlâ aynı olan {len(kalan)} tahta var ({nolar_metni(kalan)}); elle verilen ad "
+                "değiştirilmedi, birini kendi sayfasının Bilgiler sekmesinden yeniden adlandırın."
+            )
+        return yonlendir("/tahtalar", mesaj)
 
     # ---- tahta ekleme --------------------------------------------------------
     @uygulama.get("/ekle", response_class=HTMLResponse)

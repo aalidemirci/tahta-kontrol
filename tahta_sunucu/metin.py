@@ -45,6 +45,13 @@ def tr_sirala_anahtari(s: str) -> tuple:
     return tuple(_SIRA.get(h, 100 + ord(h)) for h in tr_kucuk(s or ""))
 
 
+def dogal_sirala_anahtari(s) -> tuple:
+    """Doğal sıra: metindeki sayılar sayı olarak karşılaştırılır ("Tahta 2" < "Tahta 10", "9/A" < "10/A"); harfler
+    Türk abecesiyle (`tr_sirala_anahtari`)."""
+    parcalar = re.split(r"(\d+)", str(s or ""))
+    return tuple((0, int(p), ()) if rakam_mi(p) else (1, 0, tr_sirala_anahtari(p)) for p in parcalar if p)
+
+
 _SUBE = re.compile(r"^(hazırlık|hazirlik|haz|hz|9|10|11|12)\s*(?:\.?\s*sınıf|\.?\s*sinif)?\s*[-/ .]?\s*([a-zçğıöşü])$")
 
 

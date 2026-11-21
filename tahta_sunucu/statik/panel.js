@@ -61,7 +61,7 @@
     /* 0.21.0: Tahtalar › aynı ad bandı. data-onay-ad sayıyı taşır; sunucu listeyi yeniden hesaplar. */
     adlandir: {
       ad: "eylem", deger: "adlandir", evet: "Yeniden adlandır",
-      metin: "Adı başka bir tahtayla aynı olan her tahta “Tahta <no>” adını alır; no, kurulumun sonunda tahtanın ekranında çıkan numaradır. Derslik ve öbür bilgiler değişmez.",
+      metin: "Adını kurulumda bilgisayar adından alan ve başka bir tahtayla aynı adı taşıyan her tahta “Tahta <no>” adını alır; no, kurulumun sonunda tahtanın ekranında çıkan numaradır. Elle verdiğiniz adlar, derslik ve öbür bilgiler değişmez.",
       baslik: function (n, ad) { return (ad ? ad + " tahta" : "Aynı adlı tahtalar") + " yeniden adlandırılsın mı?"; }
     },
     acil_bitir: {

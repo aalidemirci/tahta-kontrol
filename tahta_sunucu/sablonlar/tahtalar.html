@@ -56,12 +56,14 @@
 
 {# 0.21.0: ETAP'ta bütün tahtaların makine adı aynıdır; eski sürümler adı makine adından aldığı için tahtalar ayırt
    edilemez. Bant ve düğme yalnız yöneticide; düğme onay penceresi ister (JS'siz gönderilmez, notu var). Sunucu listeyi
-   kendisi hesaplar (formda kimlik yok); yalnız ad değişir, derslik ve makine adı değişmez. #}
+   kendisi hesaplar (formda kimlik yok; kural tahta_liste.adlandirilacaklar): yalnız adı kurulumdan gelen (bilgisayar
+   adı, "Yeni tahta") aynı adlılar; elle verilen ad, derslik ve makine adı değişmez. #}
 {% if ayni_ad_sayisi %}
 <div class="bant uyari" role="status" id="ayni-ad">
   <strong>Aynı adı taşıyan {{ ayni_ad_sayisi }} tahta var.</strong>
-  <span>Bu tahtalar listelerde ve ders programı eşlemesinde birbirinden ayırt edilemez. Her tahtanın numarası (No) adının
-    yanında yazar; kurulumun sonunda tahtanın ekranında çıkan numaradır.</span>
+  <span>Bu tahtalar adını kurulumda bilgisayar adından aldı; listelerde ve ders programı eşlemesinde birbirinden ayırt
+    edilemez. Her tahtanın numarası (No) adının yanında yazar; kurulumun sonunda tahtanın ekranında çıkan numaradır. Elle
+    verdiğiniz adlar değişmez.</span>
   <form method="post" action="/tahtalar/adlandir" id="ayni-ad-formu" class="dugme-satiri">
     <button type="button" data-onay="adlandir" data-onay-ad="{{ ayni_ad_sayisi }}" aria-haspopup="dialog">Hepsini “Tahta &lt;no&gt;” olarak adlandır…</button>
   </form>
@@ -115,8 +117,8 @@
       {% endif %}
       {% for t in g.tahtalar %}
       {% set gizli = suzgec and suzgec not in t.liste.durumlar %}
-      <tr class="tahta-satir" id="t-{{ t.id }}" data-id="{{ t.id }}" data-ad="{{ t.ad }}" data-birincil="{{ t.liste.birincil }}" data-durumlar="{{ t.liste.durumlar | join(' ') }}"{% if gizli %} hidden{% endif %}>
-        <td class="c-sec"><label class="sec-kap"><input type="checkbox" name="tahta" value="{{ t.id }}"{% if gizli %} disabled{% endif %}><span class="gizli">{{ t.ad }} seç</span></label></td>
+      <tr class="tahta-satir" id="t-{{ t.id }}" data-id="{{ t.id }}" data-ad="{{ t.ad }} · No {{ t.id }}" data-birincil="{{ t.liste.birincil }}" data-durumlar="{{ t.liste.durumlar | join(' ') }}"{% if gizli %} hidden{% endif %}>
+        <td class="c-sec"><label class="sec-kap"><input type="checkbox" name="tahta" value="{{ t.id }}"{% if gizli %} disabled{% endif %}><span class="gizli">{{ t.ad }} · No {{ t.id }} seç</span></label></td>
         <th scope="row" class="c-ad"><a href="/tahta/{{ t.id }}">{{ t.ad }}</a>
           <span class="alt-satir">No {{ t.id }} · {{ t.alt_satir }}</span></th>
         <td class="c-durum" data-etiket="Durum"><div class="rozetler" data-alan="rozetler">{{ rozetler(t.liste.rozetler | rejectattr('liste', 'false') | list) }}</div>
