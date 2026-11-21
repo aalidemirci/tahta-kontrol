@@ -7,6 +7,8 @@
 ; kullanıcının %LOCALAPPDATA%\TahtaKontrol klasörü) kurulumda KOPYALANIR
 ; (tahta_sunucu/tasima.py); taşınamazsa hizmet başlatılmaz ki yeni sertifika
 ; üretilip bütün tahtalar kopmasın. Masaüstü kısayolu yalnız durum penceresini açar.
+; 0.21.0: durum penceresi kapatılınca bildirim alanında simgeyle kalır (sunucu açmaz). Başlangıç
+; kısayolu YOKTUR (kural 28); 0.8 öncesinin "Tahta Kontrol.lnk" başlangıç kısayolu yine silinir.
 
 #ifndef Surum
   #define Surum "0.0.0"
@@ -41,7 +43,7 @@ UsedUserAreasWarning=no
 Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
 
 [CustomMessages]
-turkish.HizmetBasladi=Sunucu Windows hizmeti olarak çalışıyor: bilgisayar açılınca, kimse oturum açmadan başlar. Masaüstündeki "Tahta Kontrol" kısayolu durum penceresini açar; pencereyi kapatmak sunucuyu durdurmaz.
+turkish.HizmetBasladi=Sunucu Windows hizmeti olarak çalışıyor: bilgisayar açılınca, kimse oturum açmadan başlar. Masaüstündeki "Tahta Kontrol" kısayolu durum penceresini açar; pencere kapatılınca bildirim alanında simge olarak kalır ve sunucuyu durdurmaz.
 turkish.HizmetBaslamadi=UYARI: Sunucu hizmeti başlatılamadı. Durum penceresinden "Hizmeti başlat" deneyin. Ayrıntı (yönetici olarak): %1\gunluk\sunucu.log ve Olay Görüntüleyicisi > Windows Günlükleri > Uygulama.
 turkish.TasimaTamam=Önceki sürümün verisi ve sunucu sertifikası %1 klasörüne kopyalandı; tahtalar yeniden kurulum yapılmadan bağlanmayı sürdürür. Eski klasör silinmedi, içine TASINDI.txt bırakıldı.
 turkish.TasimaYok=Önceki bir kurulumun verisi bulunmadı. Durum penceresinden "Paneli aç" ile ilk kurulumu yapın.

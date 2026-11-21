@@ -61,10 +61,11 @@ def test_hizmet_modulu_pywin32_olmadan_ice_aktarilir():
         "class Engel:\n"
         "    def find_spec(self, ad, yol=None, hedef=None):\n"
         "        if ad.split('.')[0] in ('win32service', 'win32serviceutil', 'servicemanager', 'pywintypes',"
-        " 'win32api', 'win32event'):\n"
+        " 'win32api', 'win32event', 'win32gui', 'win32con'):\n"
         "            raise ImportError('engellendi: ' + ad)\n"
         "sys.meta_path.insert(0, Engel())\n"
-        "import tahta_sunucu.hizmet, tahta_sunucu.tasima, tahta_sunucu.pencere\n"
+        "import tahta_sunucu.hizmet, tahta_sunucu.tasima, tahta_sunucu.pencere, tahta_sunucu.tepsi\n"
+        "assert tahta_sunucu.tepsi.tek_ornek_al() == (None, True)  # pywin32 yoksa engel yok sayılır\n"
         "print('tamam')\n"
     )
     sonuc = subprocess.run([sys.executable, "-c", betik], cwd=KOK, capture_output=True, text=True, timeout=60)
@@ -600,9 +601,10 @@ def test_kurucu_betigi_hizmeti_kurar_ve_eski_baslangic_kisayolunu_siler():
     metin = ham.decode("utf-8-sig")
     assert "{commonstartup}\\Tahta Kontrol.lnk" in metin and "[InstallDelete]" in metin
     simgeler = metin.split("[Icons]")[1].split("\n[")[0]
-    assert (
-        "commonstartup" not in simgeler and "[Tasks]" in metin
-    )  # oturum açılınca başlatma kısayolu artık yok
+    # Oturum açılınca başlatma kısayolu yok (kural 28: "başlangıç kısayolu geri getirilmez"); 0.21.0'ın
+    # bildirim alanı simgesi de başlangıca kısayol koymaz (istisna ancak kullanıcı onayıyla, kural 28 ile).
+    assert "commonstartup" not in simgeler and "[Tasks]" in metin
+    assert "--gizli" not in metin and "durumsimgesi" not in metin
     assert 'obj= "NT AUTHORITY\\LocalService"' in metin
     assert "*S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-19:(OI)(CI)M" in metin
     assert "'tasi --hedef" in metin and "TASIMA-BEKLIYOR.txt" in metin

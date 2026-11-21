@@ -2,7 +2,11 @@
 
   python -m tahta_sunucu            Sunucuyu uçbirimde çalıştırır.
   python -m tahta_sunucu pencere    Durum penceresi: hizmet varsa durumunu gösterir; geliştirmede sunucuyu
-                                    pencere içinde çalıştırır.
+                                    pencere içinde çalıştırır. Kurulu programda bildirim alanında simgeyle
+                                    kalır (X gizler, "Çık" simge menüsündedir).
+  python -m tahta_sunucu pencere --gizli
+                                    Pencere açmadan yalnız durum simgesi (yalnız kurulu programda ya da
+                                    TAHTA_TEPSI_DENE=1 ile). Sunucu AÇMAZ.
   python -m tahta_sunucu paket YOL  Ajan paketini (.deb) dosyaya yazar.
   python -m tahta_sunucu hizmet     Windows hizmeti olarak çalışır (yalnız Hizmet Denetim Yöneticisi başlatır).
   python -m tahta_sunucu hizmet --konsol
@@ -44,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
     if komut == "pencere":
         from . import pencere
 
-        return pencere.calistir()
+        return pencere.calistir(gizli="--gizli" in argv[1:])
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     from .sunucu import Sunucu
 
