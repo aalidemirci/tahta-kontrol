@@ -324,6 +324,9 @@ def tahta_ozeti(onayli: list[dict]) -> dict:
     kilit_hedefi: "Hepsini kilitle"nin gideceği tahtalar (çevrimiçi ve sınav penceresinde olmayan).
     """
     gruplar = []
+    # 0.21.0: adı başka bir onaylı tahtayla aynı olan çipte numara da yazar (ETAP'ta makine adları aynıdır; eski
+    # kayıtların adı "etap"). Ad tekse çip yalnız adı taşır (çip dar; numara tahta sayfasında ve listede yazar).
+    ayni_ad = set(tahta_liste.ayni_adlilar((t["id"], t["ad"]) for t in onayli))
     for no, g in enumerate(tahta_liste.gruplar(onayli), start=1):
         cipler = []
         for t in g["tahtalar"]:
@@ -333,7 +336,7 @@ def tahta_ozeti(onayli: list[dict]) -> dict:
             if t.get("sinav"):
                 ek.append("sinav")
             cipler.append({
-                "id": t["id"], "ad": t["ad"], "birincil": t["liste"]["birincil"],
+                "id": t["id"], "ad": t["ad"], "no": t["id"] if t["id"] in ayni_ad else None, "birincil": t["liste"]["birincil"],
                 "simge": DURUM_SIMGESI[t["liste"]["birincil"]], "okunur": cip_okunur(t["liste"]), "ek": ek,
             })  # fmt: skip
         gruplar.append({"no": no, "ad": g["ad"], "baslik": g["baslik"], "tahtalar": cipler, "sayi": len(cipler),

@@ -670,6 +670,8 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             # Onay bekleyenin adı ve adresi yalnız yöneticiye gider; idareci yalnız sayıyı görür.
             bekleyen=bekleyen if yonetici else [],
             bekleyen_sayisi=len(bekleyen),
+            # 0.21.0: adı başka bir tahtayla aynı olan (onaylı ya da bekleyen) tahta sayısı; bant yalnız yöneticide.
+            ayni_ad_sayisi=len(tahta_liste.ayni_adlilar((t["id"], t["ad"]) for t in tahtalar)) if yonetici else 0,
             liste_yolu="/tahtalar",
             donus="/tahtalar" + (f"?durum={suzgec}" if suzgec else ""),
             ileti_satiri=int(ileti_satiri) if ileti_satiri.isdigit() and hedef.kimlik_mi(ileti_satiri) else 0,
@@ -1038,6 +1040,15 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                 (tahta_id, grup_id),
             )
 
+    def ayni_adli_baska_tahtalar(b, tahta_id: int, ad: str) -> list[int]:
+        """Adı `ad` ile aynı olan (tahta_liste.ad_anahtari) öbür kaldırılmamış tahtaların kimlikleri."""
+        anahtar = tahta_liste.ad_anahtari(ad)
+        return [
+            s["id"]
+            for s in b.execute("SELECT id, ad FROM tahta WHERE durum != 'iptal' AND id != ? ORDER BY id", (tahta_id,))
+            if anahtar and tahta_liste.ad_anahtari(s["ad"]) == anahtar
+        ]
+
     @uygulama.post("/tahta/{tahta_id}/kaydet")
     async def tahta_kaydet(istek: Request, tahta_id: int):
         k = kullanici(istek)
@@ -1087,14 +1098,59 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                 b, k["ad"], "Tahta onaylandı" if eylem == "onayla" else "Tahta düzenlendi", ayrinti, istemci_ip(istek)
             )
             kalan_bekleyen = b.execute("SELECT COUNT(*) FROM tahta WHERE durum = 'bekliyor'").fetchone()[0]
+            ayni_ad = ayni_adli_baska_tahtalar(b, tahta_id, ad)
         uyandir(tahta_id)
+        # 0.21.0: aynı ad REDDEDİLMEZ (okul bilerek aynı adı verebilir); yalnız uyarılır.
+        ayni_ad_notu = ""
+        if ayni_ad:
+            nolar = ", ".join(f"No {i}" for i in ayni_ad[:5]) + (" …" if len(ayni_ad) > 5 else "")
+            ayni_ad_notu = (
+                f" Dikkat: bu adı taşıyan {len(ayni_ad)} tahta daha var ({nolar}); "
+                "tahtaları ayırt etmek için farklı bir ad verin."
+            )
         # Onaydan sonra Genel açılır (komutlar artık açık); düzenlemeden sonra Bilgiler'de kalınır.
         if eylem == "onayla" and satir["durum"] == "bekliyor":
             mesaj = f"{ad} onaylandı; artık komut alır."
             if kalan_bekleyen:
                 mesaj += f" {kalan_bekleyen} tahta daha onay bekliyor (Tahtalar sayfasında)."
-            return yonlendir(f"/tahta/{tahta_id}", mesaj)
-        return yonlendir(f"/tahta/{tahta_id}" + ("" if eylem == "onayla" else "?sekme=bilgiler"), "Kaydedildi.")
+            return yonlendir(f"/tahta/{tahta_id}", mesaj + ayni_ad_notu)
+        return yonlendir(
+            f"/tahta/{tahta_id}" + ("" if eylem == "onayla" else "?sekme=bilgiler"), "Kaydedildi." + ayni_ad_notu
+        )
+
+    @uygulama.post("/tahtalar/adlandir")
+    async def tahtalar_adlandir(istek: Request):
+        """0.21.0: adı başka bir tahtayla AYNI olan her tahtaya "Tahta <no>" adını verir (Tahtalar › aynı ad bandı).
+
+        Yalnız yönetici; yalnız `eylem=adlandir` ile (onay penceresinin "evet" düğmesi ekler). Derslik, nitelikler,
+        durum ve makine adı DEĞİŞMEZ. Liste sunucuda yeniden hesaplanır (formdan kimlik okunmaz). İşlem kaydına
+        yalnız sayı yazılır."""
+        k = kullanici(istek)
+        if not k or k["rol"] != "yonetici":
+            if k:
+                with vt.islem() as b:
+                    vt.kayit_dus(b, k["ad"], "Yetkisiz işlem reddedildi", "Tahtaları yeniden adlandırma", istemci_ip(istek))
+            return yonlendir("/tahtalar", "Bu işlem için yönetici yetkisi gerekir.", hata=True)
+        form = await istek.form()
+        if str(form.get("eylem", "")) != "adlandir":
+            return yonlendir("/tahtalar", "Bilinmeyen işlem.", hata=True)
+        with vt.islem() as b:
+            satirlar = b.execute("SELECT id, ad FROM tahta WHERE durum != 'iptal'").fetchall()
+            idler = tahta_liste.ayni_adlilar((s["id"], s["ad"]) for s in satirlar)
+            degisen = []
+            for tahta_id in idler:
+                imlec = b.execute(
+                    "UPDATE tahta SET ad = ? WHERE id = ? AND ad != ?",
+                    (tahta_liste.varsayilan_ad(tahta_id), tahta_id, tahta_liste.varsayilan_ad(tahta_id)),
+                )
+                if imlec.rowcount:
+                    degisen.append(tahta_id)
+            if degisen:
+                vt.kayit_dus(b, k["ad"], "Aynı adlı tahtalar yeniden adlandırıldı", f"{len(degisen)} tahta", istemci_ip(istek))
+        uyandir_hepsi(degisen)  # kilit ekranının üst bandı tahtanın adını taşır
+        if not degisen:
+            return yonlendir("/tahtalar", "Aynı adı taşıyan tahta yok; hiçbir ad değişmedi.")
+        return yonlendir("/tahtalar", f"{len(degisen)} tahta “Tahta <no>” biçiminde yeniden adlandırıldı. Derslikler değişmedi.")
 
     # ---- tahta ekleme --------------------------------------------------------
     @uygulama.get("/ekle", response_class=HTMLResponse)
@@ -2048,23 +2104,30 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                     {"hata": "Eşleştirme kodu geçersiz ya da panelde tahta ekleme açık değil."}, status_code=403
                 )
             anahtar = guvenlik.belirtec()
-            ad = str(govde.get("makine_adi", "")).strip()[:60] or "Yeni tahta"
+            makine_adi = str(govde.get("makine_adi", "")).strip()[:60]
+            # 0.21.0: varsayılan ad "Tahta <no>"dur; no, kurulumun sonunda tahtanın ekranına basılan kimliktir.
+            # ETAP'ta bütün tahtaların makine adı aynıdır ("etap"); ad makine adından alınırsa tahtalar panelde
+            # ayırt edilemez. Makine adı kendi sütununda kalır (Bakım › Bağlantı ve ajan). INSERT ve UPDATE aynı
+            # işlemdedir: kimlik lastrowid'den gelir, başka bir kayıtla yarışmaz.
             imlec = b.execute(
                 "INSERT INTO tahta (ad, anahtar_ozet, kayit_zamani, ip, mac, makine_adi, surum, platform) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    ad,
+                    "Yeni tahta",
                     guvenlik.ozet(anahtar),
                     vt.simdi(),
                     istemci_ip(istek),
                     str(govde.get("mac", ""))[:17],
-                    ad,
+                    makine_adi or "Yeni tahta",
                     str(govde.get("surum", ""))[:20],
                     str(govde.get("platform", ""))[:120],
                 ),
             )
+            tahta_id = imlec.lastrowid
+            ad = tahta_liste.varsayilan_ad(tahta_id)
+            b.execute("UPDATE tahta SET ad = ? WHERE id = ?", (ad, tahta_id))
             vt.kayit_dus(b, f"tahta:{ad}", "Tahta kaydoldu", "Onay bekliyor.", istemci_ip(istek))
-            return {"tahta_id": imlec.lastrowid, "anahtar": anahtar}
+            return {"tahta_id": tahta_id, "anahtar": anahtar}
 
     @uygulama.post("/ajan/bekle")
     async def ajan_bekle(istek: Request):

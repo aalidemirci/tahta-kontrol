@@ -15,7 +15,7 @@
 {%- endmacro %}
 
 {% macro cip(t) -%}
-<a class="cip" href="/tahta/{{ t.id }}" data-id="{{ t.id }}" data-durum="{{ t.birincil }}"><svg class="simge" aria-hidden="true"><use href="#{{ t.simge }}"/></svg><span class="cip-ad">{{ t.ad }}</span><span class="cip-ekler" data-alan="ek">{% for e in t.ek %}<span class="cip-ek" data-durum="{{ 'sorun' if e == 'ariza' else 'uyari' }}"><svg class="simge" aria-hidden="true"><use href="#{{ 's-ariza' if e == 'ariza' else 'm-sinav' }}"/></svg></span>{% endfor %}</span><span class="gizli">: <span data-alan="okunur">{{ t.okunur }}</span></span></a>
+<a class="cip" href="/tahta/{{ t.id }}" data-id="{{ t.id }}" data-durum="{{ t.birincil }}"><svg class="simge" aria-hidden="true"><use href="#{{ t.simge }}"/></svg><span class="cip-ad">{{ t.ad }}</span>{% if t.no %}<span class="cip-no">No {{ t.no }}</span>{% endif %}<span class="cip-ekler" data-alan="ek">{% for e in t.ek %}<span class="cip-ek" data-durum="{{ 'sorun' if e == 'ariza' else 'uyari' }}"><svg class="simge" aria-hidden="true"><use href="#{{ 's-ariza' if e == 'ariza' else 'm-sinav' }}"/></svg></span>{% endfor %}</span><span class="gizli">: <span data-alan="okunur">{{ t.okunur }}</span></span></a>
 {%- endmacro %}
 
 {% macro durum_kutulari(kutular) -%}

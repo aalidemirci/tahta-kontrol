@@ -184,6 +184,28 @@ if [ -d /run/systemd/system ]; then
     systemctl restart tahta-ajan.service || true
 fi
 
+# Tahta numarasi (0.21.0): panelde her tahtanin yaninda "No <numara>" yazar; ETAP'ta makine adlari ayni
+# oldugu icin sinifla eslemenin tek yolu budur. ajan.json root'a aittir (0600); betik root olarak calisir.
+# Okunamazsa ya da sayi degilse hicbir sey yazilmaz (kurulum yine basarilidir).
+TAHTA_NO="$(python3 -c '
+import json
+try:
+    n = json.load(open("/etc/tahta-kontrol/ajan.json", encoding="utf-8")).get("tahta_id")
+    print(int(n) if n else "")
+except Exception:
+    pass
+' 2>/dev/null || true)"
+case "$TAHTA_NO" in
+    "" | *[!0-9]*) ;;
+    *)
+        echo
+        echo "=========================================================================="
+        echo "  TAHTA NO: $TAHTA_NO  -> Bu numarayi sinifin adiyla birlikte not edin."
+        echo "  Panelde her tahtanin yaninda ayni numara gorunur (No $TAHTA_NO)."
+        echo "=========================================================================="
+        ;;
+esac
+
 echo
 echo "Kurulum tamamlandi. Okul idaresi panelden bu tahtayi onaylayinca kullanima girer."
 echo "Kilit ve duyuru ekrani bir sonraki oturum acilisinda kendiliginden baslar;"

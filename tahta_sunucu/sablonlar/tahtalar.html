@@ -41,16 +41,33 @@
 {% if yonetici %}
 <div class="bant uyari" role="status" id="onay-bekleyen">
   <strong>{{ bekleyen_sayisi }} yeni tahta onay bekliyor.</strong>
-  <span>Kurulumu yapılan tahta, ad ve derslik verilip onaylanınca komut alır; onaysız tahta komut almaz.</span>
+  <span>Kurulumu yapılan tahta, ad ve derslik verilip onaylanınca komut alır; onaysız tahta komut almaz.
+    Numara (No), kurulumun sonunda tahtanın ekranında çıkan numaradır; dersliği onunla eşleyin.</span>
   <ul>
     {% for t in bekleyen %}
-    <li><a href="/tahta/{{ t.id }}?sekme=bilgiler">{{ t.ad }}<span class="gizli">: adlandır ve onayla</span></a> <span class="not">· {{ t.ip }} · {{ t.son_gorulme }} · adlandır ve onayla</span></li>
+    <li><a href="/tahta/{{ t.id }}?sekme=bilgiler">{{ t.ad }} · No {{ t.id }}<span class="gizli">: adlandır ve onayla</span></a> <span class="not">· {{ t.ip }} · {{ t.son_gorulme }} · adlandır ve onayla</span></li>
     {% endfor %}
   </ul>
 </div>
 {% else %}
 <p class="bant" role="status" id="onay-bekleyen">{{ bekleyen_sayisi }} yeni tahta yöneticinin onayını bekliyor; onaylanınca bu listeye girer.</p>
 {% endif %}
+{% endif %}
+
+{# 0.21.0: ETAP'ta bütün tahtaların makine adı aynıdır; eski sürümler adı makine adından aldığı için tahtalar ayırt
+   edilemez. Bant ve düğme yalnız yöneticide; düğme onay penceresi ister (JS'siz gönderilmez, notu var). Sunucu listeyi
+   kendisi hesaplar (formda kimlik yok); yalnız ad değişir, derslik ve makine adı değişmez. #}
+{% if ayni_ad_sayisi %}
+<div class="bant uyari" role="status" id="ayni-ad">
+  <strong>Aynı adı taşıyan {{ ayni_ad_sayisi }} tahta var.</strong>
+  <span>Bu tahtalar listelerde ve ders programı eşlemesinde birbirinden ayırt edilemez. Her tahtanın numarası (No) adının
+    yanında yazar; kurulumun sonunda tahtanın ekranında çıkan numaradır.</span>
+  <form method="post" action="/tahtalar/adlandir" id="ayni-ad-formu" class="dugme-satiri">
+    <button type="button" data-onay="adlandir" data-onay-ad="{{ ayni_ad_sayisi }}" aria-haspopup="dialog">Hepsini “Tahta &lt;no&gt;” olarak adlandır…</button>
+  </form>
+  <noscript><p class="not">Toplu adlandırma onay penceresi ister; JavaScript kapalıyken her tahtanın adını kendi sayfasının
+    Bilgiler sekmesinden değiştirin.</p></noscript>
+</div>
 {% endif %}
 
 <div class="bant uyari" id="yenile-bandi" hidden>Yeni tahta onaylandı ya da onay bekleyen sayısı değişti. <a href="{{ donus }}">Sayfayı yenile</a></div>
@@ -101,7 +118,7 @@
       <tr class="tahta-satir" id="t-{{ t.id }}" data-id="{{ t.id }}" data-ad="{{ t.ad }}" data-birincil="{{ t.liste.birincil }}" data-durumlar="{{ t.liste.durumlar | join(' ') }}"{% if gizli %} hidden{% endif %}>
         <td class="c-sec"><label class="sec-kap"><input type="checkbox" name="tahta" value="{{ t.id }}"{% if gizli %} disabled{% endif %}><span class="gizli">{{ t.ad }} seç</span></label></td>
         <th scope="row" class="c-ad"><a href="/tahta/{{ t.id }}">{{ t.ad }}</a>
-          <span class="alt-satir">{{ t.alt_satir }}</span></th>
+          <span class="alt-satir">No {{ t.id }} · {{ t.alt_satir }}</span></th>
         <td class="c-durum" data-etiket="Durum"><div class="rozetler" data-alan="rozetler">{{ rozetler(t.liste.rozetler | rejectattr('liste', 'false') | list) }}</div>
           {% if mesaj and not mesaj_hata and ileti_satiri == t.id %}<p class="satir-ileti" role="status" tabindex="-1" data-odakla><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>{{ mesaj }}</p>{% endif %}</td>
         <td class="c-oturum" data-etiket="Oturum" data-alan="oturum">{{ t.liste.oturum or '—' }}</td>

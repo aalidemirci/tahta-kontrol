@@ -58,6 +58,12 @@
       metin: "Ajanı sunucuya bağlanamaz; yeniden eklemek için kurulum gerekir.",
       baslik: function () { return "Bu tahta panelden kaldırılsın mı?"; }
     },
+    /* 0.21.0: Tahtalar › aynı ad bandı. data-onay-ad sayıyı taşır; sunucu listeyi yeniden hesaplar. */
+    adlandir: {
+      ad: "eylem", deger: "adlandir", evet: "Yeniden adlandır",
+      metin: "Adı başka bir tahtayla aynı olan her tahta “Tahta <no>” adını alır; no, kurulumun sonunda tahtanın ekranında çıkan numaradır. Derslik ve öbür bilgiler değişmez.",
+      baslik: function (n, ad) { return (ad ? ad + " tahta" : "Aynı adlı tahtalar") + " yeniden adlandırılsın mı?"; }
+    },
     acil_bitir: {
       ad: "eylem", deger: "bitir", evet: "Yayını bitir",
       metin: "Acil yayın bütün tahtalarda kaldırılacak.",

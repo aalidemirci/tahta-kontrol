@@ -13,7 +13,7 @@
   <label for="{{ kimlik }}-tahta">Tahta</label>
   <select id="{{ kimlik }}-tahta" name="tahta_id" required>
     <option value="">Seçin</option>
-    {% for t in tahtalar %}<option value="{{ t.id }}" {% if t.id == tahta_id %}selected{% endif %}>{{ t.ad }}{% if t.derslik %} · {{ t.derslik }}{% endif %}</option>{% endfor %}
+    {% for t in tahtalar %}<option value="{{ t.id }}" {% if t.id == tahta_id %}selected{% endif %}>{{ t.ad }} · No {{ t.id }}{% if t.derslik %} · {{ t.derslik }}{% endif %}</option>{% endfor %}
   </select>
   {% else %}
   <input type="hidden" name="tahta_id" value="{{ tahta_id }}">

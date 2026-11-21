@@ -242,6 +242,29 @@ def menu_ogeleri(t: dict, rol: str | None) -> list[dict]:
     return ogeler
 
 
+def varsayilan_ad(tahta_id: int) -> str:
+    """Yeni kaydın ve toplu yeniden adlandırmanın verdiği ad (0.21.0). Numara tahtanın kimliğidir: kurulumun sonunda
+    tahtanın ekranına basılır ve panelde her tahtanın yanında "No <kimlik>" olarak yazar."""
+    return f"Tahta {int(tahta_id)}"
+
+
+def ad_anahtari(ad) -> str:
+    """Aynı ad karşılaştırmasının anahtarı: büyük/küçük harf, Türkçe harf ve boşluk farkı yok sayılır ("ETAP" = "etap")."""
+    return metin.katla(ad)
+
+
+def ayni_adlilar(satirlar) -> list[int]:
+    """[(kimlik, ad), …] → adı en az bir BAŞKA tahtanın adıyla aynı olan tahtaların kimlikleri (artan sırada).
+
+    Boş ad sayılmaz. Çağıran iptal edilmiş (kaldırılmış) tahtaları vermez."""
+    kumeler: dict[str, list[int]] = {}
+    for kimlik, ad in satirlar:
+        anahtar = ad_anahtari(ad)
+        if anahtar:
+            kumeler.setdefault(anahtar, []).append(int(kimlik))
+    return sorted(k for liste in kumeler.values() if len(liste) > 1 for k in liste)
+
+
 def grup_adi(bina: str, kat) -> str:
     if bina and kat is not None:
         return f"{bina} · {hedef.kat_adi(kat)}"
