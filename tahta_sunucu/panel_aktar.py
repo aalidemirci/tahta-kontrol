@@ -225,6 +225,11 @@ def kaydet(uygulama, y) -> None:
             asc = program_aktar.asc_oku(bayt)
         except ValueError as hata:
             return y.yonlendir(donus, str(hata), hata=True)
+        if not program_aktar.asc_devre_gruplari(asc)["gruplar"]:
+            with vt.islem() as b:
+                zil_var = bool(program.ders_saatleri_oku(b))
+            if not zil_var:  # dosyada saat yok, zil yok: eşleme adımında ilerlenemez (zil önerisi de çıkamaz)
+                return y.yonlendir(donus, program_aktar.ASC_SAATSIZ, hata=True)
         okunan = {"kart_sayisi": len(asc["cards"]), "satir_sayisi": None}
         return onizle_ve_yonlendir(istek, k, "asc", "asc", program_aktar.ozet(bayt), okunan, asc)
 
@@ -618,7 +623,15 @@ def kaydet(uygulama, y) -> None:
             sonuc = program_aktar.geri_yukle(b, surum_id, k["ad"])
             if sonuc is None:
                 return y.yonlendir("/program?bolum=derslik", "Sürüm okunamadı.", hata=True)
-            vt.kayit_dus(b, k["ad"], "Ders programı geri yüklendi", f"sürüm #{surum_id} · {sonuc['satir']} satır",
+            ek = (f" · {sonuc['tahta_bilgisi']} tahtanın şube bilgisi geri döndü" if sonuc["tahta_bilgisi"] else "") + (
+                f" · {sonuc['tahta_bilgisi_atlanan']} tahtanın şube bilgisi sonradan değiştiği için korundu"
+                if sonuc["tahta_bilgisi_atlanan"] else "")  # fmt: skip
+            vt.kayit_dus(b, k["ad"], "Ders programı geri yüklendi", f"sürüm #{surum_id} · {sonuc['satir']} satır" + ek,
                          y.istemci_ip(istek))  # fmt: skip
-        return y.yonlendir("/program?bolum=derslik",
-                           f"Derslik programı {surum['zaman_metni']} tarihli sürüme döndürüldü ({sonuc['satir']} satır).")  # fmt: skip
+        ileti = f"Derslik programı {surum['zaman_metni']} tarihli sürüme döndürüldü ({sonuc['satir']} satır)."
+        if sonuc["tahta_bilgisi"]:
+            ileti += f" {sonuc['tahta_bilgisi']} tahtanın şube bilgisi de eski hâline döndü."
+        if sonuc["tahta_bilgisi_atlanan"]:
+            ileti += (f" {sonuc['tahta_bilgisi_atlanan']} tahtanın şube bilgisi o zamandan beri değiştirildiği için "
+                      "olduğu gibi bırakıldı.")  # fmt: skip
+        return y.yonlendir("/program?bolum=derslik", ileti)

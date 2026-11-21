@@ -780,13 +780,13 @@ def test_asc_derslik_rakam_kumesiyle_ikinci_aday_yalniz_tek_adayda():
         "101", "101", "101", "4", "", "2-101"]
     _, cozum = ikili_esle(tahta=ikili_tahtalar(("101", "DERSLİK-102")))
     durum = {e["ad"]: (e["durum"], e["deger"]) for e in cozum["eslesme"]["derslik"]}
-    assert durum["DERSLİK-101 (D-101)"] == ("otomatik", "7") and durum["DERSLİK-102 (D-102)"] == ("otomatik", "3")
+    assert durum["DERSLİK-101 (D-101)"] == ("rakam", "7") and durum["DERSLİK-102 (D-102)"] == ("otomatik", "3")
     # tahta adı da aday: derslik alanı boş, ad "101"
     _, cozum = ikili_esle(tahta=[{"id": 7, "ad": "101", "derslik": "", "subeler": ""}])
     assert next(e for e in cozum["eslesme"]["derslik"] if e["ad"].startswith("DERSLİK-101"))["deger"] == "7"
     # iki tahta aynı rakamı taşırsa eşlenmez
     _, cozum = ikili_esle(tahta=[{"id": 7, "ad": "ETAP", "derslik": "101", "subeler": ""},
-                                 {"id": 8, "ad": "Tahta 101", "derslik": "", "subeler": ""}])  # fmt: skip
+                                 {"id": 8, "ad": "101", "derslik": "", "subeler": ""}])  # fmt: skip
     assert next(e for e in cozum["eslesme"]["derslik"] if e["ad"].startswith("DERSLİK-101"))["durum"] == "eslesmedi"
     # dosyada aynı rakamlı iki derslik varsa da eşlenmez (biri öbürünün tahtasına düşmesin)
     bayt = ikili_xml().replace(b'name="DERSL\xc4\xb0K-501" short="D-501"', b'name="LAB-101" short="L-101"')
@@ -896,3 +896,143 @@ def test_asc_hatirlanan_eslesmeleri_unut(uygulama, panel, tahta, saat):
     gir(panel, "idareci1")
     assert "yönetici yetkisi" in ileti(panel.post("/program/aktar/unut", data={"onay": "1"}))
     assert "yönetici yetkisi" in ileti(panel.post("/program/aktar/asc/zil", data={"onay": "1"}))
+
+
+# ---- 0.21.0 inceleme düzeltmeleri ---------------------------------------------------------------------------------
+def test_goc_0_21_0_eski_asc_saat_eslesmeleri_silinir_surumde_tahta_bilgisi_alani(tmp_path, monkeypatch):
+    import sqlite3
+
+    monkeypatch.setenv("TAHTA_VERI_DIZINI", str(tmp_path))
+    onceki = len(vt.GOCLER) - 1
+    assert "tur = 'saat'" in vt.GOCLER[onceki] and "tahta_json" in vt.GOCLER[onceki]
+    b = sqlite3.connect(tmp_path / "tahta-kontrol.db")
+    for sira in range(onceki):
+        b.executescript(vt.GOCLER[sira])
+    b.execute(f"PRAGMA user_version = {onceki}")
+    # 0.20.0'ın yazdığı otomatik saat eşlemeleri ('ogle|1' sabahın ilk saatine) ve dokunulmaması gerekenler
+    b.executemany("INSERT INTO program_eslesme (kaynak, tur, anahtar, tahta_id, deger, guncelleme) VALUES (?, ?, ?, NULL, ?, 0)",
+                  [("asc", "saat", "1|08:00", "ogle|1"), ("asc", "saat", "9|13:30", "yok"), ("asc", "sinif", "9/a", "9/A"),
+                   ("tablo", "saat", "x", "normal|1"), ("eokul", "saat", "y", "normal|1")])  # fmt: skip
+    b.commit()
+    b.close()
+    vt.hazirla()
+    with vt.islem() as b:
+        kalan = {(s["kaynak"], s["tur"]) for s in b.execute("SELECT * FROM program_eslesme")}
+        assert kalan == {("asc", "sinif"), ("tablo", "saat"), ("eokul", "saat")}
+        assert "tahta_json" in {s["name"] for s in b.execute("PRAGMA table_info(program_surum)")}
+
+
+def test_asc_hatirlanan_saat_eslemesi_yoksa_devre_grubu_eslemesi_gecerli():
+    # göçten sonra eski otomatik saat eşlemesi yoktur; elle seçilen (0.21.0) saat eşlemesi yine öncelikli
+    _, cozum = ikili_esle(saatler=ikili_zil(10))
+    assert sum(len(v) for v in cozum["satirlar"].values()) == 159 and cozum["satirlar"][7][(0, "sabah", 1)] == "11/A"
+    _, cozum = ikili_esle(saatler=ikili_zil(10), hatirlanan={("saat", "9|13:30"): {"tahta_id": None, "deger": "yok"}})
+    assert (0, "ogle", 1) not in cozum["satirlar"][7] and cozum["satirlar"][7][(0, "ogle", 2)] == "9/I"
+
+
+def saat_eslesmedi(cozum) -> bool:
+    return any(e["durum"] == "eslesmedi" for e in cozum["eslesme"]["saat"] + cozum["eslesme"]["devre"])
+
+
+def _saatsiz_period(bayt: bytes, kullan: bool = False) -> bytes:
+    bayt = bayt.replace(b"</periods>", b'<period name="Et" short="Et" period="17" starttime="" endtime=""/></periods>')
+    if kullan:  # 11/A'nın Cuma 1. kartı saatsiz period'a
+        bayt = bayt.replace(b'<card lessonid="Lc1" classroomids="" period="1" days="00001"',
+                            b'<card lessonid="Lc1" classroomids="" period="17" days="00001"', 1)  # fmt: skip
+    return bayt
+
+
+def _saatsiz_dosya() -> bytes:
+    bayt = ikili_xml()
+    for bas in IKILI_SABAH + IKILI_OGLE:
+        bayt = bayt.replace(f'starttime="{bas}"'.encode(), b'starttime=""')
+    return bayt
+
+
+def test_asc_baslangic_saati_olmayan_period_gruplamayi_kapatmaz():
+    okunan, cozum = ikili_esle(_saatsiz_period(ikili_xml()), saatler=ikili_zil(10))
+    assert [g["anahtar"] for g in okunan["devre_gruplari"]] == ["onek:s", "onek:ö"]
+    assert sum(len(v) for v in cozum["satirlar"].values()) == 159 and not saat_eslesmedi(cozum)
+    assert not any("Başlangıç saati yazılmamış" in u for u in okunan["uyarilar"])  # kullanılmıyor: sessiz
+    # kullanılan saatsiz period: bölme yine yapılır, o saat uyarıyla eşleme adımına kalır
+    okunan, cozum = ikili_esle(_saatsiz_period(ikili_xml(adlar="sayi"), kullan=True), saatler=ikili_zil(10))
+    assert [g["kaynak"] for g in okunan["devre_gruplari"]] == ["ara", "ara"]
+    assert any(u.startswith("Başlangıç saati yazılmamış 1 ders saati (Et)") for u in okunan["uyarilar"])
+    assert next(e for e in cozum["eslesme"]["saat"] if e["ad"] == "Et")["durum"] == "eslesmedi"
+    assert sum(len(v) for v in cozum["satirlar"].values()) == 158
+    # hiçbir period'un saati yok: öneri çıkamaz, ama kullanıcıya söylenir (çıkmaz yok)
+    okunan, cozum = ikili_esle(_saatsiz_dosya(), saatler=ikili_zil())
+    assert okunan["devre_gruplari"] == []
+    zil = program_aktar.asc_zil_hazirla(okunan, ikili_zil(), cozum)
+    assert zil["zil_gerekli"] and zil["zil_onerisi"] is None and "başlangıç saati yazılmamış" in zil["zil_onerilemez"]
+
+
+def test_asc_saatsiz_dosya_zilsiz_okulda_yuklemede_reddedilir(uygulama, panel, tahta, saat):
+    ikili_okul(panel, tahta)
+    yanit = panel.post("/program/aktar/asc", files={"dosya": ("p.xml", _saatsiz_dosya(), "text/xml")})
+    assert ileti(yanit) == program_aktar.ASC_SAATSIZ and yanit.headers["location"].startswith("/program/aktar")
+    # tek saatsiz period zilsiz okulda yüklemeyi engellemez ve zil önerisi çıkar
+    panel.post("/program/aktar/asc", files={"dosya": ("p.xml", _saatsiz_period(ikili_xml()), "text/xml")})
+    assert 'action="/program/aktar/asc/zil"' in panel.get("/program/aktar?adim=esleme").text
+
+
+def test_asc_tek_gruplu_dosyada_devre_secimi_hatirlanir_ve_okunur():
+    bayt = ikili_xml(adlar="sayi", yayil=True)
+    _, cozum = ikili_esle(bayt, saatler=ikili_zil(10))
+    assert cozum["eslesme"]["devre"][0]["durum"] == "eslesmedi" and saat_eslesmedi(cozum)
+    _, secilen = ikili_esle(bayt, secimler={"devre": {"tek": "sabah"}}, saatler=ikili_zil(10))
+    assert (secilen["eslesme"]["devre"][0]["durum"], secilen["eslesme"]["devre"][0]["deger"]) == ("secildi", "sabah")
+    _, cozum = ikili_esle(bayt, saatler=ikili_zil(10), hatirlanan={("devre", "tek"): {"tahta_id": None, "deger": "sabah"}})
+    e = cozum["eslesme"]["devre"][0]
+    assert (e["anahtar"], e["durum"], e["deger"]) == ("tek", "hatirlanan", "sabah") and not saat_eslesmedi(cozum)
+    assert cozum["satirlar"] == secilen["satirlar"]
+    # zilde karşılığı olmayan hatırlanan değer yok sayılır; bu oturumda açıkça "saatlerden eşle" seçilirse o geçerli
+    _, cozum = ikili_esle(bayt, saatler=ikili_zil(10), hatirlanan={("devre", "tek"): {"tahta_id": None, "deger": "aksam"}})
+    assert cozum["eslesme"]["devre"][0]["durum"] == "eslesmedi"
+    _, cozum = ikili_esle(bayt, secimler={"devre": {"tek": ""}}, saatler=ikili_zil(10),
+                          hatirlanan={("devre", "tek"): {"tahta_id": None, "deger": "sabah"}})  # fmt: skip
+    assert (cozum["eslesme"]["devre"][0]["durum"], cozum["eslesme"]["devre"][0]["deger"]) == ("secildi", "")
+
+
+def test_asc_rakam_adayi_sube_adli_tahtaya_dusmez_ve_hatirlanmaz(uygulama):
+    bayt = ikili_xml().replace(b'name="DERSL\xc4\xb0K-501" short="D-501"', b'name="Kimya Lab 12" short="KL12"')
+    bayt = bayt.replace(b'lessonid="Lgs" classroomids="r9"', b'lessonid="Lgs" classroomids="r3"')
+    for ad in ("12/A", "Tahta 12", "12 A"):
+        _, cozum = ikili_esle(bayt, tahta=[{"id": 1, "ad": ad, "derslik": "", "subeler": ""}])
+        e = next(e for e in cozum["eslesme"]["derslik"] if e["ad"].startswith("Kimya Lab 12"))
+        assert e["durum"] == "eslesmedi" and 1 not in cozum["satirlar"], ad
+    _, cozum = ikili_esle(bayt, tahta=[{"id": 1, "ad": "12", "derslik": "", "subeler": ""}])  # yalnız numara: aday
+    assert next(e for e in cozum["eslesme"]["derslik"] if e["ad"].startswith("Kimya Lab 12"))["durum"] == "rakam"
+    # numarasından öneri onayda hatırlanmaz
+    with vt.islem() as b:
+        b.execute("DELETE FROM program_eslesme")
+        program_aktar.eslesmeleri_yaz(b, "asc", cozum)
+        assert not b.execute("SELECT * FROM program_eslesme WHERE tur = 'derslik'").fetchall()
+
+
+def test_asc_sube_guncellemesi_geri_yuklemede_doner_sonradan_degisen_korunur(uygulama, panel, tahta, saat):
+    t1, t2 = ikili_okul(panel, tahta, ("D-101", "D-102"))
+    with vt.islem() as b:
+        b.execute("UPDATE tahta SET subeler = '9/A' WHERE id = ?", (t1,))
+    zil_kur(ikili_zil())
+    panel.post("/program/aktar/asc", files={"dosya": ("p.xml", ikili_xml(), "text/xml")})
+    assert "Önceki programlar”dan geri yüklenirse" in panel.get("/program/aktar?adim=onizleme").text
+    panel.post("/program/aktar/onayla", data={"onizleme": onizleme_kimligi(), "subeleri_guncelle": "1"})
+    assert sorgu("SELECT subeler FROM tahta WHERE id IN (?, ?) ORDER BY id", t1, t2) == [
+        {"subeler": "9/I,11/A"}, {"subeler": "9/İ,11/B"}]
+    surum = sorgu("SELECT * FROM program_surum ORDER BY id DESC")[0]
+    assert {g["id"]: g["subeler"] for g in json.loads(surum["tahta_json"])} == {t1: "9/A", t2: ""}
+    with vt.islem() as b:  # t2 onaydan sonra elle değişti: geri yükleme onu ezmez
+        b.execute("UPDATE tahta SET subeler = '10/C' WHERE id = ?", (t2,))
+    yanit = panel.post(f"/program/gecmis/{surum['id']}/geri-yukle", data={"onay": "1"})
+    assert "1 tahtanın şube bilgisi de eski hâline döndü" in ileti(yanit)
+    assert "1 tahtanın şube bilgisi o zamandan beri değiştirildiği için" in ileti(yanit)
+    assert sorgu("SELECT subeler FROM tahta WHERE id IN (?, ?) ORDER BY id", t1, t2) == [{"subeler": "9/A"}, {"subeler": "10/C"}]
+    assert sorgu("SELECT COUNT(*) AS n FROM tahta_ders")[0]["n"] == 0
+    assert "şube bilgisi geri döndü" in sorgu("SELECT ayrinti FROM kayit WHERE islem = 'Ders programı geri yüklendi'")[0]["ayrinti"]
+    # geri yüklemenin geri alınması: şube bilgisi de onayın yazdığına döner
+    son = sorgu("SELECT * FROM program_surum ORDER BY id DESC")[0]
+    assert son["neden"] == "geri_yukleme"
+    panel.post(f"/program/gecmis/{son['id']}/geri-yukle", data={"onay": "1"})
+    assert sorgu("SELECT subeler FROM tahta WHERE id = ?", t1) == [{"subeler": "9/I,11/A"}]
+    assert sorgu("SELECT COUNT(*) AS n FROM tahta_ders")[0]["n"] == 159

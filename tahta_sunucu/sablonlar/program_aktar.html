@@ -12,7 +12,8 @@
 {% set ADIMLAR = [('kaynak', 'Kaynak'), ('esleme', 'Eşleme'), ('onizleme', 'Önizleme ve onay')] %}
 {% set DURUM = {'hatirlanan': ('bilgi', 's-bilgi', 'Hatırlanan'), 'otomatik': ('tamam', 's-tamam', 'Otomatik'),
                 'secildi': ('onay', 's-onay', 'Seçildi'), 'eslesmedi': ('uyari', 's-sorun', 'Eşleşmedi'),
-                'liste': ('bilgi', 's-bilgi', 'Listeden'), 'sistem': ('bilgi', 's-bilgi', 'Sıradan öneri')} %}
+                'liste': ('bilgi', 's-bilgi', 'Listeden'), 'sistem': ('bilgi', 's-bilgi', 'Sıradan öneri'),
+                'rakam': ('bilgi', 's-bilgi', 'Numarasından öneri')} %}
 {% macro durum_rozeti(d) %}{% set x = DURUM.get(d, ('bilgi', 's-bilgi', d)) %}<span class="rozet" data-durum="{{ x[0] }}"><svg class="simge" aria-hidden="true"><use href="#{{ x[1] }}"/></svg>{{ x[2] }}</span>{% endmacro %}
 
 <div class="kutu-bas">
@@ -175,7 +176,7 @@ Hazırlık/A;Cuma;2,4-6;;Z-04</pre>
   {% if az.zil_yalniz_fark %}
   <p class="bant" role="status"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>Zil çizelgeniz bu dosyaya uyuyor; yalnız bazı ders saatleri 5 dakikadan çok farklı (uyarılarda hangileri olduğu yazar). Dersler yine ders numarasına göre programa yazılır. Yeni zil çizelgesi yalnız okulun zil saatleri gerçekten değiştiyse gerekir.</p>
   {% else %}
-  <p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{% if not aktar.ders_saati_var %}Zil saatleri tanımlı değil.{% else %}Dosyadaki ders saatleri zil çizelgenize uymuyor.{% endif %} Bu dosyadaki saatlerden zil çizelgesi oluşturabilirsiniz; eşlenemeyen ders saatleri programa yazılmaz.</p>
+  <p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>{% if not aktar.ders_saati_var %}Zil saatleri tanımlı değil.{% else %}Dosyadaki ders saatleri zil çizelgenize uymuyor.{% endif %}{% if az.zil_onerisi %} Bu dosyadaki saatlerden zil çizelgesi oluşturabilirsiniz; eşlenemeyen{% else %} Eşlenemeyen{% endif %} ders saatleri programa yazılmaz.</p>
   {% endif %}
   {% if az.zil_onerilemez %}<p class="bant uyari" role="status"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><span>{{ az.zil_onerilemez }}&nbsp;<a href="/program?bolum=zil">Zil saatleri</a></span></p>{% endif %}
   {% if az.zil_onerisi %}
@@ -354,7 +355,7 @@ Hazırlık/A;Cuma;2,4-6;;Z-04</pre>
     {% if o.kaynak == 'asc' and o.sube_guncellemesi %}
     <fieldset class="secim-grubu"><legend>Tahtaların şube bilgisi</legend>
       <label class="satir"><input type="checkbox" name="subeleri_guncelle" value="1"> <span>Tahtaların şube bilgisini programdan güncelle ({{ o.sube_guncellemesi | length }} tahta)</span></label>
-      <p class="ipucu">İşaretlerseniz her tahtanın şubeleri, aSc'de ana dersliği o tahtaya eşlenen sınıflarınki olur; derslik alanı boş tahtaya aSc'deki derslik kısa adı yazılır. Duyuru hedefleri tahtanın şubelerini kullanır. İşaretlemezseniz tahta bilgileri değişmez.</p>
+      <p class="ipucu">İşaretlerseniz her tahtanın şubeleri, aSc'de ana dersliği o tahtaya eşlenen sınıflarınki olur; derslik alanı boş tahtaya aSc'deki derslik kısa adı yazılır. Duyuru hedefleri tahtanın şubelerini kullanır. İşaretlemezseniz tahta bilgileri değişmez. Eski şube ve derslik bilgisi de saklanır: bu program “Önceki programlar”dan geri yüklenirse, o zamandan beri elle değiştirilmemiş tahtaların şube bilgisi de eski hâline döner.</p>
       <details class="ek-bilgi"><summary>Değişecek tahtalar ({{ o.sube_guncellemesi | length }})</summary><ul>{% for g in o.sube_guncellemesi %}<li>No {{ g.id }} · {{ g.ad }}: {% if g.subeler != g.eski_subeler %}şubeler {{ g.eski_subeler or 'boş' }} → {{ g.subeler }}{% endif %}{% if g.derslik != g.eski_derslik %}{% if g.subeler != g.eski_subeler %} · {% endif %}derslik {{ g.derslik }}{% endif %}</li>{% endfor %}</ul></details>
     </fieldset>
     {% endif %}

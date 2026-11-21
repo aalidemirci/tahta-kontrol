@@ -60,6 +60,8 @@ ASC_OKUNAMADI = "aSc XML dosyası okunamadı; aSc'den yeniden dışa aktarıp de
 ASC_BUYUK = "Dosya beklenenden büyük; aSc'den yalnız bu okulun programını dışa aktarın."
 TC_RET = "Dosyada kimlik numarasına benzeyen değer var; silip yeniden yükleyin."
 ZIL_YOK = "Önce zil saatlerini girin; derslik programı ders saatlerine göre okunur."
+ASC_SAATSIZ = ("Dosyadaki ders saatlerinin başlangıç saati yazılmamış ve zil saatleri tanımlı değil; zil çizelgesi bu "
+               "dosyadan oluşturulamıyor. Önce zil saatlerini girin, sonra dosyayı yeniden yükleyin.")
 
 # aSc: okunan bölümler ve öğe başına izinli öznitelikler (geri kalanı okunmaz).
 ASC_IZINLI = {
@@ -227,6 +229,7 @@ def _sayi(deger, varsayilan: float) -> float:
 
 
 # Ders saati adı: harf öneki + devre içindeki numara ("S1", "Ö 3", "S-8", "Ö.2"); önek en çok 8 harf.
+_RAKAMLI_AD = re.compile(r"\d+(?:\s*[-./]\s*\d+)*")  # yalnız numaradan oluşan tahta adı (rakam adayı)
 _ONEK = re.compile(r"\s*([^\W\d_]{1,8})\s*[-.]?\s*(\d{1,2})\s*\.?\s*")
 
 
@@ -266,23 +269,28 @@ def asc_devre_gruplari(asc: dict, sinif_saatleri: dict[str, set[str]] | None = N
     2. Önek yoksa: saatler başlangıca göre sıralanıp iki parçaya bölünür; sınıfların en az %90'ını tek parçada tutan
        bölme seçilir (eşitlikte arasında `breaks` aralığı olan, sonra boşluğu büyük olan). Ders numarası parçadaki sıradır.
     3. Hiçbiri tutmazsa tek grup (bugünkü davranış: numara period numarası; tek önekte önekin sayısı).
-    period "0" ve başlangıç saati olmayan dosya gruplanmaz. Döndürür {"gruplar": [{"anahtar", "ad", "kaynak": onek|ara|tek,
-    "bas", "bit", "dersler": [(no, bas, bit)]}] (başlangıca göre sıralı), "period": {period: (grup anahtarı, no)}}.
+    period "0" gruplanmaz; başlangıç saati olmayan period da gruplamaya katılmaz ("saatsiz"; eşleme adımında elle
+    seçilir) ama öbür saatlerin gruplanmasını engellemez (0.21.0 inceleme: tek saatsiz period bütün dosyayı gruplamasız
+    bırakıyordu). Döndürür {"gruplar": [{"anahtar", "ad", "kaynak": onek|ara|tek, "bas", "bit", "dersler": [(no, bas,
+    bit)]}] (başlangıca göre sıralı), "period": {period: (grup anahtarı, no)}, "saatsiz": [period]}.
     """
     periods = asc.get("periods") or {}
-    sinif_saatleri = sinif_saatleri or {}
     sirali = []
+    saatsiz: list[str] = []
     for pid, k in periods.items():
         if pid == "0":
             continue
         bas = program.saat_dogrula(k.get("starttime"))
         if not bas:
-            return {"gruplar": [], "period": {}}
+            saatsiz.append(pid)
+            continue
         sirali.append((program.dk(bas), _sayi(pid, 0), pid, bas, program.saat_dogrula(k.get("endtime")) or ""))
     sirali.sort()
     if not sirali:
-        return {"gruplar": [], "period": {}}
+        return {"gruplar": [], "period": {}, "saatsiz": saatsiz}
     pidler = [s[2] for s in sirali]
+    # sınıfların saatsiz period kullanımı bölmeyi bozmasın: yalnız gruplanan saatler sayılır
+    sinif_saatleri = {c: set(s) & set(pidler) for c, s in (sinif_saatleri or {}).items()}
     bilgi_ = {s[2]: s for s in sirali}
 
     def grup(anahtar: str, ad: str, kaynak: str, uyeler: list[tuple[str, int]]) -> dict:
@@ -292,7 +300,7 @@ def asc_devre_gruplari(asc: dict, sinif_saatleri: dict[str, set[str]] | None = N
 
     def sonuc_(gruplar: list[dict]) -> dict:
         harita = {p: (g["anahtar"], no) for g in gruplar for p, no in g.pop("_uyeler")}
-        return {"gruplar": gruplar, "period": harita}
+        return {"gruplar": gruplar, "period": harita, "saatsiz": saatsiz}
 
     # 1. önek
     onekler: dict[str, tuple[str, str, int]] = {}
@@ -408,7 +416,13 @@ def asc_ara(asc: dict, secimler: dict) -> dict:
         for cid in sinif_idleri_ - {None, ""}:
             sinif_saatleri.setdefault(cid, set()).add(period)
     devre = asc_devre_gruplari(asc, sinif_saatleri)
-    bilgi: dict = {"derslik": {}, "sinif": {}, "saat": {}, "devre_grup": devre["gruplar"], "sinif_dersligi": {}}
+    kullanilan = set().union(*sinif_saatleri.values()) if sinif_saatleri else set()
+    saatsiz = [p for p in devre["saatsiz"] if p in kullanilan]
+    if saatsiz and len(devre["gruplar"]) > 1:  # tek gruplu dosyada görünüm değişmez (period numarasıyla eşlenir)
+        adlar = ", ".join(" ".join(str((periods.get(p) or {}).get("name") or p).split())[:30] for p in saatsiz[:8])
+        uyarilar.append(f"Başlangıç saati yazılmamış {len(saatsiz)} ders saati ({adlar}) devrelere ayrılmadı; "
+                        "eşleme adımında zil çizelgesindeki karşılığını seçin.")  # fmt: skip
+    bilgi: dict ={"derslik": {}, "sinif": {}, "saat": {}, "devre_grup": devre["gruplar"], "sinif_dersligi": {}}
     grup_adi = {g["anahtar"]: g["ad"] for g in devre["gruplar"]}
     ara: list[dict] = []
     gunler: set[int] = set()
@@ -789,7 +803,9 @@ def esle(veri: dict, saatler: list[tuple], tahtalar: list[dict], hatirlanan: dic
         if t.get("derslik"):
             derslige.setdefault(metin.derslik_anahtari(t["derslik"]), []).append(t["id"])
         ada.setdefault(metin.derslik_anahtari(t["ad"]), []).append(t["id"])
-        for alan in (t.get("derslik"), t["ad"]):
+        # rakam adayı (0.21.0): derslik alanından; addan YALNIZ ad baştan sona numaraysa ("101", "1-01"). "12/A" gibi
+        # şube ya da "Tahta 3" gibi sıra numarası taşıyan ad aday olmaz ("Kimya Lab 12" 12/A tahtasına düşüyordu).
+        for alan in (t.get("derslik"), t["ad"] if _RAKAMLI_AD.fullmatch(str(t["ad"] or "").strip()) else ""):
             if metin.rakam_anahtari(alan):
                 rakama.setdefault(metin.rakam_anahtari(alan), set()).add(t["id"])
     subeye: dict[str, list[int]] = {}
@@ -830,7 +846,7 @@ def esle(veri: dict, saatler: list[tuple], tahtalar: list[dict], hatirlanan: dic
             if deger is None and len(derslik_rakami[anahtar]) == 1:
                 r = next(iter(derslik_rakami[anahtar]))
                 if rakam_sayisi.get(r) == 1 and len(rakama.get(r, ())) == 1:
-                    deger = sorted(rakama[r])
+                    deger, durum = sorted(rakama[r]), "rakam"  # öneri: onayda hatırlanmaz, her seferinde yeniden hesaplanır
             if deger is None:
                 durum = "eslesmedi"
             elif len(deger) > 1:
@@ -868,9 +884,17 @@ def esle(veri: dict, saatler: list[tuple], tahtalar: list[dict], hatirlanan: dic
     cok_grup = len(gruplar) > 1
     grup_devresi: dict[str, str | None] = {}
     tek_grup_secimi = ""
+    tek_grup_durumu = ""
     if len(gruplar) == 1:
+        # "Bu dosya hangi devrenin programı?" seçimi: bu oturumun seçimi > hatırlanan (0.21.0 inceleme: hatırlanan
+        # yazılıyor ama okunmuyordu; türeyen saat eşlemeleri de hatırlanmadığı için soru her aktarımda geri geliyordu)
         secim = sec("devre", gruplar[0]["anahtar"])
-        tek_grup_secimi = str(secim) if secim in zil_kimlikleri else ""
+        h = hatirlanan.get(("devre", gruplar[0]["anahtar"]))
+        if secim is not None:
+            tek_grup_secimi = str(secim) if secim in zil_kimlikleri else ""
+            tek_grup_durumu = "secildi" if tek_grup_secimi or secim == "" else ""  # "": açıkça "saatlerden eşle"
+        elif h and h["deger"] in zil_kimlikleri:
+            tek_grup_secimi, tek_grup_durumu = h["deger"], "hatirlanan"
     elif cok_grup:
         alinan: set[str] = set()
         for sira, g in enumerate(gruplar):
@@ -935,10 +959,10 @@ def esle(veri: dict, saatler: list[tuple], tahtalar: list[dict], hatirlanan: dic
         eslesme["saat"].append({"anahtar": anahtar, "ad": b_["ad"], "bas": b_.get("bas", ""), "bit": b_.get("bit", ""),
                                 "grup_adi": b_.get("grup_adi", "") if cok_grup else "", "durum": durum,
                                 "deger": deger or ""})  # fmt: skip
-    if len(gruplar) == 1 and len(zil_dv) > 1 and (tek_grup_secimi or any(e["durum"] == "eslesmedi" for e in eslesme["saat"])):
+    if len(gruplar) == 1 and len(zil_dv) > 1 and (tek_grup_durumu or any(e["durum"] == "eslesmedi" for e in eslesme["saat"])):
         g = gruplar[0]
         eslesme["devre"].append({"anahtar": g["anahtar"], "ad": g["ad"], "bas": g["bas"], "bit": g["bit"],
-                                 "sayi": len(g["dersler"]), "durum": "secildi" if tek_grup_secimi else "eslesmedi",
+                                 "sayi": len(g["dersler"]), "durum": tek_grup_durumu or "eslesmedi",
                                  "deger": tek_grup_secimi, "tek": True})  # fmt: skip
     for g in gruplar if cok_grup else []:  # tek gruplu dosyada (tek devreli okul) uyarı ve görünüm değişmez (kural 25)
         farkli = saat_farki.get(g["anahtar"])
@@ -1187,14 +1211,17 @@ def _anlik(b) -> list[list]:
             for s in b.execute("SELECT * FROM tahta_ders ORDER BY tahta_id, gun, devre, ders_no")]  # fmt: skip
 
 
-def surum_yaz(b, kullanici: str, neden: str, bicim: str) -> int:
-    """Mevcut `tahta_ders`'in tamamını `program_surum`'e yazar; en yeni SURUM_SAKLA sürüm kalır."""
+def surum_yaz(b, kullanici: str, neden: str, bicim: str, tahta_bilgisi: list[dict] | None = None) -> int:
+    """Mevcut `tahta_ders`'in tamamını `program_surum`'e yazar; en yeni SURUM_SAKLA sürüm kalır. `tahta_bilgisi`
+    (0.21.0): bu işlemin değiştireceği tahta şube/derslik alanları [{"id", "subeler", "derslik", "yeni_subeler",
+    "yeni_derslik"}]; geri yüklemede eski değerler döner (`geri_yukle`)."""
     veri = _anlik(b)
     kimlik = b.execute(
-        "INSERT INTO program_surum (zaman, kullanici, neden, bicim, satir_sayisi, tahta_sayisi, veri_json) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (vt.simdi(), kullanici, neden, bicim, len(veri), len({s[0] for s in veri}), json.dumps(veri)),
-    ).lastrowid
+        "INSERT INTO program_surum (zaman, kullanici, neden, bicim, satir_sayisi, tahta_sayisi, veri_json, tahta_json) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (vt.simdi(), kullanici, neden, bicim, len(veri), len({s[0] for s in veri}), json.dumps(veri),
+         json.dumps(tahta_bilgisi, ensure_ascii=False) if tahta_bilgisi else ""),
+    ).lastrowid  # fmt: skip
     b.execute(
         "DELETE FROM program_surum WHERE id NOT IN (SELECT id FROM program_surum ORDER BY zaman DESC, id DESC LIMIT ?)",
         (SURUM_SAKLA,),
@@ -1214,6 +1241,8 @@ def eslesmeleri_yaz(b, kaynak: str, cozum: dict) -> int:
                 continue  # tahta.subeler'den gelen eşleme hatırlanmaz; kaynak her seferinde tahta.subeler'dir
             if tur in ("saat", "devre") and e["durum"] == "otomatik":
                 continue  # 0.21.0: zilden/önekten türeyen eşleme hatırlanmaz (zil değişince bayat kalmasın)
+            if e["durum"] == "rakam":
+                continue  # 0.21.0: yalnız numarası tutan derslik önerisi hatırlanmaz (yanlışsa kalıcı olmasın)
             if tur in ("derslik", "sube"):
                 tahta_id, deger = (int(e["deger"]) if str(e["deger"]).isdigit() else None), ""
             else:
@@ -1233,10 +1262,21 @@ def uygula(b, cozum: dict, kullanici: str, bicim: str, kaynak: str, temizle: lis
     """Onay (tek işlem; çağıran `vt.islem()` içinde): önce bütün `tahta_ders` sürüm olarak saklanır, sonra yalnız
     kapsamdaki (tahta, devre) çiftleri silinip yeniden yazılır; `temizle` verilen (dosyada geçmeyen) tahtaların aynı
     devre satırları da silinir; eşlemeler hatırlanır. `subeler` (0.21.0, `sube_guncellemesi`; yalnız kutu
-    işaretliyse) tahtaların şube ve boş derslik alanını yazar. Döndürür {"surum_id","tahta","satir","temizlenen",
-    "sube_tahta"}."""
-    surum_id = surum_yaz(b, kullanici, "aktarim", bicim)
+    işaretliyse) tahtaların şube ve boş derslik alanını yazar; eski değerler sürümle saklanır ve "Önceki programlar"dan
+    geri yüklenince döner. Döndürür {"surum_id","tahta","satir","temizlenen","sube_tahta"}."""
     gecerli = {t["id"] for t in b.execute("SELECT id FROM tahta WHERE durum != 'iptal'")}
+    tahta_yazilacak = []
+    for g in subeler or []:
+        if g["id"] not in gecerli:
+            continue
+        try:
+            yeni_subeler = ",".join(hedef.subeler_coz(g["subeler"]))
+        except ValueError:
+            continue
+        eski = b.execute("SELECT subeler, derslik FROM tahta WHERE id = ?", (g["id"],)).fetchone()
+        tahta_yazilacak.append({"id": g["id"], "subeler": eski["subeler"] or "", "derslik": eski["derslik"] or "",
+                                "yeni_subeler": yeni_subeler, "yeni_derslik": str(g["derslik"])[:60]})  # fmt: skip
+    surum_id = surum_yaz(b, kullanici, "aktarim", bicim, tahta_yazilacak)
     satir = 0
     tahtalar = set()
     for tahta_id, devre in sorted(cozum["kapsam"]):
@@ -1264,23 +1304,31 @@ def uygula(b, cozum: dict, kullanici: str, bicim: str, kaynak: str, temizle: lis
             (tahta_id, *devreler),
         ).rowcount
     eslesmeleri_yaz(b, kaynak, cozum)
-    sube_tahta = 0
-    for g in subeler or []:
-        if g["id"] not in gecerli:
-            continue
-        try:
-            yeni_subeler = ",".join(hedef.subeler_coz(g["subeler"]))
-        except ValueError:
-            continue
-        b.execute("UPDATE tahta SET subeler = ?, derslik = ? WHERE id = ?", (yeni_subeler, str(g["derslik"])[:60], g["id"]))
-        sube_tahta += 1
-    return {"surum_id": surum_id, "tahta": len(tahtalar), "satir": satir, "temizlenen": temizlenen, "sube_tahta": sube_tahta}
+    for g in tahta_yazilacak:
+        b.execute("UPDATE tahta SET subeler = ?, derslik = ? WHERE id = ?", (g["yeni_subeler"], g["yeni_derslik"], g["id"]))
+    return {"surum_id": surum_id, "tahta": len(tahtalar), "satir": satir, "temizlenen": temizlenen,
+            "sube_tahta": len(tahta_yazilacak)}  # fmt: skip
+
+
+def _tahta_bilgisi_oku(ham) -> list[dict]:
+    """`program_surum.tahta_json` → doğrulanmış liste (bozuk ya da eski sürümde boş)."""
+    try:
+        liste = json.loads(ham) if ham else []
+    except ValueError:
+        return []
+    alanlar = ("subeler", "derslik", "yeni_subeler", "yeni_derslik")
+    return [g for g in liste if isinstance(g, dict) and isinstance(g.get("id"), int)
+            and all(isinstance(g.get(a), str) for a in alanlar)] if isinstance(liste, list) else []  # fmt: skip
 
 
 def geri_yukle(b, surum_id: int, kullanici: str) -> dict | None:
     """Önce mevcut durum yeni sürüm olarak saklanır (geri almanın da geri alınabilmesi için), sonra `tahta_ders`
     tümüyle silinip anlık görüntü yazılır; kaldırılmış (iptal) tahtaların satırları atlanır, artık olmayan ders
-    saatleri yazılır (yetim olarak görünür). Sürüm yoksa None."""
+    saatleri yazılır (yetim olarak görünür). Sürüm yoksa None.
+
+    0.21.0: sürüm, onaydaki "şube bilgisini güncelle" adımının eski değerlerini taşıyorsa tahtanın şube ve derslik
+    alanı da eski hâline döner; yalnız alan o onaydan beri DEĞİŞMEDİYSE (sonradan elle girilen bilgi ezilmez).
+    Dönüşte "tahta_bilgisi" (geri dönen) ve "tahta_bilgisi_atlanan" (sonradan değiştiği için dokunulmayan) sayıları."""
     satir = b.execute("SELECT * FROM program_surum WHERE id = ?", (surum_id,)).fetchone()
     if not satir:
         return None
@@ -1289,8 +1337,21 @@ def geri_yukle(b, surum_id: int, kullanici: str) -> dict | None:
     except ValueError:
         return None
     zaman, kaynak_id = satir["zaman"], satir["id"]
-    surum_yaz(b, kullanici, "geri_yukleme", "")
     gecerli = {t["id"] for t in b.execute("SELECT id FROM tahta WHERE durum != 'iptal'")}
+    geri_donecek, atlanan = [], 0
+    for g in _tahta_bilgisi_oku(satir["tahta_json"]):
+        simdi = b.execute("SELECT subeler, derslik FROM tahta WHERE id = ?", (g["id"],)).fetchone()
+        if g["id"] not in gecerli or simdi is None:
+            continue
+        if ((simdi["subeler"] or ""), (simdi["derslik"] or "")) != (g["yeni_subeler"], g["yeni_derslik"]):
+            atlanan += 1
+            continue
+        # geri yüklemenin de geri alınabilmesi için ters yön saklanır
+        geri_donecek.append({"id": g["id"], "subeler": g["yeni_subeler"], "derslik": g["yeni_derslik"],
+                             "yeni_subeler": g["subeler"], "yeni_derslik": g["derslik"]})  # fmt: skip
+    surum_yaz(b, kullanici, "geri_yukleme", "", geri_donecek)
+    for g in geri_donecek:
+        b.execute("UPDATE tahta SET subeler = ?, derslik = ? WHERE id = ?", (g["yeni_subeler"], g["yeni_derslik"], g["id"]))
     b.execute("DELETE FROM tahta_ders")
     yazilan = 0
     for tahta_id, gun, devre, no, sube in veri:
@@ -1301,7 +1362,8 @@ def geri_yukle(b, surum_id: int, kullanici: str) -> dict | None:
             (int(tahta_id), int(gun), str(devre), int(no), str(sube or "")),
         )
         yazilan += 1
-    return {"satir": yazilan, "zaman": zaman, "id": kaynak_id}
+    return {"satir": yazilan, "zaman": zaman, "id": kaynak_id, "tahta_bilgisi": len(geri_donecek),
+            "tahta_bilgisi_atlanan": atlanan}  # fmt: skip
 
 
 def surum_listesi(b) -> list[dict]:
@@ -1445,11 +1507,14 @@ def asc_zil_hazirla(okunan: dict, saatler: list[tuple], cozum: dict) -> dict:
     gruplar = okunan.get("devre_gruplari") or []
     eslesmedi = any(e["durum"] == "eslesmedi" for liste in (cozum["eslesme"]["saat"], cozum["eslesme"]["devre"]) for e in liste)
     fark_var = len(gruplar) > 1 and any(cozum.get("saat_farki", {}).values())  # tek grupta yalnız zilsizlik/eşleşmeme
-    zil_gerekli = bool(gruplar) and (not saatler or eslesmedi or fark_var)
+    zil_gerekli = not saatler or eslesmedi or fark_var
     oneri = None
     onerilemez = ""
     if zil_gerekli:
-        if len(gruplar) > 2:
+        if not gruplar:  # hiçbir ders saatinin başlangıcı yok: öneri çıkamaz, kullanıcı çıkmazda kalmasın (0.21.0 inceleme)
+            onerilemez = ("Dosyadaki ders saatlerinin başlangıç saati yazılmamış; zil çizelgesi bu dosyadan oluşturulamıyor. "
+                          "Zil saatlerini zil düzenleyicisinde (Program › Zil saatleri) girin.")  # fmt: skip
+        elif len(gruplar) > 2:
             onerilemez = "Dosyada ikiden çok devre var; zil saatlerini zil düzenleyicisinde (Program › Zil saatleri) girin."
         elif any(not bit for g in gruplar for _n, _b, bit in g["dersler"]):
             onerilemez = "Dosyadaki ders saatlerinin bitişi yazılmamış; zil saatlerini zil düzenleyicisinde girin."
