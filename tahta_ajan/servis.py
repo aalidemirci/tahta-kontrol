@@ -24,7 +24,7 @@ import unicodedata
 from collections import deque
 from urllib.parse import urlsplit
 
-from . import __version__, ayar, envanter, gun_programi, sistem, tani, usb_anahtar
+from . import __version__, ayar, envanter, gun_programi, otomatik_giris, sistem, tani, usb_anahtar
 from .baglanti import BaglantiHatasi, Istemci
 from .yoklama import sayfa_sayisi, sonraki_durum
 
@@ -37,8 +37,12 @@ LOGO_YENIDEN_DENEME_SN = 60
 # Sunucunun bu ajana uygulayabileceği yetenekler (sürüm karşılaştırması yerine).
 YETENEKLER = [
     "acil", "duyuru_id", "program_kilidi", "sinav", "yoklama", "adres_listesi", "envanter", "ariza", "temizlik",
-    "dugme", "acilis_kilidi", "usb_anahtar", "gun_programi", "yoklama_gec",
+    "dugme", "acilis_kilidi", "usb_anahtar", "gun_programi", "yoklama_gec", "otomatik_giris",
 ]  # fmt: skip
+# Otomatik giriş (0.22.0, kural 39): sunucu `ayar.otomatik_giris = {"hesap": "ogretmen" | None}` gönderir; alan yoksa
+# tahtadaki ayara dokunulmaz. İstek değişince hemen, değişmese de en geç bu kadar saniyede bir yeniden uygulanır
+# (elle silinen dosya geri gelsin); durum özeti de bu kadar süre bellekte tutulur.
+OTOMATIK_GIRIS_YENILE_SN = 600
 # Yüzer düğme (0.9.0, G3). Ayar sunucudan (`ayar.dugme`) gelir ve durum.json'da saklanır (sır değil): sunucu
 # kapalıyken servis yeniden başlasa da düğme görünür ve tahtadan kilitlenebilir. Ekrandan gelen her işlem
 # burada ayara göre yeniden doğrulanır (yerel soketi herhangi bir yerel süreç açabilir).
@@ -192,6 +196,14 @@ class Servis:
         self.zamanla = lambda sn, is_: threading.Timer(sn, is_).start()
         # Yüzer düğme ayarı: None = sunucu hiç bildirmedi (eski sunucu) → düğme yok.
         self.dugme = _dugme_coz(kayitli.get("dugme"))
+        # Otomatik giriş (0.22.0): son uygulanan istek, zamanı ve durum özeti (diske yazılmaz; her yanıtta yeniden gelir).
+        self.otomatik_giris_kok = "/"  # testler geçici klasör verir
+        self.otomatik_giris_calistir = sistem.calistir  # grup üyeliği (usermod); testler None verir
+        self._og_istek = _OG_YOK
+        self._og_zaman = None
+        self._og_hata = ""
+        self._og_durum = None
+        self._og_durum_zaman = None
         # Açılışta kilit (0.9.0): oturumun kimliği ve başlangıcı (açılıştan saniye). Kararı SUNUCU verir:
         # yeni oturum_no görünce ve oturum genç ise "kilitle" komutu iner; sunucuya ulaşılamazsa tahta açık
         # kalır (kural 3). Hesap adı değil, rastgele kimlik. Aynı açılışta servis yeniden başlarsa korunur.
@@ -1841,6 +1853,8 @@ class Servis:
             "yoklama_acik": self.yoklama_acik(),  # yalnız bayrak: şube, öğretmen, öğrenci yok (M4)
             # USB anahtar (0.11.0): yalnız izlemenin durumu; takılı bellek, etiket, kimlik GÖNDERİLMEZ.
             "usb_izleme": self._usb_izleme_durumu,
+            # 0.22.0: LightDM otomatik giriş özeti (hesap SINIFI; hesap adı, dosya yolu, içerik yok).
+            "otomatik_giris": self._otomatik_giris_durumu(),
             "ekranlar": ekranlar,
             "oturum": oturum,
             "acik_sure": sistem.acik_sure(),
@@ -2516,6 +2530,9 @@ class Servis:
             dugme = _dugme_coz(ayarlar.get("dugme")) if "dugme" in ayarlar else None
             if dugme != self.dugme:
                 self.dugme, degisti = dugme, True
+        # Otomatik giriş (0.22.0): durum tabanlı; anahtar yoksa ("dokunma" ya da eski sunucu) dokunulmaz.
+        if "otomatik_giris" in ayarlar:
+            self._otomatik_giris_isle(ayarlar["otomatik_giris"])
         # Adres listesi (A6): durum tabanlı; anahtar yoksa (eski sunucu ya da boş liste) dokunulmaz.
         if "sunucu_adresleri" in ayarlar:
             self._adres_listesi_isle(ayarlar["sunucu_adresleri"])
@@ -2556,6 +2573,46 @@ class Servis:
             self.yayinla()
         if acil_degisti:
             self.bildir()  # acil_id sunucuya beklemeden gitsin (teslim kaydı)
+
+    def _otomatik_giris_isle(self, deger):
+        """`ayar.otomatik_giris`'i uygular (kural 39). Bozuk değer ve listede olmayan hesap uygulanmaz.
+
+        Giriş ekranı yeniden başlatılmaz; ayar bir sonraki açılışta geçerlidir. Olay metni hesap sınıfı taşır."""
+        if not isinstance(deger, dict) or "hesap" not in deger:
+            return
+        hesap = deger["hesap"]
+        if hesap is not None and not isinstance(hesap, str):
+            return
+        simdi = time.monotonic()
+        if (hesap == self._og_istek and self._og_zaman is not None
+                and simdi - self._og_zaman < OTOMATIK_GIRIS_YENILE_SN):  # fmt: skip
+            return
+        self._og_istek, self._og_zaman = hesap, simdi
+        try:
+            degisti, hata = otomatik_giris.uygula(hesap, self.otomatik_giris_kok, self.otomatik_giris_calistir)
+        except OSError as h:
+            degisti, hata = False, f"Otomatik giriş ayarlanamadı: {h.strerror or h.__class__.__name__}."
+        self._og_hata = hata
+        self._og_durum_zaman = None  # özet yeniden okunsun
+        if hata:
+            gunluk.warning("%s", hata)
+        elif degisti:
+            metin = ("Otomatik giriş ayarlandı (ogretmen); bir sonraki açılışta geçerli." if hesap is not None
+                     else "Tahta Kontrol'ün otomatik giriş ayarı kaldırıldı; bir sonraki açılışta geçerli.")  # fmt: skip
+            gunluk.info("%s", metin)
+            with self.kilit:
+                self.olaylar.append(metin)
+
+    def _otomatik_giris_durumu(self) -> dict | None:
+        """Durum özeti; dosyalar en çok OTOMATIK_GIRIS_YENILE_SN'de bir okunur. Okunamazsa None."""
+        simdi = time.monotonic()
+        if self._og_durum_zaman is None or simdi - self._og_durum_zaman >= OTOMATIK_GIRIS_YENILE_SN:
+            try:
+                self._og_durum = otomatik_giris.durum(self.otomatik_giris_kok, self._og_hata)
+            except OSError:
+                self._og_durum = None
+            self._og_durum_zaman = simdi
+        return self._og_durum
 
     def _acil_isle(self, deger) -> bool:
         """Sunucunun verdiği acil durumunu uygular; ekrana yansıyan bir değişiklik olduysa True."""
@@ -2852,6 +2909,9 @@ def _oturum_coz(deger, acilis: str) -> dict | None:
     if not isinstance(no, str) or not 1 <= len(no) <= 32 or isinstance(baslangic, bool) or not isinstance(baslangic, (int, float)):
         return None
     return {"no": no, "baslangic": float(baslangic)}
+
+
+_OG_YOK = object()  # otomatik giriş: sunucu henüz istek göndermedi
 
 
 def _dugme_coz(deger) -> dict | None:

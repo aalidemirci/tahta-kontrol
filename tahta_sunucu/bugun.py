@@ -22,6 +22,7 @@ from . import (
     ayar_bolumleri,
     guncelleme,
     guvenlik,
+    otomatik_giris,
     paket,
     program,
     saklama,
@@ -169,6 +170,23 @@ def _kilit_kodu(b, yonetici: bool) -> list[dict]:
                    yol="/ayarlar/kilit" if yonetici else "", eylem="Kod belirle", simge="s-kilit")]  # fmt: skip
 
 
+def _otomatik_giris(b, yonetici: bool) -> list[dict]:
+    """0.22.0 (kural 39): otomatik giriş açıkken kilit kodu ya da açılışta kilit sonradan kapandıysa tahtalar öğretmen
+    oturumunda KİLİTSİZ açılır. Yalnız yönetici (ayar yalnız onundur); ayar kendiliğinden değişmez."""
+    if not yonetici:
+        return []
+    risk = otomatik_giris.kilitsiz_risk(b)  # ayar "dokunma"ya alınsa da tahtada kalan dosyayı sayar
+    if risk is None:
+        return []
+    if risk["kip"] == "ogretmen":
+        baslik = f"Otomatik giriş açık ama {risk['neden']}: tahtalar öğretmen oturumunda kilitsiz açılır."
+    else:
+        baslik = (f"{risk['sayi']} tahtada otomatik giriş ayarı duruyor ama {risk['neden']}: "
+                  "bu tahtalar öğretmen oturumunda kilitsiz açılır.")  # fmt: skip
+    return [_satir("otomatik_giris", "uyari", baslik, yol="/ayarlar/kilit#giris", eylem="Ayara git",
+                   sayi=risk["sayi"] or 1, simge="s-kilit")]  # fmt: skip
+
+
 def guncel_olmayan_sayisi(b) -> int:
     """Ajanı güncel olmayan onaylı tahta sayısı; `tahta_liste.sayilar(...)["guncelleme"]` ile aynı kural, tek COUNT."""
     return b.execute(
@@ -247,6 +265,7 @@ def bekleyenler(b, kullanici, *, an: int | None = None, ipler: list[str] | None 
         + _ariza(b)
         + _kacirilan(b, an)
         + _kilit_kodu(b, yonetici)
+        + _otomatik_giris(b, yonetici)
         + _guncelleme_tahta(b, tahta_sayilari)
         + _yeni_surum(b, yonetici)
         + (_kurulum(b, yonetici, an, ipler) if kurulum is None else list(kurulum))

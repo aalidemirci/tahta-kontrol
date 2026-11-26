@@ -1,6 +1,6 @@
 {% from "_ayar.html" import ileti, nedir, kaydet_cubugu with context %}
 {# Kilit ve güvenlik: ortak kilit kodu (bolum=kilit_kodu; boş alan kodu DEĞİŞTİRMEZ, silme yalnız açık
-   kilit_kodu_sil=1 + onay penceresi) ve açılışta kilit (bolum=acilis_kilidi). Kodun değeri hiçbir zaman geri yazılmaz. #}
+   kilit_kodu_sil=1 + onay penceresi), açılışta kilit (bolum=acilis_kilidi) ve otomatik giriş (bolum=otomatik_giris, 0.22.0). Kodun değeri hiçbir zaman geri yazılmaz. #}
 <section class="kutu ayar-kart" id="kod" aria-labelledby="kod-baslik">
   <div class="kutu-bas">
     <h2 id="kod-baslik">Ortak kilit kodu</h2>
@@ -63,6 +63,54 @@
       <div class="ayar-denetim"><span class="rozet" data-durum="{{ 'tamam' if usb_ayari.etkin and usb_ayari.kilit_acar else 'cevrimdisi' }}">{{ 'Açık' if usb_ayari.etkin and usb_ayari.kilit_acar else 'Kapalı' }}</span> <a href="/ayarlar/usb">USB anahtar ayarına git</a></div>
     </div>
     {{ kaydet_cubugu('Açılış ayarını kaydet') }}
+  </form>
+</section>
+
+<section class="kutu ayar-kart" id="giris" aria-labelledby="giris-baslik">
+  {# 0.22.0 (kural 39): otomatik giriş durumdur (bolum=otomatik_giris, tek radyo og_kip). etapadmin parolası
+     istenmez; ajan zaten yönetici yetkisiyle çalışır. "Öğretmen" yalnız kilit kodu ve açılışta kilit varken kaydedilir. #}
+  <div class="kutu-bas">
+    <h2 id="giris-baslik">Otomatik giriş</h2>
+    {% if og_kip == 'ogretmen' %}<span class="rozet" data-durum="{{ 'uyari' if og_engel else 'tamam' }}">Öğretmen hesabı</span>
+    {% elif og_kip == 'kapali' %}<span class="rozet" data-durum="cevrimdisi">Kaldırılıyor</span>
+    {% else %}<span class="rozet" data-durum="cevrimdisi">Dokunulmuyor</span>{% endif %}
+  </div>
+  {{ ileti('giris') }}
+  {# Risk ayara değil tahtaların bildirdiğine de bakar: "dokunma"ya alınınca dosya tahtada kalır (kural 39). #}
+  {% if og_risk %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg><strong>Tahtalar kilitsiz açılır:</strong> {{ og_risk.neden }}.
+    {% if og_risk.kip == 'ogretmen' %}Otomatik girişle tahta öğretmen oturumunda açılır;{% else %}{{ og_risk.sayi }} tahtada Tahta Kontrol'ün otomatik giriş ayarı duruyor;{% endif %}
+    kilit kodunu belirleyin ve açılışta kilidi açın ya da “Otomatik girişi kaldır”ı seçin.</p>{% endif %}
+  {% if og_kip == 'dokunma' and og_acilan and not og_risk %}<p class="not">{{ og_acilan }} tahtada Tahta Kontrol'ün otomatik giriş ayarı duruyor (öğretmen hesabı). Kapatmak için “Otomatik girişi kaldır”ı seçin.</p>{% endif %}
+  {% if og_kip != 'dokunma' and og_eski %}<p class="bant uyari" role="note"><svg class="simge" aria-hidden="true"><use href="#s-bilgi"/></svg>{{ og_eski }} tahtada ajan güncellenmeli; güncellenmeyen tahtada bu ayar uygulanmaz.</p>{% endif %}
+  {% if og_kip != 'dokunma' and (og_sayilar.uygulandi or og_sayilar.bekliyor) %}<p class="not">Uygulandı: {{ og_sayilar.uygulandi }} tahta{% if og_sayilar.bekliyor %} · bekliyor ya da uygulanamadı: {{ og_sayilar.bekliyor }} tahta (ayrıntı tahta sayfasında, Bakım › Bağlantı ve ajan){% endif %}.</p>{% endif %}
+  <p class="not" id="giris-ipucu">Tahta açılınca giriş ekranında beklemeden öğretmen hesabına girer; böylece kilit, duyuru ve acil yayın ekrana gelir
+    (“Ekran yardımcısı yok” durumu kalkar). Ayarı tahtadaki Tahta Kontrol uygulaması kendisi yapar: yönetici (etapadmin) parolası istenmez.</p>
+  <form method="post" action="/ayarlar" data-kirli-izle>
+    <input type="hidden" name="bolum" value="otomatik_giris">
+    <fieldset class="olcut">
+      <legend>Tahtalar açılınca</legend>
+      <div>
+        {% for kod, ad in og_secenekler.items() %}
+        {# Seçenek pasif çizilmez (Ayarlar'da devre dışı alan yok kuralı); koşul eksikse sunucu kaydı reddeder ve nedeni yazar. #}
+        <label class="satir"><input type="radio" name="og_kip" value="{{ kod }}"{% if og_kip == kod %} checked{% endif %}
+          {%- if kod == 'ogretmen' and og_engel and og_kip != 'ogretmen' %} aria-describedby="giris-engel"{% endif %}> {{ ad }}</label>
+        {% endfor %}
+        {% if og_engel and og_kip != 'ogretmen' %}<p class="not" id="giris-engel">“Öğretmen hesabıyla otomatik gir” şu an kaydedilemez: {{ og_engel }}.</p>{% endif %}
+      </div>
+    </fieldset>
+    {% call nedir('Neyi değiştirir, neyi değiştirmez?') %}
+    <ul>
+      <li>Ayar tahtada bir sonraki açılışta geçerli olur; açık tahtanın dersi bölünmez.</li>
+      <li>Yalnız ortak öğretmen hesabı seçilebilir. Yönetici (etapadmin) ve kişisel hesaplarla otomatik giriş hiçbir koşulda yapılmaz.</li>
+      <li>Giriş ekranı atlandığı için EBA karekodu ve USB ile giriş ilk açılışta görünmez. Kişisel hesabıyla girmek isteyen öğretmen
+        önce oturumu kapatır (“Çık”); giriş ekranı gelir ve tahta yeniden kendiliğinden girmez.</li>
+      <li>Sunucuya ulaşılamıyorsa tahta kilitsiz açılır (sunucu arızası dersi rehin almaz).</li>
+      <li>Tahta kablosuz ağla bağlanıyorsa ağ giriş ekranında açılıyor olabilir; önce bir tahtada deneyin.</li>
+      <li>“Otomatik girişi kaldır” yalnız Tahta Kontrol'ün yazdığı ayarı siler; elle yapılmış başka bir ayar tahta sayfasında görünür, silinmez.</li>
+      <li>“Dokunma” seçiliyken tahtalardaki ayar olduğu gibi kalır.</li>
+    </ul>
+    {% endcall %}
+    {{ kaydet_cubugu('Otomatik giriş ayarını kaydet') }}
   </form>
 </section>
 

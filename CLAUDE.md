@@ -1,5 +1,15 @@
 # CLAUDE.md — Tahta Kontrol
 
+Yerel geliştirme 0.22.0 (kullanıcı isteği 27.11.2026, "0.22.0'ı yaz"): **açılışta otomatik giriş** (kural 39;
+`otomatik_giris.py` iki tarafta; tasarım §5.2). Okulda bazı tahtalar "Ekran yardımcısı yok" görünüyordu: tahta
+açık ama giriş ekranında bekliyor, oturum yok. Ayarlar › Kilit ve güvenlik › Otomatik giriş: dokunma (varsayılan,
+alan gönderilmez) · öğretmen · kaldır. etapadmin parolası İSTENMEZ (ajan root). "Öğretmen" yalnız kilit kodu ve
+açılışta kilit varken kaydedilir; sonradan bozulursa Bugün uyarır. Ajan DEĞİŞTİ (yetenek `otomatik_giris`;
+güncelleme bu özellik için gerekli), göç YOK. Tasarım §5'in "otomatik giriş ayarlanmaz" kararı kullanıcı isteğiyle
+değişti; ayrıntılar VARSAYILDI (§17 soru 136–145). `docs/surum-0.22.0.md`. Testlerle ve deneme sunucusunda başsız
+tarayıcıyla (uydurma veri) denendi; dağıtılmadı, gerçek ETAP'ta ve gerçek LightDM'de denenmedi (saha denemesi
+§4, O1–O9; önce tek tahtada).
+
 Yerel geliştirme 0.21.0 (kullanıcı onayı 21.11.2026). Okulda 0.20.0 24 ETAP tahtasında sorunsuz çalıştı; kullanıcı
 beş saha talebinin tek sürümde çıkmasını istedi:
 (1) **Toplu öğretmen yükleme** (`ogretmen_aktar.py`; kural 38; soru 34 kapandı). Kaynaklar: aSc XML (yalnız ad ve
@@ -136,8 +146,9 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.21.0, yerel geliştirme; dağıtılmadı.** Okulda kurulu sürüm 0.20.0'dır (24 ETAP tahtası; kullanıcı
-  bildirimi 21.11.2026). 0.21.0: sahadan beş talep — toplu öğretmen yükleme, sınıf başkanı USB anahtarı (kural 37),
+- Durum: **0.22.0, yerel geliştirme; dağıtılmadı.** Okulda kurulu sürüm 0.20.0'dır (24 ETAP tahtası; kullanıcı
+  bildirimi 21.11.2026); 0.21.0 GitHub'da yayımlandı. 0.22.0: açılışta otomatik giriş (kural 39, tasarım §5.2;
+  ajan değişti, göç yok; gerçek ETAP'ta denenmedi). 0.21.0: sahadan beş talep — toplu öğretmen yükleme, sınıf başkanı USB anahtarı (kural 37),
   tahta numarası ve toplu adlandırma, bildirim alanı durum simgesi, aSc ikili eğitim/I-İ/zil önerisi/şube bilgisi.
   Yalnız sunucu değişti, ajan değişmedi. Testlerle, başsız tarayıcıyla ve gerçek dosyalarla yerelde denendi; gerçek
   ETAP'ta, gerçek USB'de ve kurulu hizmette denenmedi; tasarım §4, §12.3, §14, §14.3, §15.6. (0.20.0: panel
@@ -425,6 +436,12 @@ tahta_sunucu/   FastAPI + SQLite + Jinja2 (HTMX yok, az miktar düz JavaScript)
                 kilit aralıkları (saf); derslik CSV okuması program_aktar.tablo_oku'ya devredilir;
                 ikili eğitim: devre_turleri (sabah/öğle eşlemesi), tahta_devreleri (programdan devre)
   dugme.py      tahtadaki yüzer düğme (0.9.0): ayar.tahta_dugmesi → ajana ayar.dugme {acik, islemler}
+  otomatik_giris.py  açılışta otomatik giriş (0.22.0; kural 39): ayar `otomatik_giris` = dokunma | ogretmen | kapali;
+                ajan_gorunumu (dokunmada None → alan GÖNDERİLMEZ; yoksa {"hesap": "ogretmen" | None}), engel (kod yok /
+                açılışta kilit kapalı), HESAPLAR (ajanla aynı), tahta_durumu (ajanın bildirdiğini süzer; sınıf adı),
+                sayilar (Ayarlar kartı); uç web.py `otomatik_giris_kaydet` (bolum=otomatik_giris, `og_kip`); kart
+                _ayar_kilit.html `#giris`; tahta sayfası _tahta_altyapi.html "Otomatik giriş" satırı; Bugün
+                `bugun._otomatik_giris` (yalnız yönetici, uyarı)
   acilis_kilidi.py  açılışta kilit (0.9.0): yeni durum.oturum_no + oturum_yasi_sn ≤ 120 → bir kez "kilitle"
                 (program kilidinin yönettiği tahtada ders dışı saatte süreli program kilidi, derste kilit yok)
   temizlik.py   oturum temizliği (K7): ayar.oturum_temizligi (varsayılan kapalı), gün sonu anları
@@ -518,6 +535,12 @@ scripts/ekran_olcum.py  Docker/Xvfb'de her tahta sayfasının ekrana sığıp s�
                 `tahta-ajan ariza` (pencere), `tahta-ajan sunucu ADRES` (parmak izi tutarsa yazar)
   ayar.py       yapılandırma, varsayılan tahta paleti, logonun servis tarafında saklanması, adres doğrulama/sırası
   baglanti.py   sunucu istemcisi (Istemci): HTTPS, sertifika zinciri yerine parmak izi denetimi (tutmazsa tek bayt gitmez)
+  otomatik_giris.py  LightDM otomatik girişi (0.22.0; işletim sistemine dokunan ÜÇÜNCÜ dosya, hepsi `kok` alır):
+                okunan_dosyalar (LightDM sırası: /usr/share → /etc/xdg → /etc conf.d → lightdm.conf), etkin_ayar (seat0;
+                özel koltuk > [Seat:*]/[SeatDefaults]; boş değer kapatır), durum (sınıf, bizim, ezilmis; ad/yol yok),
+                uygula (HESAPLAR, uid ≥ 1000, atomik O_EXCL|O_NOFOLLOW yazım, yalnız imzalı kendi dosyasını siler,
+                lightdm YENİDEN BAŞLATILMAZ); servis.py `_otomatik_giris_isle` (istek değişince ya da 600 sn'de bir),
+                `_otomatik_giris_durumu` (600 sn bellek); prerm remove/purge'de imzalı dosya silinir
   sistem.py     işletim sistemine dokunan HER ŞEY (yeni platform = bu dosya); ortak_oturum, temizlik
                 sürecini oturum sahibinin kimliğiyle başlatma (tarayici_temizligi, pencereleri_kapat);
                 USB (0.11.0): BaglamaIzleyici (mountinfo poll), cikarilabilir_baglamalar, anahtar_oku, udisks_calisiyor
@@ -810,7 +833,35 @@ packaging/windows/   PyInstaller tanımı, Inno Setup betiği (hizmet kaydı, ta
      başına onaylı önizlemeyle çalışır ve öğretmen programı aktarımından ayrıdır. Testler uydurma adla yazılır;
      gerçek personel listesi depoya girmez.
 
+39. **Otomatik giriş durumdur; parola istemez; yalnız ortak öğretmen hesabıdır** (0.22.0, kullanıcı isteği
+   27.11.2026; `docs/tasarim.md` §5.2).
+   - **Parola:** etapadmin (ya da başka bir hesabın) parolası panele, sunucuya, ajana GİRMEZ; ayarı root ajan
+     yazar. "Kolaylık" için parola alanı eklenmez (kural 5).
+   - **Değerler:** `dokunma` (varsayılan; alan hiç gönderilmez, tahtadaki ayara dokunulmaz) · `ogretmen` · `kapali`
+     (yalnız ilk satırı imzalı KENDİ dosyamız silinir). Alan yalnız `otomatik_giris` yeteneğini bildiren ajana gider.
+   - **Hesap:** iki tarafta sabit liste `("ogretmen",)` (test eşler); etapadmin, root, uid < 1000 ve kişisel hesap
+     hiçbir koşulda yazılmaz. Listeyi genişletmek kullanıcı kararıdır.
+   - **Kilit koruması:** `ogretmen` yalnız kilit kodu tanımlı VE açılışta kilit açıkken kaydedilir
+     (`otomatik_giris.engel`); sonradan bozulursa ayar kendiliğinden değişmez, Bugün yöneticiyi uyarır. Uyarı
+     ayara DEĞİL `kilitsiz_risk`'e bakar: ayar "dokunma"ya alınsa da dosyası duran tahta (ajanın bildirdiği `bizim`
+     + öğretmen) sayılır. Uyarıyı yeniden `ayar_al(b) == "ogretmen"` koşuluna indirgeme.
+   - **Tahtada:** tek dosya `/etc/lightdm/lightdm.conf.d/50-tahta-otomatik-giris.conf` (elle deneme betiğiyle aynı ad
+     ve içerik); atomik yazım, sembolik bağ ve düz olmayan dosya izlenmez; başka LightDM dosyasına dokunulmaz;
+     lightdm yeniden başlatılmaz (ayar sonraki açılışta). Paket kaldırılınca imzalı dosya silinir.
+   - **Rapor:** ajan durumunda yalnız hesap SINIFI (`etapadmin|ogretmen|ogrenci|kisisel`), `bizim`, `ezilmis`,
+     `lightdm`, `hata`; hesap adı, dosya yolu ve içerik sunucuya gitmez.
+
 ## Bilinen tuzaklar
+
+- **Otomatik giriş "dokunma"da alan GÖNDERİLMEZ (0.22.0):** ajan alanın yokluğunu "dokunma" sayar. `ajan_ayari`'na
+  `"otomatik_giris": None` yazılırsa eski sözleşme bozulmaz ama ajan `None`'ı dict değil diye yok sayar; "kaldır"
+  ise `{"hesap": None}`'dır. İkisini karıştırma: `None` gönderip "kaldırdım" sanma.
+- **LightDM'in okuma sırası ve koltuk önceliği tek yerdedir (0.22.0):** `tahta_ajan/otomatik_giris.etkin_ayar`.
+  Tanılama da (`tani._giris_ekrani`) bunu kullanır. `[Seat:seat0]` her zaman `[Seat:*]`'ın önüne geçer (dosya
+  sırasından bağımsız); boş `autologin-user=` otomatik girişi kapatır. Yeni bir okuyucu yazma.
+- **Otomatik giriş her `/ajan/bekle` yanıtında yeniden yazılmaz (0.22.0):** istek değişince ya da
+  `OTOMATIK_GIRIS_YENILE_SN` (600) dolunca uygulanır; durum özeti de 600 sn bellektedir. Süreyi kısaltma: yanıt
+  25 sn'de bir gelir ve her seferinde /etc'yi okumak/yazmak gereksizdir.
 
 - **Deneme sunucusu bu bilgisayarda 8797/8798'de açılmayabilir (0.21.0):** Windows 8789–9188 kapı aralığını
   ayırmış. Bu yüzden 0.21.0 denemesi 18807'de yapıldı. Kapı "kullanımda" hatası verirse önce ayrılmış aralığa bak

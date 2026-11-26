@@ -1,3 +1,3 @@
 """Tahta Kontrol sunucusu: okul ağında tahtaları yöneten web paneli ve ajan arayüzü."""
 
-__version__ = "0.21.0"
+__version__ = "0.22.0"

@@ -1,4 +1,4 @@
-# Saha denemesi kılavuzu (0.20.0)
+# Saha denemesi kılavuzu (0.22.0)
 
 Amaç: yazılımı tek bir tahtada deneyip Pardus ETAP hakkındaki varsayımları
 ölçmek. Tek tahta yeter; sorunsuzsa ikinci ve üçüncü tahta eklenir.
@@ -542,15 +542,31 @@ Hazırlık: bu denemeler yönetici yetkisi ister ve **önce deneme bilgisayarın
 | H11 | İki hesapta eski veri (ör. ikinci hesapla da program açılmış) varken yükseltme | Tahtaların en son bağlandığı klasör seçilir; diğerine dokunulmaz | |
 | H12 | Okulun antivirüs yazılımı | Hizmeti ve 8788 kuralını engellemiyor | |
 
-## 4. Otomatik giriş denemesi (elle)
+## 4. Otomatik giriş denemesi (0.22.0)
 
-Yazılım otomatik girişi ayarlamaz. Tanılama raporundaki "Giriş ekranı ve
-otomatik giriş" satırı hangi giriş yöneticisinin kullanıldığını gösterir.
-LightDM ise `etapadmin` ile `/etc/lightdm/lightdm.conf` içinde
-`[Seat:*]` altına `autologin-user=ogretmen` eklenerek denenir. Denemeden önce
-dosyanın yedeğini alın. Bakılacaklar: tahta `ogretmen` hesabına kendiliğinden
-açılıyor mu, karekod simgesi hâlâ kullanılabiliyor mu, ayar yeniden başlatmadan
-ve güncellemeden sonra duruyor mu.
+0.22.0'dan beri otomatik giriş sunucudan ayarlanır: Ayarlar › Kilit ve güvenlik › Otomatik giriş (tasarım
+§5.2). etapadmin parolası istenmez. **Önce tek tahtada deneyin.** Bunun için iki yol var:
+- 0.22.0 ajanını yalnız o tahtaya kurun ve ayarı "Öğretmen hesabıyla otomatik gir" yapın. Güncellenmeyen
+  tahtalar ayarı uygulamaz.
+- Ya da `etapadmin` ile `sh otomatik-giris.sh` çalıştırın (aynı dosyayı yazar).
+
+Önce tanılamanın "Giriş ekranı ve otomatik giriş" satırını okuyun; hangi giriş yöneticisinin kullanıldığını ve
+var olan otomatik giriş satırlarını gösterir.
+
+| # | Deneme | Beklenen | Sonuç |
+|---|---|---|---|
+| O1 | Kilit kodu ve açılışta kilit varken ayarı "Öğretmen" yap; tahta açıkken bekle | Ders bölünmez; tahta sayfası › Bakım › "Otomatik giriş: öğretmen · Tahta Kontrol ayarı"; işlem kaydında "Tahta olayı · Otomatik giriş ayarlandı" | |
+| O2 | Tahtayı kapatıp düğmeyle aç | Giriş ekranında beklemeden `ogretmen` oturumu; birkaç saniye sonra kilit ekranı (açılışta kilit); panelde "Ekran yardımcısı yok" görünmez | |
+| O3 | Uzaktan açma ya da BIOS zamanlayıcıyla açılış | O2 ile aynı | |
+| O4 | Oturumu kapat ("Çık") | Giriş ekranı gelir, otomatik giriş yinelenmez; EBA karekodu ve USB ile giriş çalışır | |
+| O5 | Kablosuz bağlı tahtada O2 | Ağ geliyor mu, tahta sunucuya ulaşıyor mu (ulaşmazsa kilitsiz açılır, kural 3) | |
+| O6 | ETAP'ın USB yardımcısı (USB ile kilitleme, ogrenci'ye geçiş) | Çalışıyor mu (giriş ekranının PAM adımı atlanır) | |
+| O7 | Ayarı "Otomatik girişi kaldır" yap, tahtayı yeniden başlat | Giriş ekranında bekler; dosya silinmiş | |
+| O8 | Ayar "Öğretmen"ken etapadmin ile dosyayı sil, 10 dk bekle | Dosya geri yazılır | |
+| O9 | ETAP güncellemesinden ve ajan güncellemesinden sonra yeniden başlat | Ayar durur | |
+
+Geri dönüş: ayarı "Otomatik girişi kaldır" yapın. Tahta çevrimdışıysa `etapadmin` ile
+`sudo rm /etc/lightdm/lightdm.conf.d/50-tahta-otomatik-giris.conf` çalıştırın (ya da `sh otomatik-giris.sh kaldir`).
 
 ## 5. Doğrulanmamış varsayımlar
 

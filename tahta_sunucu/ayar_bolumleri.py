@@ -20,6 +20,7 @@ from . import (
     guncelleme,
     guvenlik,
     maske,
+    otomatik_giris,
     saklama,
     temizlik,
     usb_anahtar,
@@ -37,8 +38,8 @@ BOLUMLER: list[dict] = [
      "aciklama": "Okul adı, renkler, logo ve önizleme", "yerler": ["ad", "kimlik", "logo"],
      "sozcukler": "okul adı renk logo marka tema görünüm amblem kontrast önizleme"},
     {"anahtar": "kilit", "baslik": "Kilit ve güvenlik", "kume": "Tahta davranışı", "simge": "s-kilit",
-     "aciklama": "Ortak kilit kodu, açılışta kilit", "yerler": ["kod", "acilis"],
-     "sozcukler": "kilit kodu şifre parola açılışta kilit güvenlik kodu kaldır değiştir"},
+     "aciklama": "Ortak kilit kodu, açılışta kilit, otomatik giriş", "yerler": ["kod", "acilis", "giris"],
+     "sozcukler": "kilit kodu şifre parola açılışta kilit güvenlik kodu kaldır değiştir otomatik giriş oturum öğretmen hesabı lightdm autologin ekran yardımcısı"},
     {"anahtar": "gunsonu", "baslik": "Kapatma ve gün sonu", "kume": "Tahta davranışı", "simge": "a-guc",
      "aciklama": "Otomatik kapatma, oturum temizliği", "yerler": ["kapatma", "temizlik"],
      "sozcukler": "otomatik kapatma kapanma kapanış kapat enerji tasarruf saat saati hafta sonu oturum temizliği temizlik çerez tarayıcı gün sonu"},
@@ -116,6 +117,7 @@ ESKI_PARCA = {
     "saklama": "/ayarlar/veri#saklama",
     "oturum-temizligi": "/ayarlar/gunsonu#temizlik",
     "acilis-kilidi": "/ayarlar/kilit#acilis",
+    "otomatik-giris": "/ayarlar/kilit#giris",
     "guncelleme-denetimi": "/ayarlar/guncelleme",
     "guncelleme": "/ayarlar/guncelleme",
     "yuzer-dugme": "/ayarlar/yuzer",
@@ -221,7 +223,8 @@ def ozetler(b, bugun: date, ipler: list[str] | None = None) -> dict[str, dict]:
     sonuc["okul"] = _ozet(okul_adi) if okul_adi else _ozet("Ad girilmedi", True)
     if vt.ayar_al(b, "kilit_kodu"):
         acilis = "açık" if acilis_kilidi.ayar_al(b) else "kapalı"
-        sonuc["kilit"] = _ozet(f"Kod tanımlı · açılışta kilit {acilis}", kisa="Tanımlı")
+        giris = " · otomatik giriş" if otomatik_giris.ayar_al(b) == "ogretmen" else ""
+        sonuc["kilit"] = _ozet(f"Kod tanımlı · açılışta kilit {acilis}{giris}", kisa="Tanımlı")
     else:  # kod yokken açılışta kilit uygulanmaz; ayrıca yazılmaz
         sonuc["kilit"] = _ozet("Kod tanımsız", True, kisa="Tanımsız")
 

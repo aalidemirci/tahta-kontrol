@@ -111,6 +111,17 @@
       {% elif baglanti.liste_guncel %}<span class="rozet" data-durum="tamam"><svg class="simge" aria-hidden="true"><use href="#s-tamam"/></svg>Güncel</span>
       {% else %}<span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-onay"/></svg>Eski</span><div class="not">Tahta bir sonraki bağlantısında yeni listeyi alır.</div>{% endif %}</dd>
     <dt>Paket imzası</dt><dd>{{ 'destekliyor' if baglanti.imza else 'desteklemiyor' }}</dd>
+    {# 0.22.0 (kural 39): ajanın bildirdiği LightDM durumu; hesap yalnız sınıf adıyla, dosya yolu ve içerik yok. #}
+    <dt>Otomatik giriş</dt>
+    <dd>{% if otomatik_giris is none %}{{ 'ajan desteklemiyor' if ham.surum else '—' }}
+      {%- elif not otomatik_giris.lightdm %}giriş ekranı LightDM değil; uygulanmaz
+      {%- else %}{{ otomatik_giris.etkin or 'yok (giriş ekranında bekler)' }}
+        {%- if otomatik_giris.bizim %} <span class="not">· Tahta Kontrol ayarı</span>{% elif otomatik_giris.etkin %} <span class="not">· elle yapılmış ayar</span>{% endif %}
+        {%- if otomatik_giris.ezilmis %}<div><span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Başka bir ayar eziyor</span> <span class="not">Başka bir giriş ekranı ayarı Tahta Kontrol ayarının önüne geçiyor. Tahta Kontrol o dosyaya dokunmaz; tanılamadaki “Giriş ekranı” satırına bakıp o ayarı tahtada (etapadmin) kaldırın.</span></div>
+        {%- elif otomatik_giris_kip == 'ogretmen' and otomatik_giris.etkin != 'öğretmen' and not otomatik_giris.hata %}<div class="not">Tahta bir sonraki bağlantısında ayarı uygular.</div>{% endif %}
+      {%- endif %}
+      {%- if otomatik_giris and otomatik_giris.hata %}<div><span class="rozet" data-durum="uyari"><svg class="simge" aria-hidden="true"><use href="#s-sorun"/></svg>Uygulanamadı</span> {{ otomatik_giris.hata }}</div>{% endif %}
+      {%- if kullanici.rol == 'yonetici' %} · <a href="/ayarlar/kilit#giris">Ayarlar</a>{% endif %}</dd>
   </dl>
   {% if kullanici.rol == 'yonetici' %}<p class="not">Adres listesi <a href="/ayarlar/sunucu#adresler">Ayarlar › Sunucu ve ağ</a> bölümündedir.</p>{% endif %}
 </section>

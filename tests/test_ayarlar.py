@@ -357,6 +357,7 @@ BEKLENEN_FORMLAR = {
     "kilit": [
         ("/ayarlar", "kilit_kodu", {"bolum", "kilit_kodu"}),
         ("/ayarlar", "acilis_kilidi", {"bolum", "ak_acik"}),
+        ("/ayarlar", "otomatik_giris", {"bolum", "og_kip"}),  # 0.22.0
         ("/ayarlar", "kilit_kodu", {"bolum"}),  # "Kodu kaldır…": kilit_kodu_sil=1 onay penceresinden gelir
     ],
     "gunsonu": [
@@ -484,9 +485,10 @@ def test_hicbir_alan_adi_kaybolmadi(okul):
     # kilit_kodu_sil artık form alanı değil, onay penceresinin gönderdiği değerdir (düğme + ONAY sözlüğü).
     assert 'data-onay="kilit_kodu_sil"' in ayar_sayfasi(okul, "kilit")
     assert re.search(r'kilit_kodu_sil:\s*\{\s*ad: "kilit_kodu_sil", deger: "1"', BETIK)
-    # Fazladan gelen alanlar: `donus` (yedek formlarının dönüş adresi) ve 0.21.0'ın sınıf başkanı kutuları ve nöbetçisi.
+    # Fazladan gelen alanlar: `donus` (yedek formlarının dönüş adresi), 0.21.0'ın sınıf başkanı kutuları ve nöbetçisi,
+    # 0.22.0'ın otomatik giriş radyosu.
     fazla = {ad for uc, ad in yeni - eski if uc != "/ayarlar" or ad != "ara"}
-    assert fazla == {"donus", "ua_baskan", "ua_pin_baskan", "ua_baskan_formu"}, fazla
+    assert fazla == {"donus", "ua_baskan", "ua_pin_baskan", "ua_baskan_formu", "og_kip"}, fazla
 
 
 # §4'te kalın/uyarı sayılan cümleler: ilgili sayfada geçer ve kapalı <details> içinde DEĞİLDİR.
@@ -636,7 +638,7 @@ def test_kirli_izlenen_formlarda_kaydet_dugmesi_ve_js_siz_calisir(okul):
         # JS'siz: durum yazıları gizli gelir, yalnız Kaydet görünür.
         assert html.count('<span class="kc-yok" hidden>') == html.count('<div class="kaydet-cubugu">')
         assert html.count('<span class="kc-var" role="status" hidden>') == html.count('<div class="kaydet-cubugu">')
-    assert izlenen == 14
+    assert izlenen == 15  # 0.22.0: otomatik giriş kartı
     assert "data-kirli-izle" not in okul.get(SABLON_SAYFASI).text
 
 

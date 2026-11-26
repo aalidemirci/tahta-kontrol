@@ -1,6 +1,6 @@
 [project]
 name = "tahta-kontrol"
-version = "0.21.0"
+version = "0.22.0"
 description = "Okul ağında etkileşimli tahta kontrol ve duyuru sistemi"
 requires-python = ">=3.12,<3.13"
 dependencies = [

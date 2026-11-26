@@ -6,5 +6,11 @@ if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
         systemctl stop tahta-ajan.service || true
         systemctl disable tahta-ajan.service >/dev/null 2>&1 || true
     fi
+    # 0.22.0: ajan kalkinca acilista kilit de kalkar; Tahta Kontrol'un otomatik giris dosyasi silinir
+    # (yalniz ilk satiri imzali kendi dosyamiz; baska ayara dokunulmaz).
+    OG=/etc/lightdm/lightdm.conf.d/50-tahta-otomatik-giris.conf
+    if [ -f "$OG" ] && [ ! -L "$OG" ] && head -n 1 "$OG" | grep -q '^# Tahta Kontrol tarafindan yazildi\.'; then
+        rm -f "$OG"
+    fi
 fi
 exit 0

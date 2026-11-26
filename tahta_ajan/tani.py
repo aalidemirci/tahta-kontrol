@@ -17,7 +17,7 @@ import sys
 import time
 from urllib.parse import urlsplit
 
-from . import __version__, sistem
+from . import __version__, otomatik_giris, sistem
 
 TAMAM, UYARI, SORUN, BILGI = "tamam", "uyari", "sorun", "bilgi"
 
@@ -96,6 +96,7 @@ def _giris_ekrani():
     satirlar = []
     dosyalar = ["/etc/lightdm/lightdm.conf", "/etc/pardus/greeter.conf", "/etc/gdm3/daemon.conf"]
     dosyalar += sorted(glob.glob("/etc/lightdm/lightdm.conf.d/*.conf"))
+    dosyalar += sorted(glob.glob("/etc/xdg/lightdm/lightdm.conf.d/*.conf"))
     dosyalar += sorted(glob.glob("/usr/share/lightdm/lightdm.conf.d/*.conf"))
     for yol in dosyalar:
         for satir in _oku(yol, 20000).splitlines():
@@ -109,7 +110,14 @@ def _giris_ekrani():
                     deger = "(kişisel hesap)"
                 satirlar.append(f"{os.path.basename(yol)}: {anahtar.strip()}={deger}")
     ayrinti = f"yönetici: {yonetici or 'bilinmiyor'} · otomatik giriş satırları: "
-    return BILGI, ayrinti + ("; ".join(satirlar[:12]) if satirlar else "yok")
+    ayrinti += "; ".join(satirlar[:12]) if satirlar else "yok"
+    # 0.22.0: LightDM'in birleşik ayarına göre etkin hesap (sınıf) ve Tahta Kontrol dosyası.
+    og = otomatik_giris.durum()
+    if og["lightdm"]:
+        ayrinti += f" · etkin: {og['etkin'] or 'yok'}"
+        if og["bizim"]:
+            ayrinti += " (Tahta Kontrol ayarı" + ("; başka bir ayar eziyor)" if og["ezilmis"] else ")")
+    return BILGI, ayrinti
 
 
 def _hesaplar():

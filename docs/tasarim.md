@@ -88,8 +88,9 @@ Kuralın tek yeri `tahta_liste.ayni_adlilar`/`adlandirilacaklar`'dır. Varsayıl
   pencereye bağlanır. İşletim sisteminin giriş ekranı değildir ve ETAP'ın EBA
   karekod/USB girişine dokunmaz.
 - Öngörülen kullanım: tahta `ogretmen` ortak hesabına otomatik açılır, kontrolü
-  bu katman sağlar. Otomatik giriş bu yazılımca **ayarlanmaz**; saha denemesinde
-  elle kurulup sınanacak.
+  bu katman sağlar. 0.21.0'a kadar otomatik giriş bu yazılımca ayarlanmıyordu. 0.22.0'dan beri yönetici
+  isterse sunucudan ayarlanır (kullanıcı isteği 27.11.2026; §5.2). Varsayılan "dokunma"dır: tahtadaki
+  ayara karışılmaz.
 - Açma yolları: panelden; tahtada okul genelinde ortak kilit koduyla (özeti
   tahtada durur, sunucu kapalıyken de çalışır; 5 hatalı denemede 60 sn bekleme);
   sunucuya ulaşılamıyorsa kodsuz düğmeyle.
@@ -194,6 +195,84 @@ işlem kaydına "Tahta olayı" olarak düşer: "Tahtadan kilitlendi.", "Tahtadan
 yeniden başlatıldı." (ardına yalnız hesap sınıfı eklenebilir: "(oturum: ogretmen)"); kullanıcı adı
 gönderilmez. Sunucu olay başına en çok 300 karakter, istek başına en çok 20 olay yazar. Kilit durumu
 ayrıca bir alan gerektirmez: ajanın bildirdiği `durum.kilitli`/`kilit_kaynak: "idare"` panele yansır.
+
+### 5.2 Açılışta otomatik giriş (0.22.0)
+
+**Sorun.** ETAP tahtası uzaktan ya da düğmeyle açılınca giriş ekranında bekler. Oturum açılmadığı için ekran
+yardımcısı başlamaz; panelde tahta "Ekran yardımcısı yok" görünür, kilit, duyuru ve acil yayın ekrana gelmez.
+Kullanıcı, tahtanın açılınca `ogretmen` hesabına kendiliğinden girmesini sunucudan ayarlamayı istedi
+(27.11.2026); etapadmin parolasının panele girilmesini önerdi.
+
+**Parola istenmez.** Ajan servisi kurulumdan beri yönetici (root) yetkisiyle çalışır; LightDM ayarını kendisi
+yazabilir. etapadmin parolası panele, sunucuya, ajana gitmez ve hiçbir yerde saklanmaz. Bu parola çoğu okulda
+il ya da ilçe genelinde ortaktır; sunucuda tutulması kural 5'e aykırıdır ve sızıntısı başka okulları da açar.
+
+**Ayar.** Ayarlar › Kilit ve güvenlik › Otomatik giriş (`bolum=otomatik_giris`, tek radyo `og_kip`; anahtar
+`otomatik_giris`). Üç değer:
+
+| Değer | Tahtaya inen | Ajan ne yapar |
+|---|---|---|
+| `dokunma` (varsayılan) | alan **gönderilmez** | hiçbir şey; elle yapılmış ayar olduğu gibi kalır |
+| `ogretmen` | `ayar.otomatik_giris = {"hesap": "ogretmen"}` | Tahta Kontrol dosyasını yazar |
+| `kapali` | `ayar.otomatik_giris = {"hesap": null}` | YALNIZ kendi dosyasını siler |
+
+Alan yalnız `otomatik_giris` yeteneğini bildiren ajana gider (`web.py::ajan_ayari`). Eski ajan ayarı
+uygulamaz; Ayarlar kartı güncellenmesi gereken tahta sayısını gösterir.
+
+**Kilitsiz açılma koruması.** Otomatik girişle tahta öğretmen oturumunda açılır; kilidi açılışta kilit (§5.1,
+0.9.0) getirir. Bu yüzden `ogretmen` yalnız kilit kodu TANIMLI ve açılışta kilit AÇIKKEN kaydedilir
+(`otomatik_giris.engel`). Koşul sonradan bozulursa (kod kaldırılır ya da açılışta kilit kapatılır) ayar
+kendiliğinden değişmez. Bunun yerine üç uyarı çıkar: Bugün › Sizi bekleyenler'de yöneticiye satır
+(`bugun._otomatik_giris`), Ayarlar kartında bant, kaydetme iletisinde not. Sunucuya ulaşılamıyorsa tahta yine
+kilitsiz açılır (kural 3).
+
+Uyarılar yalnız ayara değil tahtaların bildirdiğine de bakar (`otomatik_giris.kilitsiz_risk`,
+`ogretmenle_acilan_sayisi`). Ayar "dokunma"ya alınınca Tahta Kontrol dosyası tahtada kalır. Sonra açılışta kilit
+kapatılırsa, ayar "ogretmen" olmasa da tahtalar kilitsiz açılır. Bu durumda da uyarı çıkar: "N tahtada otomatik
+giriş ayarı duruyor ama …" (bütünleşik inceleme bulgusu). Bugün'ün olağan yolu tek sorgudur.
+
+**Tahtada ne yazılır.**
+- Dosya `/etc/lightdm/lightdm.conf.d/50-tahta-otomatik-giris.conf`'tur. Elle deneme betiği
+  `araclar/otomatik-giris.sh` aynı adı ve içeriği yazar:
+  ```
+  # Tahta Kontrol tarafindan yazildi. Geri almak icin: …
+  [Seat:*]
+  autologin-user=ogretmen
+  autologin-user-timeout=0
+  ```
+- Yazım atomiktir: aynı dizinde `O_EXCL | O_NOFOLLOW` geçici dosya → fsync → `os.replace`; izin 0644. İçerik
+  aynıysa dosyaya yazılmaz. Hedef düz dosya değilse (dizin, sembolik bağ) yazılmaz ve silinmez.
+- Hesap listesi ajanda da sabittir (`tahta_ajan/otomatik_giris.HESAPLAR = ("ogretmen",)`); sunucu daraltır,
+  genişletemez. Hesap tahtada yoksa ya da kimliği 1000'den küçükse (root, sistem hesabı) yazılmaz.
+- Silme yalnız ilk satırı imzalı kendi dosyasını siler. Başka dosyadaki ayara dokunulmaz, yalnız bildirilir.
+- `autologin` grubu varsa hesap gruba eklenir (betikle aynı).
+- Giriş ekranı (lightdm) yeniden başlatılmaz: ayar bir sonraki açılışta geçerli olur, açık ders bölünmez.
+- İstek değişince hemen uygulanır. Değişmese de en geç 10 dakikada bir yeniden uygulanır, böylece elle silinen
+  dosya geri gelir (`OTOMATIK_GIRIS_YENILE_SN`). Değişiklik "Tahta olayı" olarak işlem kaydına düşer.
+- Paket kaldırılırsa (`prerm remove|purge`) imzalı dosya silinir. Ajan kalkınca açılışta kilit de kalkar; tahta
+  kilitsiz öğretmen oturumunda açılmasın.
+
+**Durum bildirimi.** Ajan durumunda `otomatik_giris = {"lightdm", "etkin", "bizim", "ezilmis", "hata"}` gider:
+- `etkin`, LightDM'in birleşik ayarındaki seat0 hesabının SINIFIDIR: `etapadmin`, `ogretmen`, `ogrenci` ya da
+  `kisisel`. Hesap adı, dosya yolu ve içerik gitmez.
+- Okuma sırası LightDM'inkidir: `/usr/share/lightdm/lightdm.conf.d` → `/etc/xdg/lightdm/lightdm.conf.d` →
+  `/etc/lightdm/lightdm.conf.d` → `/etc/lightdm/lightdm.conf`. Sonraki değer öncekini ezer.
+- `[Seat:seat0]` (ya da seat0'a uyan desen) `[Seat:*]`'ın önüne geçer; `[SeatDefaults]` eski addır. Boş değer
+  otomatik girişi kapatır.
+- `ezilmis`: kendi dosyamız var ama etkin değer başka bir dosyadan geliyor.
+
+Panelde tahta sayfası › Bakım › Bağlantı ve ajan "Otomatik giriş" satırı bu özeti gösterir. Ayarlar kartı
+"Uygulandı / bekliyor" sayılarını verir. Tanılamanın "Giriş ekranı" satırı da etkin sınıfı ve
+`/etc/xdg/lightdm` dizinini okur.
+
+**Bilinen sınırlar** (gerçek ETAP'ta denenmedi; `docs/saha-denemesi.md` §4):
+- Giriş ekranı atlandığından EBA karekodu ve USB girişi ilk açılışta görünmez; oturum kapatılınca ("Çık")
+  giriş ekranı gelir ve otomatik giriş yinelenmez.
+- Kablosuz ağ ETAP'ta giriş ekranı modülüyle açılıyor olabilir; otomatik girişte ağ gelmeyebilir.
+- Giriş ekranının PAM adımı atlandığı için ETAP'ın USB yardımcısı etkilenebilir (çıkarım).
+- LiderAhenk oturumu sonlandırabilir.
+
+Varsayılan kararlar §17 soru 136–145'tedir.
 
 ## 6. Duyuru
 
@@ -2364,6 +2443,29 @@ kararıdır):
 135. **Aydınlatma (başkan):** okulun aydınlatma metni, ders yoklamasının sınıf başkanınca tahtadan alınmasını ve
     öğrencinin arkadaşlarının devam verisini okul adına işlemesini kapsıyor mu? Velilere bilgi verilecek mi?
     (Soru 33 ve 68'in devamı; dayanak §18.)
+
+Otomatik giriş (0.22.0, §5.2). Kullanıcı "sunucudan ayarlansın" dedi (27.11.2026); ayrıntılar önerildiği gibi
+**varsayıldı**, kullanıcı ayrıca yanıtlamadı:
+
+136. **Tasarım §5'in "otomatik giriş bu yazılımca ayarlanmaz" kararı değişsin mi?** Kullanıcı isteğiyle
+    değişti; varsayılan "dokunma" olduğu için ayarı açmayan okulda davranış aynıdır.
+137. **Hangi hesaplar?** Öneri: yalnız `ogretmen`. `ogrenci` eklenmedi; etapadmin ve kişisel hesap hiçbir
+    koşulda eklenmez. **Varsayıldı.**
+138. **Varsayılan değer:** öneri "dokunma" (alan gönderilmez). **Varsayıldı.**
+139. **Açılışta kilit kapalı ya da kilit kodu yokken ne olsun?** Öneri: kaydetme reddedilir; sonradan bozulursa
+    yalnız uyarı çıkar (Bugün, Ayarlar), ayar kendiliğinden kapanmaz. **Varsayıldı.**
+140. **Tahta başına istisna** (ör. bir tahtada otomatik giriş olmasın): yapılmadı; okul geneli tek ayar.
+    **Varsayıldı.**
+141. **Tahtada elle (etapadmin) yapılan ayar:** "dokunma"da korunur; "kaldır" yalnız Tahta Kontrol dosyasını
+    siler, başka dosya bildirilir. "Öğretmen"de başka dosya bizim ayarımızı ezerse panelde uyarı çıkar, ajan o
+    dosyaya dokunmaz. **Varsayıldı.**
+142. **Paket kaldırılınca:** imzalı dosya silinir (açılışta kilit de kalktığı için). **Varsayıldı.**
+143. **24 tahtada ajan güncellemesi:** özellik için gereklidir; güncellemek yine isteğe bağlıdır, güncellenmeyen
+    tahtada ayar uygulanmaz. **Varsayıldı.**
+144. **Önce tek tahtada deneme:** önerildi (`araclar/otomatik-giris.sh` ile ya da 0.22.0 ajanı tek tahtaya
+    kurularak); kullanıcı doğrudan 0.22.0'ı istedi. Saha denemesi §4 O1–O9 adımları önce bir tahtada yapılır.
+145. **Tahtalar kablolu mu, kablosuz mu? İlçe MEM ya da LiderAhenk yönetimi otomatik girişe karışıyor mu?**
+    Bilinmiyor; okulda denetlenecek.
 
 Altyapı (0.7.0 ve 6B):
 

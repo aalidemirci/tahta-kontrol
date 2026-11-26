@@ -42,6 +42,7 @@ from . import (
     kilit_program,
     marka,
     metin,
+    otomatik_giris,
     paket,
     panel_program,
     panel_usb,
@@ -933,6 +934,7 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             usb_etkin = usb_anahtar.ayar_al(b)["etkin"]  # 0.11.0: "USB anahtar" satırı yalnız özellik açıkken
             acil_suruyor = acil.aktif(b) is not None
             kilit_acik = program_is.program_ozeti(b, datetime.fromtimestamp(vt.simdi(), ISTANBUL))["kilit"] != "kapali"
+            otomatik_giris_kipi = otomatik_giris.ayar_al(b)
         tani = json.loads(satir["tani_json"]) if satir["tani_json"] else None
         durum = json.loads(satir["durum_json"] or "{}")
         t_gorunum = tahta_gorunumu(satir, None, uyelik, None, sinavlar, altyapi, acil_suruyor, kilit_acik)
@@ -965,6 +967,8 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                 "imza": "imza" in t_gorunum["yetenekler"],
             },
             ham=satir,
+            otomatik_giris=otomatik_giris.tahta_durumu(durum),
+            otomatik_giris_kip=otomatik_giris_kipi,
             komutlar=komutlar,
             tani=tani,
             durum=durum,
@@ -1437,6 +1441,14 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                 "acilis_eski": eski_ajan_sayisi(b, acilis_kilidi.yetenekli),
                 "acilis_en_yasli_sn": acilis_kilidi.EN_YASLI_OTURUM_SN,
                 "usb_ayari": usb_anahtar.ayar_al(b),
+                # 0.22.0: otomatik giriş kartı
+                "og_kip": otomatik_giris.ayar_al(b),
+                "og_secenekler": otomatik_giris.SECENEKLER,
+                "og_engel": otomatik_giris.engel(b),
+                "og_risk": otomatik_giris.kilitsiz_risk(b),
+                "og_acilan": otomatik_giris.ogretmenle_acilan_sayisi(b),
+                "og_eski": eski_ajan_sayisi(b, otomatik_giris.yetenekli),
+                "og_sayilar": otomatik_giris.sayilar(b),
             }
         if anahtar == "gunsonu":
             temizlik_ayari = temizlik_mod.ayar_al(b)
@@ -1699,14 +1711,52 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
         with vt.islem() as b:
             vt.ayar_yaz(b, acilis_kilidi.AYAR_ANAHTARI, yeni)
             kod_var = bool(vt.ayar_al(b, "kilit_kodu"))
+            giris_acik = otomatik_giris.ayar_al(b) == "ogretmen" or otomatik_giris.ogretmenle_acilan_sayisi(b) > 0
             vt.kayit_dus(b, k["ad"], "Açılışta kilit ayarı kaydedildi", "açık" if yeni else "kapalı", ip)
         if not yeni:
             mesaj = "Açılışta kilit kapatıldı; tahtalar açılınca açık başlar."
+            if giris_acik:
+                mesaj += " Dikkat: otomatik giriş açık; tahtalar öğretmen oturumunda kilitsiz açılır."
         elif not kod_var:
             mesaj = "Açılışta kilit açık, ama kilit kodu belirlenmediği için uygulanmaz. Kilit kodunu belirleyin."
         else:
             mesaj = "Açılışta kilit açık: tahta açılınca ya da oturum açılınca, sunucuya ulaşabiliyorsa kilitli başlar."
         return yonlendir("/ayarlar/kilit?yer=acilis#ileti", mesaj, hata=yeni and not kod_var)
+
+    def otomatik_giris_kaydet(k, form, ip: str):
+        """Ayarlar › Kilit ve güvenlik › Otomatik giriş (bolum=otomatik_giris, 0.22.0; kural 39).
+
+        Yalnız `otomatik_giris` anahtarı yazılır. `ogretmen` yalnız kilit kodu tanımlı ve açılışta kilit açıkken
+        kaydedilir (kilitsiz açılan tahta olmasın). Tahtalar uyandırılır; ayar tahtada bir sonraki açılışta geçerlidir."""
+        adres = "/ayarlar/kilit?yer=giris#ileti"
+        yeni = otomatik_giris.ayar_coz(form)
+        if yeni is None:
+            return yonlendir(adres, FORM_EKSIK, hata=True)
+        with vt.islem() as b:
+            onceki = otomatik_giris.ayar_al(b)
+            if yeni == "ogretmen":
+                neden = otomatik_giris.engel(b)
+                if neden:
+                    return yonlendir(adres, f"Kaydedilmedi: {neden}. Otomatik girişle tahta öğretmen oturumunda açılır; "
+                                     "kilitsiz açılmaması için önce kilit kodunu belirleyin ve açılışta kilidi açın.", hata=True)  # fmt: skip
+            if yeni == onceki:
+                return yonlendir(adres, "Otomatik giriş ayarı değişmedi.")
+            vt.ayar_yaz(b, otomatik_giris.AYAR_ANAHTARI, yeni)
+            vt.kayit_dus(b, k["ad"], otomatik_giris.ISLEM_ADI, otomatik_giris.ozet(yeni), ip)
+            eski = eski_ajan_sayisi(b, otomatik_giris.yetenekli)
+        onayli_tahtalari_uyandir()
+        if yeni == "ogretmen":
+            mesaj = ("Kaydedildi: tahtalar bir sonraki açılışta öğretmen hesabına kendiliğinden girer ve açılışta kilitle "
+                     "kilitli başlar. Açık olan tahtanın dersi bölünmez.")
+        elif yeni == "kapali":
+            mesaj = ("Kaydedildi: tahtalar Tahta Kontrol'ün yazdığı otomatik giriş ayarını siler; bir sonraki açılışta "
+                     "giriş ekranında bekler. Elle yapılmış başka bir ayara dokunulmaz.")
+        else:
+            mesaj = ("Kaydedildi: tahtalardaki otomatik giriş ayarına artık dokunulmaz. Son yazılan ayar tahtada kalır; "
+                     "tahtaların otomatik girişini kapatmak için “Otomatik girişi kaldır”ı seçin.")
+        if eski and yeni != "dokunma":
+            mesaj += f" {eski} tahtada ajan güncellenmeli; güncellenmeyen tahtada ayar uygulanmaz."
+        return yonlendir(adres, mesaj)
 
     def usb_anahtar_kaydet(k, form, ip: str):
         """Ayarlar › USB anahtar (bolum=usb_anahtar, 0.11.0): yalnız `usb_anahtar` anahtarı yazılır.
@@ -1863,6 +1913,8 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
                 mesaj = "Kilit kodu kaldırıldı; kilitlenen tahta yalnız panelden açılır."
                 if acilis_kilidi.ayar_al(b):
                     mesaj += " Açılışta kilit kod olmadan uygulanmaz."
+                if otomatik_giris.ayar_al(b) == "ogretmen" or otomatik_giris.ogretmenle_acilan_sayisi(b):
+                    mesaj += " Dikkat: otomatik giriş açık; tahtalar öğretmen oturumunda kilitsiz açılır."
             elif kod:
                 if not (kod.isdigit() and 4 <= len(kod) <= 8):
                     return yonlendir(adres, "Kilit kodu 4-8 haneli rakamlardan oluşmalı.", hata=True)
@@ -1898,6 +1950,8 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
             return dugme_ayarini_kaydet(k, form, istemci_ip(istek))
         if bolum == "acilis_kilidi":
             return acilis_kilidi_kaydet(k, form, istemci_ip(istek))
+        if bolum == "otomatik_giris":
+            return otomatik_giris_kaydet(k, form, istemci_ip(istek))
         if bolum == "usb_anahtar":
             return usb_anahtar_kaydet(k, form, istemci_ip(istek))
         if bolum == "guncelleme":
@@ -2107,6 +2161,11 @@ def uygulama_olustur(parmak_izi: str = "", guncelleme_getirici=None) -> FastAPI:
         }
         if "gun_programi" in acil.yetenekler(guncel):
             sonuc["gun_programi"] = kilit_program.ajan_gorunumu(b, guncel, vt.simdi())
+        # 0.22.0 (kural 39): otomatik giriş durumdur; "dokunma"da alan HİÇ gönderilmez (ajan tahtadaki ayara dokunmaz).
+        # Yalnız yeteneği bildiren ajana gider; eski ajan alanı zaten yok sayardı.
+        giris = otomatik_giris.ajan_gorunumu(b)
+        if giris is not None and otomatik_giris.YETENEK in acil.yetenekler(guncel):
+            sonuc["otomatik_giris"] = giris
         # A6: durum tabanlı adres listesi; boşsa gönderilmez (ajan elindeki listeyi korur).
         liste = adresler.al(b)
         if liste:
