@@ -97,4 +97,5 @@ Tasarım §5'teki "otomatik giriş bu yazılımca ayarlanmaz" kararı kullanıc�
   "Dokunma"ya alınınca tahtada kalan ayar için kilit uyarısı çıkmıyordu.
 - Deneme sunucusunda başsız tarayıcıyla Ayarlar kartı ve tahta sayfası (uydurma veri).
 
-Gerçek ETAP'ta, gerçek LightDM'de ve okul ağında denenmedi.
+Yayımdan sonra (27.11.2026) kullanıcı özelliği okulda bir ETAP tahtasında denedi ve çalıştığını bildirdi.
+Çok tahtayla kullanım ve `docs/saha-denemesi.md` §4'teki O4–O9 henüz denenmedi.

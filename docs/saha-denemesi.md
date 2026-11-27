@@ -550,6 +550,10 @@ Hazırlık: bu denemeler yönetici yetkisi ister ve **önce deneme bilgisayarın
   tahtalar ayarı uygulamaz.
 - Ya da `etapadmin` ile `sh otomatik-giris.sh` çalıştırın (aynı dosyayı yazar).
 
+**Saha bulgusu (27.11.2026, kullanıcı bildirimi):** 0.22.0 yayımlandıktan sonra kullanıcı özelliği okulda bir
+ETAP tahtasında denedi: "özellik çalışıyor". Aşağıdaki satırlardan hangilerinin denendiği ayrıca bildirilmedi;
+O4–O9 (EBA/USB girişi, kablosuz ağ, ETAP USB yardımcısı, kaldırma, geri yazma, güncelleme sonrası) açık sayılır.
+
 Önce tanılamanın "Giriş ekranı ve otomatik giriş" satırını okuyun; hangi giriş yöneticisinin kullanıldığını ve
 var olan otomatik giriş satırlarını gösterir.
 

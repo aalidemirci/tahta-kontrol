@@ -7,8 +7,9 @@ alan gönderilmez) · öğretmen · kaldır. etapadmin parolası İSTENMEZ (ajan
 açılışta kilit varken kaydedilir; sonradan bozulursa Bugün uyarır. Ajan DEĞİŞTİ (yetenek `otomatik_giris`;
 güncelleme bu özellik için gerekli), göç YOK. Tasarım §5'in "otomatik giriş ayarlanmaz" kararı kullanıcı isteğiyle
 değişti; ayrıntılar VARSAYILDI (§17 soru 136–145). `docs/surum-0.22.0.md`. Testlerle ve deneme sunucusunda başsız
-tarayıcıyla (uydurma veri) denendi; dağıtılmadı, gerçek ETAP'ta ve gerçek LightDM'de denenmedi (saha denemesi
-§4, O1–O9; önce tek tahtada).
+tarayıcıyla (uydurma veri) denendi. GitHub'da v0.22.0 olarak yayımlandı (27.11.2026; okulapp.org kartı ve kılavuz
+güncel). Kullanıcı aynı gün okulda bir ETAP tahtasında denedi: "özellik çalışıyor". Çok tahtada ve saha denemesi
+§4'ün O4–O9'u (EBA/USB girişi, kablosuz, ETAP USB yardımcısı, kaldırma) denenmedi.
 
 Yerel geliştirme 0.21.0 (kullanıcı onayı 21.11.2026). Okulda 0.20.0 24 ETAP tahtasında sorunsuz çalıştı; kullanıcı
 beş saha talebinin tek sürümde çıkmasını istedi:
@@ -146,9 +147,10 @@ Okul ağında çalışan etkileşimli tahta kontrol ve duyuru sistemi. Bir bilgi
 
 - Tasarım ve gerekçeler: `docs/tasarim.md` — "neden böyle?" sorusunun cevabı orada.
 - Saha denemesi adımları ve doğrulanmamış varsayımlar: `docs/saha-denemesi.md`.
-- Durum: **0.22.0, yerel geliştirme; dağıtılmadı.** Okulda kurulu sürüm 0.20.0'dır (24 ETAP tahtası; kullanıcı
-  bildirimi 21.11.2026); 0.21.0 GitHub'da yayımlandı. 0.22.0: açılışta otomatik giriş (kural 39, tasarım §5.2;
-  ajan değişti, göç yok; gerçek ETAP'ta denenmedi). 0.21.0: sahadan beş talep — toplu öğretmen yükleme, sınıf başkanı USB anahtarı (kural 37),
+- Durum: **0.22.0, GitHub'da yayımlandı (27.11.2026); otomatik giriş okulda bir tahtada denendi ve çalıştı.**
+  21.11.2026'da okulda 0.20.0 kuruluydu (24 ETAP tahtası); 0.22.0 denemesinin hangi sunucuyla yapıldığı
+  ve okulda şu an hangi sürümün kurulu olduğu bildirilmedi. 0.22.0: açılışta otomatik giriş (kural 39, tasarım §5.2;
+  ajan değişti, göç yok; bir ETAP tahtasında denendi, çalıştı; O4–O9 açık). 0.21.0: sahadan beş talep — toplu öğretmen yükleme, sınıf başkanı USB anahtarı (kural 37),
   tahta numarası ve toplu adlandırma, bildirim alanı durum simgesi, aSc ikili eğitim/I-İ/zil önerisi/şube bilgisi.
   Yalnız sunucu değişti, ajan değişmedi. Testlerle, başsız tarayıcıyla ve gerçek dosyalarla yerelde denendi; gerçek
   ETAP'ta, gerçek USB'de ve kurulu hizmette denenmedi; tasarım §4, §12.3, §14, §14.3, §15.6. (0.20.0: panel
